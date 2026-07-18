@@ -33,7 +33,6 @@ cudarc = { workspace = true }
 tempfile = { workspace = true }
 strum = { workspace = true }
 async-trait = { workspace = true }
-goblin = { workspace = true }
 indicatif = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

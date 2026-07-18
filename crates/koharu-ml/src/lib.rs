@@ -32,12 +32,11 @@ pub use koharu_llama as llama;
 pub use koharu_torch as torch;
 
 static LLAMA_BACKEND: OnceCell<LlamaBackend> = OnceCell::const_new();
+static DIFFUSION_RUNTIME: OnceCell<()> = OnceCell::const_new();
+static TORCH_RUNTIME: OnceCell<()> = OnceCell::const_new();
 
-/// Initializes the llama.cpp, stable-diffusion.cpp, and LibTorch runtimes.
-///
-/// This should be called before any other function in this crate. Repeated
-/// calls are safe and reuse the process-wide llama.cpp backend.
-pub async fn init() -> anyhow::Result<()> {
+/// Initializes the process-wide llama.cpp runtime and backend.
+pub async fn init_llama() -> anyhow::Result<()> {
     LLAMA_BACKEND
         .get_or_try_init(|| async {
             let llama_cpp = LlamaCpp::for_current_target();
@@ -53,7 +52,16 @@ pub async fn init() -> anyhow::Result<()> {
             LlamaBackend::load_all_backends_from_path(package_dir)
                 .context("failed to load llama.cpp backends")?;
             let backend = LlamaBackend::init().context("failed to initialize llama.cpp backend")?;
+            Ok::<LlamaBackend, anyhow::Error>(backend)
+        })
+        .await?;
+    Ok(())
+}
 
+/// Initializes stable-diffusion.cpp and its shared GGML backend support.
+pub async fn init_diffusion() -> anyhow::Result<()> {
+    DIFFUSION_RUNTIME
+        .get_or_try_init(|| async {
             let sd_cpp = StableDiffusionCpp::for_current_target()?;
             sd_cpp
                 .preload()
@@ -67,12 +75,21 @@ pub async fn init() -> anyhow::Result<()> {
                 .context("failed to resolve stable-diffusion.cpp runtime")?;
             koharu_diffusion::load_all_backends_from_path(package_dir)
                 .context("failed to load stable-diffusion.cpp backends")?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await?;
+    Ok(())
+}
+
+/// Initializes the process-wide LibTorch runtime.
+pub async fn init_torch() -> anyhow::Result<()> {
+    TORCH_RUNTIME
+        .get_or_try_init(|| async {
             Libtorch::for_current_target()?
                 .preload()
                 .await
                 .context("failed to initialize LibTorch runtime")?;
-
-            Ok::<LlamaBackend, anyhow::Error>(backend)
+            Ok::<(), anyhow::Error>(())
         })
         .await?;
     Ok(())

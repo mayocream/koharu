@@ -14,6 +14,7 @@ publish.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 keyring = { workspace = true }
+secrecy = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 atomicwrites = { workspace = true }

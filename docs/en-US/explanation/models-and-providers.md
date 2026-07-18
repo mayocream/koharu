@@ -57,7 +57,6 @@ In practice, the local models are usually quantized decoder-only transformers. G
 
 ### Translation-focused built-in local models for English output
 
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): a Q5_K_M GGUF, best when translation quality matters most
 - [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a smaller multilingual instruct option for low-memory systems or faster iteration
 - [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) and [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): larger translation-oriented choices when you want more headroom
 

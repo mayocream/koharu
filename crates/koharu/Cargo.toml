@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 description.workspace = true
 authors.workspace = true
-readme.workspace = true
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
@@ -13,42 +13,44 @@ license.workspace = true
 include = [
     "src/**",
     "icons/**",
-    "gen/**",
-    "tauri.conf.json",
-    "tauri.*.conf.json",
-    "capabilities/**",
-    "build.rs",
-    "../../ui/out/**",
+    "README.md",
 ]
 
 [dependencies]
-koharu-app = { workspace = true }
-koharu-rpc = { workspace = true }
-koharu-runtime = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
+dirs = { workspace = true }
 git-version = { workspace = true }
-serde_json = { workspace = true }
+image = { workspace = true }
+koharu-config = { workspace = true }
+koharu-canvas = { workspace = true }
+koharu-desktop = { workspace = true }
+koharu-pipeline = { workspace = true }
+koharu-psd = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-translator = { workspace = true }
+koharu-worker = { workspace = true }
 rfd = { workspace = true }
-tauri = { workspace = true }
-tauri-plugin-dialog = { workspace = true }
-tauri-plugin-fs = { workspace = true }
-tauri-plugin-opener = { workspace = true }
-tauri-plugin-process = { workspace = true }
-tauri-plugin-updater = { workspace = true }
+rayon = { workspace = true }
+rust-embed = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+specta = { workspace = true }
+specta-serde = { workspace = true }
+specta-typescript = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 console = { workspace = true }
 tracing-subscriber = { workspace = true }
 sentry = { workspace = true }
+uuid = { workspace = true }
+url = { workspace = true }
+webp = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
 windows-sys = { workspace = true }
 winreg = { workspace = true }
-
-[build-dependencies]
-tauri-build = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = ["serde_json"]

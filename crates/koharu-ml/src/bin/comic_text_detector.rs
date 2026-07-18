@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
 
     let model = ComicTextDetector::load(koharu_ml::device(cli.cpu)).await?;
     let (mask, text_blocks) = model.inference(&image)?;

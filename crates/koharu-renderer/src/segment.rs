@@ -1,3 +1,5 @@
+//! Unicode line breaking with optional Chinese segmentation and hyphenation.
+
 use std::{ops::Range, sync::LazyLock};
 
 use hypher::{Lang, hyphenate_bounded};
@@ -72,9 +74,8 @@ fn trim_mandatory_break_suffix(text: &str, start: usize, end: usize) -> usize {
 }
 
 impl LineBreaker {
-    /// Creates a new LineBreaker with default options.
-    ///
-    /// TODO: CJK specific customization.
+    /// Creates a line breaker with ICU's default rules.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             segmenter: LineSegmenter::new_auto(LineBreakOptions::default()),
@@ -88,6 +89,7 @@ impl LineBreaker {
     /// ICU still supplies the base Unicode line-break rules; this pass only
     /// removes non-mandatory break opportunities that fall inside likely
     /// Chinese word tokens.
+    #[must_use]
     pub fn with_chinese_word_segmentation(mut self) -> Self {
         self.chinese_word_segmentation = true;
         self
@@ -98,6 +100,7 @@ impl LineBreaker {
     /// `min_word_len` follows MangaTranslator's default threshold: short words
     /// keep ICU's normal break behavior, while long words gain extra break
     /// opportunities inside the word.
+    #[must_use]
     pub fn with_hyphenation(mut self, lang: Lang, min_word_len: usize) -> Self {
         self.hyphenation = Some(HyphenationConfig { lang, min_word_len });
         self
@@ -105,6 +108,7 @@ impl LineBreaker {
 
     /// Enable discretionary hyphenation from a BCP-47-ish language tag
     /// supported by `hypher`.
+    #[must_use]
     pub fn with_hyphenation_tag(mut self, tag: &str, min_word_len: usize) -> Self {
         self.hyphenation =
             hyphenation_lang_from_tag(tag).map(|lang| HyphenationConfig { lang, min_word_len });

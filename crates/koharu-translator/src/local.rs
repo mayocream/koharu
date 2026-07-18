@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use koharu_ml::llm::{
-    ChatMessage, ChatRole, ChatTemplateOptions, GenerationOptions, Input, Llm, LoadOptions,
+    ChatMessage, ChatTemplateOptions, GenerationOptions, Input, Llm, LoadOptions,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -149,20 +149,6 @@ impl LocalTranslator {
         .context("failed to serialize local translation input")?;
 
         let (messages, add_generation_prompt) = match self.model {
-            LocalModel::VntlLlama3_8Bv2 => {
-                let source = request.source_language.unwrap_or(Language::Japanese);
-                (
-                    vec![
-                        ChatMessage::system(system),
-                        ChatMessage::new(ChatRole::Named(source.to_string()), payload),
-                        ChatMessage::new(
-                            ChatRole::Named(request.target_language.to_string()),
-                            String::new(),
-                        ),
-                    ],
-                    false,
-                )
-            }
             LocalModel::HunyuanMT7B => (
                 vec![ChatMessage::user(format!("{system}\n\n{payload}"))],
                 true,
@@ -173,7 +159,7 @@ impl LocalTranslator {
             ),
         };
 
-        let prompt = self
+        Ok(self
             .llm
             .render_chat_prompt_with_options(
                 &messages,
@@ -181,12 +167,7 @@ impl LocalTranslator {
                     add_generation_prompt,
                 },
             )
-            .context("failed to render local translation prompt")?;
-        if self.model == LocalModel::VntlLlama3_8Bv2 {
-            Ok(prompt.trim_end_matches("<|eot_id|>").to_owned())
-        } else {
-            Ok(prompt)
-        }
+            .context("failed to render local translation prompt")?)
     }
 }
 

@@ -62,7 +62,7 @@ flowchart LR
 
 ## 实现结构
 
-从源码结构看，引擎注册和管线执行在 `koharu-app/src/engine.rs`，默认引擎选择在 `koharu-app/src/config.rs`。
+从源码结构看，处理阶段、执行驱动与内置处理器位于 `koharu-pipeline`，运行时设置位于 `koharu-config`。
 
 一些重要的实现细节：
 

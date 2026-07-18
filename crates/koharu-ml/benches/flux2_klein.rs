@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     let mask = image::open(fixtures.join("mask_4k.png"))?;
     let options = Flux2KleinInpaintOptions::default();
 
-    koharu_ml::init().await?;
+    koharu_ml::init_diffusion().await?;
     let model = Flux2KleinInpaint::load(koharu_ml::Device::cuda(0)).await?;
 
     Cuda::synchronize(0);

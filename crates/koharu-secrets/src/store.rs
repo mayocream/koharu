@@ -1,6 +1,7 @@
 use std::sync::Once;
 
 use keyring::Entry;
+use secrecy::{ExposeSecret, SecretString};
 
 static INIT_CREDENTIAL_STORE: Once = Once::new();
 
@@ -18,12 +19,12 @@ impl SecretStore {
     }
 
     /// Load a secret by key, returning `None` when no credential exists.
-    pub fn get(&self, key: &str) -> anyhow::Result<Option<String>> {
+    pub fn get(&self, key: &str) -> anyhow::Result<Option<SecretString>> {
         get_secret(&self.service, key)
     }
 
     /// Store a secret by key. Use `delete` to clear an existing credential.
-    pub fn set(&self, key: &str, secret: &str) -> anyhow::Result<()> {
+    pub fn set(&self, key: &str, secret: &SecretString) -> anyhow::Result<()> {
         set_secret(&self.service, key, secret)
     }
 
@@ -33,17 +34,17 @@ impl SecretStore {
     }
 }
 
-pub fn get_secret(service: &str, key: &str) -> anyhow::Result<Option<String>> {
+pub fn get_secret(service: &str, key: &str) -> anyhow::Result<Option<SecretString>> {
     let entry = secret_entry(service, key)?;
     match entry.get_password() {
-        Ok(value) => Ok(Some(value)),
+        Ok(value) => Ok(Some(SecretString::from(value))),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(err) => Err(err.into()),
     }
 }
 
-pub fn set_secret(service: &str, key: &str, secret: &str) -> anyhow::Result<()> {
-    secret_entry(service, key)?.set_password(secret)?;
+pub fn set_secret(service: &str, key: &str, secret: &SecretString) -> anyhow::Result<()> {
+    secret_entry(service, key)?.set_password(secret.expose_secret())?;
     Ok(())
 }
 

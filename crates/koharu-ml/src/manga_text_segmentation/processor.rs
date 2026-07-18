@@ -204,15 +204,7 @@ impl MangaTextSegmentationOutput {
         .context("failed to construct manga text segmentation mask")
     }
 
-    pub fn process(
-        &self,
-        image: &DynamicImage,
-        options: &MangaTextCleaningOptions,
-    ) -> Result<MangaTextCleaningResult> {
-        ensure!(
-            (0.0..=1.0).contains(&options.alpha),
-            "manga text cleaning alpha must be between 0 and 1"
-        );
+    pub fn process(&self, options: &MangaTextCleaningOptions) -> Result<GrayImage> {
         ensure!(
             options.padding_iterations <= 10,
             "manga text cleaning padding iterations must be at most 10"
@@ -220,15 +212,6 @@ impl MangaTextSegmentationOutput {
         ensure!(
             options.close_gaps_kernel <= 10,
             "manga text cleaning gap-closing kernel must be at most 10"
-        );
-
-        let source = image.to_rgb8();
-        ensure!(
-            source.dimensions() == (self.width, self.height),
-            "image dimensions {:?} do not match probability map {}x{}",
-            source.dimensions(),
-            self.width,
-            self.height
         );
 
         let mut mask = self.binary_mask(options.threshold)?;
@@ -241,40 +224,19 @@ impl MangaTextSegmentationOutput {
             fill_holes(&mut mask);
         }
 
-        let whiteout_mask = if options.padding_iterations == 0 {
-            mask.clone()
-        } else {
+        if options.padding_iterations > 0 {
             // Repeating OpenCV dilation with a 3x3 all-ones kernel is one
             // Chebyshev-radius dilation with the iteration count as radius.
-            dilate(&mask, Norm::LInf, options.padding_iterations as u8)
-        };
-        let mut overlay = source.clone();
-        let mut cleaned = source.clone();
-
-        for index in 0..mask.as_raw().len() {
-            let offset = index * 3;
-            if mask.as_raw()[index] == 255 {
-                overlay.as_mut()[offset] = blend(source.as_raw()[offset], 255, options.alpha);
-                overlay.as_mut()[offset + 1] = blend(source.as_raw()[offset + 1], 0, options.alpha);
-                overlay.as_mut()[offset + 2] = blend(source.as_raw()[offset + 2], 0, options.alpha);
-            }
-            if whiteout_mask.as_raw()[index] == 255 {
-                cleaned.as_mut()[offset..offset + 3].fill(255);
-            }
+            mask = dilate(&mask, Norm::LInf, options.padding_iterations as u8);
         }
 
-        Ok(MangaTextCleaningResult {
-            overlay,
-            cleaned,
-            mask,
-        })
+        Ok(mask)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct MangaTextCleaningOptions {
     pub threshold: f32,
-    pub alpha: f32,
     pub padding_iterations: u32,
     pub fill_holes: bool,
     pub close_gaps_kernel: u32,
@@ -284,19 +246,11 @@ impl Default for MangaTextCleaningOptions {
     fn default() -> Self {
         Self {
             threshold: 0.5,
-            alpha: 0.4,
             padding_iterations: 2,
-            fill_holes: false,
-            close_gaps_kernel: 0,
+            fill_holes: true,
+            close_gaps_kernel: 2,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct MangaTextCleaningResult {
-    pub overlay: RgbImage,
-    pub cleaned: RgbImage,
-    pub mask: GrayImage,
 }
 
 fn resize_dimensions(width: u32, height: u32, max_side: u32) -> (u32, u32) {
@@ -388,15 +342,9 @@ fn fill_holes(mask: &mut GrayImage) {
     }
 }
 
-fn blend(source: u8, layer: u8, alpha: f32) -> u8 {
-    (f32::from(source) * (1.0 - alpha) + f32::from(layer) * alpha)
-        .round_ties_even()
-        .clamp(0.0, 255.0) as u8
-}
-
 #[cfg(test)]
 mod tests {
-    use image::{DynamicImage, GrayImage, Luma, Rgb, RgbImage};
+    use image::{GrayImage, Luma};
 
     use super::{
         MangaTextCleaningOptions, MangaTextSegmentationOutput, fill_holes, opencv_ellipse,
@@ -449,16 +397,14 @@ mod tests {
     }
 
     #[test]
-    fn cleaning_uses_upstream_defaults() -> anyhow::Result<()> {
+    fn process_returns_the_padded_mask() -> anyhow::Result<()> {
         let output = MangaTextSegmentationOutput {
             width: 3,
             height: 3,
             probabilities: vec![0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
         };
-        let source = DynamicImage::ImageRgb8(RgbImage::from_pixel(3, 3, Rgb([0, 0, 0])));
-        let result = output.process(&source, &MangaTextCleaningOptions::default())?;
-        assert!(result.cleaned.pixels().all(|pixel| pixel.0 == [255; 3]));
-        assert_eq!(result.mask.get_pixel(1, 1), &Luma([255]));
+        let mask = output.process(&MangaTextCleaningOptions::default())?;
+        assert!(mask.pixels().all(|pixel| pixel.0 == [255]));
         Ok(())
     }
 }

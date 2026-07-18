@@ -5,11 +5,10 @@ use koharu_runtime::{download::client::Client, package::STORE_DIR};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::debug;
-use utoipa::ToSchema;
 
 const CATALOG_JSON: &str = include_str!("../data/google-fonts-catalog.json");
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GoogleFontVariant {
     pub style: String,
@@ -17,7 +16,7 @@ pub struct GoogleFontVariant {
     pub filename: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GoogleFontEntry {
     pub family: String,
@@ -26,7 +25,7 @@ pub struct GoogleFontEntry {
     pub variants: Vec<GoogleFontVariant>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoogleFontCatalog {
     pub fonts: Vec<GoogleFontEntry>,
 }

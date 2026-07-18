@@ -16,7 +16,8 @@ anyhow = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
 fast_image_resize = { workspace = true }
-once_cell = { workspace = true }
+koharu-fonts = { workspace = true }
+koharu-scene = { workspace = true }
 skrifa = { workspace = true }
 harfrust = { workspace = true }
 hypher = { workspace = true }
@@ -24,15 +25,16 @@ icu_properties = { workspace = true, features = ["compiled_data"] }
 icu_segmenter = { workspace = true, features = ["compiled_data"] }
 jieba-rs = { workspace = true }
 unicode-bidi = { workspace = true }
-fontdb = { workspace = true }
-fontdue = { workspace = true }
-tiny-skia = { workspace = true }
+fontique = { workspace = true }
+pollster = { workspace = true }
+serde = { workspace = true }
 tracing = { workspace = true }
-blake3 = { workspace = true }
+vello = { workspace = true }
+wgpu = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
 criterion = { workspace = true }
+once_cell = { workspace = true }
 
 [[bench]]
 name = "rendering"

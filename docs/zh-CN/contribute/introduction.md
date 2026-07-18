@@ -51,13 +51,12 @@ title: 简介
 Koharu 是一个 Rust workspace，外壳是 Tauri，UI 是 Next.js：
 
 - **`koharu/`** — Tauri 桌面外壳
-- **`koharu-app/`** — 应用后端与流水线编排
+- **`koharu-pipeline/`** — 处理 DAG、引擎注册表与内置引擎
 - **`koharu-scene/`** — 场景图、操作、历史记录和项目持久化
 - **`koharu-ml/`** — 检测、OCR、修复、字体分析
 - **`koharu-llm/`** — llama.cpp 绑定与 LLM Provider
 - **`koharu-renderer/`** — 文本 Shape 与渲染
 - **`koharu-psd/`** — 分层 PSD 导出
-- **`koharu-rpc/`** — HTTP API 与 MCP Server
 - **`koharu-runtime/`** — 运行时与模型下载管理
 - **`ui/`** — Next.js Web UI
 - **`tests/`** — Playwright E2E 测试

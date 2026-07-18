@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter(filter).init();
     let cli = Cli::parse();
     let image = image::open(cli.input)?;
-    koharu_ml::init().await?;
+    koharu_ml::init_llama().await?;
     let model = PaddleOCRVL::load(koharu_ml::device(cli.cpu)).await?;
     let result = model.inference(&image, cli.task.into())?;
     println!("{}", result.text);

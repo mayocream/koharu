@@ -1,0 +1,30 @@
+[package]
+name = "koharu-pipeline"
+version.workspace = true
+edition.workspace = true
+description = "Scene-processing DAG and built-in engines for Koharu."
+license.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+image = { workspace = true }
+koharu-config = { workspace = true }
+koharu-ml = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-translator = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+specta = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+toml = { workspace = true }

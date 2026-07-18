@@ -229,7 +229,6 @@ These variants relax the safety tuning applied to the corresponding base instruc
 
 These models are more specialized for translation quality, language coverage, or lower-resource setups.
 
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): a Q5_K_M GGUF, best when translation quality matters more than speed or memory use
 - [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a smaller multilingual instruct model that is easier to run on CPUs or low-memory GPUs
 - [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) and [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): larger translation-oriented options when you have more VRAM or RAM available
 - [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): a smaller IQ4_XS GGUF, a good balance of quality and speed on 8 GB GPUs
@@ -346,6 +345,9 @@ bun install
 ```bash
 bun dev
 ```
+
+This starts the Next.js development server and the native application together.
+Nodemon rebuilds and restarts the Rust process when workspace sources change.
 
 ### Build
 

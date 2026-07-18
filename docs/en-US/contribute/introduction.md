@@ -51,13 +51,12 @@ We welcome and appreciate any form of contribution.
 Koharu is organized as a Rust workspace with a Tauri shell and a Next.js UI:
 
 - **`koharu/`** — Tauri desktop shell
-- **`koharu-app/`** — application backend and pipeline orchestration
+- **`koharu-pipeline/`** — processing DAG, engine registry, and built-in engines
 - **`koharu-scene/`** — scene graph, operations, history, and project persistence
 - **`koharu-ml/`** — detection, OCR, inpainting, and font analysis
 - **`koharu-llm/`** — llama.cpp bindings and LLM providers
 - **`koharu-renderer/`** — text shaping and rendering
 - **`koharu-psd/`** — layered PSD export
-- **`koharu-rpc/`** — HTTP API and MCP server
 - **`koharu-runtime/`** — runtime and model download management
 - **`ui/`** — Next.js web UI
 - **`tests/`** — Playwright end-to-end tests

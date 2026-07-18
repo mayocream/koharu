@@ -57,7 +57,6 @@ Na prática, os modelos locais geralmente são transformers decoder-only quantiz
 
 ### Modelos locais internos focados em tradução para saída em inglês
 
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): um GGUF Q5_K_M, melhor quando a qualidade da tradução importa mais
 - [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): uma opção menor multilíngue do tipo instruct para sistemas com pouca memória ou iteração mais rápida
 - [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) e [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): escolhas maiores orientadas para tradução quando você quer mais folga
 

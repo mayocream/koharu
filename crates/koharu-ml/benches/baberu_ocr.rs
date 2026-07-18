@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
         .join("ocr")
         .join("title.png");
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
     let image = image::open(&input)?;
     let model = BaberuOcr::load(koharu_ml::Device::cuda(0)).await?;
 

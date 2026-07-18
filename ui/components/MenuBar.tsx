@@ -2,513 +2,300 @@
 
 import { CopyIcon, MinusIcon, SquareIcon, XIcon } from 'lucide-react'
 import Image from 'next/image'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
-import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
 import {
   Menubar,
+  MenubarCheckboxItem,
   MenubarContent,
   MenubarItem,
   MenubarMenu,
   MenubarSeparator,
   MenubarShortcut,
   MenubarTrigger,
-  MenubarCheckboxItem,
-  MenubarSub,
-  MenubarSubContent,
-  MenubarSubTrigger,
 } from '@/components/ui/menubar'
-import { useScene } from '@/hooks/useScene'
-import { getConfig, startPipeline } from '@/lib/api/default/default'
-import { isTauri, openExternalUrl } from '@/lib/backend'
-import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
-import { clearSelectionOnCurrentPage, closeProject, redoOp, selectAllTextNodesOnCurrentPage, undoOp } from '@/lib/io/scene'
-import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { useSelectionStore } from '@/lib/stores/selectionStore'
-
-const windowControls = {
-  async close() {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    return getCurrentWindow().close()
-  },
-  async minimize() {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    return getCurrentWindow().minimize()
-  },
-  async toggleMaximize() {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    return getCurrentWindow().toggleMaximize()
-  },
-  async isMaximized() {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    return getCurrentWindow().isMaximized()
-  },
-}
-
-type MenuItem = {
-  label: string
-  onSelect?: () => void | Promise<void>
-  disabled?: boolean
-  testId?: string
-}
-
-type MenuSection = {
-  label: string
-  items: MenuItem[]
-  triggerTestId?: string
-}
+import { koharuClient, useEditorStore, type PipelineScope } from '@/lib/koharu'
 
 export function MenuBar() {
   const { t } = useTranslation()
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
-  const hasPage = useSelectionStore((s) => s.pageId !== null)
-  const hasScene = useScene().scene !== null
-  const shortcuts = usePreferencesStore((state) => state.shortcuts)
-  const customPipeline = usePreferencesStore((state) => state.customPipeline)
-  const setCustomPipeline = usePreferencesStore((state) => state.setCustomPipeline)
-  const hasSelectedSteps = useMemo(
-    () => Object.values(customPipeline).some(Boolean),
-    [customPipeline],
-  )
-  const isMac = useMemo(() => getPlatform() === 'mac', [])
+  const [maximized, setMaximized] = useState(false)
+  const connection = useEditorStore((state) => state.connection)
+  const project = useEditorStore((state) => state.project)
+  const pages = useEditorStore((state) => state.pages)
+  const page = useEditorStore((state) => state.page)
+  const selectedPages = useEditorStore((state) => state.selectedPages)
+  const selectedElements = useEditorStore((state) => state.selectedElements)
+  const selectElements = useEditorStore((state) => state.selectElements)
+  const display = useEditorStore((state) => state.display)
+  const setDisplay = useEditorStore((state) => state.setDisplay)
+  const targetLanguage = useEditorStore((state) => state.targetLanguage)
+  const instructions = useEditorStore((state) => state.instructions)
+  const showTextBounds = useEditorStore((state) => state.showTextBounds)
+  const setShowTextBounds = useEditorStore((state) => state.setShowTextBounds)
+  const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
+  const native = connection === 'connected'
 
-  const requirePageId = () => {
-    const id = useSelectionStore.getState().pageId
-    if (!id) throw new Error('No current page selected')
-    return id
-  }
-
-  const runPipeline = async (opts: { pageId?: string }) => {
-    const cfg = await getConfig()
-    if (!cfg.pipeline) return
-    const p = cfg.pipeline
-    const steps = [
-      p.detector,
-      p.segmenter,
-      p.bubble_segmenter,
-      p.font_detector,
-      p.ocr,
-      p.translator,
-      p.inpainter,
-      p.renderer,
-    ].filter((s): s is string => !!s)
-    const editor = useEditorUiStore.getState()
-    const prefs = usePreferencesStore.getState()
-    await startPipeline({
-      steps,
-      pages: opts.pageId ? [opts.pageId] : undefined,
-      targetLanguage: editor.selectedLanguage,
-      systemPrompt: prefs.customSystemPrompt,
-      defaultFont: prefs.defaultFont,
-      readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
+  const run = (scope: PipelineScope) =>
+    koharuClient.fire({
+      type: 'run_pipeline',
+      scope,
+      stages: { mode: 'all' },
+      target_language: targetLanguage.trim() || null,
+      instructions: instructions.trim() || null,
     })
+
+  const updateDisplay = (next: typeof display) => {
+    setDisplay(next)
+    koharuClient.interact({ type: 'set_display', display: next })
   }
 
-  const runInpaint = async (pageId: string) => {
-    const cfg = await getConfig()
-    if (!cfg.pipeline?.inpainter) return
-    await startPipeline({ steps: [cfg.pipeline.inpainter], pages: [pageId] })
+  const toggleMaximize = () => {
+    koharuClient.controlWindow('toggle_maximize')
+    setMaximized((current) => !current)
   }
-
-  const runCustomPipeline = async (opts: { pageId?: string }) => {
-    const cfg = await getConfig()
-    if (!cfg.pipeline) return
-    const p = cfg.pipeline
-    const prefs = usePreferencesStore.getState()
-    const steps = [
-      ...(prefs.customPipeline.detect
-        ? [p.detector, p.segmenter, p.bubble_segmenter, p.font_detector]
-        : []),
-      prefs.customPipeline.ocr ? p.ocr : null,
-      prefs.customPipeline.translator ? p.translator : null,
-      prefs.customPipeline.inpainter ? p.inpainter : null,
-      prefs.customPipeline.renderer ? p.renderer : null,
-    ].filter((s): s is string => !!s)
-    const editor = useEditorUiStore.getState()
-    await startPipeline({
-      steps,
-      pages: opts.pageId ? [opts.pageId] : undefined,
-      targetLanguage: editor.selectedLanguage,
-      systemPrompt: prefs.customSystemPrompt,
-      defaultFont: prefs.defaultFont,
-      readingOrder: editor.readingOrder === 'custom' ? undefined : editor.readingOrder,
-    })
-  }
-
-  const exportItems: MenuItem[] = [
-    {
-      label: t('menu.export'),
-      onSelect: () => void exportCurrentProjectAs('rendered', [requirePageId()]),
-      disabled: !hasPage,
-      testId: 'menu-file-export',
-    },
-    {
-      label: t('menu.exportPsd'),
-      onSelect: () => void exportCurrentProjectAs('psd', [requirePageId()]),
-      disabled: !hasPage,
-      testId: 'menu-file-export-psd',
-    },
-    {
-      label: t('menu.exportAllInpainted'),
-      onSelect: () => void exportCurrentProjectAs('inpainted'),
-      disabled: !hasScene,
-      testId: 'menu-file-export-all-inpainted',
-    },
-    {
-      label: t('menu.exportAllRendered'),
-      onSelect: () => void exportCurrentProjectAs('rendered'),
-      disabled: !hasScene,
-      testId: 'menu-file-export-all-rendered',
-    },
-  ]
-
-  const helpMenuItems: MenuItem[] = [
-    { label: t('menu.discord'), onSelect: () => openExternalUrl('https://discord.gg/mHvHkxGnUY') },
-    {
-      label: t('menu.github'),
-      onSelect: () => openExternalUrl('https://github.com/mayocream/koharu'),
-    },
-  ]
-
-  const isNativeMacOS = isTauri() && isMac
-  const isWindowsTauri = isTauri() && !isMac
 
   return (
-    <div className='flex h-8 items-center border-b border-border bg-background text-[13px] text-foreground'>
-      {isNativeMacOS && <MacOSControls />}
-      <div className='flex h-full items-center pl-2 select-none'>
-        <Image src='/icon.png' alt='Koharu' width={18} height={18} draggable={false} />
+    <header className='flex h-8 shrink-0 items-center border-b border-border bg-background text-[13px] text-foreground'>
+      <div className='flex h-full shrink-0 items-center pl-2 select-none'>
+        <Image src='/icon.png' alt='Koharu' width={18} height={18} draggable={false} priority />
       </div>
-      <Menubar className='h-auto gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
+      <Menubar className='h-auto shrink-0 gap-1 border-none bg-transparent p-0 px-1.5 shadow-none'>
         <MenubarMenu>
-          <MenubarTrigger
-            data-testid='menu-file-trigger'
-            className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
-          >
-            {t('menu.file')}
-          </MenubarTrigger>
-          <MenubarContent className='min-w-48' align='start' sideOffset={5} alignOffset={-3}>
+          <MenubarTrigger>{t('native.menu.file', { defaultValue: 'File' })}</MenubarTrigger>
+          <MenubarContent>
             <MenubarItem
-              data-testid='menu-file-open-files'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void importPages('replace', 'files')}
+              disabled={!native}
+              onSelect={() => koharuClient.fire({ type: 'create_project' })}
             >
-              {t('menu.openFiles')}
+              {t('native.menu.newProject', { defaultValue: 'New Project…' })}
+              <MenubarShortcut>Ctrl+N</MenubarShortcut>
             </MenubarItem>
             <MenubarItem
-              data-testid='menu-file-open-folder'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void importPages('replace', 'folder')}
+              disabled={!native}
+              onSelect={() => koharuClient.fire({ type: 'open_project' })}
             >
-              {t('menu.openFolder')}
+              {t('native.menu.openProject', { defaultValue: 'Open Project…' })}
+              <MenubarShortcut>Ctrl+O</MenubarShortcut>
             </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
-              data-testid='menu-file-save-as'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void exportCurrentProjectAs('khr')}
+              disabled={!project}
+              onSelect={() => koharuClient.fire({ type: 'import_pages' })}
             >
-              {t('menu.saveAs')}
+              {t('native.menu.importPages', { defaultValue: 'Import Pages…' })}
             </MenubarItem>
-            <MenubarSeparator />
-            {exportItems.map((item) => (
-              <MenubarItem
-                key={item.label}
-                data-testid={item.testId}
-                className='text-[13px]'
-                disabled={item.disabled}
-                onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
-              >
-                {item.label}
-              </MenubarItem>
-            ))}
-            <MenubarSeparator />
             <MenubarItem
-              data-testid='menu-file-close-project'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void closeProject()}
+              disabled={!project || pages.length === 0}
+              onSelect={() =>
+                koharuClient.fire({ type: 'export_pages', pages: selectedPages, format: 'png' })
+              }
             >
-              {t('menu.closeProject')}
+              {t('native.menu.exportPng', { defaultValue: 'Export PNG…' })}
+            </MenubarItem>
+            <MenubarItem
+              disabled={!project || pages.length === 0}
+              onSelect={() =>
+                koharuClient.fire({ type: 'export_pages', pages: selectedPages, format: 'psd' })
+              }
+            >
+              {t('native.menu.exportPsd', { defaultValue: 'Export PSD…' })}
             </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
-              className='text-[13px]'
-              onSelect={() => {
-                setSettingsTab('appearance')
-                setSettingsOpen(true)
-              }}
+              disabled={!project}
+              onSelect={() => koharuClient.fire({ type: 'close_project' })}
             >
-              {t('menu.settings')}
-            </MenubarItem>
-          </MenubarContent>
-        </MenubarMenu>
-        <MenubarMenu>
-          <MenubarTrigger
-            data-testid='menu-edit-trigger'
-            className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
-          >
-            {t('menu.edit')}
-          </MenubarTrigger>
-          <MenubarContent className='min-w-40' align='start' sideOffset={5} alignOffset={-3}>
-            <MenubarItem
-              data-testid='menu-edit-undo'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void undoOp()}
-            >
-              {t('menu.undo')}
-              <MenubarShortcut>{formatShortcutForDisplay(shortcuts.undo, isMac)}</MenubarShortcut>
-            </MenubarItem>
-            <MenubarItem
-              data-testid='menu-edit-redo'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void redoOp()}
-            >
-              {t('menu.redo')}
-              <MenubarShortcut>{formatShortcutForDisplay(shortcuts.redo, isMac)}</MenubarShortcut>
+              {t('native.menu.closeProject', { defaultValue: 'Close Project' })}
             </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
-              data-testid='menu-edit-select-all'
-              className='text-[13px]'
-              disabled={!hasPage}
-              onSelect={() => selectAllTextNodesOnCurrentPage()}
+              disabled={!project}
+              onSelect={() => koharuClient.fire({ type: 'collect_garbage' })}
             >
-              {t('menu.selectAll')}
-              <MenubarShortcut>{isMac ? '⌘A' : 'Ctrl+A'}</MenubarShortcut>
+              {t('native.menu.collectGarbage', { defaultValue: 'Clean Project Storage' })}
             </MenubarItem>
-            <MenubarItem
-              data-testid='menu-edit-clear-select'
-              className='text-[13px]'
-              disabled={!hasPage}
-              onSelect={() => clearSelectionOnCurrentPage()}
-            >
-              {t('menu.clearSelect')}
-            </MenubarItem>
-          </MenubarContent>
-        </MenubarMenu>
-        <MenubarMenu>
-          <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'>
-            {t('menu.view')}
-          </MenubarTrigger>
-          <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
-            <MenubarItem className='text-[13px]' onSelect={fitCanvasToViewport}>
-              {t('menu.fitWindow')}
-            </MenubarItem>
-            <MenubarItem className='text-[13px]' onSelect={resetCanvasScale}>
-              {t('menu.originalSize')}
+            <MenubarItem onSelect={() => setSettingsOpen(true)}>
+              {t('native.menu.settings', { defaultValue: 'Settings…' })}
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
 
         <MenubarMenu>
-          <MenubarTrigger
-            data-testid='menu-process-trigger'
-            className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
-          >
-            {t('menu.process')}
-          </MenubarTrigger>
-          <MenubarContent className='min-w-48' align='start' sideOffset={5} alignOffset={-3}>
+          <MenubarTrigger>{t('native.menu.edit', { defaultValue: 'Edit' })}</MenubarTrigger>
+          <MenubarContent>
             <MenubarItem
-              data-testid='menu-process-current'
-              className='text-[13px]'
-              disabled={!hasPage}
-              onSelect={() => void runPipeline({ pageId: requirePageId() })}
+              disabled={!project?.can_undo}
+              onSelect={() => koharuClient.fire({ type: 'undo' })}
             >
-              {t('menu.processCurrent')}
+              {t('native.menu.undo', { defaultValue: 'Undo' })}
+              <MenubarShortcut>Ctrl+Z</MenubarShortcut>
             </MenubarItem>
             <MenubarItem
-              data-testid='menu-process-rerender'
-              className='text-[13px]'
-              disabled={!hasPage}
-              onSelect={() => void runInpaint(requirePageId())}
+              disabled={!project?.can_redo}
+              onSelect={() => koharuClient.fire({ type: 'redo' })}
             >
-              {t('menu.redoInpaintRender')}
-            </MenubarItem>
-            <MenubarItem
-              data-testid='menu-process-all'
-              className='text-[13px]'
-              disabled={!hasScene}
-              onSelect={() => void runPipeline({})}
-            >
-              {t('menu.processAll')}
+              {t('native.menu.redo', { defaultValue: 'Redo' })}
+              <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>
             </MenubarItem>
             <MenubarSeparator />
             <MenubarItem
-              className='text-[13px]'
-              disabled={!hasPage || !hasSelectedSteps}
-              onSelect={() => void runCustomPipeline({ pageId: requirePageId() })}
+              disabled={!page}
+              onSelect={() => selectElements(page?.elements.map((element) => element.id) ?? [])}
             >
-              {t('menu.runCustomCurrent')}
+              {t('native.menu.selectAll', { defaultValue: 'Select All Elements' })}
+              <MenubarShortcut>Ctrl+A</MenubarShortcut>
             </MenubarItem>
             <MenubarItem
-              className='text-[13px]'
-              disabled={!hasScene || !hasSelectedSteps}
-              onSelect={() => void runCustomPipeline({})}
+              disabled={!page || selectedElements.length === 0}
+              variant='destructive'
+              onSelect={() =>
+                page &&
+                koharuClient.fire({
+                  type: 'delete_elements',
+                  page: page.id,
+                  elements: selectedElements,
+                })
+              }
             >
-              {t('menu.runCustomAll')}
+              {t('native.menu.delete', { defaultValue: 'Delete Selected' })}
+              <MenubarShortcut>Del</MenubarShortcut>
             </MenubarItem>
-            <MenubarSub>
-              <MenubarSubTrigger className='text-[13px]'>
-                {t('menu.customPipeline')}
-              </MenubarSubTrigger>
-              <MenubarSubContent className='min-w-48'>
-                <MenubarCheckboxItem
-                  className='text-[13px]'
-                  checked={customPipeline.detect}
-                  onCheckedChange={(checked) => setCustomPipeline({ detect: checked })}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {t('processing.detect')}
-                </MenubarCheckboxItem>
-                <MenubarCheckboxItem
-                  className='text-[13px]'
-                  checked={customPipeline.ocr}
-                  onCheckedChange={(checked) => setCustomPipeline({ ocr: checked })}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {t('processing.ocr')}
-                </MenubarCheckboxItem>
-                <MenubarCheckboxItem
-                  className='text-[13px]'
-                  checked={customPipeline.translator}
-                  onCheckedChange={(checked) => setCustomPipeline({ translator: checked })}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {t('llm.generate')}
-                </MenubarCheckboxItem>
-                <MenubarCheckboxItem
-                  className='text-[13px]'
-                  checked={customPipeline.inpainter}
-                  onCheckedChange={(checked) => setCustomPipeline({ inpainter: checked })}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {t('mask.inpaint')}
-                </MenubarCheckboxItem>
-                <MenubarCheckboxItem
-                  className='text-[13px]'
-                  checked={customPipeline.renderer}
-                  onCheckedChange={(checked) => setCustomPipeline({ renderer: checked })}
-                  onSelect={(e) => e.preventDefault()}
-                >
-                  {t('llm.render')}
-                </MenubarCheckboxItem>
-              </MenubarSubContent>
-            </MenubarSub>
           </MenubarContent>
         </MenubarMenu>
+
         <MenubarMenu>
-          <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'>
-            {t('menu.help')}
-          </MenubarTrigger>
-          <MenubarContent className='min-w-36' align='start' sideOffset={5} alignOffset={-3}>
-            {helpMenuItems.map((item) => (
-              <MenubarItem
-                key={item.label}
-                className='text-[13px]'
-                disabled={item.disabled}
-                onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
-              >
-                {item.label}
-              </MenubarItem>
-            ))}
-            <MenubarSeparator />
+          <MenubarTrigger>{t('native.menu.process', { defaultValue: 'Process' })}</MenubarTrigger>
+          <MenubarContent>
             <MenubarItem
-              className='text-[13px]'
-              onSelect={() => {
-                setSettingsTab('about')
-                setSettingsOpen(true)
-              }}
+              disabled={!project || pages.length === 0}
+              onSelect={() => run({ scope: 'project' })}
             >
-              {t('settings.about')}
+              {t('native.menu.processProject', { defaultValue: 'Process Project' })}
             </MenubarItem>
+            <MenubarItem
+              disabled={selectedPages.length === 0}
+              onSelect={() => run({ scope: 'pages', pages: selectedPages })}
+            >
+              {t('native.menu.processPages', { defaultValue: 'Process Selected Pages' })}
+            </MenubarItem>
+            <MenubarItem
+              disabled={selectedElements.length === 0}
+              onSelect={() => run({ scope: 'elements', elements: selectedElements })}
+            >
+              {t('native.menu.processElements', { defaultValue: 'Process Selected Elements' })}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+
+        <MenubarMenu>
+          <MenubarTrigger>{t('native.menu.view', { defaultValue: 'View' })}</MenubarTrigger>
+          <MenubarContent>
+            <MenubarItem
+              disabled={!page}
+              onSelect={() => koharuClient.interact({ type: 'fit_window' })}
+            >
+              {t('native.menu.fit', { defaultValue: 'Fit Window' })}
+              <MenubarShortcut>0</MenubarShortcut>
+            </MenubarItem>
+            <MenubarSeparator />
+            <MenubarCheckboxItem
+              checked={display.show_text}
+              onCheckedChange={(checked) =>
+                updateDisplay({ ...display, show_text: checked === true })
+              }
+            >
+              {t('native.menu.liveText', { defaultValue: 'Live Text' })}
+            </MenubarCheckboxItem>
+            <MenubarCheckboxItem
+              checked={display.text_mask !== null}
+              disabled={!page?.assets.text_mask}
+              onCheckedChange={(checked) =>
+                updateDisplay({
+                  ...display,
+                  text_mask: checked ? { tint: [244, 63, 94, 210], opacity: 0.55 } : null,
+                })
+              }
+            >
+              {t('native.menu.textMask', { defaultValue: 'Text Mask' })}
+            </MenubarCheckboxItem>
+            <MenubarCheckboxItem
+              checked={display.brush_mask !== null}
+              disabled={!page?.assets.brush_mask}
+              onCheckedChange={(checked) =>
+                updateDisplay({
+                  ...display,
+                  brush_mask: checked ? { tint: [14, 165, 233, 210], opacity: 0.55 } : null,
+                })
+              }
+            >
+              {t('native.menu.brushMask', { defaultValue: 'Brush Mask' })}
+            </MenubarCheckboxItem>
+            <MenubarCheckboxItem
+              checked={showTextBounds}
+              onCheckedChange={(checked) => setShowTextBounds(checked === true)}
+            >
+              {t('native.menu.textBounds', { defaultValue: 'Text Bounds' })}
+            </MenubarCheckboxItem>
           </MenubarContent>
         </MenubarMenu>
       </Menubar>
-      <div data-tauri-drag-region className='flex h-full flex-1 items-center justify-center' />
-      {isWindowsTauri && <WindowControls />}
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab={settingsTab} />
-    </div>
+      <TitlebarDragRegion enabled={native} onToggleMaximize={toggleMaximize} />
+      {native && <WindowControls maximized={maximized} onToggleMaximize={toggleMaximize} />}
+    </header>
   )
 }
 
-function MacOSControls() {
-  return (
-    <div className='flex h-full items-center gap-2 pr-2 pl-4'>
-      <button
-        onClick={() => void windowControls.close()}
-        className='group flex size-3 items-center justify-center rounded-full bg-[#FF5F57] active:bg-[#bf4942]'
-      >
-        <XIcon
-          className='size-2 text-[#4a0002] opacity-0 group-hover:opacity-100'
-          strokeWidth={3}
-        />
-      </button>
-      <button
-        onClick={() => void windowControls.minimize()}
-        className='group flex size-3 items-center justify-center rounded-full bg-[#FEBC2E] active:bg-[#bf8d22]'
-      >
-        <MinusIcon
-          className='size-2 text-[#5f4a00] opacity-0 group-hover:opacity-100'
-          strokeWidth={3}
-        />
-      </button>
-      <button
-        onClick={() => void windowControls.toggleMaximize()}
-        className='group flex size-3 items-center justify-center rounded-full bg-[#28C840] active:bg-[#1e9630]'
-      >
-        <SquareIcon
-          className='size-1.5 text-[#006500] opacity-0 group-hover:opacity-100'
-          strokeWidth={3}
-        />
-      </button>
-    </div>
-  )
+function TitlebarDragRegion({
+  enabled,
+  onToggleMaximize,
+}: {
+  enabled: boolean
+  onToggleMaximize: () => void
+}) {
+  const mouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (!enabled || event.button !== 0) return
+    if (event.detail === 2) onToggleMaximize()
+    else koharuClient.controlWindow('drag')
+  }
+
+  return <div className='h-full min-w-6 flex-1 select-none' onMouseDown={mouseDown} />
 }
 
-function WindowControls() {
-  const [maximized, setMaximized] = useState(false)
-
-  const updateMaximized = useCallback(async () => {
-    setMaximized(await windowControls.isMaximized())
-  }, [])
-
-  useEffect(() => {
-    void updateMaximized()
-    const onResize = () => void updateMaximized()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [updateMaximized])
+function WindowControls({
+  maximized,
+  onToggleMaximize,
+}: {
+  maximized: boolean
+  onToggleMaximize: () => void
+}) {
+  const { t } = useTranslation()
 
   return (
-    <div className='flex h-full'>
+    <div className='flex h-full shrink-0'>
       <button
-        onClick={() => void windowControls.minimize()}
-        className='flex h-full w-11 items-center justify-center hover:bg-accent'
+        type='button'
+        aria-label={t('native.window.minimize', { defaultValue: 'Minimize' })}
+        onClick={() => koharuClient.controlWindow('minimize')}
+        className='flex h-full w-11 items-center justify-center transition-colors hover:bg-accent'
       >
         <MinusIcon className='size-4' />
       </button>
       <button
-        onClick={() => {
-          void windowControls.toggleMaximize().then(updateMaximized)
-        }}
-        className='flex h-full w-11 items-center justify-center hover:bg-accent'
+        type='button'
+        aria-label={t(maximized ? 'native.window.restore' : 'native.window.maximize', {
+          defaultValue: maximized ? 'Restore' : 'Maximize',
+        })}
+        onClick={onToggleMaximize}
+        className='flex h-full w-11 items-center justify-center transition-colors hover:bg-accent'
       >
         {maximized ? <CopyIcon className='size-3.5' /> : <SquareIcon className='size-3.5' />}
       </button>
       <button
-        onClick={() => void windowControls.close()}
-        className='flex h-full w-11 items-center justify-center hover:bg-red-500 hover:text-white'
+        type='button'
+        aria-label={t('native.window.close', { defaultValue: 'Close' })}
+        onClick={() => koharuClient.controlWindow('close')}
+        className='flex h-full w-11 items-center justify-center transition-colors hover:bg-red-500 hover:text-white'
       >
         <XIcon className='size-4' />
       </button>

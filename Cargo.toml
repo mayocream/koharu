@@ -1,8 +1,6 @@
 [workspace]
 members = [
     "crates/*",
-    "tests/integration-tests",
-    "tests/integration-tests/client",
 ]
 default-members = ["crates/koharu"]
 resolver = "3"
@@ -23,7 +21,6 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
 [workspace.dependencies]
-koharu-app = { path = "crates/koharu-app", version = "0.62.0-alpha.1", default-features = false }
 koharu-bindgen = { path = "crates/koharu-bindgen", version = "0.62.0-alpha.1", default-features = false }
 koharu-config = { path = "crates/koharu-config", version = "0.62.0-alpha.1", default-features = false }
 koharu-scene = { path = "crates/koharu-scene", version = "0.62.0-alpha.1", default-features = false }
@@ -37,10 +34,13 @@ koharu-torch = { path = "crates/koharu-torch", version = "0.62.0-alpha.1", defau
 koharu-torch-sys = { path = "crates/koharu-torch-sys", version = "0.62.0-alpha.1", default-features = false }
 koharu-ai = { path = "crates/koharu-ai", version = "0.62.0-alpha.1", default-features = false }
 koharu-ml = { path = "crates/koharu-ml", version = "0.62.0-alpha.1", default-features = false }
+koharu-pipeline = { path = "crates/koharu-pipeline", version = "0.62.0-alpha.1", default-features = false }
+koharu-worker = { path = "crates/koharu-worker", version = "0.62.0-alpha.1", default-features = false }
 koharu-translator = { path = "crates/koharu-translator", version = "0.62.0-alpha.1", default-features = false }
 koharu-psd = { path = "crates/koharu-psd", version = "0.62.0-alpha.1", default-features = false }
 koharu-renderer = { path = "crates/koharu-renderer", version = "0.62.0-alpha.1", default-features = false }
-koharu-rpc = { path = "crates/koharu-rpc", version = "0.62.0-alpha.1", default-features = false }
+koharu-canvas = { path = "crates/koharu-canvas", version = "0.62.0-alpha.1", default-features = false }
+koharu-desktop = { path = "crates/koharu-desktop", version = "0.62.0-alpha.1", default-features = false }
 koharu-secrets = { path = "crates/koharu-secrets", version = "0.62.0-alpha.1", default-features = false }
 
 # external dependencies
@@ -53,10 +53,12 @@ async-trait = "0.1"
 imageproc = "0.27"
 ab_glyph = "0.2"
 clap = { version = "4.5", features = ["derive"] }
-config = { version = "0.15", default-features = false, features = ["toml"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 serde_json = "1.0"
+specta = { version = "=2.0.0-rc.25", features = ["derive", "url", "uuid"] }
+specta-serde = "=0.0.12"
+specta-typescript = "=0.0.12"
 tokio = { version = "1.52", features = ["full"] }
 tracing = "0.1"
 tracing-core = "0.1"
@@ -64,16 +66,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "regist
 console = "0.16"
 open = "5.3"
 rfd = "0.17"
-postcard = { version = "1.0", features = ["use-std"] }
+rmp-serde = "1"
 thiserror = "2.0"
-tauri = { version = "2.11", features = ["devtools"] }
-tauri-build = "2.6"
-tauri-plugin-dialog = "2.7"
-tauri-plugin-fs = "2.5"
-tauri-plugin-opener = "2.5"
-tauri-plugin-updater = "2.10"
 blake3 = "1.8"
 rayon = "1.12"
+rust-embed = { version = "8.12", features = ["interpolate-folder-path"] }
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
 strum = { version = "0.28", features = ["derive"] }
@@ -135,49 +132,33 @@ windows = { version = "0.62", features = [
 ] }
 windows-sys = { version = "0.61", features = ["Win32_System_LibraryLoader"] }
 winreg = "0.56"
-skrifa = "0.43"
+skrifa = "0.42"
 harfrust = "0.10"
 hypher = "0.1.7"
 icu_properties = "2.2"
 icu_segmenter = "2.2"
 jieba-rs = "0.10"
-fontdb = "0.23"
-fontdue = "0.9"
-tiny-skia = "0.12"
-axum = { version = "0.8", features = ["multipart", "ws"] }
-async-stream = "0.3"
-rmp-serde = "1"
-rmpv = { version = "1", features = ["with-serde"] }
-rmcp = { version = "1.6", features = [
-    "server",
-    "transport-streamable-http-server",
-] }
+fontique = "0.11"
+pollster = "0.4"
+vello = "0.9"
+wgpu = { version = "29.0", features = ["wgsl"] }
+winit = "0.30.12"
+wry = { version = "0.55.1", features = ["transparent"] }
 schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
-utoipa = { version = "5", features = ["axum_extras", "chrono", "indexmap", "uuid"] }
-utoipa-axum = "0.2"
 uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
-chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 atomicwrites = "0.4"
 fs4 = "1"
 parking_lot = "0.12"
-dashmap = "6"
-tokio-stream = { version = "0.1", features = ["sync"] }
 walkdir = "2.5"
 proptest = "1.6"
-insta = "1.41"
 base64 = "0.22"
-tower-http = { version = "0.7", features = ["cors"] }
 unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
 keyring = "3.6"
 lru = "0.18"
 llguidance = "1.7.5"
-petgraph = "0.8"
-goblin = "0.10"
 petname = "3"
-tauri-plugin-process = "2.3"
-natord = "1.0.9"
 sentry = { version = "0.48", features = ["tracing"] }
 fast-glob = "1.0"
 tar = "0.4"

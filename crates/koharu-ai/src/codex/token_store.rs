@@ -1,4 +1,4 @@
-use koharu_secrets::SecretStore;
+use koharu_secrets::{ExposeSecret, SecretStore, SecretString};
 
 use super::error::{CodexError, Result};
 use super::tokens::CodexTokens;
@@ -48,7 +48,7 @@ impl TokenStore {
         else {
             return Ok(None);
         };
-        Ok(Some(serde_json::from_str(&raw)?))
+        Ok(Some(serde_json::from_str(raw.expose_secret())?))
     }
 
     pub fn store(&self, tokens: &CodexTokens) -> Result<()> {
@@ -108,9 +108,14 @@ impl TokenStore {
             return Ok(None);
         };
         let field_name = field.name();
-        let chunk_count = chunk_count.parse::<usize>().map_err(|err| {
-            CodexError::InvalidStoredToken(format!("{field_name} chunk count is invalid: {err}"))
-        })?;
+        let chunk_count = chunk_count
+            .expose_secret()
+            .parse::<usize>()
+            .map_err(|err| {
+                CodexError::InvalidStoredToken(format!(
+                    "{field_name} chunk count is invalid: {err}"
+                ))
+            })?;
 
         let mut value = String::new();
         for index in 0..chunk_count {
@@ -124,7 +129,7 @@ impl TokenStore {
                         "{field_name} is missing chunk {index} of {chunk_count}"
                     ))
                 })?;
-            value.push_str(&chunk);
+            value.push_str(chunk.expose_secret());
         }
 
         Ok(Some(value))
@@ -140,13 +145,15 @@ impl TokenStore {
         let chunks = split_secret_chunks(value);
         for (index, chunk) in chunks.iter().enumerate() {
             let chunk_key = self.field_chunk_key(field, index);
+            let chunk = SecretString::from((*chunk).to_owned());
             self.secrets
-                .set(&chunk_key, chunk)
+                .set(&chunk_key, &chunk)
                 .map_err(CodexError::SecretStore)?;
         }
         let chunks_key = self.field_chunks_key(field);
+        let chunk_count = SecretString::from(chunks.len().to_string());
         self.secrets
-            .set(&chunks_key, &chunks.len().to_string())
+            .set(&chunks_key, &chunk_count)
             .map_err(CodexError::SecretStore)
     }
 
@@ -156,7 +163,7 @@ impl TokenStore {
             .secrets
             .get(&chunks_key)
             .map_err(CodexError::SecretStore)?
-            .and_then(|value| value.parse::<usize>().ok())
+            .and_then(|value| value.expose_secret().parse::<usize>().ok())
             .unwrap_or_default();
 
         self.secrets

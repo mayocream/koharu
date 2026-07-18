@@ -57,7 +57,7 @@ impl Llm {
         self.model.eos_token()
     }
 
-    /// Applies the GGUF chat template, falling back to a simple role-prefixed format.
+    /// Applies the GGUF chat template.
     pub fn render_chat_prompt(&self, messages: &[ChatMessage]) -> Result<String> {
         self.render_chat_prompt_with_options(messages, ChatTemplateOptions::default())
     }

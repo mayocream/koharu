@@ -6,9 +6,7 @@ use image::DynamicImage;
 use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
-pub use self::processor::{
-    MangaTextCleaningOptions, MangaTextCleaningResult, MangaTextSegmentationOutput,
-};
+pub use self::processor::{MangaTextCleaningOptions, MangaTextSegmentationOutput};
 
 use self::{model::Model, processor::Processor};
 
@@ -88,7 +86,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_loads_and_runs() -> anyhow::Result<()> {
-        crate::init().await?;
+        crate::init_torch().await?;
         let model = MangaTextSegmentation::load(crate::Device::cpu()).await?;
         let image = DynamicImage::ImageRgb8(RgbImage::from_fn(96, 64, |x, y| {
             Rgb([

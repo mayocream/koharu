@@ -1,25 +1,28 @@
-use std::collections::HashMap;
+//! Vello scene encoding and reusable headless WGPU rasterization.
 
-use anyhow::{Context, Result, bail};
+use std::sync::{Mutex, mpsc};
+
+use anyhow::{Context, Result, anyhow, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::RgbaImage;
-use skrifa::{
-    GlyphId, MetadataProvider, OutlineGlyph,
-    instance::Size,
-    outline::{DrawSettings, OutlinePen},
+use vello::{
+    AaConfig, AaSupport, FontEmbolden, Glyph, RenderParams, RendererOptions, Scene,
+    kurbo::{Affine, Diagonal2, Join, Stroke},
+    peniko::{Color, Fill},
+    util::RenderContext,
 };
-use tiny_skia::{
-    Color, FillRule, FilterQuality, LineCap, LineJoin, Paint, Path, PathBuilder, Pixmap,
-    PixmapPaint, Stroke, Transform,
+use wgpu::{
+    Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
+    TexelCopyBufferInfo, Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
 };
 
-use crate::font::{Font, font_key};
-use crate::layout::{LayoutLine, LayoutRun, WritingMode};
-
-pub use crate::types::TextShaderEffect;
+use crate::{
+    font::font_key,
+    layout::{LayoutRun, WritingMode},
+};
 
 #[derive(Debug, Clone, Copy)]
-pub struct RenderStrokeOptions {
+pub struct StrokeOptions {
     pub color: [u8; 4],
     pub width_px: f32,
 }
@@ -53,6 +56,7 @@ pub struct RasterOptions {
 }
 
 impl RasterOptions {
+    #[must_use]
     pub fn supersampled(factor: u32) -> Self {
         Self {
             supersampling_factor: factor,
@@ -61,29 +65,30 @@ impl RasterOptions {
     }
 
     fn scale(self) -> u32 {
-        self.supersampling_factor.clamp(2, MAX_SUPERSAMPLING_FACTOR)
+        self.supersampling_factor.clamp(1, MAX_SUPERSAMPLING_FACTOR)
     }
 }
 
 impl Default for RasterOptions {
     fn default() -> Self {
         Self {
-            supersampling_factor: 2,
+            // Vello already uses area anti-aliasing. Supersampling remains available for
+            // exports, but should not multiply every interactive render by four by default.
+            supersampling_factor: 1,
             downsample_filter: DownsampleFilter::Lanczos3,
         }
     }
 }
 
-/// Options for rendering text.
 #[derive(Debug, Clone)]
 pub struct RenderOptions {
     pub color: [u8; 4],
     pub background: Option<[u8; 4]>,
-    pub anti_alias: bool,
+    pub hint_glyphs: bool,
     pub padding: f32,
     pub font_size: f32,
-    pub effect: TextShaderEffect,
-    pub stroke: Option<RenderStrokeOptions>,
+    pub baseline_shift: f32,
+    pub stroke: Option<StrokeOptions>,
     pub raster: RasterOptions,
 }
 
@@ -92,10 +97,10 @@ impl Default for RenderOptions {
         Self {
             color: [0, 0, 0, 255],
             background: None,
-            anti_alias: true,
+            hint_glyphs: true,
             padding: 0.0,
             font_size: 16.0,
-            effect: TextShaderEffect::default(),
+            baseline_shift: 0.0,
             stroke: None,
             raster: RasterOptions::default(),
         }
@@ -104,652 +109,383 @@ impl Default for RenderOptions {
 
 const MAX_SUPERSAMPLING_FACTOR: u32 = 4;
 
-pub struct TinySkiaRenderer;
+struct GpuState {
+    context: RenderContext,
+    device_id: usize,
+    renderer: vello::Renderer,
+    target: Option<RenderTarget>,
+}
 
-impl TinySkiaRenderer {
+struct RenderTarget {
+    width: u32,
+    height: u32,
+    padded_width: u32,
+    texture: Texture,
+    view: TextureView,
+    readback: Buffer,
+}
+
+/// A reusable, headless WGPU text renderer.
+///
+/// GPU setup and Vello's glyph caches live for the lifetime of this value. Rendering is
+/// serialized because a Vello renderer mutates those caches; callers may freely share this
+/// type between threads instead of creating a device for every text block.
+pub struct WgpuRenderer {
+    gpu: Mutex<GpuState>,
+}
+
+impl WgpuRenderer {
     pub fn new() -> Result<Self> {
-        Ok(Self)
+        let mut context = RenderContext::new();
+        let device_id = pollster::block_on(context.device(None))
+            .context("no WGPU adapter supports Vello's required features")?;
+        let renderer = vello::Renderer::new(
+            &context.devices[device_id].device,
+            RendererOptions {
+                antialiasing_support: AaSupport::area_only(),
+                ..Default::default()
+            },
+        )
+        .map_err(|error| anyhow!("failed to create Vello renderer: {error:?}"))?;
+
+        Ok(Self {
+            gpu: Mutex::new(GpuState {
+                context,
+                device_id,
+                renderer,
+                target: None,
+            }),
+        })
     }
 
     pub fn render(
         &self,
         layout: &LayoutRun<'_>,
         writing_mode: WritingMode,
-        opts: &RenderOptions,
+        options: &RenderOptions,
     ) -> Result<RgbaImage> {
-        let width = (layout.width + opts.padding * 2.0).ceil() as u32;
-        let height = (layout.height + opts.padding * 2.0).ceil() as u32;
-        if width == 0 || height == 0 {
-            bail!("invalid surface size {width}x{height}");
-        }
-        let raster_scale = opts.raster.scale();
-        let raster_width = width
-            .checked_mul(raster_scale)
-            .context("supersampled render surface width overflow")?;
-        let raster_height = height
-            .checked_mul(raster_scale)
-            .context("supersampled render surface height overflow")?;
-        let raster_scale_f = raster_scale as f32;
-
-        let mut surface = Pixmap::new(raster_width, raster_height)
-            .context("failed to allocate render surface")?;
-        if let Some(bg) = opts.background {
-            surface.fill(color_from_rgba(bg));
-        }
-
-        let mut cache: HashMap<FontGlyphId, GlyphRenderSource> = HashMap::new();
-        let has_stroke = opts
+        let mut draw_options = options.clone();
+        draw_options.padding += options
             .stroke
-            .is_some_and(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0);
-        if has_stroke {
-            render_pass(
-                &mut surface,
-                &mut cache,
+            .map_or(0.0, |stroke| stroke.width_px.max(0.0));
+        let baseline_top = options.baseline_shift.max(0.0);
+        let baseline_bottom = (-options.baseline_shift).max(0.0);
+        let width = dimension(layout.width, draw_options.padding, "width")?;
+        let height = dimension(
+            layout.height + baseline_top + baseline_bottom,
+            draw_options.padding,
+            "height",
+        )?;
+        let transform = Affine::translate((0.0, baseline_top as f64));
+        let mut scene = Scene::new();
+        if let Some(stroke) = draw_options
+            .stroke
+            .filter(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0)
+        {
+            draw_layout(
+                &mut scene,
                 layout,
                 writing_mode,
-                opts,
-                RenderPass::Stroke,
-                raster_scale_f,
-            )?;
+                &draw_options,
+                transform,
+                DrawStyle::Stroke(stroke),
+            );
         }
-        render_pass(
-            &mut surface,
-            &mut cache,
+        draw_layout(
+            &mut scene,
             layout,
             writing_mode,
-            opts,
-            RenderPass::Fill,
-            raster_scale_f,
-        )?;
+            &draw_options,
+            transform,
+            DrawStyle::Fill,
+        );
+        self.rasterize(
+            &scene,
+            width,
+            height,
+            options.background.unwrap_or([0, 0, 0, 0]),
+            options.raster,
+        )
+    }
 
-        surface_to_image(surface, width, height, opts.raster.downsample_filter)
+    pub(crate) fn rasterize(
+        &self,
+        scene: &Scene,
+        width: u32,
+        height: u32,
+        background: [u8; 4],
+        raster: RasterOptions,
+    ) -> Result<RgbaImage> {
+        if width == 0 || height == 0 {
+            bail!("invalid render surface {width}x{height}");
+        }
+        let scale = raster.scale();
+        let raster_width = width
+            .checked_mul(scale)
+            .context("supersampled render surface width overflow")?;
+        let raster_height = height
+            .checked_mul(scale)
+            .context("supersampled render surface height overflow")?;
+        let scaled;
+        let scene = if scale == 1 {
+            scene
+        } else {
+            scaled = {
+                let mut scaled = Scene::new();
+                scaled.append(scene, Some(Affine::scale(scale as f64)));
+                scaled
+            };
+            &scaled
+        };
+        let pixels = self.readback(scene, raster_width, raster_height, background)?;
+        let image = RgbaImage::from_raw(raster_width, raster_height, pixels)
+            .context("WGPU returned an invalid RGBA buffer")?;
+        if scale == 1 {
+            return Ok(image);
+        }
+        let mut downsampled = RgbaImage::new(width, height);
+        let resize_options = ResizeOptions::new()
+            .resize_alg(raster.downsample_filter.into())
+            .use_alpha(true);
+        Resizer::new()
+            .resize(&image, &mut downsampled, &resize_options)
+            .context("failed to downsample WGPU render")?;
+        Ok(downsampled)
+    }
+
+    fn readback(
+        &self,
+        scene: &Scene,
+        width: u32,
+        height: u32,
+        background: [u8; 4],
+    ) -> Result<Vec<u8>> {
+        let size = Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let (device, submission, target) = {
+            let mut gpu = self
+                .gpu
+                .lock()
+                .map_err(|_| anyhow!("WGPU renderer lock was poisoned"))?;
+            let GpuState {
+                context,
+                device_id,
+                renderer,
+                target,
+            } = &mut *gpu;
+            let device = context.devices[*device_id].device.clone();
+            let queue = &context.devices[*device_id].queue;
+            let target = target
+                .take()
+                .filter(|target| target.width == width && target.height == height)
+                .unwrap_or_else(|| RenderTarget::new(&device, width, height));
+            renderer
+                .render_to_texture(
+                    &device,
+                    queue,
+                    scene,
+                    &target.view,
+                    &RenderParams {
+                        base_color: rgba(background),
+                        width,
+                        height,
+                        antialiasing_method: AaConfig::Area,
+                    },
+                )
+                .map_err(|error| anyhow!("Vello rendering failed: {error:?}"))?;
+
+            let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("koharu text readback encoder"),
+            });
+            encoder.copy_texture_to_buffer(
+                target.texture.as_image_copy(),
+                TexelCopyBufferInfo {
+                    buffer: &target.readback,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(target.padded_width),
+                        rows_per_image: None,
+                    },
+                },
+                size,
+            );
+            let submission = queue.submit([encoder.finish()]);
+            (device, submission, target)
+        };
+        let slice = target.readback.slice(..);
+        let (sender, receiver) = mpsc::sync_channel(1);
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: Some(submission),
+                timeout: None,
+            })
+            .map_err(|error| anyhow!("WGPU device polling failed: {error:?}"))?;
+        receiver
+            .recv()
+            .context("WGPU closed the readback channel")?
+            .context("failed to map WGPU readback buffer")?;
+
+        let mapped = slice.get_mapped_range();
+        let row_len = (width * 4) as usize;
+        let mut pixels = Vec::with_capacity(row_len * height as usize);
+        for row in mapped
+            .chunks_exact(target.padded_width as usize)
+            .take(height as usize)
+        {
+            pixels.extend_from_slice(&row[..row_len]);
+        }
+        drop(mapped);
+        target.readback.unmap();
+        if let Ok(mut gpu) = self.gpu.lock()
+            && gpu.target.is_none()
+        {
+            gpu.target = Some(target);
+        }
+        Ok(pixels)
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct FontGlyphId {
-    font: usize,
-    glyph: u16,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct GlyphMetrics {
-    width: u32,
-    height: u32,
-    xmin: i32,
-    ymin: i32,
-}
-
-enum GlyphRenderSource {
-    Outline(OutlineGlyphData),
-    Bitmap(BitmapGlyphData),
-}
-
-struct OutlineGlyphData {
-    path: Path,
-    bounds: tiny_skia::Rect,
-}
-
-struct BitmapGlyphData {
-    metrics: GlyphMetrics,
-    fill_alpha: Vec<u8>,
+impl RenderTarget {
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        let size = Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("koharu text target"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let padded_width = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let readback = device.create_buffer(&BufferDescriptor {
+            label: Some("koharu text readback"),
+            size: u64::from(padded_width) * u64::from(height),
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        Self {
+            width,
+            height,
+            padded_width,
+            texture,
+            view,
+            readback,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
-enum RenderPass {
-    Stroke,
+pub(crate) enum DrawStyle {
+    Stroke(StrokeOptions),
     Fill,
 }
 
-fn render_pass(
-    surface: &mut Pixmap,
-    cache: &mut HashMap<FontGlyphId, GlyphRenderSource>,
+pub(crate) fn draw_layout(
+    scene: &mut Scene,
     layout: &LayoutRun<'_>,
     writing_mode: WritingMode,
-    opts: &RenderOptions,
-    pass: RenderPass,
-    raster_scale: f32,
-) -> Result<()> {
-    for line in &layout.lines {
-        let origin = match writing_mode {
-            WritingMode::Horizontal | WritingMode::VerticalRl => (
-                (opts.padding + line.baseline.0) * raster_scale,
-                (opts.padding + line.baseline.1) * raster_scale,
-            ),
-        };
-        render_line(surface, cache, line, origin, opts, pass, raster_scale)?;
-    }
-
-    Ok(())
-}
-
-fn render_line(
-    surface: &mut Pixmap,
-    cache: &mut HashMap<FontGlyphId, GlyphRenderSource>,
-    line: &LayoutLine<'_>,
-    origin: (f32, f32),
-    opts: &RenderOptions,
-    pass: RenderPass,
-    raster_scale: f32,
-) -> Result<()> {
-    let (origin_x, origin_y) = origin;
-    let mut pen_x = 0.0f32;
-    let mut pen_y = 0.0f32;
-
-    for glyph in &line.glyphs {
-        let Ok(gid) = u16::try_from(glyph.glyph_id) else {
-            pen_x += glyph.x_advance;
-            pen_y -= glyph.y_advance;
-            continue;
-        };
-
-        let key = FontGlyphId {
-            font: font_key(glyph.font),
-            glyph: gid,
-        };
-        if let std::collections::hash_map::Entry::Vacant(e) = cache.entry(key) {
-            let source = load_glyph_source(
-                glyph.font,
-                gid,
-                opts.font_size * raster_scale,
-                opts.anti_alias,
-            )?;
-            e.insert(source);
-        }
-
-        let baseline_x = origin_x + (pen_x + glyph.x_offset) * raster_scale;
-        let baseline_y = origin_y + (pen_y - glyph.y_offset) * raster_scale;
-
-        if let Some(source) = cache.get(&key) {
-            match source {
-                GlyphRenderSource::Outline(data) => {
-                    draw_outline_glyph(
-                        surface,
-                        data,
-                        baseline_x,
-                        baseline_y,
-                        opts,
-                        pass,
-                        raster_scale,
-                    );
-                }
-                GlyphRenderSource::Bitmap(data) => {
-                    draw_bitmap_glyph(
-                        surface,
-                        data,
-                        baseline_x,
-                        baseline_y,
-                        opts,
-                        pass,
-                        raster_scale,
-                    )?;
-                }
-            }
-        }
-
-        pen_x += glyph.x_advance;
-        pen_y -= glyph.y_advance;
-    }
-
-    Ok(())
-}
-
-fn load_glyph_source(
-    font: &Font,
-    glyph_id: u16,
-    font_size: f32,
-    anti_alias: bool,
-) -> Result<GlyphRenderSource> {
-    let font_ref = font.skrifa()?;
-
-    // Support variable font weights by instancing the wght axis
-    let mut location = skrifa::instance::Location::default();
-    let axes = font_ref.axes();
-    if let Some(axis) = axes.iter().find(|a| a.tag() == skrifa::Tag::new(b"wght")) {
-        let target = (font.weight as f32).clamp(axis.min_value(), axis.max_value());
-        location = axes.location([(skrifa::Tag::new(b"wght"), target)]);
-    }
-
-    if let Some(outline) = font_ref.outline_glyphs().get(GlyphId::new(glyph_id as u32))
-        && let Some(path) = outline_to_path(&outline, font_size, &location)
-    {
-        let bounds = path.bounds();
-        if bounds.width() > 0.0 && bounds.height() > 0.0 {
-            return Ok(GlyphRenderSource::Outline(OutlineGlyphData {
-                path,
-                bounds,
-            }));
-        }
-    }
-
-    let fontdue = font.fontdue()?;
-    let (metrics, mut bitmap) = fontdue.rasterize_indexed(glyph_id, font_size);
-    if !anti_alias {
-        for px in &mut bitmap {
-            *px = if *px >= 128 { 255 } else { 0 };
-        }
-    }
-
-    Ok(GlyphRenderSource::Bitmap(BitmapGlyphData {
-        metrics: GlyphMetrics {
-            width: metrics.width as u32,
-            height: metrics.height as u32,
-            xmin: metrics.xmin,
-            ymin: metrics.ymin,
-        },
-        fill_alpha: bitmap,
-    }))
-}
-
-fn draw_outline_glyph(
-    surface: &mut Pixmap,
-    glyph: &OutlineGlyphData,
-    baseline_x: f32,
-    baseline_y: f32,
-    opts: &RenderOptions,
-    pass: RenderPass,
-    raster_scale: f32,
+    options: &RenderOptions,
+    transform: Affine,
+    style: DrawStyle,
 ) {
-    let transform = glyph_transform(glyph.bounds, baseline_x, baseline_y, opts.effect.italic);
-
-    match pass {
-        RenderPass::Stroke => {
-            if let Some(stroke) = opts
-                .stroke
-                .filter(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0)
-            {
-                let stroke_paint = paint_from_rgba(stroke.color, opts.anti_alias);
-                let stroke_style = Stroke {
-                    width: stroke.width_px.max(0.0) * raster_scale * 2.0,
-                    line_join: LineJoin::Round,
-                    line_cap: LineCap::Round,
-                    ..Default::default()
-                };
-                surface.stroke_path(&glyph.path, &stroke_paint, &stroke_style, transform, None);
+    for line in &layout.lines {
+        let (baseline_x, baseline_y) = match writing_mode {
+            WritingMode::Horizontal | WritingMode::VerticalRl | WritingMode::VerticalLr => {
+                line.baseline
             }
-        }
-        RenderPass::Fill => {
-            if opts.effect.bold {
-                let bold_paint = paint_from_rgba(opts.color, opts.anti_alias);
-                let bold_style = Stroke {
-                    width: 2.0 * raster_scale,
-                    line_join: LineJoin::Round,
-                    line_cap: LineCap::Round,
-                    ..Default::default()
-                };
-                surface.stroke_path(&glyph.path, &bold_paint, &bold_style, transform, None);
+        };
+        let mut pen_x = 0.0;
+        let mut pen_y = 0.0;
+        let mut start = 0;
+
+        while start < line.glyphs.len() {
+            let font = line.glyphs[start].font;
+            let key = font_key(font);
+            let mut end = start + 1;
+            while end < line.glyphs.len() && font_key(line.glyphs[end].font) == key {
+                end += 1;
             }
 
-            let fill_paint = paint_from_rgba(opts.color, opts.anti_alias);
-            surface.fill_path(&glyph.path, &fill_paint, FillRule::Winding, transform, None);
-        }
-    }
-}
+            let mut glyphs = Vec::with_capacity(end - start);
+            for glyph in &line.glyphs[start..end] {
+                glyphs.push(Glyph {
+                    id: glyph.glyph_id,
+                    x: options.padding + baseline_x + pen_x + glyph.x_offset,
+                    y: options.padding + baseline_y + pen_y
+                        - glyph.y_offset
+                        - options.baseline_shift,
+                });
+                pen_x += glyph.x_advance;
+                pen_y -= glyph.y_advance;
+            }
 
-fn draw_bitmap_glyph(
-    surface: &mut Pixmap,
-    glyph: &BitmapGlyphData,
-    baseline_x: f32,
-    baseline_y: f32,
-    opts: &RenderOptions,
-    pass: RenderPass,
-    raster_scale: f32,
-) -> Result<()> {
-    if glyph.metrics.width == 0 || glyph.metrics.height == 0 || glyph.fill_alpha.is_empty() {
-        return Ok(());
-    }
+            let font_data = font.vello_data();
+            let normalized_coords = font.normalized_coords();
+            let mut run = scene
+                .draw_glyphs(&font_data)
+                .font_size(options.font_size)
+                .transform(transform)
+                .hint(options.hint_glyphs);
+            if !normalized_coords.is_empty() {
+                run = run.normalized_coords(normalized_coords);
+            }
+            if let Some(angle) = font.synthetic_skew() {
+                run = run
+                    .glyph_transform(Some(Affine::skew(-(angle.to_radians().tan() as f64), 0.0)));
+            }
+            if font.synthetic_bold() {
+                run = run.font_embolden(FontEmbolden::new(Diagonal2::new(1.0, 1.0)));
+            }
 
-    let width = glyph.metrics.width as usize;
-    let height = glyph.metrics.height as usize;
-    let mut fill_alpha = glyph.fill_alpha.clone();
-    if opts.effect.bold {
-        fill_alpha = dilate_alpha(
-            &fill_alpha,
-            width,
-            height,
-            scaled_pixel_radius(1.0, raster_scale),
-        );
-    }
-
-    let x = baseline_x + glyph.metrics.xmin as f32;
-    let y = baseline_y - glyph.metrics.ymin as f32 - glyph.metrics.height as f32;
-    let transform = bitmap_transform(
-        glyph.metrics.width as f32,
-        glyph.metrics.height as f32,
-        x,
-        y,
-        opts.effect.italic,
-    );
-    let paint = pixmap_paint(opts.effect.italic, opts.anti_alias);
-
-    match pass {
-        RenderPass::Stroke => {
-            if let Some(stroke) = opts
-                .stroke
-                .filter(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0)
-            {
-                let radius = scaled_pixel_radius(stroke.width_px, raster_scale);
-                let outer = dilate_alpha(&fill_alpha, width, height, radius);
-                let stroke_alpha = outer
-                    .into_iter()
-                    .zip(&fill_alpha)
-                    .map(|(outer_alpha, fill)| outer_alpha.saturating_sub(*fill))
-                    .collect::<Vec<_>>();
-                if let Some(stroke_pixmap) = alpha_pixmap(
-                    glyph.metrics.width,
-                    glyph.metrics.height,
-                    &stroke_alpha,
-                    stroke.color,
-                ) {
-                    surface.draw_pixmap(0, 0, stroke_pixmap.as_ref(), &paint, transform, None);
+            match style {
+                DrawStyle::Fill => run
+                    .brush(rgba(options.color))
+                    .draw(Fill::NonZero, glyphs.into_iter()),
+                DrawStyle::Stroke(stroke) => {
+                    let outline =
+                        Stroke::new((stroke.width_px * 2.0) as f64).with_join(Join::Round);
+                    run.brush(rgba(stroke.color))
+                        .draw(&outline, glyphs.into_iter());
                 }
             }
-        }
-        RenderPass::Fill => {
-            if let Some(fill_pixmap) = alpha_pixmap(
-                glyph.metrics.width,
-                glyph.metrics.height,
-                &fill_alpha,
-                opts.color,
-            ) {
-                surface.draw_pixmap(0, 0, fill_pixmap.as_ref(), &paint, transform, None);
-            }
+            start = end;
         }
     }
-
-    Ok(())
 }
 
-fn glyph_transform(
-    bounds: tiny_skia::Rect,
-    baseline_x: f32,
-    baseline_y: f32,
-    italic: bool,
-) -> Transform {
-    if !italic {
-        return Transform::from_translate(baseline_x, baseline_y);
+fn dimension(content: f32, padding: f32, name: &str) -> Result<u32> {
+    let value = content + padding * 2.0;
+    if !value.is_finite() || value <= 0.0 || value > u32::MAX as f32 {
+        bail!("invalid render surface {name}: {value}");
     }
-
-    let glyph_w = bounds.width().max(1.0);
-    let glyph_h = bounds.height().max(1.0);
-    let slant = (glyph_w.min(glyph_h) * 0.22).max(1.0);
-    let kx = -slant / glyph_h;
-    Transform::from_row(
-        1.0,
-        0.0,
-        kx,
-        1.0,
-        baseline_x - kx * bounds.bottom(),
-        baseline_y,
-    )
+    Ok(value.ceil() as u32)
 }
 
-fn bitmap_transform(width: f32, height: f32, x: f32, y: f32, italic: bool) -> Transform {
-    if !italic {
-        return Transform::from_translate(x, y);
-    }
-
-    let glyph_w = width.max(1.0);
-    let glyph_h = height.max(1.0);
-    let slant = (glyph_w.min(glyph_h) * 0.22).max(1.0);
-    let kx = -slant / glyph_h;
-    Transform::from_row(1.0, 0.0, kx, 1.0, x - kx * glyph_h, y)
-}
-
-fn pixmap_paint(italic: bool, anti_alias: bool) -> PixmapPaint {
-    PixmapPaint {
-        quality: if italic && anti_alias {
-            FilterQuality::Bilinear
-        } else {
-            FilterQuality::Nearest
-        },
-        ..Default::default()
-    }
-}
-
-fn surface_to_image(
-    surface: Pixmap,
-    width: u32,
-    height: u32,
-    downsample_filter: DownsampleFilter,
-) -> Result<RgbaImage> {
-    let raster_width = surface.width();
-    let raster_height = surface.height();
-    let pixels = surface.data().to_vec();
-
-    let raster_img = RgbaImage::from_raw(raster_width, raster_height, pixels)
-        .context("failed to build supersampled RgbaImage")?;
-    let mut img = RgbaImage::new(width, height);
-    let resize_options = ResizeOptions::new()
-        .resize_alg(downsample_filter.into())
-        // TinySkia already stores premultiplied RGBA; multiplying alpha again
-        // would darken translucent edges before they are unpremultiplied below.
-        .use_alpha(false);
-    Resizer::new()
-        .resize(&raster_img, &mut img, &resize_options)
-        .context("failed to downsample supersampled image")?;
-    let mut pixels = img.into_raw();
-    unpremultiply_rgba(&mut pixels);
-    RgbaImage::from_raw(width, height, pixels).context("failed to build downsampled RgbaImage")
-}
-
-fn scaled_pixel_radius(logical_radius: f32, raster_scale: f32) -> usize {
-    (logical_radius.max(0.0) * raster_scale).ceil().max(1.0) as usize
-}
-
-fn paint_from_rgba(color: [u8; 4], anti_alias: bool) -> Paint<'static> {
-    let mut paint = Paint {
-        anti_alias,
-        ..Default::default()
-    };
-    paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
-    paint
-}
-
-fn color_from_rgba(color: [u8; 4]) -> Color {
-    Color::from_rgba8(color[0], color[1], color[2], color[3])
-}
-
-fn outline_to_path(
-    outline: &OutlineGlyph<'_>,
-    font_size: f32,
-    location: &skrifa::instance::Location,
-) -> Option<Path> {
-    let mut pen = TinySkiaPathPen::new();
-    let settings = DrawSettings::unhinted(Size::new(font_size), location);
-    outline.draw(settings, &mut pen).ok()?;
-    pen.finish()
-}
-
-fn alpha_pixmap(width: u32, height: u32, alpha: &[u8], color: [u8; 4]) -> Option<Pixmap> {
-    if color[3] == 0 || width == 0 || height == 0 || alpha.is_empty() {
-        return None;
-    }
-
-    let mut pixmap = Pixmap::new(width, height)?;
-    let data = pixmap.data_mut();
-    for (index, &mask_alpha) in alpha.iter().enumerate() {
-        let out_alpha = ((mask_alpha as u32 * color[3] as u32) + 127) / 255;
-        let offset = index * 4;
-        data[offset] = (((color[0] as u32 * out_alpha) + 127) / 255) as u8;
-        data[offset + 1] = (((color[1] as u32 * out_alpha) + 127) / 255) as u8;
-        data[offset + 2] = (((color[2] as u32 * out_alpha) + 127) / 255) as u8;
-        data[offset + 3] = out_alpha as u8;
-    }
-    Some(pixmap)
-}
-
-fn dilate_alpha(alpha: &[u8], width: usize, height: usize, radius: usize) -> Vec<u8> {
-    if radius == 0 || alpha.is_empty() {
-        return alpha.to_vec();
-    }
-
-    let mut out = vec![0u8; alpha.len()];
-    for y in 0..height {
-        let y0 = y.saturating_sub(radius);
-        let y1 = (y + radius).min(height.saturating_sub(1));
-        for x in 0..width {
-            let x0 = x.saturating_sub(radius);
-            let x1 = (x + radius).min(width.saturating_sub(1));
-            let mut max_alpha = 0u8;
-            for yy in y0..=y1 {
-                let row = yy * width;
-                for xx in x0..=x1 {
-                    max_alpha = max_alpha.max(alpha[row + xx]);
-                }
-            }
-            out[y * width + x] = max_alpha;
-        }
-    }
-    out
-}
-
-fn unpremultiply_rgba(pixels: &mut [u8]) {
-    for px in pixels.chunks_exact_mut(4) {
-        let a = px[3];
-        if a == 0 || a == 255 {
-            continue;
-        }
-        let alpha = a as u32;
-        px[0] = ((px[0] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
-        px[1] = ((px[1] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
-        px[2] = ((px[2] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
-    }
-}
-
-struct TinySkiaPathPen {
-    builder: PathBuilder,
-}
-
-impl TinySkiaPathPen {
-    fn new() -> Self {
-        Self {
-            builder: PathBuilder::new(),
-        }
-    }
-
-    fn finish(self) -> Option<Path> {
-        self.builder.finish()
-    }
-}
-
-impl OutlinePen for TinySkiaPathPen {
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.builder.move_to(x, -y);
-    }
-
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.builder.line_to(x, -y);
-    }
-
-    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.builder.quad_to(cx0, -cy0, x, -y);
-    }
-
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.builder.cubic_to(cx0, -cy0, cx1, -cy1, x, -y);
-    }
-
-    fn close(&mut self) {
-        self.builder.close();
-    }
+fn rgba([r, g, b, a]: [u8; 4]) -> Color {
+    Color::from_rgba8(r, g, b, a)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        font::{Font, FontBook},
-        layout::TextLayout,
-    };
-
-    fn any_system_font() -> Font {
-        let mut book = FontBook::new();
-        let preferred = [
-            "Arial",
-            "Segoe UI",
-            "Yu Gothic",
-            "DejaVu Sans",
-            "Liberation Sans",
-        ];
-
-        for name in preferred {
-            if let Some(post_script_name) = book
-                .all_families()
-                .into_iter()
-                .find(|face| {
-                    face.post_script_name == name
-                        || face
-                            .families
-                            .iter()
-                            .any(|(family, _)| family.as_str() == name)
-                })
-                .map(|face| face.post_script_name)
-                .filter(|post_script_name| !post_script_name.is_empty())
-                && let Ok(font) = book.query(&post_script_name)
-            {
-                return font;
-            }
-        }
-
-        if let Some(face) = book
-            .all_families()
-            .into_iter()
-            .find(|face| !face.post_script_name.is_empty())
-        {
-            return book
-                .query(&face.post_script_name)
-                .expect("failed to load first system font");
-        }
-
-        panic!("no system font available for tests");
-    }
 
     #[test]
-    fn default_raster_options_use_2x_lanczos_supersampling() {
-        let raster = RasterOptions::default();
-        assert_eq!(raster.supersampling_factor, 2);
-        assert_eq!(raster.downsample_filter, DownsampleFilter::Lanczos3);
-        assert_eq!(raster.scale(), 2);
-    }
-
-    #[test]
-    fn supersampling_factor_is_bounded() {
-        assert_eq!(RasterOptions::supersampled(0).scale(), 2);
-        assert_eq!(RasterOptions::supersampled(1).scale(), 2);
-        assert_eq!(
-            RasterOptions::supersampled(99).scale(),
-            MAX_SUPERSAMPLING_FACTOR
-        );
-    }
-
-    #[test]
-    fn supersampled_render_keeps_logical_surface_dimensions() -> Result<()> {
-        let font = any_system_font();
-        let font_size = 24.0;
-        let layout = TextLayout::new(&font, Some(font_size)).run("Hello")?;
-        let renderer = TinySkiaRenderer::new()?;
-
-        let default = renderer.render(
-            &layout,
-            WritingMode::Horizontal,
-            &RenderOptions {
-                font_size,
-                ..Default::default()
-            },
-        )?;
-        let higher_scale = renderer.render(
-            &layout,
-            WritingMode::Horizontal,
-            &RenderOptions {
-                font_size,
-                raster: RasterOptions::supersampled(4),
-                ..Default::default()
-            },
-        )?;
-
-        assert_eq!(higher_scale.dimensions(), default.dimensions());
-        assert!(default.pixels().any(|pixel| pixel.0[3] > 0));
-        Ok(())
+    fn validates_surface_dimensions_without_a_device() {
+        assert_eq!(dimension(12.1, 2.0, "width").unwrap(), 17);
+        assert!(dimension(0.0, 0.0, "width").is_err());
+        assert!(dimension(f32::NAN, 0.0, "width").is_err());
     }
 }

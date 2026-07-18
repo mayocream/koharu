@@ -11,7 +11,6 @@ use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{Context as _, Result, anyhow, ensure};
 use koharu_diffusion::{Context, ContextParams, ImageGenerationParams, RgbImage, VaeFormat};
-use koharu_llama::list_llama_ggml_backend_devices;
 
 use crate::Backend;
 
@@ -53,23 +52,7 @@ impl Model {
 
 fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
     let use_accelerator = device.backend != Backend::Cpu;
-    let backend_name = device.backend.to_string();
-    let backend_devices = list_llama_ggml_backend_devices();
-    let detected_device = backend_devices
-        .iter()
-        .find(|candidate| candidate.name.eq_ignore_ascii_case(&device.name))
-        .or_else(|| {
-            backend_devices
-                .iter()
-                .filter(|candidate| candidate.backend.eq_ignore_ascii_case(&backend_name))
-                .nth(device.index)
-        });
-    let memory_free = if device.memory_free > 0 {
-        device.memory_free
-    } else {
-        detected_device.map_or(0, |device| device.memory_free)
-    };
-    let keep_parameters_resident = use_accelerator && memory_free >= 20 * 1024 * 1024 * 1024;
+    let keep_parameters_resident = use_accelerator && device.memory_free >= 20 * 1024 * 1024 * 1024;
     ContextParams {
         diffusion_model_path: Some(paths.transformer),
         llm_path: Some(paths.text_encoder),

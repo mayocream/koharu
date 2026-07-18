@@ -57,7 +57,6 @@ Koharu は [llama.cpp](https://github.com/ggml-org/llama.cpp) を通じてロー
 
 ### 英語出力向けの翻訳特化組み込みローカルモデル
 
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): Q5_K_M GGUF。翻訳品質を優先するなら有力
 - [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): 低メモリ環境や高速な試行に向く小型の多言語 instruction モデル
 - [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) と [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): より多くの VRAM / RAM を使える環境向けの大型翻訳寄りモデル
 

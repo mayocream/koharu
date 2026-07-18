@@ -1,171 +1,376 @@
-use std::{collections::HashMap, sync::Arc};
+//! Font discovery, matching, fallback, and resolved font instances.
 
-use anyhow::Context;
-pub use fontdb::FaceInfo;
-use fontdb::{Database, ID};
-use once_cell::sync::OnceCell;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    sync::Arc,
+};
 
-/// A loaded font ready for shaping and rendering.
-#[derive(Clone, Debug)]
+use anyhow::{Context, Result, bail};
+use fontique::{
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontStyle, GenericFamily,
+    Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
+};
+use harfrust::{ShaperData, ShaperInstance, Variation};
+use skrifa::{MetadataProvider, instance::LocationRef, string::StringId};
+
+/// A resolved face and variable-font instance used by shaping, metrics, and drawing.
+#[derive(Clone)]
 pub struct Font {
-    data: Arc<[u8]>,
-    face: FaceInfo,
-    fontdue: Arc<OnceCell<Arc<fontdue::Font>>>,
-    pub weight: u16,
-    pub style: String,
+    data: Blob<u8>,
+    index: u32,
+    family_name: String,
+    post_script_name: String,
+    synthesis: fontique::Synthesis,
+    shaper_data: Arc<ShaperData>,
+    shaper_instance: ShaperInstance,
+    normalized_coords: Vec<skrifa::instance::NormalizedCoord>,
+    vello_coords: Vec<vello::NormalizedCoord>,
+}
+
+impl fmt::Debug for Font {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Font")
+            .field("index", &self.index)
+            .field("family_name", &self.family_name)
+            .field("post_script_name", &self.post_script_name)
+            .field("synthesis", &self.synthesis)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Font {
-    /// Creates a skrifa FontRef for metric queries.
-    pub fn skrifa(&self) -> anyhow::Result<skrifa::FontRef<'_>> {
-        skrifa::FontRef::from_index(self.data.as_ref(), self.face.index)
-            .context("failed to create skrifa FontRef")
+    fn from_query(font: QueryFont, family_name: String) -> Result<Self> {
+        let variations = font
+            .synthesis
+            .variation_settings()
+            .iter()
+            .map(|(tag, value)| Variation {
+                tag: harfrust::Tag::new(&tag.to_be_bytes()),
+                value: *value,
+            })
+            .collect::<Vec<_>>();
+        let harfrust_font = harfrust::FontRef::from_index(font.blob.as_ref(), font.index)
+            .context("failed to create HarfRust font reference")?;
+        let shaper_data = Arc::new(ShaperData::new(&harfrust_font));
+        let shaper_instance = ShaperInstance::from_variations(&harfrust_font, &variations);
+        let skrifa_font = skrifa::FontRef::from_index(font.blob.as_ref(), font.index)
+            .context("failed to create Skrifa font reference")?;
+        let location = skrifa_font
+            .axes()
+            .location(variations.iter().map(|variation| {
+                (
+                    skrifa::Tag::new(&variation.tag.into_bytes()),
+                    variation.value,
+                )
+            }));
+        let normalized_coords = location.coords().to_vec();
+        let vello_coords = normalized_coords
+            .iter()
+            .map(|coord| coord.to_bits())
+            .collect();
+        let post_script_name = skrifa_font
+            .localized_strings(StringId::new(6))
+            .english_or_first()
+            .map(|name| name.to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| family_name.clone());
+
+        Ok(Self {
+            data: font.blob,
+            index: font.index,
+            family_name,
+            post_script_name,
+            synthesis: font.synthesis,
+            shaper_data,
+            shaper_instance,
+            normalized_coords,
+            vello_coords,
+        })
     }
 
-    /// Creates a harfrust FontRef for text shaping.
-    pub fn harfrust(&self) -> anyhow::Result<harfrust::FontRef<'_>> {
-        harfrust::FontRef::from_index(self.data.as_ref(), self.face.index)
-            .context("failed to create harfrust FontRef")
+    pub(crate) fn vello_data(&self) -> vello::peniko::FontData {
+        vello::peniko::FontData::new(self.data.clone(), self.index)
     }
 
-    pub fn fontdue(&self) -> anyhow::Result<Arc<fontdue::Font>> {
-        let font = self.fontdue.get_or_try_init(|| {
-            let settings = fontdue::FontSettings {
-                collection_index: self.face.index,
-                ..Default::default()
-            };
-            let font = fontdue::Font::from_bytes(self.data.as_ref(), settings)
-                .map_err(|err| anyhow::anyhow!(err))
-                .context("failed to create fontdue Font")?;
-            Ok::<_, anyhow::Error>(Arc::new(font))
-        })?;
-        Ok(Arc::clone(font))
+    pub(crate) fn normalized_coords(&self) -> &[vello::NormalizedCoord] {
+        &self.vello_coords
     }
 
-    /// Returns true if the font contains a glyph for the given character.
+    pub(crate) fn location(&self) -> LocationRef<'_> {
+        LocationRef::new(&self.normalized_coords)
+    }
+
+    pub(crate) fn shaper_instance(&self) -> &ShaperInstance {
+        &self.shaper_instance
+    }
+
+    pub(crate) fn shaper_data(&self) -> &ShaperData {
+        &self.shaper_data
+    }
+
+    pub(crate) fn synthetic_bold(&self) -> bool {
+        self.synthesis.embolden()
+    }
+
+    pub(crate) fn synthetic_skew(&self) -> Option<f32> {
+        self.synthesis.skew()
+    }
+
+    pub(crate) fn skrifa_ref(&self) -> Result<skrifa::FontRef<'_>> {
+        skrifa::FontRef::from_index(self.data.as_ref(), self.index)
+            .context("failed to create Skrifa font reference")
+    }
+
+    pub(crate) fn harfrust_ref(&self) -> Result<harfrust::FontRef<'_>> {
+        harfrust::FontRef::from_index(self.data.as_ref(), self.index)
+            .context("failed to create HarfRust font reference")
+    }
+
     pub fn has_glyph(&self, character: char) -> bool {
-        self.fontdue()
-            .map(|font| font.has_glyph(character))
-            .unwrap_or(false)
+        self.skrifa_ref()
+            .is_ok_and(|font| font.charmap().map(character).is_some())
+    }
+
+    pub(crate) fn covers(&self, text: &str) -> bool {
+        self.skrifa_ref().is_ok_and(|font| {
+            let charmap = font.charmap();
+            text.chars()
+                .filter(|character| {
+                    !character.is_control()
+                        && !character.is_whitespace()
+                        && !is_default_ignorable(*character)
+                })
+                .all(|character| charmap.map(character).is_some())
+        })
+    }
+
+    pub fn family_name(&self) -> &str {
+        &self.family_name
     }
 
     pub fn post_script_name(&self) -> &str {
-        &self.face.post_script_name
+        &self.post_script_name
     }
+}
 
-    pub fn weight(&self) -> u16 {
-        self.weight
-    }
-
-    pub fn style(&self) -> &str {
-        &self.style
-    }
-
-    pub fn face_info(&self) -> &FaceInfo {
-        &self.face
-    }
+fn is_default_ignorable(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x200C | 0x200D | 0xFE00..=0xFE0F | 0xE0020..=0xE007F | 0xE0100..=0xE01EF
+    )
 }
 
 pub(crate) fn font_key(font: &Font) -> usize {
     font as *const Font as usize
 }
 
-/// A collection of font sources for font discovery and loading.
-pub struct FontBook {
-    database: Database,
-    cache: HashMap<ID, Font>,
-    /// Maps data hash to font ID to avoid duplicate loading.
-    data_cache: HashMap<[u8; 32], ID>,
+#[derive(Clone, Debug)]
+pub(crate) struct FontFace {
+    pub(crate) family_name: String,
+    pub(crate) post_script_name: String,
 }
 
-impl FontBook {
-    /// Creates a FontBook with system fonts.
+/// Font discovery, matching, fallback, and source caching.
+pub struct FontSystem {
+    collection: Collection,
+    sources: SourceCache,
+    system_families: Vec<String>,
+    system_faces: Option<Vec<FontFace>>,
+    registered: HashMap<String, Vec<String>>,
+    resolved: HashMap<ResolveKey, Vec<Font>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ResolveKey {
+    families: Vec<String>,
+    width: u32,
+    weight: u32,
+    style: (u8, u32),
+    scripts: Vec<[u8; 4]>,
+    language: Option<String>,
+}
+
+impl FontSystem {
+    #[must_use]
     pub fn new() -> Self {
-        let mut database = Database::new();
-        database.load_system_fonts();
-
+        let mut collection = Collection::new(CollectionOptions::default());
+        let system_families = collection.family_names().map(str::to_owned).collect();
         Self {
-            database,
-            cache: HashMap::new(),
-            data_cache: HashMap::new(),
+            collection,
+            sources: SourceCache::new_shared(),
+            system_families,
+            system_faces: None,
+            registered: HashMap::new(),
+            resolved: HashMap::new(),
         }
     }
 
-    /// Returns all available font faces.
-    pub fn all_families(&self) -> Vec<FaceInfo> {
-        self.database.faces().cloned().collect()
-    }
-
-    /// Loads a font by PostScript name.
-    pub fn query(&mut self, post_script_name: &str) -> anyhow::Result<Font> {
-        let Some(id) = self
-            .database
-            .faces()
-            .find_map(|face| (face.post_script_name == post_script_name).then_some(face.id))
-        else {
-            return Err(anyhow::anyhow!(
-                "no font found for PostScript name: {post_script_name}"
-            ));
-        };
-        self.load_font(id)
-    }
-
-    /// Loads a font from raw bytes (e.g., downloaded from Google Fonts).
-    pub fn load_from_bytes(&mut self, data: Vec<u8>) -> anyhow::Result<Font> {
-        let hash: [u8; 32] = blake3::hash(&data).into();
-
-        if let Some(&id) = self.data_cache.get(&hash) {
-            return self.load_font(id);
+    /// Registers caller-provided font data exactly once for the supplied stable key.
+    pub fn register(&mut self, key: &str, data: Vec<u8>) -> Result<Vec<String>> {
+        if let Some(families) = self.registered.get(key) {
+            return Ok(families.clone());
         }
-
-        let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(data);
-        let source = fontdb::Source::Binary(data);
-        let ids = self.database.load_font_source(source);
-        let id = ids
+        let added = self.collection.register_fonts(Blob::from(data), None);
+        if added.is_empty() {
+            bail!("font data for {key:?} contained no usable faces");
+        }
+        let families = added
             .into_iter()
-            .next()
-            .context("font data contained no valid faces")?;
-
-        self.data_cache.insert(hash, id);
-        self.load_font(id)
+            .filter_map(|(id, _)| self.collection.family_name(id).map(str::to_owned))
+            .collect::<Vec<_>>();
+        self.registered.insert(key.to_owned(), families.clone());
+        self.resolved.clear();
+        Ok(families)
     }
 
-    pub fn load_font(&mut self, id: ID) -> anyhow::Result<Font> {
-        if let Some(font) = self.cache.get(&id) {
-            return Ok(font.clone());
+    /// Resolves an ordered font chain for the requested families, attributes, and scripts.
+    pub fn resolve(
+        &mut self,
+        families: &[String],
+        attributes: Attributes,
+        scripts: &[Script],
+        language: Option<&str>,
+    ) -> Result<Vec<Font>> {
+        let language = language.and_then(|tag| Language::parse(tag).ok());
+        let scripts = if scripts.is_empty() {
+            &[Script::from_bytes(*b"Latn")][..]
+        } else {
+            scripts
+        };
+        let style = match attributes.style {
+            FontStyle::Normal => (0, 0),
+            FontStyle::Italic => (1, 0),
+            FontStyle::Oblique(angle) => (2, angle.unwrap_or(14.0).to_bits()),
+        };
+        let key = ResolveKey {
+            families: families.to_vec(),
+            width: attributes.width.percentage().to_bits(),
+            weight: attributes.weight.value().to_bits(),
+            style,
+            scripts: scripts.iter().map(|script| script.to_bytes()).collect(),
+            language: language
+                .as_ref()
+                .map(|language| language.as_str().to_owned()),
+        };
+        if let Some(fonts) = self.resolved.get(&key) {
+            return Ok(fonts.clone());
+        }
+        let mut seen = HashSet::new();
+        let mut resolved = Vec::new();
+
+        for &script in scripts {
+            let mut candidates = Vec::new();
+            {
+                let mut query = self.collection.query(&mut self.sources);
+                if families.is_empty() {
+                    query.set_families([QueryFamily::Generic(GenericFamily::SansSerif)]);
+                } else {
+                    query.set_families(
+                        families
+                            .iter()
+                            .map(|family| QueryFamily::Named(family.as_str())),
+                    );
+                }
+                query.set_attributes(attributes);
+                query.set_fallbacks(FallbackKey::new(script, language.as_ref()));
+                query.matches_with(|font| {
+                    candidates.push(font.clone());
+                    QueryStatus::Continue
+                });
+            }
+
+            for candidate in candidates {
+                if !seen.insert((candidate.blob.id(), candidate.index)) {
+                    continue;
+                }
+                let family_name = self
+                    .collection
+                    .family_name(candidate.family.0)
+                    .unwrap_or("Unknown")
+                    .to_owned();
+                resolved.push(Font::from_query(candidate, family_name)?);
+            }
         }
 
-        let face = self
-            .database
-            .face(id)
-            .cloned()
-            .with_context(|| format!("missing font face for id {:?}", id))?;
-        let data = self
-            .database
-            .with_face_data(id, |data, _| Arc::<[u8]>::from(data.to_vec()))
-            .with_context(|| format!("failed to load font data for {:?}", id))?;
+        if resolved.is_empty() && !families.is_empty() {
+            resolved = self.resolve(
+                &[],
+                attributes,
+                scripts,
+                language.as_ref().map(Language::as_str),
+            )?;
+        }
+        if resolved.is_empty() {
+            bail!("no usable fonts are installed");
+        }
+        if self.resolved.len() >= 256 {
+            self.resolved.clear();
+        }
+        self.resolved.insert(key, resolved.clone());
+        Ok(resolved)
+    }
 
-        // Determine weight and style from face info
-        let fontdb::Weight(weight) = face.weight;
-        let style = match face.style {
-            fontdb::Style::Normal => "normal".to_string(),
-            fontdb::Style::Italic => "italic".to_string(),
-            fontdb::Style::Oblique => "oblique".to_string(),
-        };
+    pub fn query_family(&mut self, family: &str) -> Result<Font> {
+        self.resolve(
+            &[family.to_owned()],
+            Attributes::default(),
+            &[Script::from_bytes(*b"Latn")],
+            None,
+        )?
+        .into_iter()
+        .find(|font| font.family_name().eq_ignore_ascii_case(family))
+        .with_context(|| format!("no font found for family {family:?}"))
+    }
 
-        let font = Font {
-            data,
-            face,
-            fontdue: Arc::new(OnceCell::new()),
-            weight,
-            style,
-        };
-        self.cache.insert(id, font.clone());
-        Ok(font)
+    pub fn first_font(&mut self) -> Result<Font> {
+        self.resolve(
+            &[],
+            Attributes::default(),
+            &[Script::from_bytes(*b"Latn")],
+            None,
+        )?
+        .into_iter()
+        .next()
+        .context("no usable fonts are installed")
+    }
+
+    pub(crate) fn system_faces(&mut self) -> Vec<FontFace> {
+        if let Some(faces) = &self.system_faces {
+            return faces.clone();
+        }
+        let mut faces = Vec::new();
+        for family_name in self.system_families.clone() {
+            let Some(family) = self.collection.family_by_name(&family_name) else {
+                continue;
+            };
+            for info in family.fonts() {
+                let Some(blob) = info.load(Some(&mut self.sources)) else {
+                    continue;
+                };
+                let query = QueryFont {
+                    family: (family.id(), 0),
+                    blob,
+                    index: info.index(),
+                    synthesis: fontique::Synthesis::default(),
+                    charmap_index: info.charmap_index(),
+                };
+                let Ok(font) = Font::from_query(query, family_name.clone()) else {
+                    continue;
+                };
+                faces.push(FontFace {
+                    family_name: family_name.clone(),
+                    post_script_name: font.post_script_name,
+                });
+            }
+        }
+        self.system_faces = Some(faces.clone());
+        faces
     }
 }
 
-impl Default for FontBook {
+impl Default for FontSystem {
     fn default() -> Self {
         Self::new()
     }

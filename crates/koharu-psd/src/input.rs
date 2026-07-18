@@ -1,6 +1,6 @@
 //! Self-contained input types for the PSD export.
 //!
-//! `koharu-app` constructs a `PsdDocument` by walking the scene, resolves its
+//! The caller constructs a `PsdDocument` by walking the scene, resolves its
 //! blobs, and hands the result to `export_document`. The PSD crate does not
 //! depend on Koharu's scene crate.
 

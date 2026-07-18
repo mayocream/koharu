@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use koharu_ml::manga_text_segmentation::MangaTextSegmentation;
+use koharu_ml::manga_text_segmentation::{MangaTextCleaningOptions, MangaTextSegmentation};
 
 #[derive(Debug, Parser)]
 #[command(about = "Segment manga text pixels into a binary mask")]
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(cli.input)?;
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
     let model = MangaTextSegmentation::load(koharu_ml::device(cli.cpu)).await?;
     let segmentation = if let Some(max_side) = cli.max_side {
         model.inference_with_max_side(&image, max_side)?
@@ -44,6 +44,11 @@ async fn main() -> Result<()> {
     } else {
         model.inference(&image)?
     };
-    segmentation.binary_mask(cli.threshold)?.save(cli.output)?;
+    segmentation
+        .process(&MangaTextCleaningOptions {
+            threshold: cli.threshold,
+            ..Default::default()
+        })?
+        .save(cli.output)?;
     Ok(())
 }

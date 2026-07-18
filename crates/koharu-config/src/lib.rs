@@ -1,16 +1,376 @@
-use std::fs;
-use std::path::{Path, PathBuf};
+//! Live, typed configuration backed by Koharu's shared TOML file.
+//!
+//! `load(section)` returns a process-wide handle with `RwLock`-style access:
+//!
+//! ```no_run
+//! # use serde::{Deserialize, Serialize};
+//! #[derive(Default, Deserialize, Serialize)]
+//! struct PipelineConfig { translator: String }
+//! # fn main() -> anyhow::Result<()> {
+//! let pipeline = koharu_config::load::<PipelineConfig>("pipeline")?;
+//! pipeline.write()?.translator = "deepl".into();
+//! pipeline.save()?;
+//! # Ok(()) }
+//! ```
+//!
+//! Keep the handle, not a copied value, and do not hold read or write guards
+//! across `.await` points.
 
-use anyhow::{Context, Result};
-use config::{Config, File, FileFormat};
+use std::any::Any;
+use std::collections::HashMap;
+use std::fs;
+use std::io::{self, Write};
+use std::ops::{Deref, DerefMut};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+
+use anyhow::{Context, Result, anyhow};
+use atomicwrites::{AtomicFile, OverwriteBehavior};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use tokio::sync::watch;
 
-pub use koharu_secrets::SecretStore;
+pub use koharu_secrets::{ExposeSecret, SecretStore, SecretString};
 
 const CONFIG_DIRECTORY: &str = ".koharu";
 const CONFIG_FILE: &str = "config.toml";
 const SECRET_SERVICE: &str = "koharu";
+
+static MANAGER: OnceLock<Result<Arc<Manager>, String>> = OnceLock::new();
+
+/// Monotonically increasing version of a live configuration value.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ConfigRevision(u64);
+
+impl ConfigRevision {
+    pub const ZERO: Self = Self(0);
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// A shared, live configuration value.
+///
+/// Clone this handle rather than retaining a value obtained from `read()`.
+pub struct Config<T> {
+    manager: Arc<Manager>,
+    target: Target,
+    state: Arc<State<T>>,
+}
+
+impl<T> Clone for Config<T> {
+    fn clone(&self) -> Self {
+        Self {
+            manager: self.manager.clone(),
+            target: self.target.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
+
+impl<T> std::fmt::Debug for Config<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Config")
+            .field("target", &self.target)
+            .field("revision", &self.revision())
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> Config<T> {
+    /// Create a live configuration handle without file persistence.
+    /// `save()` succeeds as a no-op, making this suitable for tests.
+    #[must_use]
+    pub fn memory(value: T) -> Self
+    where
+        T: Send + Sync + 'static,
+    {
+        let manager = Manager::memory();
+        let (changes, _) = watch::channel(ConfigRevision::ZERO);
+        Self {
+            manager,
+            target: Target::Root,
+            state: Arc::new(State {
+                value: RwLock::new(value),
+                revision: AtomicU64::new(0),
+                changes,
+            }),
+        }
+    }
+
+    /// Borrow the latest configuration value for reading.
+    pub fn read(&self) -> Result<ConfigRead<'_, T>> {
+        let value = self
+            .state
+            .value
+            .read()
+            .map_err(|_| anyhow!("configuration read lock is poisoned"))?;
+        let revision = self.revision();
+        Ok(ConfigRead { revision, value })
+    }
+
+    /// Borrow the live configuration value for mutation.
+    ///
+    /// Mutations are immediately visible after the guard is dropped. Call
+    /// `Config::save` or `ConfigWrite::save` when they must also be durable.
+    pub fn write(&self) -> Result<ConfigWrite<'_, T>> {
+        let value = self
+            .state
+            .value
+            .write()
+            .map_err(|_| anyhow!("configuration write lock is poisoned"))?;
+        Ok(ConfigWrite {
+            config: self,
+            value: Some(value),
+            dirty: false,
+        })
+    }
+
+    #[must_use]
+    pub fn revision(&self) -> ConfigRevision {
+        ConfigRevision(self.state.revision.load(Ordering::Acquire))
+    }
+
+    /// Subscribe to published in-memory changes. The receiver always contains
+    /// the latest revision, so lagging consumers can simply re-read the value.
+    #[must_use]
+    pub fn subscribe(&self) -> watch::Receiver<ConfigRevision> {
+        self.state.changes.subscribe()
+    }
+}
+
+impl<T> From<T> for Config<T>
+where
+    T: Send + Sync + 'static,
+{
+    fn from(value: T) -> Self {
+        Self::memory(value)
+    }
+}
+
+impl<T> Config<T>
+where
+    T: Serialize,
+{
+    /// Persist the latest complete value while preventing concurrent mutation.
+    pub fn save(&self) -> Result<()> {
+        let value = self.read()?;
+        self.manager.save(&self.target, &*value)
+    }
+}
+
+pub struct ConfigRead<'a, T> {
+    revision: ConfigRevision,
+    value: RwLockReadGuard<'a, T>,
+}
+
+impl<T> ConfigRead<'_, T> {
+    #[must_use]
+    pub const fn revision(&self) -> ConfigRevision {
+        self.revision
+    }
+}
+
+impl<T> Deref for ConfigRead<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+#[must_use = "configuration changes are not durable until `save()` succeeds"]
+pub struct ConfigWrite<'a, T> {
+    config: &'a Config<T>,
+    value: Option<RwLockWriteGuard<'a, T>>,
+    dirty: bool,
+}
+
+impl<T> ConfigWrite<'_, T>
+where
+    T: Serialize,
+{
+    /// Persist this exact write-locked value and then release the guard.
+    pub fn save(self) -> Result<()> {
+        self.config.manager.save(
+            &self.config.target,
+            self.value
+                .as_deref()
+                .expect("configuration guard is present"),
+        )
+    }
+}
+
+impl<T> Deref for ConfigWrite<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.value
+            .as_deref()
+            .expect("configuration guard is present")
+    }
+}
+
+impl<T> DerefMut for ConfigWrite<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.dirty = true;
+        self.value
+            .as_deref_mut()
+            .expect("configuration guard is present")
+    }
+}
+
+impl<T> Drop for ConfigWrite<'_, T> {
+    fn drop(&mut self) {
+        if !self.dirty {
+            return;
+        }
+
+        let revision = self.state_revision();
+        self.config.state.changes.send_replace(revision);
+    }
+}
+
+impl<T> ConfigWrite<'_, T> {
+    fn state_revision(&self) -> ConfigRevision {
+        let previous = self.config.state.revision.fetch_add(1, Ordering::AcqRel);
+        ConfigRevision(
+            previous
+                .checked_add(1)
+                .expect("configuration revision overflow"),
+        )
+    }
+}
+
+struct State<T> {
+    value: RwLock<T>,
+    revision: AtomicU64,
+    changes: watch::Sender<ConfigRevision>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Target {
+    Root,
+    Section(String),
+}
+
+struct Registered {
+    type_name: &'static str,
+    state: Arc<dyn Any + Send + Sync>,
+}
+
+struct Manager {
+    path: Option<PathBuf>,
+    sections: Mutex<HashMap<Target, Registered>>,
+    save: Mutex<()>,
+}
+
+impl Manager {
+    fn new(path: PathBuf) -> Arc<Self> {
+        Arc::new(Self {
+            path: Some(path),
+            sections: Mutex::new(HashMap::new()),
+            save: Mutex::new(()),
+        })
+    }
+
+    fn memory() -> Arc<Self> {
+        Arc::new(Self {
+            path: None,
+            sections: Mutex::new(HashMap::new()),
+            save: Mutex::new(()),
+        })
+    }
+
+    fn load<T>(self: &Arc<Self>, target: Target) -> Result<Config<T>>
+    where
+        T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,
+    {
+        let mut sections = self
+            .sections
+            .lock()
+            .map_err(|_| anyhow!("configuration registry lock is poisoned"))?;
+
+        if let Some(registered) = sections.get(&target) {
+            let state = registered
+                .state
+                .clone()
+                .downcast::<State<T>>()
+                .map_err(|_| {
+                    anyhow!(
+                        "configuration {target:?} was already loaded as `{}` instead of `{}`",
+                        registered.type_name,
+                        std::any::type_name::<T>()
+                    )
+                })?;
+            return Ok(Config {
+                manager: self.clone(),
+                target,
+                state,
+            });
+        }
+
+        let path = self
+            .path
+            .as_deref()
+            .context("in-memory configuration cannot load another section")?;
+        let value = load_value(path, &target)?;
+        let (changes, _) = watch::channel(ConfigRevision::ZERO);
+        let state = Arc::new(State {
+            value: RwLock::new(value),
+            revision: AtomicU64::new(0),
+            changes,
+        });
+        sections.insert(
+            target.clone(),
+            Registered {
+                type_name: std::any::type_name::<T>(),
+                state: state.clone(),
+            },
+        );
+
+        Ok(Config {
+            manager: self.clone(),
+            target,
+            state,
+        })
+    }
+
+    fn save<T>(&self, target: &Target, value: &T) -> Result<()>
+    where
+        T: Serialize + ?Sized,
+    {
+        let Some(path) = self.path.as_deref() else {
+            return Ok(());
+        };
+        let _save = self
+            .save
+            .lock()
+            .map_err(|_| anyhow!("configuration save lock is poisoned"))?;
+        let mut document = load_document(path)?;
+        let update = toml::Value::try_from(value).context("failed to serialize configuration")?;
+
+        match target {
+            Target::Root => {
+                let update = update
+                    .as_table()
+                    .context("root configuration must serialize as a table")?;
+                for (key, value) in update {
+                    document.insert(key.clone(), value.clone());
+                }
+            }
+            Target::Section(section) => {
+                document.insert(section.clone(), update);
+            }
+        }
+
+        write_document(path, &document)
+    }
+}
 
 /// Returns the shared Koharu configuration path: `~/.koharu/config.toml`.
 pub fn path() -> Result<PathBuf> {
@@ -18,122 +378,90 @@ pub fn path() -> Result<PathBuf> {
     Ok(home.join(CONFIG_DIRECTORY).join(CONFIG_FILE))
 }
 
-/// Loads the shared configuration into a caller-defined root type.
-///
-/// Values from `T::default()` are used as the lowest-priority source, so a
-/// file may contain only the values that differ from those defaults. Fields
-/// not represented by `T` remain available to other configuration consumers.
-pub fn load<T>() -> Result<T>
+/// Load or retrieve a live, process-wide top-level configuration section.
+pub fn load<T>(section: &str) -> Result<Config<T>>
 where
-    T: Default + DeserializeOwned + Serialize,
+    T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,
 {
-    load_from(&path()?)
+    validate_section(section)?;
+    manager()?.load(Target::Section(section.to_owned()))
 }
 
-/// Writes the top-level fields represented by a caller-defined root type.
+/// Load or retrieve the live root configuration value.
 ///
-/// Top-level fields already in the file but not represented by `T` are
-/// preserved, allowing independent crates to extend the shared file.
-pub fn save<T>(value: &T) -> Result<()>
+/// Prefer `load(section)` for independently owned configuration. This exists
+/// for applications whose schema intentionally covers the complete file.
+pub fn load_root<T>() -> Result<Config<T>>
 where
-    T: Serialize,
+    T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,
 {
-    save_to(&path()?, value)
-}
-
-/// Loads one caller-defined top-level section from the shared configuration.
-///
-/// Missing values are filled from `T::default()`. The section name is kept
-/// outside this crate so consumers own both their schema and namespace.
-pub fn load_section<T>(section: &str) -> Result<T>
-where
-    T: Default + DeserializeOwned + Serialize,
-{
-    load_section_from(&path()?, section)
-}
-
-/// Replaces one top-level section while preserving every other section.
-pub fn save_section<T>(section: &str, value: &T) -> Result<()>
-where
-    T: Serialize,
-{
-    save_section_to(&path()?, section, value)
+    manager()?.load(Target::Root)
 }
 
 /// Returns Koharu's platform-backed secret store.
+#[must_use]
 pub fn secrets() -> SecretStore {
     SecretStore::new(SECRET_SERVICE)
 }
 
-fn load_from<T>(path: &Path) -> Result<T>
+fn manager() -> Result<Arc<Manager>> {
+    match MANAGER.get_or_init(|| {
+        path()
+            .map(Manager::new)
+            .map_err(|error| format!("{error:#}"))
+    }) {
+        Ok(manager) => Ok(manager.clone()),
+        Err(error) => Err(anyhow!(error.clone())),
+    }
+}
+
+fn load_value<T>(path: &Path, target: &Target) -> Result<T>
 where
     T: Default + DeserializeOwned + Serialize,
 {
-    Config::builder()
-        .add_source(Config::try_from(&T::default()).context("failed to serialize defaults")?)
-        .add_source(toml_file(path))
-        .build()
-        .with_context(|| format!("failed to load `{}`", path.display()))?
-        .try_deserialize()
-        .with_context(|| format!("failed to deserialize `{}`", path.display()))
-}
+    let mut value = toml::Value::try_from(T::default())
+        .context("failed to serialize configuration defaults")?;
+    let document = load_document(path)?;
 
-fn save_to<T>(path: &Path, value: &T) -> Result<()>
-where
-    T: Serialize,
-{
-    let mut document = load_document(path)?;
-    let update = toml::Value::try_from(value).context("failed to serialize configuration")?;
-    let update = update
-        .as_table()
-        .context("root configuration must serialize as a table")?;
-
-    for (key, value) in update {
-        document.insert(key.clone(), value.clone());
+    let update = match target {
+        Target::Root => Some(toml::Value::Table(document)),
+        Target::Section(section) => document.get(section).cloned(),
+    };
+    if let Some(update) = update {
+        merge(&mut value, update);
     }
 
-    write_document(path, document)
+    value.try_into().with_context(|| match target {
+        Target::Root => format!("failed to deserialize `{}`", path.display()),
+        Target::Section(section) => format!(
+            "failed to deserialize section `{section}` from `{}`",
+            path.display()
+        ),
+    })
 }
 
-fn load_section_from<T>(path: &Path, section: &str) -> Result<T>
-where
-    T: Default + DeserializeOwned + Serialize,
-{
-    validate_section(section)?;
-
-    let mut defaults = toml::Table::new();
-    defaults.insert(
-        section.to_owned(),
-        toml::Value::try_from(T::default()).context("failed to serialize section defaults")?,
-    );
-
-    Config::builder()
-        .add_source(Config::try_from(&defaults).context("failed to serialize section defaults")?)
-        .add_source(toml_file(path))
-        .build()
-        .with_context(|| format!("failed to load `{}`", path.display()))?
-        .get(section)
-        .with_context(|| {
-            format!(
-                "failed to deserialize section `{section}` from `{}`",
-                path.display()
-            )
-        })
-}
-
-fn save_section_to<T>(path: &Path, section: &str, value: &T) -> Result<()>
-where
-    T: Serialize,
-{
-    validate_section(section)?;
-
-    let mut document = load_document(path)?;
-    document.insert(
-        section.to_owned(),
-        toml::Value::try_from(value)
-            .with_context(|| format!("failed to serialize section `{section}`"))?,
-    );
-    write_document(path, document)
+fn merge(base: &mut toml::Value, update: toml::Value) {
+    match (base, update) {
+        (toml::Value::Table(base), toml::Value::Table(update)) => {
+            let changes_tag = matches!(
+                (base.get("model"), update.get("model")),
+                (Some(base), Some(update)) if base != update
+            );
+            if changes_tag {
+                *base = update;
+                return;
+            }
+            for (key, value) in update {
+                match base.get_mut(&key) {
+                    Some(base) => merge(base, value),
+                    None => {
+                        base.insert(key, value);
+                    }
+                }
+            }
+        }
+        (base, update) => *base = update,
+    }
 }
 
 fn load_document(path: &Path) -> Result<toml::Table> {
@@ -146,19 +474,24 @@ fn load_document(path: &Path) -> Result<toml::Table> {
     toml::from_str(&content).with_context(|| format!("failed to parse `{}`", path.display()))
 }
 
-fn write_document(path: &Path, document: toml::Table) -> Result<()> {
+fn write_document(path: &Path, document: &toml::Table) -> Result<()> {
     let parent = path
         .parent()
         .context("configuration path has no parent directory")?;
     fs::create_dir_all(parent)
         .with_context(|| format!("failed to create `{}`", parent.display()))?;
 
-    let content = toml::to_string_pretty(&document).context("failed to encode configuration")?;
-    fs::write(path, content).with_context(|| format!("failed to write `{}`", path.display()))
+    let content = toml::to_string_pretty(document).context("failed to encode configuration")?;
+    AtomicFile::new(path, OverwriteBehavior::AllowOverwrite)
+        .write(|file| file.write_all(content.as_bytes()))
+        .map_err(atomic_write_error)
+        .with_context(|| format!("failed to write `{}`", path.display()))
 }
 
-fn toml_file(path: &Path) -> File<config::FileSourceFile, FileFormat> {
-    File::from(path).format(FileFormat::Toml).required(false)
+fn atomic_write_error(error: atomicwrites::Error<io::Error>) -> io::Error {
+    match error {
+        atomicwrites::Error::Internal(error) | atomicwrites::Error::User(error) => error,
+    }
 }
 
 fn validate_section(section: &str) -> Result<()> {
@@ -176,12 +509,12 @@ mod tests {
 
     use super::*;
 
-    #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
     struct RootConfig {
         http: HttpConfig,
     }
 
-    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct HttpConfig {
         connect_timeout: u64,
         read_timeout: u64,
@@ -196,120 +529,215 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+    struct PluginConfig {
+        enabled: bool,
+    }
+
+    fn test_manager() -> (tempfile::TempDir, Arc<Manager>) {
+        let directory = tempfile::tempdir().unwrap();
+        let manager = Manager::new(directory.path().join(CONFIG_FILE));
+        (directory, manager)
+    }
+
     #[test]
-    fn path_uses_home_dot_koharu_layout() {
-        let path = path().unwrap();
+    fn handles_for_the_same_section_share_live_state() {
+        let (_directory, manager) = test_manager();
+        let first = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+        let second = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+
+        first.write().unwrap().connect_timeout = 45;
+
+        assert_eq!(second.read().unwrap().connect_timeout, 45);
+        assert_eq!(second.revision(), ConfigRevision(1));
+    }
+
+    #[test]
+    fn save_persists_the_latest_live_value() {
+        let (directory, manager) = test_manager();
+        let config = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+        config.write().unwrap().connect_timeout = 45;
+
+        assert!(!directory.path().join(CONFIG_FILE).exists());
+        config.save().unwrap();
+
+        let reloaded = Manager::new(directory.path().join(CONFIG_FILE))
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+        assert_eq!(reloaded.read().unwrap().connect_timeout, 45);
+    }
+
+    #[test]
+    fn write_guard_can_save_while_holding_the_exact_value() {
+        let (directory, manager) = test_manager();
+        let config = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+        let mut value = config.write().unwrap();
+        value.read_timeout = 600;
+        value.save().unwrap();
+
+        let document = fs::read_to_string(directory.path().join(CONFIG_FILE)).unwrap();
+        assert!(document.contains("read_timeout = 600"));
+    }
+
+    #[test]
+    fn subscribers_receive_the_latest_revision() {
+        let (_directory, manager) = test_manager();
+        let config = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+        let changes = config.subscribe();
+
+        config.write().unwrap().connect_timeout = 45;
+
+        assert_eq!(*changes.borrow(), ConfigRevision(1));
+    }
+
+    #[test]
+    fn concurrent_writers_mutate_one_live_value_without_lost_updates() {
+        let (_directory, manager) = test_manager();
+        let config = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let config = config.clone();
+                scope.spawn(move || {
+                    for _ in 0..100 {
+                        config.write().unwrap().connect_timeout += 1;
+                    }
+                });
+            }
+        });
+
+        assert_eq!(config.read().unwrap().connect_timeout, 420);
+        assert_eq!(config.revision().get(), 400);
+    }
+
+    #[test]
+    fn concurrent_section_saves_preserve_both_sections() {
+        let (directory, manager) = test_manager();
+        let http = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+        let plugin = manager
+            .load::<PluginConfig>(Target::Section("plugin".into()))
+            .unwrap();
+        plugin.write().unwrap().enabled = true;
+
+        std::thread::scope(|scope| {
+            scope.spawn(|| http.save().unwrap());
+            scope.spawn(|| plugin.save().unwrap());
+        });
+
+        let document = fs::read_to_string(directory.path().join(CONFIG_FILE)).unwrap();
+        assert!(document.contains("[http]"));
+        assert!(document.contains("[plugin]"));
+        assert!(document.contains("enabled = true"));
+    }
+
+    #[test]
+    fn defaults_are_deeply_merged_with_file_values() {
+        let (directory, manager) = test_manager();
+        fs::write(
+            directory.path().join(CONFIG_FILE),
+            "[http]\nconnect_timeout = 45\n",
+        )
+        .unwrap();
+
+        let config = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
+
         assert_eq!(
-            path.file_name().and_then(|name| name.to_str()),
-            Some(CONFIG_FILE)
-        );
-        assert_eq!(
-            path.parent()
-                .and_then(Path::file_name)
-                .and_then(|name| name.to_str()),
-            Some(CONFIG_DIRECTORY)
+            *config.read().unwrap(),
+            HttpConfig {
+                connect_timeout: 45,
+                read_timeout: 300,
+            }
         );
     }
 
     #[test]
-    fn root_load_merges_caller_defaults_with_file_values() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(CONFIG_FILE);
-        fs::write(
-            &path,
+    fn changing_a_model_tag_replaces_its_configuration() {
+        let mut base: toml::Value = toml::from_str(
             r#"
-                [http]
-                connect_timeout = 45
+                model = "local"
+                local_model = "lfm2.5-1.2b-instruct"
+            "#,
+        )
+        .unwrap();
+        let update = toml::from_str(
+            r#"
+                model = "openai"
+                remote_model = "gpt-4.1-mini"
             "#,
         )
         .unwrap();
 
-        let config: RootConfig = load_from(&path).unwrap();
+        merge(&mut base, update);
 
-        assert_eq!(config.http.connect_timeout, 45);
-        assert_eq!(config.http.read_timeout, 300);
+        assert_eq!(base["model"].as_str(), Some("openai"));
+        assert_eq!(base["remote_model"].as_str(), Some("gpt-4.1-mini"));
+        assert!(base.get("local_model").is_none());
     }
 
     #[test]
-    fn section_load_uses_caller_defaults() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(CONFIG_FILE);
+    fn section_save_preserves_unrelated_sections() {
+        let (directory, manager) = test_manager();
         fs::write(
-            &path,
-            r#"
-                [http]
-                connect_timeout = 45
-            "#,
+            directory.path().join(CONFIG_FILE),
+            "[plugin]\nenabled = true\n",
         )
         .unwrap();
+        let config = manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
 
-        let config: HttpConfig = load_section_from(&path, "http").unwrap();
+        config.save().unwrap();
 
-        assert_eq!(config.connect_timeout, 45);
-        assert_eq!(config.read_timeout, 300);
-    }
-
-    #[test]
-    fn missing_section_uses_caller_defaults() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(CONFIG_FILE);
-
-        let config: HttpConfig = load_section_from(&path, "http").unwrap();
-
-        assert_eq!(config, HttpConfig::default());
-    }
-
-    #[test]
-    fn root_save_preserves_unrelated_sections() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(CONFIG_FILE);
-        fs::write(
-            &path,
-            r#"
-                [plugin]
-                enabled = true
-            "#,
-        )
-        .unwrap();
-
-        save_to(&path, &RootConfig::default()).unwrap();
-        let document = fs::read_to_string(&path).unwrap();
-
+        let document = fs::read_to_string(directory.path().join(CONFIG_FILE)).unwrap();
         assert!(document.contains("[plugin]"));
         assert!(document.contains("enabled = true"));
         assert!(document.contains("[http]"));
     }
 
     #[test]
-    fn section_save_preserves_other_sections() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(CONFIG_FILE);
+    fn root_save_preserves_unknown_top_level_sections() {
+        let (directory, manager) = test_manager();
         fs::write(
-            &path,
-            r#"
-                [plugin]
-                enabled = true
-            "#,
+            directory.path().join(CONFIG_FILE),
+            "[plugin]\nenabled = true\n",
         )
         .unwrap();
+        let config = manager.load::<RootConfig>(Target::Root).unwrap();
 
-        save_section_to(&path, "http", &HttpConfig::default()).unwrap();
-        let document = fs::read_to_string(&path).unwrap();
+        config.save().unwrap();
 
+        let document = fs::read_to_string(directory.path().join(CONFIG_FILE)).unwrap();
         assert!(document.contains("[plugin]"));
-        assert!(document.contains("enabled = true"));
         assert!(document.contains("[http]"));
     }
 
     #[test]
-    fn section_save_creates_the_config_directory() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join(CONFIG_DIRECTORY).join(CONFIG_FILE);
+    fn loading_a_section_with_two_types_is_rejected() {
+        let (_directory, manager) = test_manager();
+        manager
+            .load::<HttpConfig>(Target::Section("http".into()))
+            .unwrap();
 
-        save_section_to(&path, "http", &HttpConfig::default()).unwrap();
+        let error = manager
+            .load::<RootConfig>(Target::Section("http".into()))
+            .unwrap_err();
 
-        assert!(path.is_file());
-        let config: HttpConfig = load_section_from(&path, "http").unwrap();
-        assert_eq!(config, HttpConfig::default());
+        assert!(error.to_string().contains("already loaded"));
     }
 }

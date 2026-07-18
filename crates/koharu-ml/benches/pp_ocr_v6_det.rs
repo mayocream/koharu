@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
         .join("object_detection")
         .join("1.jpg");
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
 
     let image = image::open(&input)?;
     let model = PPOCRV6MediumDet::load(koharu_ml::Device::cuda(0)).await?;

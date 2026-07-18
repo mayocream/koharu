@@ -70,20 +70,16 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn create(path: impl AsRef<Path>, name: impl Into<String>) -> Result<Self> {
-        Self::create_with(path, name, Options::default())
+    pub fn create(path: impl AsRef<Path>) -> Result<Self> {
+        Self::create_with(path, Options::default())
     }
 
-    pub fn create_with(
-        path: impl AsRef<Path>,
-        name: impl Into<String>,
-        options: Options,
-    ) -> Result<Self> {
+    pub fn create_with(path: impl AsRef<Path>, options: Options) -> Result<Self> {
         if path.as_ref().exists() {
             return Err(Error::invalid("project file already exists"));
         }
         let connection = storage::create_disk(path.as_ref(), options.busy_timeout)?;
-        Self::initialize(connection, name.into(), options)
+        Self::initialize(connection, options)
     }
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -95,22 +91,18 @@ impl Session {
         Self::load(connection, options)
     }
 
-    pub fn memory(name: impl Into<String>) -> Result<Self> {
-        Self::memory_with(name, Options::default())
+    pub fn memory() -> Result<Self> {
+        Self::memory_with(Options::default())
     }
 
-    pub fn memory_with(name: impl Into<String>, options: Options) -> Result<Self> {
+    pub fn memory_with(options: Options) -> Result<Self> {
         let connection = storage::open_memory(options.busy_timeout)?;
-        Self::initialize(connection, name.into(), options)
+        Self::initialize(connection, options)
     }
 
-    fn initialize(
-        connection: rusqlite::Connection,
-        name: String,
-        options: Options,
-    ) -> Result<Self> {
+    fn initialize(connection: rusqlite::Connection, options: Options) -> Result<Self> {
         let id = ProjectId::new();
-        let project = Project::new(name);
+        let project = Project::new();
         let snapshot = revision::to_vec(&Snapshot {
             revision: Revision::ZERO,
             project: project.clone(),
@@ -664,10 +656,6 @@ impl State {
 
     fn prepare_one(&mut self, command: Command) -> Result<Option<StoredChange>> {
         match command {
-            Command::RenameProject(after) => {
-                let before = std::mem::replace(&mut self.project.name, after.clone());
-                Ok((before != after).then_some(StoredChange::ProjectName { before, after }))
-            }
             Command::InsertPage { page, index } => {
                 if self.pages.contains_key(&page.id)
                     || page
@@ -881,10 +869,6 @@ impl State {
 
     fn apply_change(&mut self, change: &StoredChange) -> Result<()> {
         match change {
-            StoredChange::ProjectName { before, after } => {
-                expect(&self.project.name, before, "project name")?;
-                self.project.name.clone_from(after);
-            }
             StoredChange::Page { before, after } => {
                 if let Some(before) = before {
                     if self.project.pages.get(before.index) != Some(&before.page) {
@@ -1039,7 +1023,6 @@ impl ChangeSet {
                             .map(|positioned| positioned.element.id),
                     );
                 }
-                StoredChange::ProjectName { .. } => {}
             }
         }
     }

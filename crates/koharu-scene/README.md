@@ -53,7 +53,6 @@ Its public shape is intentionally direct:
 
 ```rust
 pub struct Project {
-    pub name: String,
     pub pages: Vec<Page>,
 }
 
@@ -145,7 +144,7 @@ duplicating a raster for every text block.
 `Session` is the committed source of truth:
 
 ```rust
-let session = koharu_scene::Session::open("book.koharu")?;
+let session = koharu_scene::Session::open("book.khr")?;
 
 let project = session.project();
 let page = session.page(page_id)?;       // expected O(1)
@@ -211,7 +210,7 @@ There is no second mutation implementation behind the fluent API.
 
 ## Persistence
 
-One `.koharu` file is one SQLite database containing three tables:
+One `.khr` file is one SQLite database containing three tables:
 
 ```text
 project

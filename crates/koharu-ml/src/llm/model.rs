@@ -21,11 +21,13 @@ use koharu_llama::{
     },
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
-    model::{AddBos, LlamaChatMessage, LlamaModel, params::LlamaModelParams},
+    model::{AddBos, LlamaModel, params::LlamaModelParams},
     mtmd::{MtmdBitmap, MtmdContext, MtmdContextParams, MtmdInputChunks, MtmdInputText},
     sampling::LlamaSampler,
     token::LlamaToken,
 };
+use minijinja::{Environment, Error as TemplateError, ErrorKind as TemplateErrorKind, context};
+use serde::Serialize;
 
 use super::{
     Capabilities, ChatMessage, FinishReason, Generation, GenerationControl, GenerationOptions,
@@ -34,6 +36,7 @@ use super::{
 use crate::Backend;
 
 const DEFAULT_MAX_UBATCH: u32 = 512;
+const CHAT_TEMPLATE_NAME: &str = "chat";
 
 #[derive(Debug)]
 pub(super) struct Model {
@@ -42,6 +45,81 @@ pub(super) struct Model {
     mtmd: Option<Mutex<MtmdContext>>,
     capabilities: Capabilities,
     eos_token: LlamaToken,
+    chat_template: ChatTemplate,
+}
+
+#[derive(Debug)]
+struct ChatTemplate {
+    environment: Environment<'static>,
+    bos_token: String,
+    eos_token: String,
+}
+
+#[derive(Serialize)]
+struct TemplateMessage<'a> {
+    role: &'a str,
+    content: &'a str,
+}
+
+impl ChatTemplate {
+    fn from_model(model: &LlamaModel, eos_token: LlamaToken) -> Result<Self> {
+        let template = model
+            .chat_template(None)
+            .context("GGUF model does not contain a chat template")?;
+        let source = template
+            .to_string()
+            .context("GGUF chat template is not valid UTF-8")?;
+        let mut environment = Environment::new();
+        minijinja_contrib::add_to_environment(&mut environment);
+        environment
+            .set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
+        environment.add_function("raise_exception", raise_template_exception);
+        environment
+            .add_template_owned(CHAT_TEMPLATE_NAME, source)
+            .map_err(anyhow::Error::msg)
+            .context("failed to compile GGUF chat template")?;
+        Ok(Self {
+            environment,
+            bos_token: token_text(model, model.token_bos())
+                .context("failed to decode model BOS token for chat template")?,
+            eos_token: token_text(model, eos_token)
+                .context("failed to decode model EOS token for chat template")?,
+        })
+    }
+
+    fn render(&self, messages: &[ChatMessage], add_generation_prompt: bool) -> Result<String> {
+        let messages = messages
+            .iter()
+            .map(|message| TemplateMessage {
+                role: message.role.as_str(),
+                content: &message.content,
+            })
+            .collect::<Vec<_>>();
+        let template = self
+            .environment
+            .get_template(CHAT_TEMPLATE_NAME)
+            .map_err(anyhow::Error::msg)
+            .context("compiled GGUF chat template is unavailable")?;
+        template
+            .render(context! {
+                messages => messages,
+                bos_token => self.bos_token.as_str(),
+                eos_token => self.eos_token.as_str(),
+                add_generation_prompt => add_generation_prompt,
+                enable_thinking => false,
+                tools => Vec::<()>::new(),
+                documents => Vec::<()>::new(),
+            })
+            .map_err(anyhow::Error::msg)
+            .context("failed to render GGUF chat template")
+    }
+}
+
+fn raise_template_exception(message: String) -> std::result::Result<String, TemplateError> {
+    Err(TemplateError::new(
+        TemplateErrorKind::InvalidOperation,
+        message,
+    ))
 }
 
 impl Model {
@@ -63,6 +141,7 @@ impl Model {
         let eos_token = options
             .eos_token_id
             .map_or_else(|| model.token_eos(), LlamaToken::new);
+        let chat_template = ChatTemplate::from_model(&model, eos_token)?;
         let (mtmd, capabilities) = match options.mtmd {
             Some(options) => {
                 ensure_file(&options.projector_path, "MTMD projector")?;
@@ -115,6 +194,7 @@ impl Model {
             mtmd,
             capabilities,
             eos_token,
+            chat_template,
         })
     }
 
@@ -135,21 +215,7 @@ impl Model {
         messages: &[ChatMessage],
         add_generation_prompt: bool,
     ) -> Result<String> {
-        let llama_messages = messages
-            .iter()
-            .map(|message| {
-                LlamaChatMessage::new(message.role.as_str().to_owned(), message.content.clone())
-            })
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .context("failed to build llama.cpp chat messages")?;
-
-        match self.model.chat_template(None) {
-            Ok(template) => self
-                .model
-                .apply_chat_template(&template, &llama_messages, add_generation_prompt)
-                .context("failed to apply GGUF chat template"),
-            Err(_) => Ok(render_fallback_chat_prompt(messages, add_generation_prompt)),
-        }
+        self.chat_template.render(messages, add_generation_prompt)
     }
 
     pub(super) fn inference<F>(
@@ -668,20 +734,6 @@ fn token_text(model: &LlamaModel, token: LlamaToken) -> Result<String> {
         .map_err(Into::into)
 }
 
-fn render_fallback_chat_prompt(messages: &[ChatMessage], add_generation_prompt: bool) -> String {
-    let mut prompt = String::new();
-    for message in messages {
-        prompt.push_str(message.role.as_str());
-        prompt.push_str(": ");
-        prompt.push_str(&message.content);
-        prompt.push('\n');
-    }
-    if add_generation_prompt {
-        prompt.push_str("assistant: ");
-    }
-    prompt
-}
-
 fn ensure_file(path: &Path, description: &str) -> Result<()> {
     ensure!(
         path.exists(),
@@ -764,18 +816,5 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.n_ubatch, 1024);
-    }
-
-    #[test]
-    fn fallback_chat_prompt_respects_generation_prompt_option() {
-        let messages = [ChatMessage::user("hello")];
-        assert_eq!(
-            render_fallback_chat_prompt(&messages, true),
-            "user: hello\nassistant: "
-        );
-        assert_eq!(
-            render_fallback_chat_prompt(&messages, false),
-            "user: hello\n"
-        );
     }
 }

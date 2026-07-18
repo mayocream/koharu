@@ -1,10 +1,11 @@
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 pub type Color = [u8; 4];
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum TextAlign {
     #[default]
     Start,
@@ -14,7 +15,7 @@ pub enum TextAlign {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum VerticalAlign {
     #[default]
     Top,
@@ -23,7 +24,7 @@ pub enum VerticalAlign {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum WritingMode {
     #[default]
     Auto,
@@ -33,7 +34,7 @@ pub enum WritingMode {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum TextOverflow {
     #[default]
     Visible,
@@ -41,7 +42,7 @@ pub enum TextOverflow {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum TextFit {
     #[default]
     Frame,
@@ -49,7 +50,7 @@ pub enum TextFit {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 pub enum FontSlant {
     #[default]
     Normal,
@@ -60,7 +61,7 @@ pub enum FontSlant {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum BlendMode {
     #[default]
     Normal,
@@ -78,7 +79,7 @@ pub enum BlendMode {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum StrokePosition {
     Inside,
     #[default]
@@ -87,7 +88,7 @@ pub enum StrokePosition {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum BevelStyle {
     #[default]
     Inner,
@@ -98,21 +99,21 @@ pub enum BevelStyle {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub struct TextDecoration {
     pub underline: bool,
     pub strikethrough: bool,
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct GradientStop {
     pub offset: f32,
     pub color: Color,
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct TextEffect {
     pub enabled: bool,
     pub opacity: f32,
@@ -137,7 +138,7 @@ impl TextEffect {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub enum TextEffectKind {
     Stroke {
         color: Color,
@@ -243,7 +244,7 @@ impl TextEffectKind {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct TextStyle {
     pub font_families: Vec<String>,
     pub font_size: f32,
@@ -310,7 +311,7 @@ impl TextStyle {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct TextLayout {
     pub horizontal_align: TextAlign,
     pub vertical_align: VerticalAlign,

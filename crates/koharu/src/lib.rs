@@ -1,7 +1,8 @@
 pub mod app;
-pub mod assets;
-pub mod cli;
+mod background;
 pub mod panic;
+pub mod protocol;
+mod resources;
 pub mod sentry;
 pub mod tracing;
 pub mod version;

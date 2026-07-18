@@ -32,7 +32,7 @@ fn encode(image: DynamicImage) -> Vec<u8> {
 
 #[test]
 fn revision_round_trips_the_public_model() {
-    let project = Project::new("Koharu");
+    let project = Project::new();
     let bytes = revision::to_vec(&project).unwrap();
     let decoded: Project = revision::from_slice(&bytes).unwrap();
     assert_eq!(decoded, project);
@@ -60,7 +60,7 @@ fn revision_reads_an_older_shape() {
 
 #[test]
 fn commands_build_a_koharu_page() {
-    let mut session = Session::memory("test").unwrap();
+    let mut session = Session::memory().unwrap();
     let mut commands = session.commands();
     let page = commands
         .add_page("001.png", rgba_png([1, 2, 3, 255]))
@@ -99,7 +99,7 @@ fn commands_build_a_koharu_page() {
 
 #[test]
 fn fluent_edits_are_commands() {
-    let mut session = Session::memory("test").unwrap();
+    let mut session = Session::memory().unwrap();
     let mut edit = session.edit();
     let page = edit.add_page("page", rgba_png([0, 0, 0, 255])).unwrap();
     let text = edit
@@ -122,10 +122,10 @@ fn fluent_edits_are_commands() {
 #[test]
 fn project_reopens_from_sqlite() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("project.koharu");
+    let path = directory.path().join("project.khr");
     let page;
     {
-        let mut session = Session::create(&path, "test").unwrap();
+        let mut session = Session::create(&path).unwrap();
         let mut commands = session.commands();
         page = commands.add_page("page", rgba_png([4, 5, 6, 255])).unwrap();
         session.apply(commands).unwrap();
@@ -144,8 +144,8 @@ fn project_reopens_from_sqlite() {
 #[test]
 fn stale_writers_refresh_instead_of_overwriting() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("parallel.koharu");
-    let mut first = Session::create(&path, "test").unwrap();
+    let path = directory.path().join("parallel.khr");
+    let mut first = Session::create(&path).unwrap();
     let mut second = Session::open(&path).unwrap();
 
     let mut commands = first.commands();
@@ -153,12 +153,12 @@ fn stale_writers_refresh_instead_of_overwriting() {
     first.apply(commands).unwrap();
 
     let mut stale = second.commands();
-    stale.rename_project("stale");
+    stale.add_page("stale", rgba_png([0, 0, 0, 255])).unwrap();
     assert!(matches!(
         second.apply(stale),
         Err(Error::RevisionConflict { .. })
     ));
-    assert_eq!(second.project().name, "test");
+    assert!(second.project().pages.is_empty());
     let changes = second.refresh().unwrap();
     assert_eq!(changes.to, Revision::new(1));
     assert!(second.page(page).is_ok());
@@ -167,8 +167,8 @@ fn stale_writers_refresh_instead_of_overwriting() {
 #[test]
 fn refresh_falls_back_to_a_pruned_checkpoint() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("pruned.koharu");
-    let mut writer = Session::create(&path, "test").unwrap();
+    let path = directory.path().join("pruned.khr");
+    let mut writer = Session::create(&path).unwrap();
     let mut reader = Session::open(&path).unwrap();
     let mut commands = writer.commands();
     let page = commands.add_page("page", rgba_png([0, 0, 0, 255])).unwrap();
@@ -183,7 +183,7 @@ fn refresh_falls_back_to_a_pruned_checkpoint() {
 
 #[test]
 fn a_failed_batch_leaves_memory_and_sqlite_unchanged() {
-    let mut session = Session::memory("test").unwrap();
+    let mut session = Session::memory().unwrap();
     let mut commands = session.commands();
     let page = commands.add_page("page", rgba_png([0, 0, 0, 255])).unwrap();
     let text = commands.add_text(page, Frame::new(0.0, 0.0, 10.0, 10.0));
@@ -200,7 +200,7 @@ fn a_failed_batch_leaves_memory_and_sqlite_unchanged() {
 
 #[test]
 fn masks_must_be_single_channel_and_page_sized() {
-    let mut session = Session::memory("test").unwrap();
+    let mut session = Session::memory().unwrap();
     let mut commands = session.commands();
     let page = commands.add_page("page", rgba_png([0, 0, 0, 255])).unwrap();
     session.apply(commands).unwrap();
@@ -222,7 +222,7 @@ fn masks_must_be_single_channel_and_page_sized() {
 
 #[test]
 fn a_new_page_can_receive_an_asset_in_the_same_batch() {
-    let mut session = Session::memory("test").unwrap();
+    let mut session = Session::memory().unwrap();
     let mut commands = session.commands();
     let page = commands.add_page("page", rgba_png([0, 0, 0, 255])).unwrap();
     commands
@@ -234,19 +234,19 @@ fn a_new_page_can_receive_an_asset_in_the_same_batch() {
 
 #[test]
 fn retained_changes_are_safely_reverted() {
-    let mut session = Session::memory("initial").unwrap();
-    let mut rename = session.commands();
-    rename.rename_project("renamed");
-    let revision = session.apply(rename).unwrap().to;
-    assert_eq!(session.project().name, "renamed");
+    let mut session = Session::memory().unwrap();
+    let mut add = session.commands();
+    let page = add.add_page("page", rgba_png([0, 0, 0, 255])).unwrap();
+    let revision = session.apply(add).unwrap().to;
+    assert!(session.page(page).is_ok());
 
     session.revert([revision]).unwrap();
-    assert_eq!(session.project().name, "initial");
+    assert!(session.page(page).is_err());
 }
 
 #[test]
 fn merge_allows_independent_fields_and_rejects_same_field() {
-    let session = Session::memory("test").unwrap();
+    let session = Session::memory().unwrap();
     let page = crate::PageId::new();
     let element = crate::ElementId::new();
     let mut left = session.commands();
@@ -274,7 +274,7 @@ fn merge_allows_independent_fields_and_rejects_same_field() {
 
 #[test]
 fn pruning_all_history_allows_old_blobs_to_be_collected() {
-    let mut session = Session::memory("test").unwrap();
+    let mut session = Session::memory().unwrap();
     let mut create = session.commands();
     let page = create.add_page("page", rgba_png([1, 1, 1, 255])).unwrap();
     session.apply(create).unwrap();

@@ -138,7 +138,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_character_sequence() -> anyhow::Result<()> {
-        crate::init().await?;
+        crate::init_torch().await?;
         let model = BaberuOcr::load(crate::Device::cpu()).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");

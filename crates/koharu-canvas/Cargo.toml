@@ -1,0 +1,25 @@
+[package]
+name = "koharu-canvas"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+
+[dependencies]
+bytemuck = { workspace = true, features = ["derive"] }
+image = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-scene = { workspace = true }
+rayon = { workspace = true }
+thiserror = { workspace = true }
+vello = { workspace = true }
+wgpu = { workspace = true }
+
+[dev-dependencies]
+pollster = { workspace = true }

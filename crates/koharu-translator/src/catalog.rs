@@ -67,12 +67,6 @@ macro_rules! define_local_models {
 }
 
 define_local_models! {
-    VntlLlama3_8Bv2 => {
-        id: "vntl-llama3-8b-v2",
-        repository: "lmg-anon/vntl-llama3-8b-v2-gguf",
-        filename: "vntl-llama3-8b-v2-hf-q5_k_m.gguf",
-        languages: SupportedLanguages::Limited(&[Language::English])
-    };
     Lfm2_5_1_2bInstruct => {
         id: "lfm2.5-1.2b-instruct",
         repository: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",

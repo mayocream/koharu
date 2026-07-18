@@ -62,7 +62,9 @@ Because of that, a single model is usually not enough. Koharu first finds text b
 
 ## The implementation shape
 
-In the source tree, the engine registry and pipeline execution live in `koharu-app/src/engine.rs`, while default engine selection lives in `koharu-app/src/config.rs`.
+In the source tree, the processing stages, execution driver, and built-in processors live in `koharu-pipeline`; runtime settings live in `koharu-config`.
+
+The runner does not treat the configured engines as a fixed sequential list. Every engine declares required and optional input artifacts plus its output artifacts, and each named pipeline node may add explicit `dependsOn` edges. Koharu validates those contracts as a DAG, rejects cycles and unordered output conflicts, and runs all ready nodes across all pages concurrently. A failed node blocks only descendants that require it; independent branches continue.
 
 Some implementation details matter:
 

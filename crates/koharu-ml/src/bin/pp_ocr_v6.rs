@@ -53,7 +53,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
     let device = koharu_ml::device(cli.cpu);
     match cli.command {
         Command::Det(args) => detect(args, device).await,

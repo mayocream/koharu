@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     let translator: Box<dyn Translator> = match args.provider {
         Provider::Local => {
-            koharu_ml::init().await?;
+            koharu_ml::init_llama().await?;
             let model = required_model(&args)?.parse::<LocalModel>()?;
             let device = koharu_ml::device(args.cpu);
             Box::new(LocalTranslator::load(device, model).await?)

@@ -62,7 +62,7 @@ flowchart LR
 
 ## 実装の形
 
-ソースコード上では、エンジンの登録とパイプライン実行は `koharu-app/src/engine.rs` にあり、既定エンジンの選択は `koharu-app/src/config.rs` にあります。
+ソースコード上では、処理ステージ、実行ドライバ、組み込みプロセッサは `koharu-pipeline` にあり、ランタイム設定は `koharu-config` にあります。
 
 実装上、重要な点は次の通りです。
 

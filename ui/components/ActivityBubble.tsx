@@ -1,241 +1,164 @@
 'use client'
 
-import { AlertTriangleIcon, CircleXIcon } from 'lucide-react'
-import { type ReactNode } from 'react'
+import { CircleX, Download, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { cancelOperation } from '@/lib/api/default/default'
-import type {
-  DownloadProgress,
-  JobSummary,
-  JobWarningEvent,
-  PipelineProgress,
-} from '@/lib/api/schemas'
-import { useDownloadsStore } from '@/lib/stores/downloadsStore'
-import { useEditorUiStore } from '@/lib/stores/editorUiStore'
-import { type JobEntry, useJobsStore } from '@/lib/stores/jobsStore'
+import { koharuClient, useEditorStore, type DownloadStatus, type JobStatus } from '@/lib/koharu'
 
-type TranslateFunc = ReturnType<typeof useTranslation>['t']
-
-const clampProgress = (value?: number) => {
-  if (typeof value !== 'number' || Number.isNaN(value)) return undefined
-  return Math.max(0, Math.min(100, Math.round(value)))
-}
-
-function BubbleCard({ children }: { children: ReactNode }) {
-  return (
-    <div className='rounded-2xl border border-border bg-card/95 p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur'>
-      {children}
-    </div>
-  )
-}
-
-function ProgressBar({ percent }: { percent?: number }) {
-  return (
-    <div className='mt-3 flex items-center gap-2'>
-      <div className='relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted'>
-        {typeof percent === 'number' ? (
-          <div
-            className='h-full rounded-full bg-primary transition-[width] duration-700 ease-out'
-            style={{ width: `${percent}%` }}
-          />
-        ) : (
-          <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-linear-to-r from-primary/40 via-primary to-primary/40' />
-        )}
-      </div>
-      {typeof percent === 'number' && (
-        <span className='w-12 text-right text-[11px] font-semibold text-muted-foreground tabular-nums'>
-          {percent}%
-        </span>
-      )}
-    </div>
-  )
-}
-
-function DownloadCard({
-  filename,
-  percent,
-  t,
-}: {
-  filename: string
-  percent?: number
-  t: TranslateFunc
-}) {
-  return (
-    <BubbleCard>
-      <div className='flex items-start gap-3'>
-        <div className='mt-1 h-2.5 w-2.5 animate-pulse rounded-full bg-primary shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
-        <div className='min-w-0 flex-1'>
-          <div className='text-sm font-semibold text-foreground'>{t('download.title')}</div>
-          <div className='block max-w-full truncate text-xs text-muted-foreground' title={filename}>
-            {filename}
-          </div>
-          <ProgressBar percent={percent} />
-        </div>
-      </div>
-    </BubbleCard>
-  )
-}
-
-function ErrorCard({
-  message,
-  onDismiss,
-  t,
-}: {
-  message: string
-  onDismiss: () => void
-  t: TranslateFunc
-}) {
-  return (
-    <div className='rounded-2xl border border-red-200/80 bg-card/95 p-4 shadow-[0_15px_60px_rgba(0,0,0,0.12)] backdrop-blur dark:border-red-900/80'>
-      <div className='flex items-start gap-3'>
-        <div className='mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/70 dark:text-red-400'>
-          <CircleXIcon className='size-4' />
-        </div>
-        <div className='min-w-0 flex-1'>
-          <div className='flex items-start justify-between gap-3'>
-            <div className='min-w-0'>
-              <div className='text-sm font-semibold text-red-700 dark:text-red-300'>
-                {t('errors.title')}
-              </div>
-              <div className='mt-1 border-l-2 border-red-500 pl-3 text-xs break-words text-red-700/90 dark:text-red-200/90'>
-                {message}
-              </div>
+function JobCard({ job }: { job: JobStatus }) {
+  const { t } = useTranslation()
+  const dismiss = useEditorStore((state) => state.dismissJob)
+  if (job.state === 'running') {
+    const percent =
+      job.total > 0 ? Math.min(100, Math.round((job.completed / job.total) * 100)) : null
+    const detail = [job.stage, job.model].filter(Boolean).join(' · ')
+    return (
+      <div className='rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur'>
+        <div className='flex items-start gap-3'>
+          <span className='mt-1.5 size-2 animate-pulse rounded-full bg-primary' />
+          <div className='min-w-0 flex-1'>
+            <div className='text-sm font-semibold'>
+              {t(`native.jobs.${job.kind}`, { defaultValue: job.kind })}
             </div>
-            <Button
-              variant='ghost'
-              size='icon-xs'
-              onClick={onDismiss}
-              className='text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-300 dark:hover:bg-red-950/60'
-              aria-label={t('errors.dismiss')}
-            >
-              <CircleXIcon className='size-3.5' />
-            </Button>
+            <div className='truncate text-xs text-muted-foreground'>
+              {detail || t('native.jobs.working', { defaultValue: 'Working…' })}
+            </div>
+            <div className='mt-2 flex items-center gap-2'>
+              <div className='relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted'>
+                {percent === null ? (
+                  <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-primary' />
+                ) : (
+                  <div
+                    className='h-full rounded-full bg-primary'
+                    style={{ width: `${percent}%` }}
+                  />
+                )}
+              </div>
+              {percent !== null && <span className='text-[11px] tabular-nums'>{percent}%</span>}
+            </div>
+            <div className='mt-2 flex justify-end'>
+              <Button
+                size='sm'
+                variant='outline'
+                onClick={() => koharuClient.fire({ type: 'cancel_job', job: job.id })}
+              >
+                {t('native.jobs.cancel', { defaultValue: 'Cancel' })}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function JobWarnings({ warnings, t }: { warnings: JobWarningEvent[]; t: TranslateFunc }) {
-  const latest = warnings[warnings.length - 1]
-  const count = warnings.length
-  const pageLabel =
-    typeof latest.totalPages === 'number' && latest.totalPages > 1
-      ? t('operations.imageProgress', {
-          current: latest.pageIndex + 1,
-          total: latest.totalPages,
-        })
-      : undefined
-  const header =
-    count === 1 ? t('operations.warningsOne') : t('operations.warningsOther', { count })
-  return (
-    <div
-      data-testid='operation-warnings'
-      className='mt-3 rounded-lg border border-amber-200/70 bg-amber-50/80 p-2.5 dark:border-amber-900/70 dark:bg-amber-950/40'
-    >
-      <div className='flex items-start gap-2 text-amber-900 dark:text-amber-200'>
-        <AlertTriangleIcon className='mt-0.5 size-3.5 shrink-0' />
-        <div className='min-w-0 flex-1'>
-          <div className='text-[11px] font-semibold'>{header}</div>
-          <div className='mt-0.5 truncate text-[11px] text-amber-800/90 dark:text-amber-200/80'>
-            {[latest.stepId, pageLabel].filter(Boolean).join(' \u00b7 ')}
-          </div>
-          <div className='mt-1 line-clamp-2 text-[11px] break-words text-amber-900/80 dark:text-amber-100/80'>
-            {latest.message}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function JobCard({ job, onCancel, t }: { job: JobEntry; onCancel: () => void; t: TranslateFunc }) {
-  const progress: PipelineProgress | undefined = job.progress
-  const percent = clampProgress(progress?.overallPercent)
-  const stepLabels: Record<string, string> = {
-    detect: t('processing.detect'),
-    ocr: t('processing.ocr'),
-    inpaint: t('mask.inpaint'),
-    llmGenerate: t('llm.generate'),
-    render: t('processing.render'),
+    )
   }
-  const stepLabel = progress?.step
-    ? (stepLabels[String(progress.step)] ?? String(progress.step))
-    : undefined
-  const currentPage = progress?.currentPage
-  const totalPages = progress?.totalPages
-  const pageText =
-    typeof currentPage === 'number' && totalPages && totalPages > 1
-      ? t('operations.imageProgress', { current: currentPage + 1, total: totalPages })
-      : undefined
-  const subtitle =
-    [pageText, stepLabel].filter(Boolean).join(' \u00b7 ') || t('operations.inProgress')
-  const warnings = job.warnings ?? []
 
+  if (job.state === 'finished' || job.state === 'cancelled') return null
   return (
-    <BubbleCard>
-      <div data-testid='operation-card' className='flex items-start gap-3'>
-        <div className='mt-1 h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
-        <div className='flex-1'>
-          <div className='flex items-start justify-between gap-2'>
-            <div className='flex flex-col gap-1'>
-              <div className='text-sm font-semibold text-foreground'>
-                {t('operations.processCurrent')}
-              </div>
-              <div className='text-xs text-muted-foreground'>{subtitle}</div>
-            </div>
+    <div className='rounded-xl border border-destructive/30 bg-card/95 p-3 shadow-xl backdrop-blur'>
+      <div className='flex items-start gap-2'>
+        <CircleX className='mt-0.5 size-4 text-destructive' />
+        <div className='min-w-0 flex-1 text-xs text-destructive'>{job.error}</div>
+        <Button
+          size='icon-xs'
+          variant='ghost'
+          aria-label={t('native.jobs.dismiss', { defaultValue: 'Dismiss' })}
+          onClick={() => dismiss(job.id)}
+        >
+          <X />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function DownloadCard({ download }: { download: DownloadStatus }) {
+  const { t } = useTranslation()
+  const dismiss = useEditorStore((state) => state.dismissDownload)
+
+  if (download.state === 'finished') return null
+  if (download.state === 'failed') {
+    return (
+      <div className='rounded-xl border border-destructive/30 bg-card/95 p-3 shadow-xl backdrop-blur'>
+        <div className='flex items-start gap-2'>
+          <CircleX className='mt-0.5 size-4 text-destructive' />
+          <div className='min-w-0 flex-1'>
+            <div className='truncate text-xs font-medium'>{download.name}</div>
+            <div className='text-xs text-destructive'>{download.error}</div>
           </div>
-          <ProgressBar percent={percent} />
-          {warnings.length > 0 && <JobWarnings warnings={warnings} t={t} />}
-          <div className='mt-3 flex justify-end'>
-            <Button
-              data-testid='operation-cancel'
-              variant='outline'
-              size='sm'
-              onClick={onCancel}
-              className='text-xs font-semibold'
-            >
-              {t('operations.cancel')}
-            </Button>
+          <Button
+            size='icon-xs'
+            variant='ghost'
+            aria-label={t('native.jobs.dismiss', { defaultValue: 'Dismiss' })}
+            onClick={() => dismiss(download.id)}
+          >
+            <X />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const percent =
+    download.total > 0
+      ? Math.min(100, Math.round((download.completed / download.total) * 100))
+      : null
+  const transferred =
+    download.total > 0
+      ? `${formatBytes(download.completed)} / ${formatBytes(download.total)}`
+      : formatBytes(download.completed)
+  return (
+    <div className='rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur'>
+      <div className='flex items-start gap-3'>
+        <Download className='mt-0.5 size-4 text-primary' />
+        <div className='min-w-0 flex-1'>
+          <div className='text-sm font-semibold'>
+            {t('native.downloads.title', { defaultValue: 'Download' })}
+          </div>
+          <div className='truncate text-xs text-muted-foreground'>{download.name}</div>
+          <div className='mt-2 flex items-center gap-2'>
+            <div className='relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted'>
+              {percent === null ? (
+                <div className='activity-progress-indeterminate absolute inset-0 w-1/2 rounded-full bg-primary' />
+              ) : (
+                <div className='h-full rounded-full bg-primary' style={{ width: `${percent}%` }} />
+              )}
+            </div>
+            {percent !== null && <span className='text-[11px] tabular-nums'>{percent}%</span>}
+          </div>
+          <div className='mt-1 text-right text-[11px] text-muted-foreground tabular-nums'>
+            {transferred}
           </div>
         </div>
       </div>
-    </BubbleCard>
+    </div>
   )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GiB`
 }
 
 export function ActivityBubble() {
-  const { t } = useTranslation()
-  const jobs = useJobsStore((s) => s.jobs)
-  const downloads = useDownloadsStore((s) => s.downloads)
-  const uiError = useEditorUiStore((s) => s.error)
-  const clearUiError = useEditorUiStore((s) => s.clearError)
-
-  const runningJobs = Object.values(jobs).filter(
-    (j: JobSummary) => j.status === 'running',
-  ) as JobEntry[]
-  const activeDownloads: DownloadProgress[] = Object.values(downloads).filter((d) => {
-    const s = d.status.status
-    return s === 'started' || s === 'downloading'
-  })
-
-  const errorMessage = uiError?.message
-  if (!errorMessage && runningJobs.length === 0 && activeDownloads.length === 0) return null
-
+  const jobs = useEditorStore((state) => state.jobs)
+  const downloads = useEditorStore((state) => state.downloads)
+  const visible = Object.values(jobs).filter(
+    (job) => job.state === 'running' || job.state === 'failed',
+  )
+  const visibleDownloads = Object.values(downloads).filter(
+    (download) => download.state === 'running' || download.state === 'failed',
+  )
+  if (!visible.length && !visibleDownloads.length) return null
   return (
-    <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
-      {errorMessage && <ErrorCard message={errorMessage} onDismiss={clearUiError} t={t} />}
-      {runningJobs.map((job) => (
-        <JobCard key={job.id} job={job} onCancel={() => void cancelOperation(job.id)} t={t} />
+    <aside className='pointer-events-auto fixed right-5 bottom-8 z-50 flex w-80 max-w-[calc(100%-2rem)] flex-col gap-2'>
+      {visibleDownloads.map((download) => (
+        <DownloadCard key={download.id} download={download} />
       ))}
-      {activeDownloads.map((d) => {
-        const percent =
-          d.total && d.total > 0 ? Math.round((d.downloaded / d.total) * 100) : undefined
-        return <DownloadCard key={d.id} filename={d.filename} percent={percent} t={t} />
-      })}
-    </div>
+      {visible.map((job) => (
+        <JobCard key={job.id} job={job} />
+      ))}
+    </aside>
   )
 }

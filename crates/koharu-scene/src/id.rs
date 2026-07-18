@@ -2,20 +2,27 @@ use std::{fmt, str::FromStr};
 
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use uuid::Uuid;
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(transparent)]
 pub struct ProjectId(Uuid);
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(transparent)]
 pub struct PageId(Uuid);
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(transparent)]
 pub struct ElementId(Uuid);
 
@@ -67,10 +74,10 @@ impl_uuid_id!(ElementId);
 
 #[revisioned(revision = 1)]
 #[derive(
-    Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
+    Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
 )]
 #[serde(transparent)]
-pub struct Revision(u64);
+pub struct Revision(#[specta(type = f64)] u64);
 
 impl Revision {
     pub const ZERO: Self = Self(0);
@@ -97,7 +104,9 @@ impl fmt::Display for Revision {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
 #[serde(transparent)]
 pub struct BlobId([u8; 32]);
 

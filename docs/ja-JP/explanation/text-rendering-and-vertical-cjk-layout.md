@@ -40,7 +40,7 @@ flowchart LR
 
 ## Koharu が実際にやっていること
 
-実装としては、レンダラは `koharu-renderer` クレートにあり、主な調停は `koharu-app/src/renderer.rs`、`src/layout.rs`、`src/shape.rs`、`src/segment.rs`、`src/renderer.rs` で行われています。
+実装としては、合成、レイアウト、シェーピング、セグメンテーション、WGPU ラスタライズを `koharu-renderer` クレート内の各モジュールが担当します。
 
 翻訳済み `TextBlock` 1 つに対する流れは、おおむね次の通りです。
 

@@ -1,50 +1,19 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
-import {
-  SunIcon,
-  MoonIcon,
-  MonitorIcon,
-  CheckCircleIcon,
-  AlertCircleIcon,
-  LoaderIcon,
-  PaletteIcon,
-  KeyIcon,
-  HardDriveIcon,
-  InfoIcon,
-  CpuIcon,
-  KeyboardIcon,
-  SaveIcon,
-  RotateCcwIcon,
-  AlertTriangleIcon,
-  CopyIcon,
-  ExternalLinkIcon,
-  LogInIcon,
-  LogOutIcon,
-  SparklesIcon,
-} from 'lucide-react'
+import { Cpu, KeyRound, Keyboard, Monitor, Moon, Palette, Save, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
   Accordion,
+  AccordionContent,
   AccordionItem,
   AccordionTrigger,
-  AccordionContent,
 } from '@/components/ui/accordion'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Kbd } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -54,435 +23,374 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useUpdater, type UpdaterStatus } from '@/components/Updater'
-import {
-  getCatalog as getLlmCatalog,
-  getConfig,
-  getEngineCatalog,
-  getGetCatalogQueryKey as getGetLlmCatalogQueryKey,
-  getMeta,
-  patchConfig,
-  deleteCodexSession,
-  getGetCodexAuthStatusQueryKey,
-  startCodexDeviceLogin,
-  useGetCodexAuthStatus,
-} from '@/lib/api/default/default'
-import type {
-  AppConfig,
-  ConfigPatch,
-  CodexDeviceLogin,
-  EngineCatalog as GetEngineCatalog200,
-  LlmProviderCatalog,
-  ProviderConfig,
-} from '@/lib/api/schemas'
-import { isTauri, openExternalUrl } from '@/lib/backend'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { supportedLanguages } from '@/lib/i18n'
 import {
-  areShortcutsEqual,
-  formatShortcut,
-  formatModifierCombination,
-  getPlatform,
-  isKeyBlocked,
-  isModifierKey,
-} from '@/lib/shortcutUtils'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+  koharuClient,
+  useEditorStore,
+  type DetectionModel,
+  type InpaintingModel,
+  type OcrModel,
+  type PipelineConfig,
+  type SecretProvider,
+  type ShortcutAction,
+  type SegmentationModel,
+  type Stage,
+  type TargetLanguageView,
+  type TranslationModel,
+  type TypographyModel,
+} from '@/lib/koharu'
 
-// Dialog state models `AppConfig` (what `GET /config` returns — snake_case).
-// But `PATCH /config` expects a `ConfigPatch` with camelCase fields because
-// the patch schema derives `rename_all = "camelCase"` serde attrs. Translate
-// at the boundary so the dialog internals stay unified.
-type UpdateConfigBody = AppConfig
-
-function appConfigToPatch(cfg: AppConfig): ConfigPatch {
-  const patch: ConfigPatch = {}
-  if (cfg.data?.path) {
-    patch.data = { path: cfg.data.path }
-  }
-  if (cfg.http) {
-    patch.http = {
-      connectTimeout: cfg.http.connect_timeout,
-      readTimeout: cfg.http.read_timeout,
-      maxRetries: cfg.http.max_retries,
-    }
-  }
-  if (cfg.pipeline) {
-    patch.pipeline = {
-      detector: cfg.pipeline.detector,
-      fontDetector: cfg.pipeline.font_detector,
-      segmenter: cfg.pipeline.segmenter,
-      bubbleSegmenter: cfg.pipeline.bubble_segmenter,
-      ocr: cfg.pipeline.ocr,
-      translator: cfg.pipeline.translator,
-      inpainter: cfg.pipeline.inpainter,
-      renderer: cfg.pipeline.renderer,
-    }
-  }
-  if (cfg.providers) {
-    patch.providers = cfg.providers.map((p) => ({
-      id: p.id,
-      baseUrl: p.base_url ?? null,
-      apiKey: p.api_key ?? null,
-    }))
-  }
-  return patch
-}
-
-async function updateConfig(next: UpdateConfigBody): Promise<AppConfig> {
-  return (await patchConfig(appConfigToPatch(next))) as AppConfig
-}
-
-const GITHUB_REPO = 'mayocream/koharu'
-
-const TABS = [
-  { id: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
-  { id: 'engines', icon: CpuIcon, labelKey: 'settings.engines' },
-  { id: 'providers', icon: KeyIcon, labelKey: 'settings.apiKeys' },
-  { id: 'ai', icon: SparklesIcon, labelKey: 'settings.ai' },
-  { id: 'keybinds', icon: KeyboardIcon, labelKey: 'settings.keybinds' },
-  { id: 'runtime', icon: HardDriveIcon, labelKey: 'settings.runtime' },
-  { id: 'about', icon: InfoIcon, labelKey: 'settings.about' },
+const settingsTabs = [
+  { id: 'appearance', icon: Palette, label: 'native.settings.appearance' },
+  { id: 'pipeline', icon: Cpu, label: 'native.settings.pipeline' },
+  { id: 'credentials', icon: KeyRound, label: 'native.settings.credentials' },
+  { id: 'shortcuts', icon: Keyboard, label: 'native.settings.shortcuts' },
 ] as const
+type SettingsTab = (typeof settingsTabs)[number]['id']
 
-export type TabId = (typeof TABS)[number]['id']
-
-type SettingsDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  defaultTab?: TabId
+type PipelineModel =
+  | DetectionModel
+  | SegmentationModel
+  | OcrModel
+  | TranslationModel
+  | TypographyModel
+  | InpaintingModel
+const stages: Stage[] = [
+  'detection',
+  'segmentation',
+  'ocr',
+  'translation',
+  'typography',
+  'inpainting',
+]
+const modelOptions: Record<Stage, PipelineModel['model'][]> = {
+  detection: ['pp_doclayout_v3', 'comic_text_detector'],
+  segmentation: ['manga_text_segmentation', 'speech_bubble_segmentation'],
+  ocr: ['paddleocr_vl_1.6', 'manga_ocr'],
+  translation: [
+    'local',
+    'openai',
+    'gemini',
+    'claude',
+    'deepseek',
+    'openai_compatible',
+    'deepl',
+    'google_cloud_translation',
+    'caiyun',
+  ],
+  typography: ['font_detector'],
+  inpainting: ['lama', 'aot_inpainting', 'flux2_klein'],
+}
+const modelLabels: Record<PipelineModel['model'], string> = {
+  comic_text_detector: 'Comic Text Detector',
+  pp_doclayout_v3: 'PP-DocLayoutV3',
+  manga_text_segmentation: 'Manga Text Segmentation',
+  speech_bubble_segmentation: 'Speech Bubble Segmentation',
+  'paddleocr_vl_1.6': 'PaddleOCR-VL 1.6',
+  manga_ocr: 'Manga OCR',
+  local: 'Local',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  claude: 'Claude',
+  deepseek: 'DeepSeek',
+  openai_compatible: 'OpenAI-compatible',
+  deepl: 'DeepL',
+  google_cloud_translation: 'Google Cloud Translation',
+  caiyun: 'Caiyun',
+  font_detector: 'Font Detector',
+  lama: 'LaMa',
+  aot_inpainting: 'AOT Inpainting',
+  flux2_klein: 'FLUX.2 Klein',
+}
+const stageDescriptions: Record<Stage, string> = {
+  detection: 'Locate text on the page.',
+  segmentation: 'Refine the areas that should be cleaned.',
+  ocr: 'Read the text inside each region.',
+  translation: 'Convert source text to the target language.',
+  typography: 'Choose fonts and fit translated text.',
+  inpainting: 'Rebuild the artwork behind removed text.',
 }
 
-const DEFAULT_HTTP_CONNECT_TIMEOUT = 20
-const DEFAULT_HTTP_READ_TIMEOUT = 300
-const DEFAULT_HTTP_MAX_RETRIES = 3
-
-export function SettingsDialog({
-  open,
-  onOpenChange,
-  defaultTab = 'appearance',
-}: SettingsDialogProps) {
+export function SettingsDialog() {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const [tab, setTab] = useState<TabId>(defaultTab)
-  useEffect(() => {
-    if (open) setTab(defaultTab)
-  }, [defaultTab, open])
-
-  const [appConfig, setAppConfig] = useState<UpdateConfigBody | null>(null)
-  const [providerCatalogs, setProviderCatalogs] = useState<LlmProviderCatalog[]>([])
-  const [apiKeyDrafts, setApiKeyDrafts] = useState<Record<string, string>>({})
-  const [dataPathDraft, setDataPathDraft] = useState('')
-  const [httpConnectTimeoutDraft, setHttpConnectTimeoutDraft] = useState('')
-  const [httpReadTimeoutDraft, setHttpReadTimeoutDraft] = useState('')
-  const [httpMaxRetriesDraft, setHttpMaxRetriesDraft] = useState('')
-  const [storageSettingsError, setStorageSettingsError] = useState<string | null>(null)
-  const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false)
-  const [engineCatalog, setEngineCatalog] = useState<GetEngineCatalog200 | null>(null)
-  const [appVersion, setAppVersion] = useState<string>()
-  const updater = useUpdater()
+  const { theme, setTheme } = useTheme()
+  const open = useEditorStore((state) => state.settingsOpen)
+  const setOpen = useEditorStore((state) => state.setSettingsOpen)
+  const settings = useEditorStore((state) => state.settings)
+  const targetLanguage = useEditorStore((state) => state.targetLanguage)
+  const setTargetLanguage = useEditorStore((state) => state.setTargetLanguage)
+  const instructions = useEditorStore((state) => state.instructions)
+  const setInstructions = useEditorStore((state) => state.setInstructions)
+  const [draft, setDraft] = useState<PipelineConfig | null>(settings?.pipeline ?? null)
+  const [targetLanguageDraft, setTargetLanguageDraft] = useState(targetLanguage)
+  const [instructionsDraft, setInstructionsDraft] = useState(instructions)
+  const [secrets, setSecrets] = useState<Partial<Record<SecretProvider, string>>>({})
+  const [tab, setTab] = useState<SettingsTab>('appearance')
 
   useEffect(() => {
-    if (!open) return
-    void (async () => {
-      try {
-        const [config, catalog, engines] = await Promise.all([
-          getConfig(),
-          getLlmCatalog(),
-          getEngineCatalog(),
-        ])
-        setAppConfig(config)
-        setProviderCatalogs(catalog.providers)
-        setEngineCatalog(engines)
-      } catch {}
-    })()
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const meta = await getMeta()
-        if (cancelled) return
-        setAppVersion(meta.version)
-      } catch {
-        return
-      }
-    })()
-    return () => {
-      cancelled = true
+    if (open) {
+      setTab('appearance')
+      setTargetLanguageDraft(targetLanguage)
+      setInstructionsDraft(instructions)
+      koharuClient.fire({ type: 'get_settings' })
     }
-  }, [open])
-
-  const checkForUpdates = updater.checkForUpdates
+  }, [instructions, open, targetLanguage])
   useEffect(() => {
-    if (!open || !isTauri()) return
-    void checkForUpdates()
-  }, [open, checkForUpdates])
-
-  useEffect(() => {
-    if (!appConfig?.data) return
-    setDataPathDraft(appConfig.data.path)
-    setHttpConnectTimeoutDraft(
-      String(appConfig.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT),
-    )
-    setHttpReadTimeoutDraft(String(appConfig.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT))
-    setHttpMaxRetriesDraft(String(appConfig.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES))
-    setStorageSettingsError(null)
-  }, [appConfig])
-
-  const persistConfig = async (next: UpdateConfigBody) => {
-    try {
-      const saved = await updateConfig(next)
-      const catalog = await getLlmCatalog()
-      setAppConfig(saved)
-      setProviderCatalogs(catalog.providers)
-      queryClient.invalidateQueries({ queryKey: getGetLlmCatalogQueryKey() })
-      return saved
-    } catch {
-      return null
+    setDraft(settings?.pipeline ?? null)
+    if (open && settings) {
+      setTargetLanguageDraft((current) =>
+        normalizeTargetLanguage(current, settings.target_languages),
+      )
     }
+  }, [open, settings])
+
+  const save = () => {
+    if (!draft) return
+    koharuClient
+      .command({ type: 'set_pipeline_config', config: draft })
+      .then((result) => {
+        if (result === 'accepted') {
+          setTargetLanguage(targetLanguageDraft)
+          setInstructions(instructionsDraft)
+          setOpen(false)
+        }
+      })
+      .catch(() => undefined)
   }
-
-  const upsertProvider = (id: string, updater: (p: ProviderConfig) => ProviderConfig) => {
-    if (!appConfig) return
-    const providers = [...(appConfig.providers ?? [])]
-    const idx = providers.findIndex((p) => p.id === id)
-    const current = idx >= 0 ? providers[idx] : { id }
-    if (idx >= 0) providers[idx] = updater(current)
-    else providers.push(updater(current))
-    setAppConfig({ ...appConfig, providers })
-  }
-
-  const handleApplyStorageSettings = async () => {
-    if (!appConfig) return
-    const path = dataPathDraft.trim()
-    if (!path) {
-      setStorageSettingsError('Required')
-      return
-    }
-    const connectTimeout = Number.parseInt(httpConnectTimeoutDraft.trim(), 10)
-    if (!Number.isInteger(connectTimeout) || connectTimeout <= 0) {
-      setStorageSettingsError('Invalid HTTP connect timeout')
-      return
-    }
-    const readTimeout = Number.parseInt(httpReadTimeoutDraft.trim(), 10)
-    if (!Number.isInteger(readTimeout) || readTimeout <= 0) {
-      setStorageSettingsError('Invalid HTTP read timeout')
-      return
-    }
-    const maxRetries = Number.parseInt(httpMaxRetriesDraft.trim(), 10)
-    if (!Number.isInteger(maxRetries) || maxRetries < 0) {
-      setStorageSettingsError('Invalid HTTP max retries')
-      return
-    }
-
-    setIsSavingStorageSettings(true)
-    setStorageSettingsError(null)
-    const saved = await persistConfig({
-      ...appConfig,
-      data: { path },
-      http: {
-        connect_timeout: connectTimeout,
-        read_timeout: readTimeout,
-        max_retries: maxRetries,
-      },
-    })
-    setIsSavingStorageSettings(false)
-    if (!saved) {
-      setStorageSettingsError('Failed')
-      return
-    }
-    if (!isTauri()) {
-      setStorageSettingsError('Restart manually')
-      return
-    }
-    try {
-      const { relaunch } = await import('@tauri-apps/plugin-process')
-      await relaunch()
-    } catch {
-      setStorageSettingsError('Restart manually')
-    }
-  }
-
-  const storageSettingsUnchanged =
-    dataPathDraft.trim() === appConfig?.data?.path &&
-    httpConnectTimeoutDraft.trim() ===
-      String(appConfig?.http?.connect_timeout ?? DEFAULT_HTTP_CONNECT_TIMEOUT) &&
-    httpReadTimeoutDraft.trim() ===
-      String(appConfig?.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT) &&
-    httpMaxRetriesDraft.trim() === String(appConfig?.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className='flex h-[600px] max-h-[85vh] w-[760px] max-w-[92vw] flex-col gap-0 overflow-hidden p-0'>
-        <DialogTitle className='sr-only'>{t('settings.title')}</DialogTitle>
-        <DialogDescription className='sr-only'>Settings</DialogDescription>
+        <DialogTitle className='sr-only'>
+          {t('native.settings.title', { defaultValue: 'Settings' })}
+        </DialogTitle>
+        <DialogDescription className='sr-only'>
+          {t('native.settings.description', { defaultValue: 'Koharu settings' })}
+        </DialogDescription>
 
-        <div className='flex h-full'>
-          {/* Sidebar */}
+        <div className='flex min-h-0 flex-1'>
           <nav className='flex w-[180px] shrink-0 flex-col gap-1 border-r border-border bg-muted/30 p-3'>
             <p className='mb-3 px-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
-              {t('settings.title')}
+              {t('native.settings.title', { defaultValue: 'Settings' })}
             </p>
-            {TABS.map(({ id, icon: Icon, labelKey }) => (
+            {settingsTabs.map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
-                onClick={() => setTab(id)}
+                type='button'
                 data-active={tab === id}
-                className='flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
+                onClick={() => setTab(id)}
+                className='flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
               >
                 <Icon className='size-4 shrink-0' />
-                {t(labelKey)}
+                {t(label, { defaultValue: id })}
               </button>
             ))}
           </nav>
 
-          {/* Content */}
-          <ScrollArea className='min-h-0 flex-1'>
-            <div className='p-6'>
-              {tab === 'appearance' && <AppearancePane />}
-              {tab === 'engines' && engineCatalog && appConfig && (
-                <EnginesPane
-                  catalog={engineCatalog}
-                  pipeline={appConfig.pipeline ?? {}}
-                  onChange={(pipeline) => {
-                    const next = { ...appConfig, pipeline }
-                    setAppConfig(next)
-                    void persistConfig(next)
-                  }}
-                />
-              )}
-              {tab === 'providers' && (
-                <ProvidersPane
-                  catalogs={providerCatalogs}
-                  config={appConfig}
-                  drafts={apiKeyDrafts}
-                  onBaseUrlChange={(id, v) =>
-                    upsertProvider(id, (p) => ({
-                      ...p,
-                      base_url: v || null,
-                    }))
-                  }
-                  onBaseUrlBlur={() => appConfig && void persistConfig(appConfig)}
-                  onApiKeyChange={(id, v) => setApiKeyDrafts((c) => ({ ...c, [id]: v }))}
-                  onSaveKey={(id) => {
-                    const key = apiKeyDrafts[id]?.trim()
-                    if (!key || !appConfig) return
-                    const providers = [...(appConfig.providers ?? [])]
-                    const idx = providers.findIndex((p) => p.id === id)
-                    const current = idx >= 0 ? providers[idx] : { id }
-                    const updated = { ...current, api_key: key }
-                    if (idx >= 0) providers[idx] = updated
-                    else providers.push(updated)
-                    void persistConfig({ ...appConfig, providers }).then(() =>
-                      setApiKeyDrafts((c) => {
-                        const n = { ...c }
-                        delete n[id]
-                        return n
-                      }),
-                    )
-                  }}
-                  onClearKey={(id) => {
-                    if (!appConfig) return
-                    const providers = [...(appConfig.providers ?? [])]
-                    const idx = providers.findIndex((p) => p.id === id)
-                    if (idx >= 0) providers[idx] = { ...providers[idx], api_key: null }
-                    void persistConfig({ ...appConfig, providers }).then(() =>
-                      setApiKeyDrafts((c) => {
-                        const n = { ...c }
-                        delete n[id]
-                        return n
-                      }),
-                    )
-                  }}
-                />
-              )}
-              {tab === 'ai' && <CodexSettingsPane />}
-              {tab === 'runtime' && (
-                <StoragePane
-                  dataPath={dataPathDraft}
-                  httpConnectTimeout={httpConnectTimeoutDraft}
-                  httpReadTimeout={httpReadTimeoutDraft}
-                  httpMaxRetries={httpMaxRetriesDraft}
-                  error={storageSettingsError}
-                  saving={isSavingStorageSettings}
-                  unchanged={storageSettingsUnchanged}
-                  onPathChange={(v) => {
-                    setDataPathDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onHttpConnectTimeoutChange={(v) => {
-                    setHttpConnectTimeoutDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onHttpReadTimeoutChange={(v) => {
-                    setHttpReadTimeoutDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onHttpMaxRetriesChange={(v) => {
-                    setHttpMaxRetriesDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onApply={() => void handleApplyStorageSettings()}
-                />
-              )}
-              {tab === 'keybinds' && <KeybindsPane />}
-              {tab === 'about' && (
-                <AboutPane
-                  version={appVersion}
-                  latestVersion={updater.latestVersion}
-                  status={updater.status}
-                  isInstallingUpdate={updater.isInstalling}
-                  onInstallUpdate={() => void updater.installUpdate()}
-                />
-              )}
+          <div className='flex min-w-0 flex-1 flex-col'>
+            <ScrollArea className='min-h-0 flex-1'>
+              <div className='p-6'>
+                {tab === 'appearance' && (
+                  <AppearanceSettings theme={theme ?? 'system'} onThemeChange={setTheme} />
+                )}
+
+                {tab === 'pipeline' && (
+                  <Section
+                    title={t('native.settings.pipeline', { defaultValue: 'Pipeline' })}
+                    description={t('native.settings.pipelineHelp', {
+                      defaultValue:
+                        'Choose how Koharu detects, reads, translates, and rebuilds each page.',
+                    })}
+                  >
+                    {draft ? (
+                      <div className='divide-y divide-border'>
+                        {stages.map((stage) => (
+                          <StageEditor
+                            key={stage}
+                            stage={stage}
+                            config={draft}
+                            localModels={settings?.local_translation_models ?? []}
+                            targetLanguages={settings?.target_languages ?? []}
+                            targetLanguage={targetLanguageDraft}
+                            instructions={instructionsDraft}
+                            onTargetLanguageChange={setTargetLanguageDraft}
+                            onInstructionsChange={setInstructionsDraft}
+                            onChange={setDraft}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className='rounded-xl border p-4 text-xs text-muted-foreground'>
+                        {t('native.settings.unavailable', {
+                          defaultValue: 'Settings are unavailable while disconnected.',
+                        })}
+                      </div>
+                    )}
+                  </Section>
+                )}
+
+                {tab === 'credentials' && (
+                  <Section
+                    title={t('native.settings.credentials', { defaultValue: 'Credentials' })}
+                    description={t('native.settings.credentialsHelp', {
+                      defaultValue: 'Secret values are write-only and never returned to the UI.',
+                    })}
+                  >
+                    <Accordion type='multiple' className='-mx-1'>
+                      {settings?.credentials.map(({ provider, configured }) => (
+                        <AccordionItem key={provider} value={provider} className='border-border'>
+                          <AccordionTrigger className='px-1 py-3 hover:no-underline'>
+                            <div className='flex flex-1 items-center gap-2.5 pr-2'>
+                              <span
+                                className={`size-2 shrink-0 rounded-full ${configured ? 'bg-green-500' : 'bg-muted-foreground/35'}`}
+                              />
+                              <span className='text-sm font-medium capitalize'>
+                                {provider.replaceAll('_', ' ')}
+                              </span>
+                              <span className='ml-auto text-xs font-normal text-muted-foreground'>
+                                {configured
+                                  ? t('native.settings.configured', {
+                                      defaultValue: 'Configured',
+                                    })
+                                  : t('native.settings.notConfigured', {
+                                      defaultValue: 'Not configured',
+                                    })}
+                              </span>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className='space-y-2 px-1 pt-1 pb-4'>
+                            <Label className='text-xs' htmlFor={`secret-${provider}`}>
+                              {t('native.settings.credentials', { defaultValue: 'Credential' })}
+                            </Label>
+                            <div className='flex gap-2'>
+                              <Input
+                                id={`secret-${provider}`}
+                                type='password'
+                                autoComplete='new-password'
+                                className='[&::-ms-reveal]:hidden'
+                                placeholder={
+                                  configured
+                                    ? t('native.settings.configured', {
+                                        defaultValue: 'Configured',
+                                      })
+                                    : t('native.settings.notConfigured', {
+                                        defaultValue: 'Not configured',
+                                      })
+                                }
+                                value={secrets[provider] ?? ''}
+                                onChange={(event) =>
+                                  setSecrets((current) => ({
+                                    ...current,
+                                    [provider]: event.currentTarget.value,
+                                  }))
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key !== 'Enter') return
+                                  const value = secrets[provider]?.trim()
+                                  if (!value) return
+                                  koharuClient.fire({ type: 'set_secret', provider, value })
+                                  setSecrets((current) => ({ ...current, [provider]: '' }))
+                                }}
+                              />
+                              <Button
+                                size='sm'
+                                disabled={!secrets[provider]?.trim()}
+                                onClick={() => {
+                                  const value = secrets[provider]?.trim()
+                                  if (!value) return
+                                  koharuClient.fire({ type: 'set_secret', provider, value })
+                                  setSecrets((current) => ({ ...current, [provider]: '' }))
+                                }}
+                              >
+                                {t('native.settings.set', { defaultValue: 'Set' })}
+                              </Button>
+                              {configured && (
+                                <Button
+                                  size='sm'
+                                  variant='destructive'
+                                  onClick={() =>
+                                    koharuClient.fire({
+                                      type: 'set_secret',
+                                      provider,
+                                      value: null,
+                                    })
+                                  }
+                                >
+                                  {t('native.settings.clear', { defaultValue: 'Clear' })}
+                                </Button>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </Section>
+                )}
+
+                {tab === 'shortcuts' && <ShortcutSettings />}
+              </div>
+            </ScrollArea>
+
+            <div className='flex justify-end gap-2 border-t px-5 py-3'>
+              <Button variant='outline' onClick={() => setOpen(false)}>
+                {t('common.cancel', { defaultValue: 'Cancel' })}
+              </Button>
+              <Button disabled={!draft} onClick={save}>
+                <Save />
+                {t('common.save', { defaultValue: 'Save' })}
+              </Button>
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   )
 }
 
-// ── Appearance ────────────────────────────────────────────────────
-
-const THEMES = [
-  { value: 'light', icon: SunIcon, labelKey: 'settings.themeLight' },
-  { value: 'dark', icon: MoonIcon, labelKey: 'settings.themeDark' },
-  { value: 'system', icon: MonitorIcon, labelKey: 'settings.themeSystem' },
+const themes = [
+  { value: 'light', icon: Sun, label: 'native.settings.light' },
+  { value: 'dark', icon: Moon, label: 'native.settings.dark' },
+  { value: 'system', icon: Monitor, label: 'native.settings.system' },
 ] as const
 
-function AppearancePane() {
+function AppearanceSettings({
+  theme,
+  onThemeChange,
+}: {
+  theme: string
+  onThemeChange: (theme: string) => void
+}) {
   const { t, i18n } = useTranslation()
-  const { theme, setTheme } = useTheme()
-  const locales = useMemo(() => supportedLanguages, [])
   return (
     <div className='space-y-8'>
-      <Section title={t('settings.theme')}>
+      <Section title={t('native.settings.theme', { defaultValue: 'Theme' })}>
         <div className='grid grid-cols-3 gap-3'>
-          {THEMES.map(({ value, icon: Icon, labelKey }) => (
+          {themes.map(({ value, icon: Icon, label }) => (
             <button
               key={value}
-              onClick={() => setTheme(value)}
+              type='button'
               data-active={theme === value}
+              onClick={() => onThemeChange(value)}
               className='flex flex-col items-center gap-2 rounded-xl border border-border bg-card px-4 py-4 text-muted-foreground transition hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground'
             >
               <Icon className='size-5' />
-              <span className='text-xs font-medium'>{t(labelKey)}</span>
+              <span className='text-xs font-medium'>{t(label, { defaultValue: value })}</span>
             </button>
           ))}
         </div>
       </Section>
 
-      <Section title={t('settings.language')}>
-        <Select value={i18n.language} onValueChange={(v) => i18n.changeLanguage(v)}>
+      <Section title={t('native.settings.language', { defaultValue: 'Language' })}>
+        <Select value={i18n.language} onValueChange={(language) => i18n.changeLanguage(language)}>
           <SelectTrigger className='w-full'>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {locales.map((code) => (
-              <SelectItem key={code} value={code}>
-                {t(`menu.languages.${code}`, { defaultValue: code })}
+            {supportedLanguages.map((language) => (
+              <SelectItem key={language} value={language}>
+                {t(`menu.languages.${language}`, { defaultValue: language })}
               </SelectItem>
             ))}
           </SelectContent>
@@ -492,860 +400,6 @@ function AppearancePane() {
   )
 }
 
-// ── Engines ──────────────────────────────────────────────────────
-
-function EnginesPane({
-  catalog,
-  pipeline,
-  onChange,
-}: {
-  catalog: GetEngineCatalog200
-  pipeline: import('@/lib/api/schemas').PipelineConfig
-  onChange: (pipeline: import('@/lib/api/schemas').PipelineConfig) => void
-}) {
-  const { t } = useTranslation()
-
-  const sections = [
-    {
-      label: t('settings.detector'),
-      key: 'detector' as const,
-      engines: catalog.detectors,
-    },
-    {
-      label: t('settings.fontDetector'),
-      key: 'font_detector' as const,
-      engines: catalog.fontDetectors,
-    },
-    {
-      label: t('settings.segmenter'),
-      key: 'segmenter' as const,
-      engines: catalog.segmenters,
-    },
-    {
-      label: t('settings.bubbleSegmenter'),
-      key: 'bubble_segmenter' as const,
-      engines: catalog.bubbleSegmenters,
-    },
-    { label: t('settings.ocr'), key: 'ocr' as const, engines: catalog.ocr },
-    {
-      label: t('settings.translator'),
-      key: 'translator' as const,
-      engines: catalog.translators,
-    },
-    {
-      label: t('settings.inpainter'),
-      key: 'inpainter' as const,
-      engines: catalog.inpainters,
-    },
-    {
-      label: t('settings.renderer'),
-      key: 'renderer' as const,
-      engines: catalog.renderers,
-    },
-  ]
-
-  return (
-    <div className='space-y-4'>
-      <p className='text-xs text-muted-foreground'>{t('settings.enginesDescription')}</p>
-      {sections.map(({ label, key, engines }) => (
-        <div key={key} className='space-y-1.5'>
-          <Label className='text-xs'>{label}</Label>
-          <Select
-            value={pipeline[key] ?? engines[0]?.id ?? ''}
-            onValueChange={(v) => onChange({ ...pipeline, [key]: v })}
-          >
-            <SelectTrigger className='w-full'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {engines.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
-                  {e.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Providers ─────────────────────────────────────────────────────
-
-function ProvidersPane({
-  catalogs,
-  config,
-  drafts,
-  onBaseUrlChange,
-  onBaseUrlBlur,
-  onApiKeyChange,
-  onSaveKey,
-  onClearKey,
-}: {
-  catalogs: LlmProviderCatalog[]
-  config: UpdateConfigBody | null
-  drafts: Record<string, string>
-  onBaseUrlChange: (id: string, v: string) => void
-  onBaseUrlBlur: () => void
-  onApiKeyChange: (id: string, v: string) => void
-  onSaveKey: (id: string) => void
-  onClearKey: (id: string) => void
-}) {
-  const { t } = useTranslation()
-
-  if (!catalogs.length)
-    return (
-      <p className='py-12 text-center text-sm text-muted-foreground'>
-        {t('settings.loadingProviders')}
-      </p>
-    )
-
-  return (
-    <div className='space-y-6'>
-      <Section title={t('settings.apiKeys')} description={t('settings.providersDescription')}>
-        <Accordion type='multiple' className='-mx-1'>
-          {catalogs.map((provider) => {
-            const cfg = config?.providers?.find((p) => p.id === provider.id)
-            const draft = drafts[provider.id] ?? ''
-            const hasDraft = draft.trim().length > 0
-            const statusColor =
-              provider.status === 'ready'
-                ? 'bg-green-500'
-                : provider.status === 'missing_configuration'
-                  ? 'bg-amber-400'
-                  : provider.status === 'discovery_failed'
-                    ? 'bg-red-500'
-                    : 'bg-muted-foreground'
-
-            return (
-              <AccordionItem key={provider.id} value={provider.id} className='border-border'>
-                <AccordionTrigger className='px-1 py-3 hover:no-underline'>
-                  <div className='flex items-center gap-2.5'>
-                    <span className={`size-2 shrink-0 rounded-full ${statusColor}`} />
-                    <span className='text-sm font-medium'>{provider.name}</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className='space-y-4 px-1 pt-1 pb-4'>
-                  {provider.error && (
-                    <p className='text-xs text-muted-foreground'>{provider.error}</p>
-                  )}
-
-                  {provider.requiresBaseUrl && (
-                    <div className='space-y-1.5'>
-                      <Label className='text-xs'>{t('settings.localLlmBaseUrl')}</Label>
-                      <Input
-                        type='url'
-                        value={cfg?.base_url ?? ''}
-                        onChange={(e) => onBaseUrlChange(provider.id, e.target.value)}
-                        onBlur={onBaseUrlBlur}
-                        placeholder='https://api.example.com/v1'
-                      />
-                    </div>
-                  )}
-
-                  <div className='space-y-1.5'>
-                    <Label className='text-xs'>{t('settings.apiKey')}</Label>
-                    <div className='flex gap-2'>
-                      <Input
-                        type='password'
-                        value={draft}
-                        onChange={(e) => onApiKeyChange(provider.id, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && hasDraft) onSaveKey(provider.id)
-                        }}
-                        placeholder={
-                          cfg?.api_key === '[REDACTED]'
-                            ? t('settings.apiKeyPlaceholderStored')
-                            : t('settings.apiKeyPlaceholderEmpty')
-                        }
-                        className='[&::-ms-reveal]:hidden'
-                      />
-                      {hasDraft ? (
-                        <Button size='sm' onClick={() => onSaveKey(provider.id)}>
-                          {t('settings.apiKeySave')}
-                        </Button>
-                      ) : cfg?.api_key === '[REDACTED]' ? (
-                        <Button
-                          variant='destructive'
-                          size='sm'
-                          onClick={() => onClearKey(provider.id)}
-                        >
-                          {t('settings.apiKeyClear')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            )
-          })}
-        </Accordion>
-      </Section>
-    </div>
-  )
-}
-
-// ── Keybinds ──────────────────────────────────────────────────────
-
-function CodexSettingsPane() {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const [login, setLogin] = useState<CodexDeviceLogin | null>(null)
-  const [loginOpen, setLoginOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const { data: auth, refetch } = useGetCodexAuthStatus()
-
-  const loginStatus = auth?.login?.status
-  const signedIn = auth?.signedIn === true
-
-  useEffect(() => {
-    if (!loginOpen && loginStatus !== 'pending') return
-    const id = window.setInterval(() => void refetch(), 2000)
-    return () => window.clearInterval(id)
-  }, [loginOpen, loginStatus, refetch])
-
-  useEffect(() => {
-    if (loginOpen && (signedIn || loginStatus === 'succeeded')) {
-      const id = window.setTimeout(() => setLoginOpen(false), 700)
-      return () => window.clearTimeout(id)
-    }
-  }, [loginOpen, loginStatus, signedIn])
-
-  const statusLabel = useMemo(() => {
-    if (signedIn) return auth?.accountId ? auth.accountId : t('ai.signedIn')
-    if (loginStatus === 'failed') return t('ai.signInFailed')
-    if (loginStatus === 'pending') return t('ai.signInPending')
-    return t('ai.signedOut')
-  }, [auth?.accountId, loginStatus, signedIn, t])
-
-  const invalidateAuth = () =>
-    queryClient.invalidateQueries({ queryKey: getGetCodexAuthStatusQueryKey() })
-
-  const handleSignIn = async () => {
-    setBusy(true)
-    setActionError(null)
-    try {
-      const next = await startCodexDeviceLogin()
-      setLogin(next)
-      setCopied(false)
-      setLoginOpen(true)
-      void invalidateAuth()
-      void openExternalUrl(next.verificationUrl)
-    } catch (err) {
-      setActionError(String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    setBusy(true)
-    setActionError(null)
-    try {
-      await deleteCodexSession()
-      await invalidateAuth()
-    } catch (err) {
-      setActionError(String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleCopyCode = async () => {
-    if (!login?.userCode || typeof navigator === 'undefined') return
-    await navigator.clipboard?.writeText(login.userCode)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1200)
-  }
-
-  return (
-    <Section title={t('settings.codex')} description={t('settings.codexDescription')}>
-      <div className='rounded-md border border-amber-200/70 bg-amber-50/80 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100'>
-        {t('settings.codexTwoFactorDescription')}
-      </div>
-      <div className='rounded-md border border-border bg-card p-3'>
-        <div className='flex items-center justify-between gap-3'>
-          <div className='flex min-w-0 items-center gap-2'>
-            <div className='flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary'>
-              <SparklesIcon className='size-4' />
-            </div>
-            <div className='min-w-0'>
-              <div className='text-sm font-medium text-foreground'>Codex</div>
-              <div className='truncate text-xs text-muted-foreground'>{statusLabel}</div>
-            </div>
-          </div>
-          {signedIn ? (
-            <Button
-              variant='outline'
-              size='sm'
-              className='gap-1.5'
-              disabled={busy}
-              onClick={() => void handleLogout()}
-            >
-              <LogOutIcon className='size-3.5' />
-              {t('ai.signOut')}
-            </Button>
-          ) : (
-            <Button
-              variant='default'
-              size='sm'
-              className='gap-1.5'
-              disabled={busy}
-              onClick={() => void handleSignIn()}
-            >
-              {busy ? (
-                <LoaderIcon className='size-3.5 animate-spin' />
-              ) : (
-                <LogInIcon className='size-3.5' />
-              )}
-              {t('ai.signIn')}
-            </Button>
-          )}
-        </div>
-        {(actionError || (auth?.login?.status === 'failed' && auth.login.error)) && (
-          <p className='mt-2 line-clamp-3 text-xs text-destructive'>
-            {actionError || auth?.login?.error}
-          </p>
-        )}
-      </div>
-
-      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-        <DialogContent className='w-[340px] max-w-[92vw] gap-3 p-4'>
-          <DialogTitle className='text-sm'>{t('ai.signInTitle')}</DialogTitle>
-          <DialogDescription className='sr-only'>{t('ai.signIn')}</DialogDescription>
-          <div className='flex items-center justify-between gap-3 rounded-md border border-border bg-muted/40 px-3 py-2'>
-            <div className='min-w-0'>
-              <div className='text-[10px] font-semibold tracking-wide text-muted-foreground uppercase'>
-                {t('ai.userCode')}
-              </div>
-              <div className='mt-0.5 font-mono text-xl font-semibold tracking-widest'>
-                {login?.userCode ?? '...'}
-              </div>
-            </div>
-            <Button
-              variant='outline'
-              size='icon-sm'
-              disabled={!login}
-              aria-label={copied ? t('common.copied') : t('common.copy')}
-              onClick={() => void handleCopyCode()}
-            >
-              <CopyIcon className='size-3.5' />
-            </Button>
-          </div>
-          <Button
-            variant='outline'
-            size='sm'
-            className='w-full gap-1.5'
-            disabled={!login}
-            onClick={() => login && void openExternalUrl(login.verificationUrl)}
-          >
-            <ExternalLinkIcon className='size-3.5' />
-            {t('ai.openBrowser')}
-          </Button>
-          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-            {signedIn || loginStatus === 'succeeded' ? (
-              <>
-                <CheckCircleIcon className='size-4 text-green-500' />
-                {t('ai.signInComplete')}
-              </>
-            ) : loginStatus === 'failed' ? (
-              <>
-                <AlertCircleIcon className='size-4 text-destructive' />
-                <span className='line-clamp-2'>{auth?.login?.error ?? t('ai.signInFailed')}</span>
-              </>
-            ) : (
-              <>
-                <LoaderIcon className='size-4 animate-spin' />
-                {t('ai.signInPending')}
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </Section>
-  )
-}
-
-const SHORTCUT_ITEMS = [
-  { key: 'select', labelKey: 'toolRail.select' },
-  { key: 'block', labelKey: 'toolRail.block' },
-  { key: 'brush', labelKey: 'toolRail.brush' },
-  { key: 'eraser', labelKey: 'toolRail.eraser' },
-  { key: 'repairBrush', labelKey: 'toolRail.repairBrush' },
-  {
-    key: 'increaseBrushSize',
-    labelKey: 'settings.shortcutIncreaseBrushSize',
-  },
-  {
-    key: 'decreaseBrushSize',
-    labelKey: 'settings.shortcutDecreaseBrushSize',
-  },
-  { key: 'undo', labelKey: 'menu.undo' },
-  { key: 'redo', labelKey: 'menu.redo' },
-] as const
-
-function KeybindsPane() {
-  const { t } = useTranslation()
-  const shortcuts = usePreferencesStore((state) => state.shortcuts)
-  const setShortcuts = usePreferencesStore((state) => state.setShortcuts)
-  const resetShortcutsStore = usePreferencesStore((state) => state.resetShortcuts)
-  const [pendingShortcuts, setPendingShortcuts] = useState(shortcuts)
-  const [recordingKey, setRecordingKey] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [isSaved, setIsSaved] = useState(false)
-  const [liveShortcut, setLiveShortcut] = useState<string | null>(null)
-  const isMac = useMemo(() => getPlatform() === 'mac', [])
-
-  // Optimized conflict detection
-  const conflictCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    Object.values(pendingShortcuts).forEach((val) => {
-      counts.set(val, (counts.get(val) || 0) + 1)
-    })
-    return counts
-  }, [pendingShortcuts])
-
-  const isDirty = useMemo(
-    () => !areShortcutsEqual(shortcuts, pendingShortcuts),
-    [shortcuts, pendingShortcuts],
-  )
-
-  // Sync from store if it changes (e.g. externally via Reset)
-  useEffect(() => {
-    setPendingShortcuts(shortcuts)
-  }, [shortcuts])
-
-  useEffect(() => {
-    if (!recordingKey) {
-      setError(null)
-      setLiveShortcut(null)
-      return
-    }
-
-    setError(null)
-    setLiveShortcut(null)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setError(null)
-
-      // Early exit for modifier-only events - but update preview!
-      if (isModifierKey(e.key)) {
-        setLiveShortcut(formatModifierCombination(e, isMac))
-        return
-      }
-
-      // Allow Escape to cancel recording
-      if (e.key === 'Escape') {
-        setRecordingKey(null)
-        setLiveShortcut(null)
-        return
-      }
-
-      // Block system/function keys
-      if (isKeyBlocked(e.key)) {
-        setError(t('settings.shortcutInvalid'))
-        return
-      }
-
-      const shortcut = formatShortcut(e, isMac)
-      if (!shortcut) return
-
-      setPendingShortcuts((prev) => ({ ...prev, [recordingKey]: shortcut }))
-      setRecordingKey(null)
-      setIsSaved(false)
-      setLiveShortcut(null)
-    }
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (isModifierKey(e.key)) {
-        const combo = formatModifierCombination(e, isMac)
-        setLiveShortcut(combo || null)
-      }
-    }
-
-    const handleClickOutside = () => {
-      setRecordingKey(null)
-      setLiveShortcut(null)
-    }
-
-    window.addEventListener('keydown', handleKeyDown, { capture: true })
-    window.addEventListener('keyup', handleKeyUp, { capture: true })
-    window.addEventListener('click', handleClickOutside, { capture: true })
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true })
-      window.removeEventListener('keyup', handleKeyUp, { capture: true })
-      window.removeEventListener('click', handleClickOutside, {
-        capture: true,
-      })
-    }
-  }, [recordingKey, pendingShortcuts, t, isMac])
-
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
-
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  const handleSave = () => {
-    setShortcuts(pendingShortcuts)
-    setIsSaved(true)
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      setIsSaved(false)
-      saveTimeoutRef.current = null
-    }, 2000)
-  }
-
-  const handleReset = () => {
-    setResetConfirmOpen(true)
-  }
-
-  const handleConfirmReset = () => {
-    resetShortcutsStore()
-    setResetConfirmOpen(false)
-  }
-
-  const renderShortcutKeys = (shortcutStr: string, kbdClass?: string) => {
-    const parts = shortcutStr.split('+')
-
-    return parts.map((part, i) => (
-      <Fragment key={i}>
-        <Kbd className={kbdClass}>{part}</Kbd>
-        {i < parts.length - 1 && <span className='text-muted-foreground'>+</span>}
-      </Fragment>
-    ))
-  }
-
-  return (
-    <div className='flex h-full flex-col gap-6'>
-      <div className='grow space-y-6 overflow-y-auto pr-2'>
-        <Section title={t('settings.keybinds')} description={t('settings.keybindsDescription')}>
-          <div className='divide-y divide-border overflow-hidden rounded-xl border border-border bg-card'>
-            {SHORTCUT_ITEMS.map((item) => {
-              const currentVal = pendingShortcuts[item.key]
-              const hasConflict = currentVal && (conflictCounts.get(currentVal) || 0) > 1
-              const conflictingItem = hasConflict
-                ? SHORTCUT_ITEMS.find(
-                    (s) => s.key !== item.key && pendingShortcuts[s.key] === currentVal,
-                  )
-                : null
-
-              return (
-                <div key={item.key} className='flex items-center justify-between px-4 py-2'>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-sm'>{t(item.labelKey)}</span>
-                    {hasConflict && (
-                      <div
-                        title={`${t('settings.shortcutConflict')}${
-                          conflictingItem ? `: ${t(conflictingItem.labelKey)}` : ''
-                        }`}
-                      >
-                        <AlertTriangleIcon className='size-3.5 text-amber-500' />
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    variant={recordingKey === item.key ? 'secondary' : 'ghost'}
-                    size='sm'
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setRecordingKey(item.key)
-                    }}
-                    className='group h-8 w-fit px-2 font-mono uppercase'
-                  >
-                    <div className='flex items-center gap-1'>
-                      {recordingKey === item.key ? (
-                        error ? (
-                          <span className='text-xs text-destructive'>{error}</span>
-                        ) : liveShortcut ? (
-                          renderShortcutKeys(liveShortcut)
-                        ) : (
-                          <span className='text-xs text-muted-foreground italic'>
-                            {t('settings.shortcutPressKey')}
-                          </span>
-                        )
-                      ) : currentVal ? (
-                        renderShortcutKeys(currentVal, 'bg-background')
-                      ) : (
-                        <span className='text-xs text-muted-foreground'>NONE</span>
-                      )}
-                    </div>
-                  </Button>
-                </div>
-              )
-            })}
-          </div>
-        </Section>
-      </div>
-
-      <div className='flex items-center justify-between border-t border-border pt-4'>
-        <Button
-          variant='ghost'
-          size='sm'
-          className='gap-2 text-muted-foreground hover:text-foreground'
-          onClick={handleReset}
-        >
-          <RotateCcwIcon className='size-4' />
-          {t('settings.shortcutReset')}
-        </Button>
-        <div className='flex items-center gap-2'>
-          <Button
-            variant='default'
-            size='sm'
-            disabled={!isDirty || isSaved}
-            onClick={handleSave}
-            className='min-w-32 gap-2'
-          >
-            {isSaved ? (
-              <>
-                <CheckCircleIcon className='size-4' />
-                {t('common.saved')}
-              </>
-            ) : (
-              <>
-                <SaveIcon className='size-4' />
-                {t('common.save')}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-      <AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogTitle>{t('settings.shortcutReset')}</AlertDialogTitle>
-          <AlertDialogDescription>{t('settings.shortcutResetDescription')}</AlertDialogDescription>
-          <div className='flex justify-end gap-2'>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmReset}>
-              {t('common.confirm')}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  )
-}
-
-// ── Storage ───────────────────────────────────────────────────────
-
-function StoragePane({
-  dataPath,
-  httpConnectTimeout,
-  httpReadTimeout,
-  httpMaxRetries,
-  error,
-  saving,
-  unchanged,
-  onPathChange,
-  onHttpConnectTimeoutChange,
-  onHttpReadTimeoutChange,
-  onHttpMaxRetriesChange,
-  onApply,
-}: {
-  dataPath: string
-  httpConnectTimeout: string
-  httpReadTimeout: string
-  httpMaxRetries: string
-  error: string | null
-  saving: boolean
-  unchanged: boolean
-  onPathChange: (v: string) => void
-  onHttpConnectTimeoutChange: (v: string) => void
-  onHttpReadTimeoutChange: (v: string) => void
-  onHttpMaxRetriesChange: (v: string) => void
-  onApply: () => void
-}) {
-  const { t } = useTranslation()
-  const [confirmOpen, setConfirmOpen] = useState(false)
-
-  return (
-    <>
-      <Section title={t('settings.runtime')} description={t('settings.runtimeDescription')}>
-        <div className='space-y-1.5'>
-          <Label className='text-xs'>{t('settings.dataPath')}</Label>
-          <Input type='text' value={dataPath} onChange={(e) => onPathChange(e.target.value)} />
-          <p className='text-xs leading-relaxed text-muted-foreground'>
-            {t('settings.dataPathDescription')}
-          </p>
-        </div>
-
-        <div className='grid gap-4 md:grid-cols-2'>
-          <div className='space-y-1.5'>
-            <Label className='text-xs'>{t('settings.httpConnectTimeout')}</Label>
-            <Input
-              type='number'
-              min='1'
-              step='1'
-              inputMode='numeric'
-              value={httpConnectTimeout}
-              onChange={(e) => onHttpConnectTimeoutChange(e.target.value)}
-            />
-            <p className='text-xs leading-relaxed text-muted-foreground'>
-              {t('settings.httpConnectTimeoutDescription')}
-            </p>
-          </div>
-
-          <div className='space-y-1.5'>
-            <Label className='text-xs'>{t('settings.httpReadTimeout')}</Label>
-            <Input
-              type='number'
-              min='1'
-              step='1'
-              inputMode='numeric'
-              value={httpReadTimeout}
-              onChange={(e) => onHttpReadTimeoutChange(e.target.value)}
-            />
-            <p className='text-xs leading-relaxed text-muted-foreground'>
-              {t('settings.httpReadTimeoutDescription')}
-            </p>
-          </div>
-        </div>
-
-        <div className='space-y-1.5'>
-          <Label className='text-xs'>{t('settings.httpMaxRetries')}</Label>
-          <Input
-            type='number'
-            min='0'
-            step='1'
-            inputMode='numeric'
-            value={httpMaxRetries}
-            onChange={(e) => onHttpMaxRetriesChange(e.target.value)}
-          />
-          <p className='text-xs leading-relaxed text-muted-foreground'>
-            {t('settings.httpMaxRetriesDescription')}
-          </p>
-        </div>
-
-        {error && <p className='text-xs text-destructive'>{error}</p>}
-        <div className='flex justify-end pt-1'>
-          <Button
-            onClick={() => setConfirmOpen(true)}
-            disabled={!dataPath.trim() || saving || unchanged}
-          >
-            {saving ? t('settings.restartApplying') : t('settings.restartApply')}
-          </Button>
-        </div>
-      </Section>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogTitle>{t('settings.restartApply')}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('settings.restartRequiredDescription')}
-          </AlertDialogDescription>
-          <div className='flex justify-end gap-2'>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmOpen(false)
-                onApply()
-              }}
-            >
-              {t('settings.restartApply')}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  )
-}
-
-// ── About ─────────────────────────────────────────────────────────
-
-function AboutPane({
-  version,
-  latestVersion,
-  status,
-  isInstallingUpdate,
-  onInstallUpdate,
-}: {
-  version?: string
-  latestVersion?: string
-  status: UpdaterStatus
-  isInstallingUpdate: boolean
-  onInstallUpdate: () => void
-}) {
-  const { t } = useTranslation()
-
-  return (
-    <div className='flex h-full flex-col items-center justify-center gap-5 py-8'>
-      <img src='/icon-large.png' alt='Koharu' className='size-20' draggable={false} />
-      <div className='text-center'>
-        <h2 className='text-lg font-bold tracking-wide text-foreground'>Koharu</h2>
-        <p className='mt-1 text-sm text-muted-foreground'>{t('settings.aboutTagline')}</p>
-      </div>
-
-      <div className='w-full max-w-sm rounded-xl border border-border bg-card p-4'>
-        <div className='space-y-3 text-sm'>
-          <InfoRow label={t('settings.aboutVersion')}>
-            <div className='flex flex-col items-end gap-0.5'>
-              <span className='font-mono text-xs font-medium'>{version || '...'}</span>
-              {status === 'loading' && (
-                <LoaderIcon className='size-3.5 animate-spin text-muted-foreground' />
-              )}
-              {status === 'latest' && (
-                <span className='flex items-center gap-1 text-xs text-green-500'>
-                  <CheckCircleIcon className='size-3.5' />
-                  {t('settings.aboutLatest')}
-                </span>
-              )}
-              {status === 'outdated' && (
-                <Button
-                  variant='link'
-                  size='xs'
-                  onClick={onInstallUpdate}
-                  disabled={isInstallingUpdate}
-                  className='h-auto gap-1 p-0 text-amber-500'
-                >
-                  {isInstallingUpdate ? (
-                    <LoaderIcon className='size-3.5 animate-spin' />
-                  ) : (
-                    <AlertCircleIcon className='size-3.5' />
-                  )}
-                  {t('settings.aboutUpdate', { version: latestVersion })}
-                </Button>
-              )}
-            </div>
-          </InfoRow>
-          <InfoRow label={t('settings.aboutAuthor')}>
-            <Button
-              variant='link'
-              size='xs'
-              onClick={() => void openExternalUrl('https://github.com/mayocream')}
-            >
-              Mayo
-            </Button>
-          </InfoRow>
-          <InfoRow label={t('settings.aboutRepository')}>
-            <Button
-              variant='link'
-              size='xs'
-              onClick={() => void openExternalUrl(`https://github.com/${GITHUB_REPO}`)}
-            >
-              GitHub
-            </Button>
-          </InfoRow>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Shared ────────────────────────────────────────────────────────
-
 function Section({
   title,
   description,
@@ -1353,10 +407,10 @@ function Section({
 }: {
   title: string
   description?: string
-  children: ReactNode
+  children: React.ReactNode
 }) {
   return (
-    <div className='space-y-3'>
+    <section className='space-y-3'>
       <div>
         <h3 className='text-sm font-semibold text-foreground'>{title}</h3>
         {description && (
@@ -1364,15 +418,577 @@ function Section({
         )}
       </div>
       {children}
+    </section>
+  )
+}
+
+function StageEditor({
+  stage,
+  config,
+  localModels,
+  targetLanguages,
+  targetLanguage,
+  instructions,
+  onTargetLanguageChange,
+  onInstructionsChange,
+  onChange,
+}: {
+  stage: Stage
+  config: PipelineConfig
+  localModels: string[]
+  targetLanguages: TargetLanguageView[]
+  targetLanguage: string
+  instructions: string
+  onTargetLanguageChange: (language: string) => void
+  onInstructionsChange: (instructions: string) => void
+  onChange: (config: PipelineConfig) => void
+}) {
+  const { t } = useTranslation()
+  const model = config[stage] as PipelineModel
+  const replace = (next: PipelineModel) => onChange(setStage(config, stage, next))
+  const hasOptions = hasModelOptions(model)
+  return (
+    <article className='grid grid-cols-[minmax(8rem,150px)_minmax(0,1fr)] gap-5 py-3 first:pt-0 last:pb-0'>
+      <div className='min-w-0 pt-1'>
+        <Label htmlFor={`pipeline-${stage}`} className='text-xs leading-none font-semibold'>
+          {t(`native.stage.${stage}`, { defaultValue: stage })}
+        </Label>
+        <p
+          id={`pipeline-${stage}-description`}
+          className='mt-1 text-[10px] leading-snug text-muted-foreground'
+        >
+          {t(`native.stageDescription.${stage}`, { defaultValue: stageDescriptions[stage] })}
+        </p>
+      </div>
+      <div className='min-w-0 space-y-2'>
+        <Select
+          value={model.model}
+          onValueChange={(value) => replace(defaultModel(value as PipelineModel['model']))}
+        >
+          <SelectTrigger
+            id={`pipeline-${stage}`}
+            aria-describedby={`pipeline-${stage}-description`}
+            className='w-full bg-background'
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {modelOptions[stage].map((option) => (
+              <SelectItem key={option} value={option}>
+                {modelLabels[option]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasOptions && <ModelFields model={model} localModels={localModels} onChange={replace} />}
+        {stage === 'translation' && (
+          <TranslationPreferences
+            languages={targetLanguages}
+            targetLanguage={targetLanguage}
+            instructions={instructions}
+            onTargetLanguageChange={onTargetLanguageChange}
+            onInstructionsChange={onInstructionsChange}
+          />
+        )}
+      </div>
+    </article>
+  )
+}
+
+function TranslationPreferences({
+  languages,
+  targetLanguage,
+  instructions,
+  onTargetLanguageChange,
+  onInstructionsChange,
+}: {
+  languages: TargetLanguageView[]
+  targetLanguage: string
+  instructions: string
+  onTargetLanguageChange: (language: string) => void
+  onInstructionsChange: (instructions: string) => void
+}) {
+  const { t, i18n } = useTranslation()
+  const displayNames = new Intl.DisplayNames([i18n.resolvedLanguage ?? i18n.language], {
+    type: 'language',
+  })
+
+  return (
+    <div className='mt-3 grid gap-2 border-t border-border/70 pt-3'>
+      <div className='grid gap-0.5'>
+        <Label htmlFor='translation-target-language' className='text-xs font-normal'>
+          {t('native.model.targetLanguage', { defaultValue: 'Target language' })}
+        </Label>
+        <Select
+          value={normalizeTargetLanguage(targetLanguage, languages)}
+          disabled={languages.length === 0}
+          onValueChange={onTargetLanguageChange}
+        >
+          <SelectTrigger id='translation-target-language' className='w-full bg-background'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {languages.map((language) => (
+              <SelectItem key={language.tag} value={language.tag}>
+                {displayNames.of(language.tag) ?? language.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className='grid gap-0.5'>
+        <Label htmlFor='translation-instructions' className='text-xs font-normal'>
+          {t('native.model.instructions', { defaultValue: 'Instructions' })}
+        </Label>
+        <Textarea
+          id='translation-instructions'
+          className='min-h-16 resize-y text-[12px] md:text-[12px]'
+          value={instructions}
+          placeholder={t('native.model.instructionsPlaceholder', {
+            defaultValue: 'Optional guidance for tone, names, and formatting.',
+          })}
+          onChange={(event) => onInstructionsChange(event.currentTarget.value)}
+        />
+      </div>
     </div>
   )
 }
 
-function InfoRow({ label, children }: { label: string; children: ReactNode }) {
+function normalizeTargetLanguage(value: string, languages: TargetLanguageView[]): string {
+  if (languages.some((language) => language.tag === value)) return value
+  return languages.find((language) => language.name === value)?.tag ?? languages[0]?.tag ?? value
+}
+
+function hasModelOptions(model: PipelineModel): boolean {
+  switch (model.model) {
+    case 'comic_text_detector':
+    case 'paddleocr_vl_1.6':
+    case 'manga_ocr':
+    case 'lama':
+    case 'flux2_klein':
+    case 'google_cloud_translation':
+    case 'caiyun':
+      return false
+    default:
+      return true
+  }
+}
+
+function ModelFields({
+  model,
+  localModels,
+  onChange,
+}: {
+  model: PipelineModel
+  localModels: string[]
+  onChange: (model: PipelineModel) => void
+}) {
+  const { t } = useTranslation()
+  switch (model.model) {
+    case 'comic_text_detector':
+    case 'paddleocr_vl_1.6':
+    case 'manga_ocr':
+    case 'lama':
+    case 'flux2_klein':
+    case 'google_cloud_translation':
+    case 'caiyun':
+      return null
+    case 'pp_doclayout_v3':
+      return (
+        <NumberSetting
+          label={t('native.model.confidence', { defaultValue: 'Confidence' })}
+          value={model.confidence ?? 0.25}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(confidence) => onChange({ ...model, confidence })}
+        />
+      )
+    case 'manga_text_segmentation':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <NumberSetting
+            label={t('native.model.threshold', { defaultValue: 'Threshold' })}
+            value={model.threshold ?? 0.5}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(threshold) => onChange({ ...model, threshold })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.maxSide', { defaultValue: 'Maximum side' })}
+            value={model.max_side ?? null}
+            min={1}
+            onChange={(max_side) => onChange({ ...model, max_side })}
+          />
+          <BooleanSetting
+            label={t('native.model.horizontalFlip', { defaultValue: 'Horizontal flip' })}
+            value={model.horizontal_flip ?? false}
+            onChange={(horizontal_flip) => onChange({ ...model, horizontal_flip })}
+          />
+          <BooleanSetting
+            label={t('native.model.verticalFlip', { defaultValue: 'Vertical flip' })}
+            value={model.vertical_flip ?? false}
+            onChange={(vertical_flip) => onChange({ ...model, vertical_flip })}
+          />
+        </div>
+      )
+    case 'speech_bubble_segmentation':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <OptionalNumberSetting
+            label={t('native.model.confidence', { defaultValue: 'Confidence' })}
+            value={model.confidence ?? null}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(confidence) => onChange({ ...model, confidence })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.nmsIou', { defaultValue: 'NMS IoU' })}
+            value={model.nms_iou ?? null}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(nms_iou) => onChange({ ...model, nms_iou })}
+          />
+        </div>
+      )
+    case 'local':
+      return (
+        <div className='grid gap-0.5'>
+          <Label htmlFor='local-translation-model' className='text-xs font-normal'>
+            {t('native.model.localModel', { defaultValue: 'Local model' })}
+          </Label>
+          <Select
+            value={model.local_model}
+            onValueChange={(local_model) => onChange({ ...model, local_model })}
+          >
+            <SelectTrigger id='local-translation-model' className='w-full bg-background'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {localModels.map((localModel) => (
+                <SelectItem key={localModel} value={localModel}>
+                  {localModel}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )
+    case 'openai':
+    case 'gemini':
+    case 'claude':
+    case 'deepseek':
+      return <ChatFields model={model} onChange={onChange} />
+    case 'openai_compatible':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <TextSetting
+            label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
+            type='url'
+            value={model.base_url}
+            onChange={(base_url) => onChange({ ...model, base_url })}
+          />
+          <TextSetting
+            label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
+            value={model.remote_model}
+            onChange={(remote_model) => onChange({ ...model, remote_model })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.temperature', { defaultValue: 'Temperature' })}
+            value={model.temperature}
+            min={0}
+            onChange={(temperature) => onChange({ ...model, temperature })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.maxTokens', { defaultValue: 'Maximum tokens' })}
+            value={model.max_tokens}
+            min={1}
+            onChange={(max_tokens) => onChange({ ...model, max_tokens })}
+          />
+        </div>
+      )
+    case 'deepl':
+      return (
+        <TextSetting
+          label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
+          type='url'
+          value={model.base_url ?? ''}
+          onChange={(base_url) => onChange({ ...model, base_url: base_url || null })}
+        />
+      )
+    case 'font_detector':
+      return (
+        <NumberSetting
+          label={t('native.model.topK', { defaultValue: 'Top K' })}
+          value={model.top_k ?? 3}
+          min={1}
+          step={1}
+          onChange={(top_k) => onChange({ ...model, top_k })}
+        />
+      )
+    case 'aot_inpainting':
+      return (
+        <NumberSetting
+          label={t('native.model.maxSide', { defaultValue: 'Maximum side' })}
+          value={model.max_side ?? 2048}
+          min={1}
+          step={1}
+          onChange={(max_side) => onChange({ ...model, max_side })}
+        />
+      )
+  }
+}
+
+function ChatFields({
+  model,
+  onChange,
+}: {
+  model: Extract<TranslationModel, { model: 'openai' | 'gemini' | 'claude' | 'deepseek' }>
+  onChange: (model: PipelineModel) => void
+}) {
+  const { t } = useTranslation()
   return (
-    <div className='flex items-center justify-between'>
-      <span className='text-muted-foreground'>{label}</span>
-      <div className='flex items-center'>{children}</div>
+    <div className='grid gap-2 sm:grid-cols-2'>
+      <TextSetting
+        label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
+        value={model.remote_model}
+        onChange={(remote_model) => onChange({ ...model, remote_model })}
+      />
+      <OptionalNumberSetting
+        label={t('native.model.temperature', { defaultValue: 'Temperature' })}
+        value={model.temperature}
+        min={0}
+        onChange={(temperature) => onChange({ ...model, temperature })}
+      />
+      <OptionalNumberSetting
+        label={t('native.model.maxTokens', { defaultValue: 'Maximum tokens' })}
+        value={model.max_tokens}
+        min={1}
+        onChange={(max_tokens) => onChange({ ...model, max_tokens })}
+      />
     </div>
   )
+}
+
+function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className='flex items-center justify-between gap-3'>
+      <Label className='text-xs font-normal'>{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function ShortcutSettings() {
+  const { t } = useTranslation()
+  const shortcuts = useEditorStore((state) => state.shortcuts)
+  const setShortcut = useEditorStore((state) => state.setShortcut)
+  const actions: ShortcutAction[] = ['select', 'text', 'text_mask', 'brush_mask', 'pan', 'fit']
+  return (
+    <Section
+      title={t('native.settings.shortcuts', { defaultValue: 'Shortcuts' })}
+      description={t('native.settings.shortcutsHelp', {
+        defaultValue: 'Single-key tool shortcuts are stored on this device.',
+      })}
+    >
+      <div className='divide-y divide-border overflow-hidden rounded-xl border border-border bg-card'>
+        {actions.map((action) => (
+          <div key={action} className='flex items-center justify-between gap-3 px-4 py-2'>
+            <span className='text-sm'>
+              {action === 'fit'
+                ? t('native.canvas.fit', { defaultValue: 'Fit Window' })
+                : t(`native.tools.${action}`, { defaultValue: action })}
+            </span>
+            <Input
+              className='h-8 w-14 text-center uppercase'
+              maxLength={1}
+              value={shortcuts[action]}
+              onChange={(event) => setShortcut(action, event.currentTarget.value)}
+            />
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
+function TextSetting({
+  label,
+  value,
+  type = 'text',
+  onChange,
+}: {
+  label: string
+  value: string
+  type?: 'text' | 'url'
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className='grid gap-0.5 text-xs'>
+      <span>{label}</span>
+      <Input
+        type={type}
+        value={value}
+        required={type === 'url'}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </label>
+  )
+}
+
+function NumberSetting({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string
+  value: number
+  min?: number
+  max?: number
+  step?: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className='grid gap-0.5 text-xs'>
+      <span>{label}</span>
+      <Input
+        type='number'
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => {
+          const next = Number(event.currentTarget.value)
+          if (Number.isFinite(next)) onChange(next)
+        }}
+      />
+    </label>
+  )
+}
+
+function OptionalNumberSetting({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string
+  value: number | null
+  min?: number
+  max?: number
+  step?: number
+  onChange: (value: number | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <label className='grid gap-0.5 text-xs'>
+      <span>{label}</span>
+      <Input
+        type='number'
+        value={value ?? ''}
+        min={min}
+        max={max}
+        step={step}
+        placeholder={t('native.model.default', { defaultValue: 'Default' })}
+        onChange={(event) =>
+          onChange(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))
+        }
+      />
+    </label>
+  )
+}
+
+function BooleanSetting({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <SettingRow label={label}>
+      <Switch checked={value} onCheckedChange={onChange} />
+    </SettingRow>
+  )
+}
+
+function setStage(config: PipelineConfig, stage: Stage, model: PipelineModel): PipelineConfig {
+  switch (stage) {
+    case 'detection':
+      return { ...config, detection: model as DetectionModel }
+    case 'segmentation':
+      return { ...config, segmentation: model as SegmentationModel }
+    case 'ocr':
+      return { ...config, ocr: model as OcrModel }
+    case 'translation':
+      return { ...config, translation: model as TranslationModel }
+    case 'typography':
+      return { ...config, typography: model as TypographyModel }
+    case 'inpainting':
+      return { ...config, inpainting: model as InpaintingModel }
+  }
+}
+
+function defaultModel(model: PipelineModel['model']): PipelineModel {
+  switch (model) {
+    case 'comic_text_detector':
+      return { model }
+    case 'pp_doclayout_v3':
+      return { model, confidence: 0.25 }
+    case 'manga_text_segmentation':
+      return { model, threshold: 0.5, max_side: null, horizontal_flip: false, vertical_flip: false }
+    case 'speech_bubble_segmentation':
+      return { model, confidence: null, nms_iou: null }
+    case 'paddleocr_vl_1.6':
+      return { model }
+    case 'manga_ocr':
+      return { model }
+    case 'local':
+      return { model, local_model: 'lfm2.5-1.2b-instruct' }
+    case 'openai':
+      return { model, remote_model: 'gpt-4.1-mini', temperature: null, max_tokens: null }
+    case 'gemini':
+      return { model, remote_model: 'gemini-2.5-flash', temperature: null, max_tokens: null }
+    case 'claude':
+      return {
+        model,
+        remote_model: 'claude-sonnet-4-20250514',
+        temperature: null,
+        max_tokens: null,
+      }
+    case 'deepseek':
+      return { model, remote_model: 'deepseek-chat', temperature: null, max_tokens: null }
+    case 'openai_compatible':
+      return {
+        model,
+        base_url: 'http://localhost:11434/v1',
+        remote_model: 'model',
+        temperature: null,
+        max_tokens: null,
+      }
+    case 'deepl':
+      return { model, base_url: null }
+    case 'google_cloud_translation':
+      return { model }
+    case 'caiyun':
+      return { model }
+    case 'font_detector':
+      return { model, top_k: 3 }
+    case 'lama':
+      return { model }
+    case 'aot_inpainting':
+      return { model, max_side: 2048 }
+    case 'flux2_klein':
+      return { model }
+  }
 }

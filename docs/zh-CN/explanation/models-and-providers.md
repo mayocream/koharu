@@ -57,7 +57,6 @@ Koharu 通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 支持本地 GG
 
 ### 面向英文输出的翻译型内置本地模型
 
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf)：Q5_K_M GGUF，更适合追求翻译质量
 - [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF)：更小的多语言 instruction 模型，适合低内存机器或更快的迭代
 - [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) 和 [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF)：更大的翻译取向模型，适合有更多 VRAM / RAM 的环境
 

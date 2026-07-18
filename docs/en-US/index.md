@@ -482,7 +482,6 @@ hide:
           <div class="kh-hero__model-label">Local models include</div>
           <div class="kh-chip-list kh-hero__models">
             <span class="kh-chip">sakura</span>
-            <span class="kh-chip">vntl-llama3</span>
             <span class="kh-chip">hunyuan</span>
             <span class="kh-chip">lfm2</span>
           </div>

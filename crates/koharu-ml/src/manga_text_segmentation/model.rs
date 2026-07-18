@@ -601,7 +601,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires the dynamically loaded LibTorch runtime"]
     async fn model_tree_matches_checkpoint_tensor_shapes() -> anyhow::Result<()> {
-        crate::init().await?;
+        crate::init_torch().await?;
         let model = Model::new(koharu_torch::Device::Cpu);
         let variables = model.vs.variables();
 

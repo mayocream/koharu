@@ -1,8 +1,9 @@
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub struct Size {
     pub width: u32,
     pub height: u32,
@@ -24,7 +25,7 @@ impl Size {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 pub struct Frame {
     pub x: f32,
     pub y: f32,

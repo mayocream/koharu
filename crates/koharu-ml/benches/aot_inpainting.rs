@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
     let image = image::open(fixtures.join("image_4k.jpg"))?;
     let mask = image::open(fixtures.join("mask_4k.png"))?.to_luma8();
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
     let model = AotInpainting::load(koharu_ml::Device::cuda(0)).await?;
     model.inference(&image, &mask)?;
     Cuda::synchronize(0);

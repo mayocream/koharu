@@ -14,12 +14,8 @@ pub struct HttpConfig {
 }
 
 impl HttpConfig {
-    pub fn load() -> Result<Self> {
-        koharu_config::load_section(HTTP_SECTION)
-    }
-
-    pub fn save(&self) -> Result<()> {
-        koharu_config::save_section(HTTP_SECTION, self)
+    pub fn load() -> Result<koharu_config::Config<Self>> {
+        koharu_config::load(HTTP_SECTION)
     }
 }
 

@@ -6,20 +6,9 @@ Document only repository-specific constraints here. Normal Rust, TypeScript, tes
 
 - `temp/` contains read-only upstream checkouts used to port and compare implementations. Never modify or commit it.
 - `data/`, `models/`, and `runs/` are local inputs, weights, and outputs. Never commit them.
-- `crates/koharu-scene` owns the scene graph, operations, history, WebP blob storage, persisted project sessions, and saved project archives; `koharu-app` owns workflows, application state, and shared application DTOs; `koharu-rpc` owns transport and the OpenAPI definition. Do not move application, transport, or UI concerns into `koharu-scene`.
 - Public safe wrappers belong in `koharu-llama`, `koharu-diffusion`, and `koharu-torch`. Raw handles, dynamic loading, build logic, and `unsafe` FFI belong in the matching `*-sys` crate.
 
 ## Generated Code
-
-`koharu-rpc` Rust types and routes are the API source of truth. After changing them, regenerate in this order:
-
-```text
-bun run generate:openapi
-bun --cwd ui run generate:api
-bun run generate:client
-```
-
-This updates `ui/openapi.json`, `ui/lib/api/default/**`, `ui/lib/api/schemas/**`, and `tests/integration-tests/client/**`. Do not hand-edit those outputs. `ui/lib/api/fetch.ts` is the handwritten Orval mutator; other UI behavior belongs in hooks or `ui/lib/io`. Integration behavior belongs in the tests.
 
 The following are also generated or derived and should be changed through their generator or authoritative input:
 

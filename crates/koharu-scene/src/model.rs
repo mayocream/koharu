@@ -2,23 +2,20 @@ use std::collections::HashSet;
 
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 use crate::{BlobId, ElementId, Error, Frame, PageId, Quad, Result, Size, TextLayout, TextStyle};
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Project {
-    pub name: String,
     pub pages: Vec<Page>,
 }
 
 impl Project {
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            pages: Vec::new(),
-        }
+    pub const fn new() -> Self {
+        Self { pages: Vec::new() }
     }
 
     #[must_use]
@@ -53,7 +50,7 @@ impl Project {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Page {
     pub id: PageId,
     pub name: String,
@@ -109,7 +106,7 @@ impl Page {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 pub struct PageAssets {
     pub clean: Option<BlobId>,
     pub rendered: Option<BlobId>,
@@ -156,7 +153,7 @@ impl PageAssets {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Type)]
 pub enum PageAsset {
     Clean,
     Rendered,
@@ -172,7 +169,7 @@ impl PageAsset {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Element {
     pub id: ElementId,
     pub frame: Frame,
@@ -242,14 +239,14 @@ impl Element {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub enum ElementKind {
     Text(TextBlock),
     Image(ImageElement),
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct ImageElement {
     pub blob: BlobId,
     pub natural_size: Size,
@@ -257,7 +254,7 @@ pub struct ImageElement {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 pub struct TextBlock {
     pub source: Option<SourceText>,
     pub translation: Option<String>,
@@ -282,7 +279,7 @@ impl TextBlock {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct SourceText {
     pub text: String,
     pub language: Option<String>,
@@ -305,7 +302,7 @@ impl SourceText {
 }
 
 #[revisioned(revision = 1)]
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub enum TextDirection {
     #[default]
     Auto,

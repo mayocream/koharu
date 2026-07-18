@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     let image = image::open(&cli.input)?;
 
     // Initialize the Koharu ML framework
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
 
     let model = PPDocLayoutV3::load(koharu_ml::device(cli.cpu)).await?;
     let result = model.inference(&image, cli.threshold)?;

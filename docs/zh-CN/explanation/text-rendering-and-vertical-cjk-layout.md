@@ -40,13 +40,7 @@ flowchart LR
 
 ## Koharu 实际上怎么做
 
-从实现上看，渲染器位于 `koharu-renderer` crate，核心协作逻辑分布在：
-
-- `koharu-app/src/renderer.rs`
-- `src/layout.rs`
-- `src/shape.rs`
-- `src/segment.rs`
-- `src/renderer.rs`
+从实现上看，合成、布局、文本塑形、分词和 WGPU 光栅化均由 `koharu-renderer` crate 内相应的模块负责。
 
 对单个已翻译 `TextBlock` 来说，大致流程是：
 

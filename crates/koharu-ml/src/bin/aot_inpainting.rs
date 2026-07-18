@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let image = image::open(&cli.input)?;
     let mask = image::open(&cli.mask)?.to_luma8();
 
-    koharu_ml::init().await?;
+    koharu_ml::init_torch().await?;
     let model = AotInpainting::load(koharu_ml::device(cli.cpu)).await?;
     let inpainted = model.inference_with_max_side(&image, &mask, cli.max_side)?;
     inpainted.save(cli.output)?;

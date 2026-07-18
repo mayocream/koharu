@@ -62,6 +62,8 @@
 }
 
 :root {
+  --workspace-background-rgb: 245 245 245;
+  --workspace-panel: color-mix(in oklch, var(--muted) 50%, var(--background));
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -97,6 +99,7 @@
 }
 
 .dark {
+  --workspace-background-rgb: 38 38 38;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -134,8 +137,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
-    @apply bg-background text-foreground select-none;
+    @apply bg-transparent text-foreground select-none;
     font-family:
       var(--font-inter), var(--font-noto-sc), var(--font-noto-tc), var(--font-noto-jp),
       ui-sans-serif, system-ui, sans-serif;
@@ -145,4 +149,3 @@
     @apply select-text;
   }
 }
-

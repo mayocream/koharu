@@ -14,10 +14,7 @@ use crate::{
         vulkan::vulkan_available,
     },
     download::{archive::extract, client::Client, github::github_release},
-    package::{
-        Package, PreloadablePackage, STORE_DIR, cuda::Cuda, dependency, loading::preload,
-        rocm::Rocm,
-    },
+    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload, rocm::Rocm},
 };
 
 const REPO: &str = "leejet/stable-diffusion.cpp";
@@ -149,12 +146,7 @@ impl Package for StableDiffusionCpp {
             rename(temporary.path(), &path)?;
         }
 
-        dependency::isolate(
-            &self
-                .dylibs()
-                .map(|name| path.join(name))
-                .collect::<Vec<_>>(),
-        )
+        Ok(path)
     }
 }
 
@@ -170,14 +162,7 @@ impl PreloadablePackage for StableDiffusionCpp {
 
         let directory = self.resolve().await?;
         for name in self.dylibs() {
-            let path = directory.join(name);
-            // Imported libraries are aliased; entry libraries and dynamically discovered
-            // backend plugins keep their original filenames.
-            preload(if path.exists() {
-                path
-            } else {
-                directory.join(dependency::alias(name))
-            })?;
+            preload(directory.join(name))?;
         }
         Ok(())
     }

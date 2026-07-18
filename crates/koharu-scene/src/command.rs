@@ -63,10 +63,6 @@ impl Commands {
         Ok(())
     }
 
-    pub fn rename_project(&mut self, name: impl Into<String>) {
-        self.push(Command::RenameProject(name.into()));
-    }
-
     pub fn add_page(
         &mut self,
         name: impl Into<String>,
@@ -176,7 +172,6 @@ impl Commands {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Command {
-    RenameProject(String),
     InsertPage {
         page: Page,
         index: usize,
@@ -236,7 +231,6 @@ pub enum ElementChange {
 
 #[derive(Default)]
 struct Footprint {
-    project_name: bool,
     pages: HashSet<PageId>,
     page_fields: HashSet<(PageId, PageField)>,
     elements: HashSet<(PageId, ElementId)>,
@@ -270,7 +264,6 @@ impl Footprint {
         let mut footprint = Self::default();
         for command in commands {
             match command {
-                Command::RenameProject(_) => footprint.project_name = true,
                 Command::InsertPage { page, .. } => {
                     footprint.pages.insert(page.id);
                 }
@@ -317,8 +310,7 @@ impl Footprint {
     }
 
     fn overlaps(&self, other: &Self) -> bool {
-        if self.project_name && other.project_name
-            || self.pages.iter().any(|page| other.touches_page(*page))
+        if self.pages.iter().any(|page| other.touches_page(*page))
             || other.pages.iter().any(|page| self.touches_page(*page))
             || self
                 .page_fields
@@ -414,10 +406,6 @@ pub(crate) struct PositionedElement {
 #[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum StoredChange {
-    ProjectName {
-        before: String,
-        after: String,
-    },
     Page {
         before: Option<PositionedPage>,
         after: Option<PositionedPage>,
@@ -453,10 +441,6 @@ pub(crate) enum StoredChange {
 impl StoredChange {
     pub(crate) fn reversed(&self) -> Self {
         match self.clone() {
-            Self::ProjectName { before, after } => Self::ProjectName {
-                before: after,
-                after: before,
-            },
             Self::Page { before, after } => Self::Page {
                 before: after,
                 after: before,
@@ -531,7 +515,7 @@ impl StoredChange {
                     }
                 }
             }
-            Self::ProjectName { .. } | Self::MovePage { .. } | Self::PageName { .. } => {}
+            Self::MovePage { .. } | Self::PageName { .. } => {}
         }
     }
 }

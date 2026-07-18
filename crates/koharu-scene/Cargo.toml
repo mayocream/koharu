@@ -34,6 +34,7 @@ image = { version = "0.25", default-features = false, features = [
 revision = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
+specta = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 

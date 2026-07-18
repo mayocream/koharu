@@ -53,10 +53,6 @@ impl<'session> Edit<'session> {
         Ok(PageEdit { edit: self, page })
     }
 
-    pub fn rename_project(&mut self, name: impl Into<String>) {
-        self.commands.rename_project(name);
-    }
-
     pub fn commit(self) -> Result<ChangeSet> {
         self.session.apply(self.commands)
     }

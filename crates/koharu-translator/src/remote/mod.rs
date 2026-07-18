@@ -37,8 +37,8 @@ impl ApiKey {
     pub fn load(provider: RemoteProviderKind) -> Result<Option<Self>> {
         Ok(koharu_config::secrets()
             .get(provider.id())?
-            .filter(|value| !value.trim().is_empty())
-            .map(Self::new))
+            .filter(|value| !value.expose_secret().trim().is_empty())
+            .map(Self))
     }
 
     /// Stores this API key for a provider. An empty key clears the credential.
@@ -46,7 +46,7 @@ impl ApiKey {
         if self.expose().trim().is_empty() {
             return Self::delete(provider);
         }
-        koharu_config::secrets().set(provider.id(), self.expose())?;
+        koharu_config::secrets().set(provider.id(), &self.0)?;
         Ok(())
     }
 
@@ -70,6 +70,12 @@ impl std::fmt::Debug for ApiKey {
 impl From<String> for ApiKey {
     fn from(value: String) -> Self {
         Self::new(value)
+    }
+}
+
+impl From<SecretString> for ApiKey {
+    fn from(value: SecretString) -> Self {
+        Self(value)
     }
 }
 
