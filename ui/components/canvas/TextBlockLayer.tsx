@@ -24,18 +24,7 @@ type BoxGeometry = {
   height: number
 }
 
-/**
- * Maps CSS resize cursors through 45° rotation steps.
- *
- * Each entry is a ring of 8 cursor names at 0°, 45°, 90°, …, 315°.
- * - Index 0: 0° (identity)
- * - Index 1: 45°
- * - Index 2: 90°
- * - …
- * - Index 7: 315°
- *
- * Unknown cursors fall back to the original name (see `rotateCursor`).
- */
+// Resize cursors rotated in 45° steps. Index = (deg/45) % 8.
 const ROTATE_CURSOR_MAP: Record<string, readonly string[]> = {
   'ns-resize':   ['ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize'],
   'ew-resize':   ['ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize'],
@@ -192,8 +181,7 @@ function TextBlockItem({
         const cos = Math.cos(rotationRad)
         const sin = Math.sin(rotationRad)
 
-        // Project pointer movement to box-local axes so resize directions
-        // remain intuitive even when the box is rotated.
+        // Project pointer delta to box-local space so resize feels natural under rotation.
         const localDx = mx * cos + my * sin
         const localDy = -mx * sin + my * cos
 
@@ -314,8 +302,6 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
   const x = (spriteT?.x ?? node.transform.x) * scale
   const y = (spriteT?.y ?? node.transform.y) * scale
   const rotation = spriteT?.rotationDeg ?? node.transform.rotationDeg ?? 0
-  // Renderer centers the rotated sprite; match that model by rotating
-  // around the sprite's center rather than top-left.
   return (
     <img
       alt=''
