@@ -64,6 +64,9 @@ const MIN_STROKE_WIDTH = 0.2
 const MAX_STROKE_WIDTH = 24
 const STROKE_WIDTH_STEP = 0.1
 
+const MIN_ROTATION_DEG = -180
+const MAX_ROTATION_DEG = 180
+
 const DEFAULT_FONT_FACES: FontFaceInfo[] = [
   {
     familyName: 'Arial',
@@ -76,6 +79,7 @@ const DEFAULT_FONT_FACES: FontFaceInfo[] = [
 const clampByte = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
 const clampStrokeWidth = (v: number) =>
   Number(Math.max(MIN_STROKE_WIDTH, Math.min(MAX_STROKE_WIDTH, v)).toFixed(1))
+const clampRotationDeg = (v: number) => Math.max(MIN_ROTATION_DEG, Math.min(MAX_ROTATION_DEG, v))
 
 const colorToHex = (color: number[]) =>
   `#${color
@@ -346,6 +350,49 @@ export function RenderControlsPanel() {
   const updateStrokeWidth = (value: number) => {
     applyStrokeSetting({ ...currentStroke, widthPx: clampStrokeWidth(value) })
   }
+
+  const updateSelectedRotation = async (value: number) => {
+    if (!page || selectedNodes.length === 0) return
+    const deg = clampRotationDeg(value)
+    const buildOp = (n: TextNodeEntry) =>
+      ops.updateNode(page.id, n.id, {
+        transform: { ...n.transform, rotationDeg: deg },
+        data: { text: { lockLayoutBox: true } },
+      })
+    const op =
+      selectedNodes.length === 1
+        ? buildOp(selectedNodes[0])
+        : ops.batch(
+            'Multi-block rotation',
+            selectedNodes.map((n) => buildOp(n)),
+          )
+    await applyOp(op)
+    queueAutoRender(page.id)
+  }
+
+  // Local draft state for the rotation number input so that intermediate
+  // values like "-" (needed to type negative angles) are not discarded by
+  // the controlled-input cycle.
+  const [rotationDraft, setRotationDraft] = useState<string | null>(null)
+
+  // Sync the draft when selected node or its rotation changes externally.
+  useEffect(() => {
+    setRotationDraft(null)
+  }, [selectedNode?.id, selectedNode?.transform.rotationDeg])
+
+  const commitRotationDraft = () => {
+    if (rotationDraft == null) return
+    const parsed = Number.parseFloat(rotationDraft)
+    setRotationDraft(null)
+    if (!Number.isFinite(parsed)) return
+    void updateSelectedRotation(parsed)
+  }
+
+  // Current rotation value, preferring the draft when it's a valid number.
+  const currentDeg =
+    rotationDraft != null && Number.isFinite(Number.parseFloat(rotationDraft))
+      ? clampRotationDeg(Number.parseFloat(rotationDraft))
+      : (selectedNode?.transform.rotationDeg ?? 0)
 
   const effectItems: {
     key: 'italic' | 'bold'
@@ -762,6 +809,86 @@ export function RenderControlsPanel() {
               size='icon-sm'
               className='size-7 shrink-0 rounded-l-none border-l'
               onClick={() => updateStrokeWidth(currentStrokeWidth + STROKE_WIDTH_STEP)}
+            >
+              <PlusIcon className='size-3' />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Rotation */}
+      <div className='flex flex-col gap-0.5'>
+        <span className='text-[10px] font-medium text-muted-foreground uppercase'>
+          {t('render.rotationLabel')}
+        </span>
+        <div className='flex min-w-0 items-center gap-1'>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon-sm'
+                className='size-7 shrink-0 rounded-r-none border-r'
+                data-testid='render-rotation-minus'
+                disabled={!selectedNode}
+                onClick={() => void updateSelectedRotation(currentDeg - 1)}
+              >
+                <MinusIcon className='size-3' />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side='bottom' sideOffset={4}>
+              -1°
+            </TooltipContent>
+          </Tooltip>
+
+          <input
+            type='range'
+            min={String(MIN_ROTATION_DEG)}
+            max={String(MAX_ROTATION_DEG)}
+            step='1'
+            disabled={!selectedNode}
+            value={String(currentDeg)}
+            onChange={(event) => {
+              setRotationDraft(event.target.value)
+            }}
+            onPointerUp={commitRotationDraft}
+            onKeyUp={commitRotationDraft}
+            onBlur={commitRotationDraft}
+            className='h-7 min-w-0 flex-1 cursor-pointer accent-primary'
+          />
+
+          <div className='flex min-w-0 items-center rounded-md border border-input bg-background shadow-xs'>
+            <Input
+              type='number'
+              min={String(MIN_ROTATION_DEG)}
+              max={String(MAX_ROTATION_DEG)}
+              className='h-7 w-14 min-w-0 [appearance:textfield] rounded-none border-0 px-1 text-center text-xs shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+              data-testid='render-rotation-input'
+              disabled={!selectedNode}
+              value={rotationDraft ?? String(selectedNode?.transform.rotationDeg ?? 0)}
+              onChange={(event) => {
+                setRotationDraft(event.target.value)
+              }}
+              onBlur={commitRotationDraft}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  (event.target as HTMLInputElement).blur()
+                } else if (event.key === 'Escape') {
+                  setRotationDraft(null)
+                }
+              }}
+            />
+            <span className='flex h-7 w-5 items-center justify-center text-[10px] text-muted-foreground'>
+              °
+            </span>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              className='size-7 shrink-0 rounded-l-none border-l'
+              data-testid='render-rotation-plus'
+              disabled={!selectedNode}
+              onClick={() => void updateSelectedRotation(currentDeg + 1)}
             >
               <PlusIcon className='size-3' />
             </Button>

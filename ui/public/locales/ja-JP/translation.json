@@ -210,6 +210,7 @@
     "effectItalic": "斜体",
     "effectBold": "太字",
     "effectBorder": "縁取り",
+    "rotationLabel": "回転",
     "strokeColorLabel": "縁取りの色",
     "strokeWidthLabel": "縁取りの太さ",
     "fontWeights": {

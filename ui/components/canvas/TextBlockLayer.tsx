@@ -1,7 +1,7 @@
 'use client'
 
 import { useDrag } from '@use-gesture/react'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import { useBlobImage } from '@/hooks/useBlobData'
 import { useCurrentPage, useTextNodes, type TextNodeEntry } from '@/hooks/useCurrentPage'
@@ -17,6 +17,26 @@ type TextBlockLayerProps = {
   style?: React.CSSProperties
 }
 
+type BoxGeometry = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+// Resize cursors rotated in 45° steps. Index = (deg/45) % 8.
+const ROTATE_CURSOR_MAP: Record<string, readonly string[]> = {
+  'ns-resize':   ['ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize'],
+  'ew-resize':   ['ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize'],
+  'nwse-resize': ['nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize'],
+  'nesw-resize': ['nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize',   'nesw-resize', 'ew-resize',   'nwse-resize', 'ns-resize'],
+}
+
+const rotateCursor = (cursor: string, deg: number): string => {
+  const steps = Math.round(((deg % 360) + 360) % 360 / 45) % 8
+  return ROTATE_CURSOR_MAP[cursor]?.[steps] ?? cursor
+}
+
 /**
  * Overlay for the active page's Text nodes. Each rectangle is draggable /
  * resizable; commits dispatch `Op::UpdateNode { transform }` through
@@ -30,16 +50,27 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
   const mode = useEditorUiStore((s) => s.mode)
   const interactive = mode === 'select' || mode === 'block'
 
-  const updateTransform = async (id: string, t: Transform) => {
-    if (!page) return
-    const data: NodeDataPatch = {
-      text: {
-        lockLayoutBox: true,
-      },
-    }
-    await applyOp(ops.updateNode(page.id, id, { transform: t, data }))
-    queueAutoRender(page.id)
-  }
+  const updateTransform = useCallback(
+    async (id: string, geometry: BoxGeometry) => {
+      if (!page) return
+      const rotationDeg = page.nodes[id]?.transform?.rotationDeg ?? 0
+      const next: Transform = {
+        x: geometry.x,
+        y: geometry.y,
+        width: geometry.width,
+        height: geometry.height,
+        rotationDeg,
+      }
+      const data: NodeDataPatch = {
+        text: {
+          lockLayoutBox: true,
+        },
+      }
+      await applyOp(ops.updateNode(page.id, id, { transform: next, data }))
+      queueAutoRender(page.id)
+    },
+    [page, applyOp, queueAutoRender],
+  )
 
   return (
     <div
@@ -64,7 +95,7 @@ export function TextBlockLayer({ showSprites, scale, style }: TextBlockLayerProp
           selected={selectedIds.has(n.id)}
           interactive={interactive}
           onSelect={(id, additive) => select(id, additive)}
-          onCommit={(t) => void updateTransform(n.id, t)}
+          onCommit={(geometry) => void updateTransform(n.id, geometry)}
         />
       ))}
     </div>
@@ -78,7 +109,7 @@ type TextBlockItemProps = {
   selected: boolean
   interactive: boolean
   onSelect: (id: string, additive: boolean) => void
-  onCommit: (transform: Transform) => void
+  onCommit: (geometry: BoxGeometry) => void
 }
 
 const isAdditiveEvent = (event: unknown): boolean => {
@@ -114,7 +145,7 @@ function TextBlockItem({
   const setBox = (x: number, y: number, w: number, h: number) => {
     const el = boxRef.current
     if (!el) return
-    el.style.transform = `translate(${x}px, ${y}px)`
+    el.style.transform = `translate(${x}px, ${y}px) rotate(${t.rotationDeg ?? 0}deg)`
     el.style.width = `${w}px`
     el.style.height = `${h}px`
   }
@@ -146,34 +177,47 @@ function TextBlockItem({
       const { x: sx, y: sy, w: sw, h: sh } = dragStart.current
       const edge = edgeRef.current
       if (isResizeRef.current && edge) {
-        let dx = 0
-        let dy = 0
+        const rotationRad = ((t.rotationDeg ?? 0) * Math.PI) / 180
+        const cos = Math.cos(rotationRad)
+        const sin = Math.sin(rotationRad)
+
+        // Project pointer delta to box-local space so resize feels natural under rotation.
+        const localDx = mx * cos + my * sin
+        const localDy = -mx * sin + my * cos
+
+        let moveLocalX = 0
+        let moveLocalY = 0
         let w = sw
         let h = sh
-        if (edge.right) w += mx
+        if (edge.right) w += localDx
         if (edge.left) {
-          w -= mx
-          dx = mx
+          w -= localDx
+          moveLocalX = localDx
         }
-        if (edge.bottom) h += my
+        if (edge.bottom) h += localDy
         if (edge.top) {
-          h -= my
-          dy = my
+          h -= localDy
+          moveLocalY = localDy
         }
         w = Math.max(4 * scale, w)
         h = Math.max(4 * scale, h)
-        if (edge.left && w === 4 * scale) dx = sw - 4 * scale
-        if (edge.top && h === 4 * scale) dy = sh - 4 * scale
-        setBox(sx + dx, sy + dy, w, h)
+        if (edge.left && w === 4 * scale) moveLocalX = sw - 4 * scale
+        if (edge.top && h === 4 * scale) moveLocalY = sh - 4 * scale
+
+        const worldDx = moveLocalX * cos - moveLocalY * sin
+        const worldDy = moveLocalX * sin + moveLocalY * cos
+        const nextX = sx + worldDx
+        const nextY = sy + worldDy
+
+        setBox(nextX, nextY, w, h)
         if (last) {
           isResizeRef.current = false
           edgeRef.current = null
           onCommit({
-            x: Math.round((sx + dx) / scale),
-            y: Math.round((sy + dy) / scale),
+            x: Math.round(nextX / scale),
+            y: Math.round(nextY / scale),
             width: Math.max(4, Math.round(w / scale)),
             height: Math.max(4, Math.round(h / scale)),
-            rotationDeg: t.rotationDeg ?? 0,
           })
         }
       } else {
@@ -184,7 +228,6 @@ function TextBlockItem({
             y: Math.round((sy + my) / scale),
             width: t.width,
             height: t.height,
-            rotationDeg: t.rotationDeg ?? 0,
           })
         }
       }
@@ -215,7 +258,8 @@ function TextBlockItem({
         position: 'absolute',
         top: 0,
         left: 0,
-        transform: `translate(${t.x * scale}px, ${t.y * scale}px)`,
+        transform: `translate(${t.x * scale}px, ${t.y * scale}px) rotate(${t.rotationDeg ?? 0}deg)`,
+        transformOrigin: 'top left',
         width: w,
         height: h,
         pointerEvents: interactive ? 'auto' : 'none',
@@ -236,10 +280,16 @@ function TextBlockItem({
         className={`pointer-events-none absolute -top-1.5 -left-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold text-white shadow ${
           selected ? 'bg-primary' : 'bg-rose-400'
         }`}
+        style={{ transform: `rotate(${t.rotationDeg ? -t.rotationDeg : 0}deg)` }}
       >
         {index + 1}
       </div>
-      {selected && interactive && <ResizeHandles onEdgePointerDown={handleEdgePointerDown} />}
+      {selected && interactive && (
+        <ResizeHandles
+          onEdgePointerDown={handleEdgePointerDown}
+          rotationDeg={t.rotationDeg ?? 0}
+        />
+      )}
     </div>
   )
 }
@@ -251,6 +301,7 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
   const spriteT = node.data.spriteTransform
   const x = (spriteT?.x ?? node.transform.x) * scale
   const y = (spriteT?.y ?? node.transform.y) * scale
+  const rotation = spriteT?.rotationDeg ?? node.transform.rotationDeg ?? 0
   return (
     <img
       alt=''
@@ -261,13 +312,19 @@ function BlockSprite({ node, scale }: { node: TextNodeEntry; scale: number }) {
         top: 0,
         left: 0,
         transformOrigin: 'top left',
-        transform: `translate(${x}px, ${y}px) scale(${scale})`,
+        transform: `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${scale})`,
       }}
     />
   )
 }
 
-function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: ResizeEdge) => void }) {
+function ResizeHandles({
+  onEdgePointerDown,
+  rotationDeg,
+}: {
+  onEdgePointerDown: (edge: ResizeEdge) => void
+  rotationDeg: number
+}) {
   const s = RESIZE_HANDLE_SIZE
   const half = s / 2
 
@@ -320,7 +377,12 @@ function ResizeHandles({ onEdgePointerDown }: { onEdgePointerDown: (edge: Resize
         <div
           key={i}
           onPointerDown={() => onEdgePointerDown(e.edge)}
-          style={{ position: 'absolute', ...e.style, cursor: e.cursor, zIndex: 30 }}
+          style={{
+            position: 'absolute',
+            ...e.style,
+            cursor: rotateCursor(e.cursor, rotationDeg),
+            zIndex: 30,
+          }}
         />
       ))}
     </>

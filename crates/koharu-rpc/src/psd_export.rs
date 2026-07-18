@@ -258,7 +258,7 @@ fn text_to_psd(
         translation: text.translation.clone(),
         style: text.style.as_ref().map(convert_style),
         rendered: text.sprite.as_ref().map(blob_ref_to_psd),
-        rotation_deg: text.rotation_deg,
+        rotation_deg: text.rotation_deg.or(Some(transform.rotation_deg)),
         font_prediction: text.font_prediction.as_ref().map(convert_prediction),
         source_direction: text.source_direction.map(convert_dir),
         rendered_direction: text.rendered_direction.map(convert_dir),
