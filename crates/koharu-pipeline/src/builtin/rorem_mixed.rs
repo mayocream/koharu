@@ -25,6 +25,7 @@ pub struct RoremMixedConfig {
     pub num_inference_steps: i32,
     pub guidance_scale: f32,
     pub strength: f32,
+    #[specta(type = f64)]
     pub seed: i64,
 }
 

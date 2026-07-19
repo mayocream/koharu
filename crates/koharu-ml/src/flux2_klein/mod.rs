@@ -281,11 +281,8 @@ impl Flux2KleinInpaint {
             .next()
             .context("FLUX.2 Klein returned no inpainted image")?;
 
-        let generated = if crop_coords.is_some() {
-            Flux2ImageProcessor::apply_overlay(&mask_image, &image, generated, crop_coords)?
-        } else {
-            generated
-        };
+        let generated =
+            Flux2ImageProcessor::apply_overlay(&mask_image, &image, generated, crop_coords)?;
         Ok(DynamicImage::ImageRgb8(generated))
     }
 }

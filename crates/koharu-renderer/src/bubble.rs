@@ -290,7 +290,53 @@ fn safe_layout_box_with_padding(field: &BubbleDistance, padding: u8) -> Option<L
     }
 
     let safe = build_safe_map(background, distance, width, height, safe_threshold);
-    let (left, top, right, bottom) = largest_safe_rectangle(&safe, width, height, (cx, cy))?;
+    let largest = largest_safe_rectangle(&safe, width, height, (cx, cy))?;
+    let mut selected = largest;
+
+    // A second inscribed rectangle inside the padded pixels wastes almost half of an oval
+    // balloon. For dense convex bodies, use a lightly inset bounding box of the safe pixels.
+    // Thin tails disappear at the distance threshold, while sparse concave masks retain the
+    // conservative all-safe rectangle above.
+    let mut safe_bounds = None::<(u32, u32, u32, u32)>;
+    let mut safe_count = 0u64;
+    for y in 0..height {
+        for x in 0..width {
+            if !safe[y as usize * width as usize + x as usize] {
+                continue;
+            }
+            safe_count += 1;
+            let bounds = safe_bounds.get_or_insert((x, y, x + 1, y + 1));
+            bounds.0 = bounds.0.min(x);
+            bounds.1 = bounds.1.min(y);
+            bounds.2 = bounds.2.max(x + 1);
+            bounds.3 = bounds.3.max(y + 1);
+        }
+    }
+    if let Some((left, top, right, bottom)) = safe_bounds {
+        let bounds_width = right - left;
+        let bounds_height = bottom - top;
+        let bounds_area = u64::from(bounds_width) * u64::from(bounds_height);
+        if bounds_area > 0 && safe_count as f32 / bounds_area as f32 >= 0.76 {
+            let inset_x = ((bounds_width as f32) * 0.08).ceil() as u32;
+            let inset_y = ((bounds_height as f32) * 0.08).ceil() as u32;
+            let candidate = (
+                left + inset_x,
+                top + inset_y,
+                right.saturating_sub(inset_x),
+                bottom.saturating_sub(inset_y),
+            );
+            let candidate_area = u64::from(candidate.2.saturating_sub(candidate.0))
+                * u64::from(candidate.3.saturating_sub(candidate.1));
+            let largest_area = u64::from(largest.2 - largest.0) * u64::from(largest.3 - largest.1);
+            if candidate.0 < candidate.2
+                && candidate.1 < candidate.3
+                && candidate_area > largest_area
+            {
+                selected = candidate;
+            }
+        }
+    }
+    let (left, top, right, bottom) = selected;
 
     Some(LayoutBox {
         x: field.x0 as f32 + left as f32,
@@ -552,6 +598,38 @@ mod tests {
             rect.x + rect.width <= 80.0 || rect.y >= 80.0,
             "safe area should not bridge across the missing corner, got {rect:?}"
         );
+    }
+
+    #[test]
+    fn dense_oval_uses_more_than_the_double_inscribed_rectangle() {
+        let mut mask = GrayImage::from_pixel(160, 220, Luma([0u8]));
+        let center = (80.0f32, 110.0f32);
+        let radii = (50.0f32, 90.0f32);
+        for y in 20..200 {
+            for x in 30..130 {
+                let dx = (x as f32 + 0.5 - center.0) / radii.0;
+                let dy = (y as f32 + 0.5 - center.1) / radii.1;
+                if dx * dx + dy * dy <= 1.0 {
+                    mask.put_pixel(x, y, Luma([1]));
+                }
+            }
+        }
+        let index = BubbleIndex::new(mask.clone());
+        let rect = index
+            .lookup(
+                LayoutBox {
+                    x: 70.0,
+                    y: 100.0,
+                    width: 20.0,
+                    height: 20.0,
+                },
+                WritingMode::Horizontal,
+            )
+            .expect("oval bubble");
+
+        assert!(rect.width >= 60.0, "oval safe width was {rect:?}");
+        assert!(rect.height >= 110.0, "oval safe height was {rect:?}");
+        assert_rect_pixels_match(&mask, rect, 1);
     }
 
     #[test]

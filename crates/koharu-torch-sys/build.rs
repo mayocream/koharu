@@ -104,9 +104,15 @@ async fn build_shim() -> Result<()> {
 }
 
 fn output_dir() -> Result<PathBuf> {
-    Ok(PathBuf::from(env::var("CARGO_WORKSPACE_DIR")?)
-        .join("target")
-        .join(env::var("PROFILE")?))
+    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+    // Cargo's PROFILE is only `debug` or `release`, even for a custom profile.
+    // OUT_DIR retains the actual profile (and optional target triple) directory.
+    out_dir
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .context("koharu-torch-sys OUT_DIR has no profile directory")
 }
 
 fn shim_file_name() -> &'static str {

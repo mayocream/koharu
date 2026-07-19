@@ -119,6 +119,11 @@ pub enum UiCommand {
         page: PageId,
         elements: Vec<ElementTextLayout>,
     },
+    CacheFont {
+        family: String,
+        weight: u16,
+        italic: bool,
+    },
     SetElementFrames {
         elements: Vec<ElementFrame>,
     },
@@ -369,6 +374,56 @@ pub struct SettingsView {
     pub translation: TranslationSettings,
     pub local_translation_models: Vec<String>,
     pub target_languages: Vec<TargetLanguageView>,
+    pub fonts: Vec<FontFaceView>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct FontFaceView {
+    pub family_name: String,
+    pub post_script_name: String,
+    pub weight: u16,
+    pub stretch: u16,
+    pub style: FontFaceStyleView,
+    pub source: FontSourceView,
+    pub category: Option<String>,
+    pub cached: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum FontFaceStyleView {
+    Normal,
+    Italic,
+    Oblique,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum FontSourceView {
+    System,
+    Google,
+}
+
+impl From<koharu_renderer::FontFaceInfo> for FontFaceView {
+    fn from(value: koharu_renderer::FontFaceInfo) -> Self {
+        Self {
+            family_name: value.family_name,
+            post_script_name: value.post_script_name,
+            weight: value.weight,
+            stretch: value.stretch,
+            style: match value.style {
+                koharu_renderer::FontFaceStyle::Normal => FontFaceStyleView::Normal,
+                koharu_renderer::FontFaceStyle::Italic => FontFaceStyleView::Italic,
+                koharu_renderer::FontFaceStyle::Oblique => FontFaceStyleView::Oblique,
+            },
+            source: match value.source {
+                koharu_renderer::FontSource::System => FontSourceView::System,
+                koharu_renderer::FontSource::Google => FontSourceView::Google,
+            },
+            category: value.category,
+            cached: value.cached,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
@@ -751,6 +806,7 @@ mod tests {
                     tag: "en-US".into(),
                     name: "English".into(),
                 }],
+                fonts: Vec::new(),
             },
         })
         .unwrap();
@@ -758,5 +814,6 @@ mod tests {
             value["settings"]["translation"]["credentials"]["openai"],
             "secret-value"
         );
+        assert!(value["settings"]["pipeline"]["processors"].is_array());
     }
 }

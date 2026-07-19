@@ -3,13 +3,14 @@ import { ThemeProvider } from 'next-themes'
 import { describe, expect, it } from 'vitest'
 
 import { ActivityBubble } from '@/components/ActivityBubble'
+import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { MenuBar } from '@/components/MenuBar'
 import { Navigator } from '@/components/Navigator'
 import { Panels } from '@/components/Panels'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { useEditorStore, type Element } from '@/lib/koharu'
+import { useEditorStore, type Element, type SettingsView } from '@/lib/koharu'
 
 const textElement: Element = {
   id: 'element',
@@ -53,6 +54,51 @@ const textElement: Element = {
       predictions: [],
     },
   },
+}
+
+const fontSettings: SettingsView = {
+  pipeline: { processors: [] },
+  translation: {
+    model: { provider: 'local', model: 'lfm2.5-1.2b-instruct' },
+    target_language: 'en-US',
+    instructions: null,
+    credentials: {
+      openai: '',
+      gemini: '',
+      claude: '',
+      deepseek: '',
+      openai_compatible: '',
+      openrouter: '',
+      lm_studio: '',
+      deepl: '',
+      google_cloud_translation: '',
+      caiyun: '',
+    },
+  },
+  local_translation_models: [],
+  target_languages: [],
+  fonts: [
+    {
+      family_name: 'Noto Sans',
+      post_script_name: 'NotoSans-Regular',
+      weight: 400,
+      stretch: 100,
+      style: 'normal',
+      source: 'system',
+      category: null,
+      cached: true,
+    },
+    {
+      family_name: 'Noto Sans',
+      post_script_name: 'NotoSans-Bold',
+      weight: 700,
+      stretch: 100,
+      style: 'normal',
+      source: 'system',
+      category: null,
+      cached: true,
+    },
+  ],
 }
 
 function installProject() {
@@ -114,21 +160,40 @@ describe('native editor components', () => {
     ).toHaveAttribute('src', 'koharu-resource://project/project/blob/clean?width=320')
   })
 
-  it('switches canvas tools and exposes the practical inspector', () => {
+  it('switches canvas tools and restores the compact render controls', () => {
     installProject()
+    useEditorStore.setState({ settings: fontSettings })
     render(
       <TooltipProvider>
+        <CanvasToolbar />
         <ToolRail />
         <Panels />
       </TooltipProvider>,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Brush mask' }))
     expect(useEditorStore.getState().tool).toBe('brush_mask')
-    const inspect = screen.getByRole('tab', { name: /inspect/i })
-    fireEvent.mouseDown(inspect, { button: 0, ctrlKey: false })
-    expect(inspect).toHaveAttribute('data-state', 'active')
-    expect(screen.getByText('Frame')).toBeInTheDocument()
-    expect(screen.getByText('Typography')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Page view')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fit Window' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('layer-textBlocks')).toHaveAttribute('data-visible', 'true')
+    expect(screen.queryByTestId('layer-rendered')).not.toBeInTheDocument()
+    expect(screen.getByTestId('textblocks-count')).toHaveAttribute('data-count', '1')
+    expect(screen.getByTestId('textblock-card-0')).toHaveAttribute('data-selected', 'true')
+    expect(screen.getByTestId('textblock-translation-element')).toHaveValue('Hello')
+    const renderTab = screen.getByRole('tab', { name: /render/i })
+    fireEvent.mouseDown(renderTab, { button: 0, ctrlKey: false })
+    expect(renderTab).toHaveAttribute('data-state', 'active')
+    expect(screen.getByTestId('render-controls-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('render-font-select')).toHaveTextContent('Noto Sans')
+    expect(screen.getByTestId('render-font-variant-select')).toHaveTextContent(
+      'render.fontWeights.regular',
+    )
+    expect(screen.getByTestId('render-font-size')).toHaveValue(16)
+    expect(screen.getByTestId('render-effect-toggle-bold')).toHaveAttribute(
+      'data-variant',
+      'toggle_off',
+    )
+    expect(screen.getByTestId('render-align-center')).toHaveAttribute('data-variant', 'toggle_on')
+    expect(screen.getByTestId('render-stroke-enable')).toHaveAttribute('data-variant', 'toggle_off')
   })
 
   it('shows retained job progress and the typed settings builder', () => {
@@ -149,6 +214,18 @@ describe('native editor components', () => {
         pipeline: {
           processors: [
             { model: 'comic_text_detector' },
+            {
+              model: 'comic_layout_yolo26s',
+              confidence: 0.25,
+              text_regions: false,
+              text_masks: true,
+            },
+            {
+              model: 'comic_onomatopoeia',
+              detection_threshold: 0.5,
+              recognition_threshold: 0.5,
+              dedup_iou: 0.30000001192092896,
+            },
             { model: 'speech_bubble_yolov8m', confidence: null, nms_iou: null },
             { model: 'paddleocr_vl_1.6' },
             { model: 'font_detector', top_k: 3 },
@@ -183,6 +260,7 @@ describe('native editor components', () => {
           { tag: 'en-US', name: 'English' },
           { tag: 'ja-JP', name: 'Japanese' },
         ],
+        fonts: [],
       },
     })
     render(
@@ -194,6 +272,11 @@ describe('native editor components', () => {
     expect(screen.getByText('25%')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /pipeline/i }))
     expect(screen.getByText('Pipeline', { selector: 'h3' })).toBeInTheDocument()
+    expect(
+      screen.queryByText('Settings are unavailable while disconnected.'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Comic Layout YOLO26s' })).toBeChecked()
+    expect(screen.getByLabelText('Dedup IoU')).toHaveValue(0.3)
     const credential = screen.getByLabelText('openai credential')
     expect(credential).toHaveAttribute('type', 'password')
     expect(credential).toHaveValue('secret-value')

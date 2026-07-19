@@ -9,11 +9,22 @@ pub enum FontSource {
     Google,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum FontFaceStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub struct FontFaceInfo {
     pub family_name: String,
     pub post_script_name: String,
+    pub weight: u16,
+    pub stretch: u16,
+    pub style: FontFaceStyle,
     pub source: FontSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,

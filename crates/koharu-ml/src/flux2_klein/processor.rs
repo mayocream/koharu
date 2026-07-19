@@ -252,3 +252,23 @@ impl Flux2ImageProcessor {
         Ok(output)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use image::{GrayImage, Luma, Rgb, RgbImage};
+
+    use super::Flux2ImageProcessor;
+
+    #[test]
+    fn overlay_without_a_crop_preserves_unmasked_pixels() {
+        let initial = RgbImage::from_pixel(2, 1, Rgb([10, 20, 30]));
+        let generated = RgbImage::from_pixel(2, 1, Rgb([200, 210, 220]));
+        let mut mask = GrayImage::new(2, 1);
+        mask.put_pixel(1, 0, Luma([u8::MAX]));
+
+        let output = Flux2ImageProcessor::apply_overlay(&mask, &initial, generated, None).unwrap();
+
+        assert_eq!(output.get_pixel(0, 0), initial.get_pixel(0, 0));
+        assert_eq!(output.get_pixel(1, 0), &Rgb([200, 210, 220]));
+    }
+}

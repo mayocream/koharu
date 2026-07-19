@@ -14,6 +14,8 @@ use fontique::{
 use harfrust::{ShaperData, ShaperInstance, Variation};
 use skrifa::{MetadataProvider, instance::LocationRef, string::StringId};
 
+use crate::types::FontFaceStyle;
+
 /// A resolved face and variable-font instance used by shaping, metrics, and drawing.
 #[derive(Clone)]
 pub struct Font {
@@ -170,6 +172,9 @@ pub(crate) fn font_key(font: &Font) -> usize {
 pub(crate) struct FontFace {
     pub(crate) family_name: String,
     pub(crate) post_script_name: String,
+    pub(crate) weight: u16,
+    pub(crate) stretch: u16,
+    pub(crate) style: FontFaceStyle,
 }
 
 /// Font discovery, matching, fallback, and source caching.
@@ -362,6 +367,13 @@ impl FontSystem {
                 faces.push(FontFace {
                     family_name: family_name.clone(),
                     post_script_name: font.post_script_name,
+                    weight: info.weight().value().round().clamp(1.0, 1000.0) as u16,
+                    stretch: info.width().percentage().round().clamp(1.0, 1000.0) as u16,
+                    style: match info.style() {
+                        FontStyle::Normal => FontFaceStyle::Normal,
+                        FontStyle::Italic => FontFaceStyle::Italic,
+                        FontStyle::Oblique(_) => FontFaceStyle::Oblique,
+                    },
                 });
             }
         }

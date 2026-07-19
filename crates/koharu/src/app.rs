@@ -28,9 +28,9 @@ use crate::{
     jobs::{Background, ExportRequest, NativeEvent, PipelineRequest},
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
-        CanvasPageView, DownloadStatus, Handle, HitTarget, JobKind, JobStatus, MaskPlane,
-        PageDelta, PageSummary, PageView, ProjectDelta, ProjectHeader, RequestId, SettingsView,
-        TargetLanguageView, TranslationSettings,
+        CanvasPageView, DownloadStatus, FontFaceView, Handle, HitTarget, JobKind, JobStatus,
+        MaskPlane, PageDelta, PageSummary, PageView, ProjectDelta, ProjectHeader, RequestId,
+        SettingsView, TargetLanguageView, TranslationSettings,
     },
     resources::Resources,
 };
@@ -57,6 +57,12 @@ pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
     let translation = TranslationConfig::load()?;
     let background = Background::new(pipeline.clone(), translation.clone());
     let resources = Resources::new();
+    let font_renderer = koharu_renderer::SceneRenderer::new()?;
+    let fonts = font_renderer
+        .available_fonts()?
+        .into_iter()
+        .map(FontFaceView::from)
+        .collect();
     koharu_desktop::run(
         DesktopOptions {
             decorations: false,
@@ -64,7 +70,15 @@ pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
             protocols: vec![resources.protocol()],
             ..DesktopOptions::default()
         },
-        App::new(background, pipeline, translation, resources, initial_path),
+        App::new(
+            background,
+            pipeline,
+            translation,
+            resources,
+            font_renderer,
+            fonts,
+            initial_path,
+        ),
     )
 }
 
@@ -84,6 +98,8 @@ pub struct App {
     pipeline: Config<PipelineConfig>,
     translation: Config<TranslationConfig>,
     resources: Resources,
+    font_renderer: koharu_renderer::SceneRenderer,
+    fonts: Vec<FontFaceView>,
     jobs: HashMap<RequestId, RunningJob>,
     downloads: HashMap<u64, DownloadStatus>,
     pending_masks: HashSet<(PageId, CanvasMaskPlane, u64)>,
@@ -116,6 +132,8 @@ impl App {
         pipeline: Config<PipelineConfig>,
         translation: Config<TranslationConfig>,
         resources: Resources,
+        font_renderer: koharu_renderer::SceneRenderer,
+        fonts: Vec<FontFaceView>,
         initial_path: Option<PathBuf>,
     ) -> Self {
         Self {
@@ -126,6 +144,8 @@ impl App {
             pipeline,
             translation,
             resources,
+            font_renderer,
+            fonts,
             jobs: HashMap::new(),
             downloads: HashMap::new(),
             pending_masks: HashSet::new(),
@@ -442,6 +462,28 @@ impl App {
                     current.save()?;
                 }
                 self.emit_settings(desktop)?;
+                return Ok(CommandOutcome::Accepted(self.current_revision()));
+            }
+            AppCommand::CacheFont {
+                family,
+                weight,
+                italic,
+            } => {
+                let renderer = self.font_renderer.clone();
+                let handle = desktop.handle();
+                tokio::spawn(async move {
+                    let error = renderer
+                        .fetch_google_font(&family, weight, italic)
+                        .await
+                        .err()
+                        .map(|error| error.to_string());
+                    let _ = handle.send_event(NativeEvent::FontCached {
+                        family,
+                        weight,
+                        italic,
+                        error,
+                    });
+                });
                 return Ok(CommandOutcome::Accepted(self.current_revision()));
             }
             _ => {}
@@ -792,6 +834,7 @@ impl App {
                             name: language.to_string(),
                         })
                         .collect(),
+                    fonts: self.fonts.clone(),
                 },
             },
         )
@@ -1122,6 +1165,27 @@ impl Application for App {
                     self.refresh(desktop)?;
                 }
                 Ok(())
+            }
+            NativeEvent::FontCached {
+                family,
+                weight,
+                italic,
+                error,
+            } => {
+                if let Some(error) = error {
+                    return self.problem(desktop, AppErrorCode::IoFailed, anyhow!(error));
+                }
+                for face in &mut self.fonts {
+                    if face.family_name == family
+                        && face.weight == weight
+                        && matches!(face.style, crate::protocol::FontFaceStyleView::Italic)
+                            == italic
+                    {
+                        face.cached = true;
+                    }
+                }
+                desktop.canvas().invalidate_fonts();
+                self.emit_settings(desktop)
             }
             NativeEvent::PipelineProgress { job, progress } => {
                 let Some(running) = self.jobs.get_mut(&job) else {

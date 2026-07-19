@@ -24,7 +24,7 @@ use crate::{
     layout::{TextLayout, WritingMode},
     renderer::{DrawStyle, RasterOptions, RenderOptions, StrokeOptions, WgpuRenderer, draw_layout},
     script::{fontique_scripts, is_cjk_text, shaping_direction_for_text},
-    types::{FontFaceInfo, FontSource},
+    types::{FontFaceInfo, FontFaceStyle, FontSource},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -48,6 +48,7 @@ pub struct RenderedPage {
 }
 
 /// Scene-aware renderer shared by the application and export paths.
+#[derive(Clone)]
 pub struct SceneRenderer {
     fonts: Arc<Mutex<FontSystem>>,
     google_fonts: Arc<GoogleFonts>,
@@ -277,6 +278,9 @@ impl SceneRenderer {
             .map(|face| FontFaceInfo {
                 family_name: face.family_name,
                 post_script_name: face.post_script_name,
+                weight: face.weight,
+                stretch: face.stretch,
+                style: face.style,
                 source: FontSource::System,
                 category: None,
                 cached: true,
@@ -292,6 +296,13 @@ impl SceneRenderer {
                         variant.weight,
                         if variant.style == "italic" { "i" } else { "" }
                     ),
+                    weight: variant.weight,
+                    stretch: 100,
+                    style: if variant.style == "italic" {
+                        FontFaceStyle::Italic
+                    } else {
+                        FontFaceStyle::Normal
+                    },
                     source: FontSource::Google,
                     category: Some(entry.category.clone()),
                     cached: self.google_fonts.is_variant_cached(&entry.family, variant),
@@ -305,6 +316,13 @@ impl SceneRenderer {
 
     pub fn google_fonts(&self) -> &GoogleFonts {
         &self.google_fonts
+    }
+
+    pub async fn fetch_google_font(&self, family: &str, weight: u16, italic: bool) -> Result<()> {
+        self.google_fonts
+            .fetch_variant(family, weight, if italic { "italic" } else { "normal" })
+            .await?;
+        Ok(())
     }
 
     pub fn resolve_post_script_name(
@@ -379,7 +397,6 @@ impl SceneRenderer {
         let scale_x = block.style.horizontal_scale / 100.0;
         let scale_y = block.style.vertical_scale / 100.0;
         let mut layout = TextLayout::new(&fonts[0])
-            .with_font_size(block.style.font_size)
             .with_fallback_fonts(&fonts[1..])
             .with_writing_mode(writing_mode)
             .with_alignment(align)
@@ -387,6 +404,14 @@ impl SceneRenderer {
             .with_spacing(block.style.letter_spacing, block.style.word_spacing)
             .with_max_width(layout_box.width / scale_x)
             .with_max_height(layout_box.height / scale_y);
+        layout = if block.layout.fit == TextFit::Bubble {
+            layout
+                .with_max_font_size(block.style.font_size)
+                .with_min_font_size((block.style.font_size * 0.6).max(9.0))
+                .with_min_line_height(1.0)
+        } else {
+            layout.with_font_size(block.style.font_size)
+        };
         if let Some(language) = options.target_language.as_deref() {
             layout = layout.with_hyphenation_language_tag(language);
         }
@@ -416,7 +441,9 @@ impl SceneRenderer {
             raster: RasterOptions::default(),
             ..Default::default()
         };
-        if block.layout.overflow == TextOverflow::Clip {
+        let clip_to_layout_box =
+            block.layout.fit == TextFit::Bubble || block.layout.overflow == TextOverflow::Clip;
+        if clip_to_layout_box {
             let clip = Rect::new(
                 ((layout_box.x - x) / scale_x) as f64,
                 ((layout_box.y - y) / scale_y) as f64,
@@ -453,7 +480,7 @@ impl SceneRenderer {
                 block.style.decoration,
             );
         }
-        if block.layout.overflow == TextOverflow::Clip {
+        if clip_to_layout_box {
             scene.pop_layer();
         }
         Ok(Some(RenderedElement {
@@ -575,6 +602,11 @@ fn resolve_writing_mode(
     text: &str,
     block: &koharu_scene::TextBlock,
 ) -> WritingMode {
+    // Persisted scenes may contain the source typography detector's vertical mode. The rendered
+    // translation owns the final direction, and non-CJK scripts must remain horizontal.
+    if !is_cjk_text(text) {
+        return WritingMode::Horizontal;
+    }
     match requested {
         SceneWritingMode::Horizontal => WritingMode::Horizontal,
         SceneWritingMode::VerticalRightToLeft => WritingMode::VerticalRl,
@@ -837,6 +869,30 @@ mod tests {
         );
         assert_eq!(
             infer_writing_mode(&tall, "HELLO", Some(SceneTextDirection::Auto)),
+            WritingMode::Horizontal
+        );
+    }
+
+    #[test]
+    fn latin_translation_overrides_a_persisted_vertical_source_layout() {
+        let block = koharu_scene::TextBlock::default();
+        let element = Element::new_text(
+            ElementId::new(),
+            Frame {
+                width: 40.0,
+                height: 120.0,
+                ..Default::default()
+            },
+            block.clone(),
+        );
+
+        assert_eq!(
+            resolve_writing_mode(
+                &element,
+                SceneWritingMode::VerticalRightToLeft,
+                "English translation",
+                &block,
+            ),
             WritingMode::Horizontal
         );
     }

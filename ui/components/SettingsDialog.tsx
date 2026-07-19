@@ -52,8 +52,18 @@ const phases: Phase[] = [
 ]
 type PipelinePhase = Exclude<Phase, 'translation'>
 const modelOptions = {
-  detection: ['pp_doclayout_v3', 'comic_text_detector', 'koharu_yolo26s', 'comic_onomatopoeia'],
-  segmentation: ['manga_text_mask', 'speech_bubble_yolov8m', 'mask_fusion'],
+  detection: [
+    'pp_doclayout_v3',
+    'comic_text_detector',
+    'comic_layout_yolo26s',
+    'comic_onomatopoeia',
+  ],
+  segmentation: [
+    'manga_text_mask',
+    'speech_bubble_yolov8m',
+    'speech_bubble_yolo11n',
+    'mask_fusion',
+  ],
   ocr: ['paddleocr_vl_1.6', 'manga_ocr', 'baberu_ocr'],
   translation: [
     'local',
@@ -69,14 +79,15 @@ const modelOptions = {
     'caiyun',
   ],
   typography: ['font_detector'],
-  inpainting: ['lama', 'aot_inpainting', 'flux2_klein'],
+  inpainting: ['lama', 'aot_inpainting', 'flux2_klein', 'rorem_mixed'],
 } satisfies Record<Phase, ModelName[]>
 const processorOrder: PipelineModel['model'][] = [
   'pp_doclayout_v3',
   'comic_text_detector',
-  'koharu_yolo26s',
+  'comic_layout_yolo26s',
   'manga_text_mask',
   'speech_bubble_yolov8m',
+  'speech_bubble_yolo11n',
   'comic_onomatopoeia',
   'mask_fusion',
   'paddleocr_vl_1.6',
@@ -86,15 +97,17 @@ const processorOrder: PipelineModel['model'][] = [
   'lama',
   'aot_inpainting',
   'flux2_klein',
+  'rorem_mixed',
 ]
 const modelLabels: Record<ModelName, string> = {
   comic_text_detector: 'Comic Text Detector',
   pp_doclayout_v3: 'PP-DocLayoutV3',
-  koharu_yolo26s: 'Koharu YOLO26s Layout',
+  comic_layout_yolo26s: 'Comic Layout YOLO26s',
   comic_onomatopoeia: 'COO Detector + OCR',
   mask_fusion: 'Semantic Mask Fusion',
   manga_text_mask: 'Manga Text Mask',
   speech_bubble_yolov8m: 'Speech Bubble (YOLOv8m)',
+  speech_bubble_yolo11n: 'Speech Bubble (YOLO11n)',
   'paddleocr_vl_1.6': 'PaddleOCR-VL 1.6',
   manga_ocr: 'Manga OCR',
   baberu_ocr: 'Baberu OCR',
@@ -113,6 +126,7 @@ const modelLabels: Record<ModelName, string> = {
   lama: 'LaMa',
   aot_inpainting: 'AOT Inpainting',
   flux2_klein: 'FLUX.2 Klein',
+  rorem_mixed: 'RORem Mixed',
 }
 const phaseDescriptions: Record<Phase, string> = {
   detection: 'Locate text on the page.',
@@ -160,7 +174,7 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className='flex h-[600px] max-h-[85vh] w-[760px] max-w-[92vw] flex-col gap-0 overflow-hidden p-0'>
+      <DialogContent className='flex h-[680px] max-h-[90vh] w-[760px] max-w-[92vw] flex-col gap-0 overflow-hidden p-0'>
         <DialogTitle className='sr-only'>
           {t('native.settings.title', { defaultValue: 'Settings' })}
         </DialogTitle>
@@ -169,7 +183,7 @@ export function SettingsDialog() {
         </DialogDescription>
 
         <div className='flex min-h-0 flex-1'>
-          <nav className='flex w-[180px] shrink-0 flex-col gap-1 border-r border-border bg-muted/30 p-3'>
+          <nav className='flex w-[176px] shrink-0 flex-col gap-1 border-r border-border bg-muted/30 p-3'>
             <p className='mb-3 px-3 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase'>
               {t('native.settings.title', { defaultValue: 'Settings' })}
             </p>
@@ -189,7 +203,7 @@ export function SettingsDialog() {
 
           <div className='flex min-w-0 flex-1 flex-col'>
             <ScrollArea className='min-h-0 flex-1'>
-              <div className='p-6'>
+              <div className='p-6 lg:p-7'>
                 {tab === 'appearance' && (
                   <AppearanceSettings theme={theme ?? 'system'} onThemeChange={setTheme} />
                 )}
@@ -337,24 +351,24 @@ function PhaseEditor({
 }) {
   const { t } = useTranslation()
   return (
-    <article className='grid grid-cols-[minmax(8rem,150px)_minmax(0,1fr)] gap-5 py-3 first:pt-0 last:pb-0'>
-      <div className='min-w-0 pt-1'>
+    <article className='py-5 first:pt-0 last:pb-0'>
+      <div className='mb-3 flex min-w-0 items-baseline gap-3'>
         <Label className='text-xs leading-none font-semibold'>
           {t(`native.phase.${phase}`, { defaultValue: phase })}
         </Label>
         <p
           id={`pipeline-${phase}-description`}
-          className='mt-1 text-[10px] leading-snug text-muted-foreground'
+          className='text-[11px] leading-snug text-muted-foreground'
         >
           {t(`native.phaseDescription.${phase}`, { defaultValue: phaseDescriptions[phase] })}
         </p>
       </div>
-      <div className='min-w-0 space-y-2' aria-describedby={`pipeline-${phase}-description`}>
+      <div className='grid min-w-0 gap-3' aria-describedby={`pipeline-${phase}-description`}>
         {modelOptions[phase].map((name) => {
           const index = config.processors.findIndex((processor) => processor.model === name)
           const model = index >= 0 ? config.processors[index] : null
           return (
-            <div key={name} className='rounded-lg border border-border bg-background p-2.5'>
+            <div key={name} className='rounded-xl border border-border bg-background p-3 shadow-xs'>
               <div className='flex items-center justify-between gap-3'>
                 <Label className='text-xs font-medium'>{modelLabels[name]}</Label>
                 <Switch
@@ -421,21 +435,21 @@ function TranslationEditor({
   useEffect(() => setRevealCredential(false), [credential])
 
   return (
-    <article className='grid grid-cols-[minmax(8rem,150px)_minmax(0,1fr)] gap-5 py-3 first:pt-0 last:pb-0'>
-      <div className='min-w-0 pt-1'>
+    <article className='py-5 first:pt-0 last:pb-0'>
+      <div className='mb-3 flex min-w-0 items-baseline gap-3'>
         <Label htmlFor='pipeline-translation' className='text-xs leading-none font-semibold'>
           {t('native.phase.translation', { defaultValue: 'translation' })}
         </Label>
         <p
           id='pipeline-translation-description'
-          className='mt-1 text-[10px] leading-snug text-muted-foreground'
+          className='text-[11px] leading-snug text-muted-foreground'
         >
           {t('native.phaseDescription.translation', {
             defaultValue: phaseDescriptions.translation,
           })}
         </p>
       </div>
-      <div className='min-w-0 space-y-2'>
+      <div className='min-w-0 space-y-3 rounded-xl border border-border bg-background p-4 shadow-xs'>
         <Select
           value={config.model.provider}
           onValueChange={(provider) => replace(defaultProvider(provider as Providers['provider']))}
@@ -552,7 +566,7 @@ function TranslationPreferences({
   })
 
   return (
-    <div className='mt-3 grid gap-2 border-t border-border/70 pt-3'>
+    <div className='mt-3 grid gap-3 border-t border-border/70 pt-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]'>
       <div className='grid gap-0.5'>
         <Label htmlFor='translation-target-language' className='text-xs font-normal'>
           {t('native.model.targetLanguage', { defaultValue: 'Target language' })}
@@ -627,7 +641,7 @@ function PipelineModelFields({
     case 'lama':
     case 'flux2_klein':
       return null
-    case 'koharu_yolo26s':
+    case 'comic_layout_yolo26s':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
           <NumberSetting
@@ -639,14 +653,9 @@ function PipelineModelFields({
             onChange={(confidence) => onChange({ ...model, confidence })}
           />
           <BooleanSetting
-            label='Dialogue regions'
-            value={model.dialogue_regions ?? false}
-            onChange={(dialogue_regions) => onChange({ ...model, dialogue_regions })}
-          />
-          <BooleanSetting
-            label='COO proposals'
-            value={model.onomatopoeia_regions ?? true}
-            onChange={(onomatopoeia_regions) => onChange({ ...model, onomatopoeia_regions })}
+            label='Text regions'
+            value={model.text_regions ?? false}
+            onChange={(text_regions) => onChange({ ...model, text_regions })}
           />
           <BooleanSetting
             label='Instance text masks'
@@ -659,20 +668,20 @@ function PipelineModelFields({
       return (
         <div className='grid gap-2 sm:grid-cols-3'>
           <NumberSetting
-            label='COO confidence'
-            value={model.onomatopoeia_threshold ?? 0.5}
+            label='Detection confidence'
+            value={model.detection_threshold ?? 0.5}
             min={0}
             max={1}
             step={0.05}
-            onChange={(onomatopoeia_threshold) => onChange({ ...model, onomatopoeia_threshold })}
+            onChange={(detection_threshold) => onChange({ ...model, detection_threshold })}
           />
           <NumberSetting
-            label='OCR confidence'
-            value={model.ocr_threshold ?? 0.5}
+            label='Recognition confidence'
+            value={model.recognition_threshold ?? 0.5}
             min={0}
             max={1}
             step={0.05}
-            onChange={(ocr_threshold) => onChange({ ...model, ocr_threshold })}
+            onChange={(recognition_threshold) => onChange({ ...model, recognition_threshold })}
           />
           <NumberSetting
             label='Dedup IoU'
@@ -685,25 +694,19 @@ function PipelineModelFields({
         </div>
       )
     case 'mask_fusion':
-      return (
-        <NumberSetting
-          label='COO region padding'
-          value={model.coo_padding ?? 4}
-          min={0}
-          step={1}
-          onChange={(coo_padding) => onChange({ ...model, coo_padding })}
-        />
-      )
+      return null
     case 'pp_doclayout_v3':
       return (
-        <NumberSetting
-          label={t('native.model.confidence', { defaultValue: 'Confidence' })}
-          value={model.confidence ?? 0.25}
-          min={0}
-          max={1}
-          step={0.05}
-          onChange={(confidence) => onChange({ ...model, confidence })}
-        />
+        <div className='max-w-48'>
+          <NumberSetting
+            label={t('native.model.confidence', { defaultValue: 'Confidence' })}
+            value={model.confidence ?? 0.25}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(confidence) => onChange({ ...model, confidence })}
+          />
+        </div>
       )
     case 'manga_text_mask':
       return (
@@ -735,6 +738,7 @@ function PipelineModelFields({
         </div>
       )
     case 'speech_bubble_yolov8m':
+    case 'speech_bubble_yolo11n':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
           <OptionalNumberSetting
@@ -757,23 +761,86 @@ function PipelineModelFields({
       )
     case 'font_detector':
       return (
-        <NumberSetting
-          label={t('native.model.topK', { defaultValue: 'Top K' })}
-          value={model.top_k ?? 3}
-          min={1}
-          step={1}
-          onChange={(top_k) => onChange({ ...model, top_k })}
-        />
+        <div className='max-w-48'>
+          <NumberSetting
+            label={t('native.model.topK', { defaultValue: 'Top K' })}
+            value={model.top_k ?? 3}
+            min={1}
+            step={1}
+            onChange={(top_k) => onChange({ ...model, top_k })}
+          />
+        </div>
       )
     case 'aot_inpainting':
       return (
-        <NumberSetting
-          label={t('native.model.maxSide', { defaultValue: 'Maximum side' })}
-          value={model.max_side ?? 2048}
-          min={1}
-          step={1}
-          onChange={(max_side) => onChange({ ...model, max_side })}
-        />
+        <div className='max-w-48'>
+          <NumberSetting
+            label={t('native.model.maxSide', { defaultValue: 'Maximum side' })}
+            value={model.max_side ?? 2048}
+            min={1}
+            step={1}
+            onChange={(max_side) => onChange({ ...model, max_side })}
+          />
+        </div>
+      )
+    case 'rorem_mixed':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <TextSetting
+            label='Prompt'
+            value={model.prompt ?? ''}
+            onChange={(prompt) => onChange({ ...model, prompt })}
+          />
+          <TextSetting
+            label='Negative prompt'
+            value={model.negative_prompt ?? ''}
+            onChange={(negative_prompt) => onChange({ ...model, negative_prompt })}
+          />
+          <NumberSetting
+            label='Resolution'
+            value={model.resolution ?? 512}
+            min={512}
+            max={1024}
+            step={512}
+            onChange={(resolution) => onChange({ ...model, resolution })}
+          />
+          <NumberSetting
+            label='Mask dilation'
+            value={model.mask_dilation ?? 0}
+            min={0}
+            max={255}
+            step={1}
+            onChange={(mask_dilation) => onChange({ ...model, mask_dilation })}
+          />
+          <NumberSetting
+            label='Inference steps'
+            value={model.num_inference_steps ?? 30}
+            min={1}
+            step={1}
+            onChange={(num_inference_steps) => onChange({ ...model, num_inference_steps })}
+          />
+          <NumberSetting
+            label='Guidance scale'
+            value={model.guidance_scale ?? 8}
+            min={0.01}
+            step={0.1}
+            onChange={(guidance_scale) => onChange({ ...model, guidance_scale })}
+          />
+          <NumberSetting
+            label='Strength'
+            value={model.strength ?? 0.999}
+            min={0.001}
+            max={0.999}
+            step={0.001}
+            onChange={(strength) => onChange({ ...model, strength })}
+          />
+          <NumberSetting
+            label='Seed'
+            value={model.seed ?? -1}
+            step={1}
+            onChange={(seed) => onChange({ ...model, seed })}
+          />
+        </div>
       )
   }
 }
@@ -1024,7 +1091,7 @@ function NumberSetting({
       <span>{label}</span>
       <Input
         type='number'
-        value={value}
+        value={displayNumber(value, step)}
         min={min}
         max={max}
         step={step}
@@ -1058,7 +1125,7 @@ function OptionalNumberSetting({
       <span>{label}</span>
       <Input
         type='number'
-        value={value ?? ''}
+        value={value === null ? '' : displayNumber(value, step)}
         min={min}
         max={max}
         step={step}
@@ -1069,6 +1136,12 @@ function OptionalNumberSetting({
       />
     </label>
   )
+}
+
+function displayNumber(value: number, step?: number): number {
+  if (!step || !Number.isFinite(value)) return value
+  const precision = Math.max(0, -Math.floor(Math.log10(step)))
+  return Number(value.toFixed(precision))
 }
 
 function BooleanSetting({
@@ -1093,26 +1166,26 @@ function defaultPipelineModel(model: PipelineModel['model']): PipelineModel {
       return { model }
     case 'pp_doclayout_v3':
       return { model, confidence: 0.25 }
-    case 'koharu_yolo26s':
+    case 'comic_layout_yolo26s':
       return {
         model,
         confidence: 0.25,
-        dialogue_regions: false,
-        onomatopoeia_regions: true,
+        text_regions: false,
         text_masks: true,
       }
     case 'comic_onomatopoeia':
       return {
         model,
-        onomatopoeia_threshold: 0.5,
-        ocr_threshold: 0.5,
+        detection_threshold: 0.5,
+        recognition_threshold: 0.5,
         dedup_iou: 0.3,
       }
     case 'mask_fusion':
-      return { model, coo_padding: 4 }
+      return { model }
     case 'manga_text_mask':
       return { model, threshold: 0.5, max_side: null, horizontal_flip: false, vertical_flip: false }
     case 'speech_bubble_yolov8m':
+    case 'speech_bubble_yolo11n':
       return { model, confidence: null, nms_iou: null }
     case 'paddleocr_vl_1.6':
       return { model }
@@ -1127,6 +1200,8 @@ function defaultPipelineModel(model: PipelineModel['model']): PipelineModel {
     case 'aot_inpainting':
       return { model, max_side: 2048 }
     case 'flux2_klein':
+      return { model }
+    case 'rorem_mixed':
       return { model }
   }
 }

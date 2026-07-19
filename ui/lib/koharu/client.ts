@@ -301,16 +301,16 @@ export function isUiEvent(value: unknown): value is UiEvent {
         !isRecord(settings.pipeline) ||
         !isRecord(settings.translation) ||
         !Array.isArray(settings.local_translation_models) ||
-        !Array.isArray(settings.target_languages)
+        !Array.isArray(settings.target_languages) ||
+        !Array.isArray(settings.fonts)
       )
         return false
       const pipeline = settings.pipeline
       const translation = settings.translation
       return (
-        ['detection', 'segmentation', 'ocr', 'typography', 'inpainting'].every(
-          (phase) => pipeline[phase] === null || isModelConfig(pipeline[phase]),
-        ) &&
-        isModelConfig(translation.model) &&
+        Array.isArray(pipeline.processors) &&
+        pipeline.processors.every(isModelConfig) &&
+        isProviderConfig(translation.model) &&
         typeof translation.target_language === 'string' &&
         (translation.instructions === null || typeof translation.instructions === 'string') &&
         isTranslationCredentials(translation.credentials) &&
@@ -320,6 +320,18 @@ export function isUiEvent(value: unknown): value is UiEvent {
             isRecord(language) &&
             typeof language.tag === 'string' &&
             typeof language.name === 'string',
+        ) &&
+        settings.fonts.every(
+          (font) =>
+            isRecord(font) &&
+            typeof font.family_name === 'string' &&
+            typeof font.post_script_name === 'string' &&
+            typeof font.weight === 'number' &&
+            typeof font.stretch === 'number' &&
+            ['normal', 'italic', 'oblique'].includes(String(font.style)) &&
+            ['system', 'google'].includes(String(font.source)) &&
+            (font.category === null || typeof font.category === 'string') &&
+            typeof font.cached === 'boolean',
         )
       )
     }
@@ -336,6 +348,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isModelConfig(value: unknown): boolean {
   return isRecord(value) && typeof value.model === 'string'
+}
+
+function isProviderConfig(value: unknown): boolean {
+  return isRecord(value) && typeof value.provider === 'string'
 }
 
 function isTranslationCredentials(value: unknown): boolean {

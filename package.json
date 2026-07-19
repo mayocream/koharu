@@ -4,8 +4,8 @@
   ],
   "scripts": {
     "dev": "bun run --parallel dev:ui dev:native",
-    "dev:ui": "bun run --cwd ui dev",
-    "dev:native": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec \"cargo run -p koharu --bin koharu\"",
+    "dev:ui": "kill-port 3000 && bun run --cwd ui dev",
+    "dev:native": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec \"cargo run -p koharu --bin koharu --profile release-with-debug\"",
     "build": "bun run --cwd ui build && cargo build -p koharu",
     "lint:ui": "bun run --filter ui lint",
     "test:ui": "bun run --filter ui test",
@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "git-cliff": "^2.13.1",
+    "kill-port": "^2.0.1",
     "nodemon": "^3.1.14",
     "oxfmt": "^0.56.0"
   }

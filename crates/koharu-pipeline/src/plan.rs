@@ -99,6 +99,7 @@ impl ConfiguredModel {
             Self::Processor(ProcessorConfig::MaskFusion(_)) => &[
                 Artifact::TextMaskCandidate,
                 Artifact::LayoutTextMask,
+                Artifact::TextRegion,
                 Artifact::CooRegion,
             ],
             Self::Processor(ProcessorConfig::PaddleOcrVl1_6(_))

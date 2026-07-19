@@ -103,22 +103,24 @@ describe('KoharuClient', () => {
     client.disconnect()
   })
 
-  it('accepts settings with one model per phase', () => {
+  it('accepts settings with a processor list', () => {
     useEditorStore.setState({ error: null, settings: null })
     const { bridge, client } = connected()
     bridge.emit({
       type: 'settings_changed',
       settings: {
         pipeline: {
-          detection: { model: 'comic_text_detector' },
-          segmentation: {
-            model: 'speech_bubble_yolov8m',
-            confidence: null,
-            nms_iou: null,
-          },
-          ocr: { model: 'paddleocr_vl_1.6' },
-          typography: { model: 'font_detector', top_k: 3 },
-          inpainting: { model: 'lama' },
+          processors: [
+            { model: 'comic_text_detector' },
+            {
+              model: 'speech_bubble_yolov8m',
+              confidence: null,
+              nms_iou: null,
+            },
+            { model: 'paddleocr_vl_1.6' },
+            { model: 'font_detector', top_k: 3 },
+            { model: 'lama' },
+          ],
         },
         translation: {
           model: { provider: 'local', model: 'lfm2.5-1.2b-instruct' },
@@ -142,10 +144,23 @@ describe('KoharuClient', () => {
           { tag: 'en-US', name: 'English' },
           { tag: 'ja-JP', name: 'Japanese' },
         ],
+        fonts: [
+          {
+            family_name: 'Noto Sans',
+            post_script_name: 'NotoSans-Regular',
+            weight: 400,
+            stretch: 100,
+            style: 'normal',
+            source: 'system',
+            category: null,
+            cached: true,
+          },
+        ],
       },
     })
 
     expect(useEditorStore.getState().error).toBeNull()
+    expect(useEditorStore.getState().settings?.pipeline.processors).toHaveLength(5)
     expect(useEditorStore.getState().settings?.translation.model.provider).toBe('local')
     client.disconnect()
   })

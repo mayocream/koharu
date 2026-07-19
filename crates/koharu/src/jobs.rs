@@ -33,6 +33,12 @@ pub enum NativeEvent {
     ProjectAdvanced {
         job: RequestId,
     },
+    FontCached {
+        family: String,
+        weight: u16,
+        italic: bool,
+        error: Option<String>,
+    },
     Finished {
         job: RequestId,
         revisions: Vec<Revision>,

@@ -62,9 +62,19 @@ export type ClaudeConfig = {
 	thinking: boolean,
 };
 
+export type ComicLayoutYolo26sConfig = {
+	confidence?: number,
+	/**
+	 *  Add the model's generic text instances as editable free text. Keep this
+	 *  off when a stronger text detector is configured alongside the model.
+	 */
+	text_regions?: boolean,
+	text_masks?: boolean,
+};
+
 export type ComicOnomatopoeiaConfig = {
-	onomatopoeia_threshold?: number,
-	ocr_threshold?: number,
+	detection_threshold?: number,
+	recognition_threshold?: number,
 	dedup_iou?: number,
 };
 
@@ -124,9 +134,24 @@ export type FontDetectorConfig = {
 	top_k?: number,
 };
 
+export type FontFaceStyleView = "normal" | "italic" | "oblique";
+
+export type FontFaceView = {
+	family_name: string,
+	post_script_name: string,
+	weight: number,
+	stretch: number,
+	style: FontFaceStyleView,
+	source: FontSourceView,
+	category: string | null,
+	cached: boolean,
+};
+
 export type FontSlant = "Normal" | "Italic" | { Oblique: {
 	angle_degrees: number,
 } };
+
+export type FontSourceView = "system" | "google";
 
 export type Force = "none" | "targets" | "all";
 
@@ -166,21 +191,6 @@ export type JobKind = "pipeline" | "import" | "export";
 
 export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; phase: Phase | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "cancelled"; id: RequestId };
 
-export type KoharuYolo26sConfig = {
-	confidence?: number,
-	/**
-	 *  Add dialogue instances as editable text. Keep this off when a stronger
-	 *  ordinary-text detector is configured alongside the layout model.
-	 */
-	dialogue_regions?: boolean,
-	/**
-	 *  Retain the fine-tuned model's COO proposals for the dedicated COO
-	 *  recognizer to verify and deduplicate.
-	 */
-	onomatopoeia_regions?: boolean,
-	text_masks?: boolean,
-};
-
 export type LaMaConfig = Record<string, never>;
 
 export type LmStudioConfig = {
@@ -205,7 +215,7 @@ export type MangaTextMaskConfig = {
 };
 
 export type MaskFusionConfig = {
-	/**  Extra page pixels around a COO region used when the detector has no polygon. */
+	/**  Retained for compatibility with saved settings. Region masks are exact and this is ignored. */
 	coo_padding?: number,
 };
 
@@ -283,12 +293,14 @@ export type PipelineConfig = {
 export type ProcessorConfig = { model: "comic_text_detector" } | {
 	model: "pp_doclayout_v3",
 } & PPDocLayoutV3Config | {
-	model: "koharu_yolo26s",
-} & KoharuYolo26sConfig | {
+	model: "comic_layout_yolo26s",
+} & ComicLayoutYolo26sConfig | {
 	model: "manga_text_mask",
 } & MangaTextMaskConfig | {
 	model: "speech_bubble_yolov8m",
 } & YoloV8mSpeechBubbleConfig | {
+	model: "speech_bubble_yolo11n",
+} & Yolo11nSpeechBubbleConfig | {
 	model: "comic_onomatopoeia",
 } & ComicOnomatopoeiaConfig | {
 	model: "mask_fusion",
@@ -296,9 +308,11 @@ export type ProcessorConfig = { model: "comic_text_detector" } | {
 	model: "font_detector",
 } & FontDetectorConfig | { model: "lama" } | {
 	model: "aot_inpainting",
-} & AotInpaintingConfig | { model: "flux2_klein" };
+} & AotInpaintingConfig | { model: "flux2_klein" } | {
+	model: "rorem_mixed",
+} & RoremMixedConfig;
 
-export type ProcessorId = "comic_text_detector" | "pp_doclayout_v3" | "koharu_yolo26s" | "manga_text_mask" | "speech_bubble_yolov8m" | "comic_onomatopoeia" | "mask_fusion" | "paddleocr_vl_1.6" | "manga_ocr" | "baberu_ocr" | "translation" | "font_detector" | "lama" | "aot_inpainting" | "flux2_klein";
+export type ProcessorId = "comic_text_detector" | "pp_doclayout_v3" | "comic_layout_yolo26s" | "manga_text_mask" | "speech_bubble_yolov8m" | "speech_bubble_yolo11n" | "comic_onomatopoeia" | "mask_fusion" | "paddleocr_vl_1.6" | "manga_ocr" | "baberu_ocr" | "translation" | "font_detector" | "lama" | "aot_inpainting" | "flux2_klein" | "rorem_mixed";
 
 export type ProjectDelta = {
 	from: Revision,
@@ -358,6 +372,17 @@ export type RequestId = string;
 
 export type Revision = number;
 
+export type RoremMixedConfig = {
+	prompt?: string,
+	negative_prompt?: string,
+	resolution?: number,
+	mask_dilation?: number,
+	num_inference_steps?: number,
+	guidance_scale?: number,
+	strength?: number,
+	seed?: number,
+};
+
 export type RunTarget = { target: "all" } | { target: "phase"; phase: Phase } | { target: "processors"; processors: ProcessorId[] } | { target: "artifacts"; artifacts: Artifact[] };
 
 export type Scope = { scope: "project" } | { scope: "pages"; pages: PageId[] } | { scope: "region"; page: PageId; frame: Frame } | { scope: "elements"; elements: ElementId[] };
@@ -367,6 +392,7 @@ export type SettingsView = {
 	translation: TranslationSettings,
 	local_translation_models: string[],
 	target_languages: TargetLanguageView[],
+	fonts: FontFaceView[],
 };
 
 export type Size = {
@@ -517,7 +543,7 @@ export type TranslationSettings = {
 	credentials: TranslationCredentialsView,
 };
 
-export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: PageId; name: string } | { type: "delete_page"; page: PageId } | { type: "delete_pages"; pages: PageId[] } | { type: "move_page"; page: PageId; index: number } | { type: "add_text"; page: PageId; frame: Frame } | { type: "set_translation"; page: PageId; element: ElementId; translation: string | null } | { type: "set_text_style"; page: PageId; element: ElementId; style: TextStyle } | { type: "set_text_layout"; page: PageId; element: ElementId; layout: TextLayout } | { type: "set_text_styles"; page: PageId; elements: ElementTextStyle[] } | { type: "set_text_layouts"; page: PageId; elements: ElementTextLayout[] } | { type: "set_element_frames"; elements: ElementFrame[] } | { type: "set_element_opacity"; page: PageId; elements: ElementId[]; opacity: number } | { type: "set_element_visibility"; page: PageId; elements: ElementId[]; visible: boolean } | { type: "delete_elements"; page: PageId; elements: ElementId[] } | { type: "move_element"; page: PageId; element: ElementId; index: number } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: RunTarget; force: Force } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: PageId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
+export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: PageId; name: string } | { type: "delete_page"; page: PageId } | { type: "delete_pages"; pages: PageId[] } | { type: "move_page"; page: PageId; index: number } | { type: "add_text"; page: PageId; frame: Frame } | { type: "set_translation"; page: PageId; element: ElementId; translation: string | null } | { type: "set_text_style"; page: PageId; element: ElementId; style: TextStyle } | { type: "set_text_layout"; page: PageId; element: ElementId; layout: TextLayout } | { type: "set_text_styles"; page: PageId; elements: ElementTextStyle[] } | { type: "set_text_layouts"; page: PageId; elements: ElementTextLayout[] } | { type: "cache_font"; family: string; weight: number; italic: boolean } | { type: "set_element_frames"; elements: ElementFrame[] } | { type: "set_element_opacity"; page: PageId; elements: ElementId[]; opacity: number } | { type: "set_element_visibility"; page: PageId; elements: ElementId[]; visible: boolean } | { type: "delete_elements"; page: PageId; elements: ElementId[] } | { type: "move_element"; page: PageId; element: ElementId; index: number } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: RunTarget; force: Force } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: PageId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
 
 export type UiError = {
 	code: UiErrorCode,
@@ -540,6 +566,11 @@ export type VerticalAlign = "Top" | "Center" | "Bottom";
 export type WindowAction = "drag" | "minimize" | "toggle_maximize" | "close";
 
 export type WritingMode = "Auto" | "Horizontal" | "VerticalRightToLeft" | "VerticalLeftToRight";
+
+export type Yolo11nSpeechBubbleConfig = {
+	confidence?: number | null,
+	nms_iou?: number | null,
+};
 
 export type YoloV8mSpeechBubbleConfig = {
 	confidence?: number | null,

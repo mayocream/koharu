@@ -103,10 +103,13 @@ pub struct TextLayout<'a> {
     font: &'a Font,
     fallback_fonts: &'a [Font],
     font_size: Option<f32>,
+    min_font_size: Option<f32>,
+    max_font_size: Option<f32>,
     max_width: Option<f32>,
     max_height: Option<f32>,
     alignment: Option<TextAlign>,
     line_height: Option<f32>,
+    min_line_height: Option<f32>,
     letter_spacing: f32,
     word_spacing: f32,
 }
@@ -121,10 +124,13 @@ impl<'a> TextLayout<'a> {
             font,
             fallback_fonts: &[],
             font_size: None,
+            min_font_size: None,
+            max_font_size: None,
             max_width: None,
             max_height: None,
             alignment: None,
             line_height: None,
+            min_line_height: None,
             letter_spacing: 0.0,
             word_spacing: 0.0,
         }
@@ -133,6 +139,24 @@ impl<'a> TextLayout<'a> {
     #[must_use]
     pub fn with_font_size(mut self, size: f32) -> Self {
         self.font_size = Some(size);
+        self.min_font_size = None;
+        self.max_font_size = None;
+        self
+    }
+
+    /// Automatically fit the text to its bounds without growing beyond `size`.
+    #[must_use]
+    pub fn with_max_font_size(mut self, size: f32) -> Self {
+        self.font_size = None;
+        self.max_font_size = Some(size);
+        self
+    }
+
+    /// Prevent automatically fitted text from becoming unreadably small.
+    #[must_use]
+    pub fn with_min_font_size(mut self, size: f32) -> Self {
+        self.font_size = None;
+        self.min_font_size = Some(size);
         self
     }
 
@@ -196,6 +220,13 @@ impl<'a> TextLayout<'a> {
         self
     }
 
+    /// Allow auto-fit to tighten leading only when the readable size floor still overflows.
+    #[must_use]
+    pub fn with_min_line_height(mut self, ratio: f32) -> Self {
+        self.min_line_height = Some(ratio);
+        self
+    }
+
     #[must_use]
     pub fn with_spacing(mut self, letter: f32, word: f32) -> Self {
         self.letter_spacing = letter;
@@ -215,36 +246,82 @@ impl<'a> TextLayout<'a> {
         let _s = tracing::info_span!("auto_size").entered();
         let max_height = self.max_height.unwrap_or(f32::INFINITY);
         let max_width = self.max_width.unwrap_or(f32::INFINITY);
+        let maximum = self.max_font_size.unwrap_or(300.0).max(0.5);
+        let minimum = self
+            .min_font_size
+            .unwrap_or(maximum.min(1.0))
+            .max(0.5)
+            .min(maximum);
+        let fits = |layout: &LayoutRun<'_>| {
+            layout.width <= max_width + f32::EPSILON && layout.height <= max_height + f32::EPSILON
+        };
 
-        let mut low = 6;
-        let mut high = 300;
-        let mut best: Option<LayoutRun<'a>> = None;
+        let maximum_layout = self.run_with_size(text, maximum)?;
+        if fits(&maximum_layout) {
+            return Ok(maximum_layout);
+        }
+
+        let mut best = self.run_with_size(text, minimum)?;
+        if !fits(&best) {
+            let Some(preferred_line_height) = self.line_height else {
+                return Ok(best);
+            };
+            let minimum_line_height = self
+                .min_line_height
+                .unwrap_or(preferred_line_height)
+                .max(0.1)
+                .min(preferred_line_height);
+            if minimum_line_height >= preferred_line_height {
+                return Ok(best);
+            }
+
+            let mut compact = self.clone();
+            compact.line_height = Some(minimum_line_height);
+            best = compact.run_with_size(text, minimum)?;
+            if !fits(&best) {
+                return Ok(best);
+            }
+
+            let mut low = minimum_line_height;
+            let mut high = preferred_line_height;
+            let mut iterations = 0u32;
+            while high - low > 0.001 && iterations < 12 {
+                iterations += 1;
+                let ratio = (low + high) * 0.5;
+                compact.line_height = Some(ratio);
+                let layout = compact.run_with_size(text, minimum)?;
+                if fits(&layout) {
+                    best = layout;
+                    low = ratio;
+                } else {
+                    high = ratio;
+                }
+            }
+            tracing::info!(
+                iterations,
+                font_size = best.font_size,
+                line_height = low,
+                "auto_size tightened leading"
+            );
+            return Ok(best);
+        }
+
+        let mut low = minimum;
+        let mut high = maximum;
         let mut iterations = 0u32;
-
-        while low <= high {
+        while high - low > 0.01 && iterations < 16 {
             iterations += 1;
-            let mid = (low + high) / 2;
-            let size = mid as f32;
+            let size = (low + high) * 0.5;
             let layout = self.run_with_size(text, size)?;
-            if layout.width <= max_width && layout.height <= max_height {
-                best = Some(layout);
-                low = mid + 1;
+            if fits(&layout) {
+                best = layout;
+                low = size;
             } else {
-                high = mid - 1;
+                high = size;
             }
         }
-
-        // If no size fits within constraints, fall back to the smallest size.
-        // This ensures we always render something even if the box is very small.
-        if best.is_none() {
-            best = Some(self.run_with_size(text, 6.0)?);
-        }
-        tracing::info!(
-            iterations,
-            font_size = best.as_ref().map(|b| b.font_size as u32).unwrap_or(0),
-            "auto_size done"
-        );
-        Ok(best.unwrap())
+        tracing::info!(iterations, font_size = best.font_size, "auto_size done");
+        Ok(best)
     }
 
     fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
@@ -1021,6 +1098,87 @@ mod tests {
             (actual - expected).abs() <= eps,
             "expected {expected}, got {actual}"
         );
+    }
+
+    #[test]
+    fn capped_auto_size_shrinks_text_to_fit_the_available_height() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let preferred_size = 24.0;
+        let fixed = TextLayout::new(&font)
+            .with_font_size(preferred_size)
+            .with_max_width(1_000.0)
+            .run("First\nSecond\nThird")?;
+        let max_height = fixed.height * 0.65;
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(preferred_size)
+            .with_max_width(1_000.0)
+            .with_max_height(max_height)
+            .run("First\nSecond\nThird")?;
+
+        assert!(fitted.font_size < preferred_size);
+        assert!(fitted.width <= 1_000.0);
+        assert!(fitted.height <= max_height + 0.01);
+        Ok(())
+    }
+
+    #[test]
+    fn capped_auto_size_does_not_enlarge_text_that_already_fits() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let preferred_size = 18.0;
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(preferred_size)
+            .with_max_width(1_000.0)
+            .with_max_height(1_000.0)
+            .run("Fits")?;
+
+        assert_eq!(fitted.font_size, preferred_size);
+        Ok(())
+    }
+
+    #[test]
+    fn capped_auto_size_respects_the_readable_floor() -> anyhow::Result<()> {
+        let font = any_system_font();
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(16.0)
+            .with_min_font_size(8.0)
+            .with_max_width(12.0)
+            .with_max_height(12.0)
+            .run("This translation cannot fit")?;
+
+        assert_eq!(fitted.font_size, 8.0);
+        Ok(())
+    }
+
+    #[test]
+    fn capped_auto_size_prefers_default_leading_before_tightening() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "First\nSecond\nThird\nFourth";
+        let loose = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_line_height(1.2)
+            .run(text)?;
+        let tight = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_line_height(1.0)
+            .run(text)?;
+        let max_height = (loose.height + tight.height) * 0.5;
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(16.0)
+            .with_min_font_size(16.0)
+            .with_line_height(1.2)
+            .with_min_line_height(1.0)
+            .with_max_width(1_000.0)
+            .with_max_height(max_height)
+            .run(text)?;
+
+        assert_eq!(fitted.font_size, 16.0);
+        assert!(fitted.height <= max_height + 0.01);
+        assert!(fitted.height > tight.height);
+        Ok(())
     }
 
     #[test]

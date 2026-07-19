@@ -4,10 +4,7 @@ use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
 use image::DynamicImage;
 use koharu_ml::font_detector::{FontDetector, FontPrediction};
-use koharu_scene::{
-    Command, ElementChange, ElementId, PageId, StrokePosition, TextEffect, TextEffectKind,
-    TextLayout, TextRole, TextStyle, WritingMode,
-};
+use koharu_scene::{Command, ElementChange, ElementId, PageId, TextRole, TextStyle};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -108,17 +105,11 @@ impl Processor for FontDetectorProcessor {
                 .expect("captured page")
                 .text(input.element)
                 .expect("captured text");
-            let (style, layout) =
-                apply_prediction(text.style.clone(), text.layout.clone(), prediction);
+            let style = apply_prediction(text.style.clone(), prediction);
             commands.push(Command::EditElement {
                 page: input.page,
                 element: input.element,
                 edit: ElementChange::Style(style),
-            });
-            commands.push(Command::EditElement {
-                page: input.page,
-                element: input.element,
-                edit: ElementChange::Layout(layout),
             });
         }
         Ok(commands)
@@ -131,43 +122,43 @@ struct TextInput {
     image: DynamicImage,
 }
 
-fn apply_prediction(
-    mut style: TextStyle,
-    mut layout: TextLayout,
-    prediction: FontPrediction,
-) -> (TextStyle, TextLayout) {
-    style.font_families = prediction
-        .named_fonts
-        .into_iter()
-        .map(|font| font.name)
-        .collect();
-    style.font_size = prediction.font_size_px.max(1.0);
+fn apply_prediction(mut style: TextStyle, prediction: FontPrediction) -> TextStyle {
     style.color = [
         prediction.text_color[0],
         prediction.text_color[1],
         prediction.text_color[2],
         255,
     ];
-    style.line_height = prediction.line_height.max(0.1);
-    style.angle_degrees = prediction.angle_deg;
     style
-        .effects
-        .retain(|effect| !matches!(effect.kind, TextEffectKind::Stroke { .. }));
-    if prediction.stroke_width_px > 0.0 {
-        style.effects.push(TextEffect::new(TextEffectKind::Stroke {
-            color: [
-                prediction.stroke_color[0],
-                prediction.stroke_color[1],
-                prediction.stroke_color[2],
-                255,
-            ],
-            width: prediction.stroke_width_px,
-            position: StrokePosition::Center,
-        }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prediction_only_changes_the_text_color() {
+        let original = TextStyle {
+            font_families: vec!["Noto Sans".into()],
+            font_size: 27.0,
+            line_height: 1.45,
+            letter_spacing: 2.0,
+            word_spacing: 3.0,
+            angle_degrees: -8.0,
+            ..TextStyle::default()
+        };
+        let prediction = FontPrediction {
+            text_color: [12, 34, 56],
+            font_size_px: 18.0,
+            line_height: 0.8,
+            angle_deg: 16.0,
+            stroke_color: [90, 80, 70],
+            stroke_width_px: 4.0,
+            ..FontPrediction::default()
+        };
+        let mut expected = original.clone();
+        expected.color = [12, 34, 56, 255];
+
+        assert_eq!(apply_prediction(original, prediction), expected);
     }
-    layout.writing_mode = match prediction.direction {
-        koharu_ml::font_detector::TextDirection::Horizontal => WritingMode::Horizontal,
-        koharu_ml::font_detector::TextDirection::Vertical => WritingMode::VerticalRightToLeft,
-    };
-    (style, layout)
 }

@@ -1,19 +1,26 @@
 'use client'
 
 import {
-  ArrowDown,
-  ArrowUp,
+  ALargeSmall,
+  Bandage,
+  Contrast,
   Eye,
   EyeOff,
-  ImageIcon,
   LayersIcon,
+  Paintbrush,
   SlidersHorizontalIcon,
   Trash2,
-  TypeIcon,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { RenderControlsPanel } from '@/components/panels/RenderControlsPanel'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -37,105 +44,143 @@ import {
   type TextLayout,
   type TextStyle,
 } from '@/lib/koharu'
+import { cn } from '@/lib/utils'
+
+type DisplayLayer = {
+  id: string
+  label: string
+  icon: ComponentType<{ className?: string }> | 'RAW'
+  visible: boolean
+  hasContent: boolean
+  setVisible: (visible: boolean) => void
+}
 
 function Layers() {
   const { t } = useTranslation()
   const page = useEditorStore((state) => state.page)
-  const selected = useEditorStore((state) => state.selectedElements)
-  const select = useEditorStore((state) => state.selectElements)
+  const display = useEditorStore((state) => state.display)
+  const setDisplay = useEditorStore((state) => state.setDisplay)
   if (!page) return null
-  const layers = [...page.elements].reverse()
+
+  const changeDisplay = (next: typeof display) => {
+    setDisplay(next)
+    koharuClient.interact({ type: 'set_display', display: next })
+  }
+  const textElements = page.elements.filter(isTextElement)
+  const layers: DisplayLayer[] = [
+    {
+      id: 'textBlocks',
+      label: t('layers.textBlocks'),
+      icon: ALargeSmall,
+      visible: display.show_text,
+      hasContent: textElements.length > 0,
+      setVisible: (show_text) => changeDisplay({ ...display, show_text }),
+    },
+    {
+      id: 'brush',
+      label: t('layers.brush'),
+      icon: Paintbrush,
+      visible: display.brush_mask !== null,
+      hasContent: page.assets.brush_mask !== null,
+      setVisible: (visible) =>
+        changeDisplay({
+          ...display,
+          brush_mask: visible ? { tint: [14, 165, 233, 210], opacity: 0.55 } : null,
+        }),
+    },
+    {
+      id: 'inpainted',
+      label: t('layers.inpainted'),
+      icon: Bandage,
+      visible: display.page === 'clean',
+      hasContent: page.assets.clean !== null,
+      setVisible: (visible) => changeDisplay({ ...display, page: visible ? 'clean' : 'source' }),
+    },
+    {
+      id: 'mask',
+      label: t('layers.mask'),
+      icon: Contrast,
+      visible: display.text_mask !== null,
+      hasContent: page.assets.text_mask !== null,
+      setVisible: (visible) =>
+        changeDisplay({
+          ...display,
+          text_mask: visible ? { tint: [244, 63, 94, 210], opacity: 0.55 } : null,
+        }),
+    },
+    {
+      id: 'base',
+      label: t('layers.base'),
+      icon: 'RAW',
+      visible: display.page === 'source',
+      hasContent: true,
+      setVisible: () => changeDisplay({ ...display, page: 'source' }),
+    },
+  ]
+
   return (
-    <div className='flex flex-col py-1'>
-      {layers.map((element) => {
-        const index = page.elements.findIndex((item) => item.id === element.id)
-        const active = selected.includes(element.id)
+    <div className='flex flex-col'>
+      {layers.map((layer) => {
+        const Icon = layer.icon
+        const canToggle = layer.hasContent && !(layer.id === 'base' && layer.visible)
+        const active = layer.hasContent && layer.visible
         return (
           <div
-            key={element.id}
-            data-selected={active}
-            className='group flex items-center gap-1 px-2 py-1.5 transition-colors hover:bg-accent/40 data-[selected=true]:bg-accent/60'
+            key={layer.id}
+            data-testid={`layer-${layer.id}`}
+            data-has-content={layer.hasContent}
+            data-visible={layer.visible}
+            className={cn(
+              'group flex items-center gap-2 px-2 py-1.5 transition-colors hover:bg-black/[0.03]',
+              !layer.hasContent && 'opacity-40',
+            )}
           >
-            <button
-              className='flex min-w-0 flex-1 items-center gap-2 text-left text-xs'
-              onClick={(event) =>
-                select(
-                  event.shiftKey || event.ctrlKey || event.metaKey
-                    ? active
-                      ? selected.filter((id) => id !== element.id)
-                      : [...selected, element.id]
-                    : [element.id],
-                )
-              }
-            >
-              {isTextElement(element) ? (
-                <TypeIcon className='size-3.5 text-muted-foreground' />
-              ) : (
-                <ImageIcon className='size-3.5 text-muted-foreground' />
-              )}
-              <span className='truncate'>
-                {isTextElement(element)
-                  ? element.kind.Text.translation ||
-                    element.kind.Text.source?.text ||
-                    t('native.layers.text', { defaultValue: 'Text' })
-                  : (element.kind.Image?.name ??
-                    t('native.layers.image', { defaultValue: 'Image' }))}
-              </span>
-            </button>
             <Button
               size='icon-xs'
               variant='ghost'
-              className='size-5'
+              className={cn('size-5', canToggle ? 'cursor-pointer' : 'cursor-default')}
+              disabled={!canToggle}
               aria-label={
-                element.visible
+                layer.visible
                   ? t('native.layers.hide', { defaultValue: 'Hide layer' })
                   : t('native.layers.show', { defaultValue: 'Show layer' })
               }
-              onClick={() =>
-                koharuClient.fire({
-                  type: 'set_element_visibility',
-                  page: page.id,
-                  elements: [element.id],
-                  visible: !element.visible,
-                })
-              }
+              onClick={() => canToggle && layer.setVisible(!layer.visible)}
             >
-              {element.visible ? <Eye /> : <EyeOff />}
+              {layer.visible ? (
+                <Eye
+                  className={cn('size-3.5', active ? 'text-foreground' : 'text-muted-foreground')}
+                />
+              ) : (
+                <EyeOff className='size-3.5 text-muted-foreground/40' />
+              )}
             </Button>
-            <Button
-              size='icon-xs'
-              variant='ghost'
-              className='size-5 opacity-0 transition-opacity group-hover:opacity-100'
-              disabled={index >= page.elements.length - 1}
-              aria-label={t('native.layers.up', { defaultValue: 'Move layer up' })}
-              onClick={() =>
-                koharuClient.fire({
-                  type: 'move_element',
-                  page: page.id,
-                  element: element.id,
-                  index: index + 1,
-                })
-              }
+            <div
+              className={cn(
+                'flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground',
+                !layer.hasContent && 'text-muted-foreground/40',
+              )}
             >
-              <ArrowUp />
-            </Button>
-            <Button
-              size='icon-xs'
-              variant='ghost'
-              className='size-5 opacity-0 transition-opacity group-hover:opacity-100'
-              disabled={index <= 0}
-              aria-label={t('native.layers.down', { defaultValue: 'Move layer down' })}
-              onClick={() =>
-                koharuClient.fire({
-                  type: 'move_element',
-                  page: page.id,
-                  element: element.id,
-                  index: index - 1,
-                })
-              }
+              {Icon === 'RAW' ? (
+                <span className='text-[8px] font-bold'>RAW</span>
+              ) : (
+                <Icon className='size-3.5' />
+              )}
+            </div>
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-xs',
+                active ? 'text-foreground' : 'text-muted-foreground',
+              )}
             >
-              <ArrowDown />
-            </Button>
+              {layer.label}
+            </span>
+            <span
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                layer.hasContent ? 'bg-rose-500' : 'bg-muted-foreground/20',
+              )}
+            />
           </div>
         )
       })}
@@ -170,24 +215,25 @@ function TranslationEditor({ element }: { element: Element }) {
     return () => window.clearTimeout(timer)
   }, [commit, draft, page, value])
   return (
-    <div className='overflow-hidden rounded-md bg-card/90 text-xs ring-1 ring-border'>
-      <div className='border-b border-border px-2 py-1.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase'>
-        {t('native.inspector.source', { defaultValue: 'Source text' })}
+    <div className='space-y-1.5 text-xs'>
+      <div className='text-[10px] font-medium tracking-wide text-muted-foreground uppercase'>
+        {t('textBlocks.ocrLabel')}
       </div>
-      <div className='px-2 pt-2 text-xs whitespace-pre-wrap text-muted-foreground'>
+      <div className='rounded border border-border/60 bg-muted/30 px-1.5 py-1 text-xs whitespace-pre-wrap text-muted-foreground'>
         {text?.source?.text || '—'}
       </div>
-      <div className='space-y-1.5 p-2'>
+      <div className='space-y-1'>
         <Label
           htmlFor={`translation-${element.id}`}
           className='text-[10px] text-muted-foreground uppercase'
         >
-          {t('native.inspector.translation', { defaultValue: 'Translation' })}
+          {t('textBlocks.translationLabel')}
         </Label>
         <Textarea
           id={`translation-${element.id}`}
           value={draft}
-          rows={4}
+          rows={2}
+          data-testid={`textblock-translation-${element.id}`}
           className='min-h-0 resize-none px-1.5 py-1 text-xs'
           onChange={(event) => setDraft(event.currentTarget.value)}
           onBlur={commit}
@@ -198,22 +244,124 @@ function TranslationEditor({ element }: { element: Element }) {
 }
 
 function TextContent() {
+  const { t } = useTranslation()
   const page = useEditorStore((state) => state.page)
   const selected = useEditorStore((state) => state.selectedElements)
-  const texts =
-    page?.elements.filter((element) => selected.includes(element.id) && isTextElement(element)) ??
-    []
-  if (!texts.length) return <EmptySelection />
+  const select = useEditorStore((state) => state.selectElements)
+  const texts = page?.elements.filter(isTextElement) ?? []
+  if (!page) return null
+  if (!texts.length)
+    return (
+      <p className='m-2 rounded-md border border-dashed border-border p-2 text-xs text-muted-foreground'>
+        {t('textBlocks.none')}
+      </p>
+    )
+  const selectedIndex = texts.findIndex((element) => selected.includes(element.id))
   return (
-    <div className='space-y-1.5 p-2'>
-      {texts.map((element) => (
-        <TranslationEditor key={element.id} element={element} />
-      ))}
+    <div className='p-2'>
+      <Accordion
+        type='single'
+        collapsible
+        value={selectedIndex >= 0 ? String(selectedIndex) : ''}
+        onValueChange={(value) => {
+          if (!value) {
+            select([])
+            return
+          }
+          const element = texts[Number(value)]
+          if (element) select([element.id])
+        }}
+        className='flex flex-col gap-1'
+        data-testid='textblocks-accordion'
+      >
+        {texts.map((element, index) => {
+          const text = element.kind.Text
+          const isSelected = selected.includes(element.id)
+          const source = text.source?.text.trim() ?? ''
+          const translation = text.translation?.trim() ?? ''
+          return (
+            <AccordionItem
+              key={element.id}
+              value={String(index)}
+              data-testid={`textblock-card-${index}`}
+              data-selected={isSelected}
+              className='overflow-hidden rounded-md bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
+            >
+              <AccordionTrigger
+                data-testid={`textblock-trigger-${index}`}
+                onClick={(event) => {
+                  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+                    event.preventDefault()
+                    select(
+                      isSelected
+                        ? selected.filter((id) => id !== element.id)
+                        : [...selected, element.id],
+                    )
+                  }
+                }}
+                className='flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline data-[state=open]:bg-accent [&>svg]:hidden'
+              >
+                <span
+                  className={cn(
+                    'min-w-6 shrink-0 rounded-md px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums',
+                    isSelected ? 'bg-primary' : 'bg-muted-foreground/60',
+                  )}
+                >
+                  {index + 1}
+                </span>
+                <div className='flex min-w-0 flex-1 items-center gap-1'>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase',
+                      source ? 'bg-rose-400/70 text-white' : 'bg-muted text-muted-foreground/50',
+                    )}
+                  >
+                    {t('textBlocks.ocrBadge')}
+                  </span>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-sm px-1 py-0.5 text-[9px] font-medium uppercase',
+                      translation
+                        ? 'bg-rose-400/70 text-white'
+                        : 'bg-muted text-muted-foreground/50',
+                    )}
+                  >
+                    {t('textBlocks.translationBadge')}
+                  </span>
+                  <span className='line-clamp-1 min-w-0 flex-1 text-xs text-muted-foreground'>
+                    {translation || source || t('native.layers.text', { defaultValue: 'Text' })}
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className='px-2 pt-1.5 pb-2 shadow-[inset_0_1px_0_0_var(--color-border)]'>
+                <div className='mb-1 flex justify-end'>
+                  <Button
+                    size='icon-xs'
+                    variant='ghost'
+                    className='size-5 text-rose-600 hover:text-rose-600'
+                    aria-label={t('workspace.deleteBlock')}
+                    onClick={() =>
+                      koharuClient.fire({
+                        type: 'delete_elements',
+                        page: page.id,
+                        elements: [element.id],
+                      })
+                    }
+                  >
+                    <Trash2 className='size-3' />
+                  </Button>
+                </div>
+                <TranslationEditor element={element} />
+              </AccordionContent>
+            </AccordionItem>
+          )
+        })}
+      </Accordion>
     </div>
   )
 }
 
-function Inspector() {
+export function Inspector() {
   const { t } = useTranslation()
   const page = useEditorStore((state) => state.page)
   const selected = useEditorStore((state) => state.selectedElements)
@@ -697,24 +845,21 @@ function InsetEditor({
 export function Panels() {
   const { t } = useTranslation()
   const page = useEditorStore((state) => state.page)
-  const selected = useEditorStore((state) => state.selectedElements)
-  const selectedTextCount =
-    page?.elements.filter((element) => selected.includes(element.id) && isTextElement(element))
-      .length ?? 0
+  const textCount = page?.elements.filter(isTextElement).length ?? 0
   return (
-    <aside className='flex h-full min-h-0 w-full flex-col border-l bg-[var(--workspace-panel)]'>
+    <aside className='flex h-full min-h-0 w-full flex-col border-l bg-muted/50'>
       <Tabs defaultValue='layers' className='h-60 shrink-0 gap-0 border-b border-border'>
         <TabsList className='m-2 mb-0 grid w-[calc(100%-1rem)] grid-cols-2 bg-muted/70'>
           <TabsTrigger value='layers' className='gap-1'>
             <LayersIcon className='size-3.5' />
             <span className='text-xs font-semibold tracking-wide uppercase'>
-              {t('native.panels.layers', { defaultValue: 'Layers' })}
+              {t('layers.title')}
             </span>
           </TabsTrigger>
-          <TabsTrigger value='inspect' className='gap-1'>
+          <TabsTrigger value='render' className='gap-1'>
             <SlidersHorizontalIcon className='size-3.5' />
             <span className='text-xs font-semibold tracking-wide uppercase'>
-              {t('native.panels.inspect', { defaultValue: 'Inspect' })}
+              {t('panels.render')}
             </span>
           </TabsTrigger>
         </TabsList>
@@ -727,22 +872,22 @@ export function Panels() {
           </ScrollArea>
         </TabsContent>
         <TabsContent
-          value='inspect'
+          value='render'
           className='min-h-0 flex-1 px-2 pb-2 data-[state=inactive]:hidden'
         >
           <ScrollArea className='h-full' viewportClassName='pr-1 [&>div]:!block'>
-            <Inspector />
+            <div className='pt-1'>
+              <RenderControlsPanel />
+            </div>
           </ScrollArea>
         </TabsContent>
       </Tabs>
 
       <div className='flex min-h-0 flex-1 flex-col'>
         <div className='flex items-center justify-between border-b border-border px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase'>
-          <span className='flex items-center gap-1'>
-            <TypeIcon className='size-3.5' />
-            {t('native.panels.text', { defaultValue: 'Text' })}
+          <span data-testid='textblocks-count' data-count={textCount} className='truncate'>
+            {t('textBlocks.title', { count: textCount })}
           </span>
-          <span className='font-mono text-[10px]'>{selectedTextCount}</span>
         </div>
         <ScrollArea className='min-h-0 flex-1' viewportClassName='pb-1'>
           <TextContent />

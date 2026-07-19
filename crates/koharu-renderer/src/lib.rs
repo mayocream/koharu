@@ -19,4 +19,4 @@ pub use segment::{
     LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment, hyphenation_lang_from_tag,
 };
 pub use shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
-pub use types::{FontFaceInfo, FontSource, TextAlign};
+pub use types::{FontFaceInfo, FontFaceStyle, FontSource, TextAlign};
