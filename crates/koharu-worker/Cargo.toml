@@ -2,7 +2,7 @@
 name = "koharu-worker"
 version.workspace = true
 edition.workspace = true
-description = "Isolated model worker process for Koharu."
+description = "Supervised subprocess RPC and shared-memory transport for Koharu."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
@@ -12,10 +12,10 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-koharu-config = { workspace = true }
-koharu-pipeline = { workspace = true }
-koharu-runtime = { workspace = true }
-koharu-scene = { workspace = true }
+async-trait = { workspace = true }
+memmap2 = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }

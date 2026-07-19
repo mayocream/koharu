@@ -55,28 +55,18 @@ O Koharu suporta modelos GGUF locais através do [llama.cpp](https://github.com/
 
 Na prática, os modelos locais geralmente são transformers decoder-only quantizados. GGUF é o formato do modelo; `llama.cpp` é o runtime de inferência.
 
-### Modelos locais internos focados em tradução para saída em inglês
-
-- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): uma opção menor multilíngue do tipo instruct para sistemas com pouca memória ou iteração mais rápida
-- [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) e [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): escolhas maiores orientadas para tradução quando você quer mais folga
-
-### Modelos locais internos focados em tradução para saída em chinês
-
-- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): uma escolha balanceada entre qualidade e velocidade em GPUs da classe de 8 GB
-- [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): uma opção mais leve para configurações de médio porte ou com uso intenso de CPU
-
-### Modelo local interno focado em tradução para cobertura de idiomas mais ampla
-
-- [hunyuan-mt-7b](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): uma opção multi-idioma com requisitos moderados de hardware
-
 ### Outras famílias de modelos locais internos
 
 O seletor local também inclui famílias de propósito geral que não são específicas para tradução:
 
-- Gemma 4 instruct: `gemma4-e2b-it`, `gemma4-e4b-it`, `gemma4-26b-a4b-it`, `gemma4-31b-it`
-- Gemma 4 uncensored: `gemma4-e2b-uncensored`, `gemma4-e4b-uncensored`
+O tradutor local padrão é `gemma4-12b-it`.
+
+- LFM2.5 Instruct: `lfm2.5-1.2b-instruct`
+- Ministral 3 Instruct: `ministral-3-8b-instruct`
+- Gemma 4 instruct (GGUFs Dynamic derivados de QAT da Unsloth): `gemma4-e2b-it`, `gemma4-e4b-it`, `gemma4-12b-it`, `gemma4-26b-a4b-it`, `gemma4-31b-it`
+- Gemma 4 sem censura (HauhauCS QAT quando disponível): `gemma4-e2b-uncensored`, `gemma4-e4b-uncensored`, `gemma4-12b-uncensored`, `gemma4-26b-a4b-uncensored`, `gemma4-31b-uncensored`
 - Qwen 3.5: `qwen3.5-0.8b`, `qwen3.5-2b`, `qwen3.5-4b`, `qwen3.5-9b`, `qwen3.5-27b`, `qwen3.5-35b-a3b`
-- Qwen 3.5 uncensored: `qwen3.5-2b-uncensored`, `qwen3.5-4b-uncensored`, `qwen3.5-9b-uncensored`, `qwen3.5-27b-uncensored`, `qwen3.5-35b-a3b-uncensored`
+- Qwen 3.5 uncensored: `qwen3.5-2b-uncensored`, `qwen3.5-4b-uncensored`, `qwen3.5-9b-uncensored`
 - Qwen 3.6: `qwen3.6-27b`, `qwen3.6-35b-a3b`
 - Qwen 3.6 uncensored: `qwen3.6-27b-uncensored`, `qwen3.6-35b-a3b-uncensored`
 
@@ -86,7 +76,7 @@ O Koharu também pode traduzir através de APIs remotas ou auto-hospedadas em ve
 
 As famílias de provedores suportados são:
 
-- baseados em LLM: `OpenAI`, `Gemini`, `Claude`, `DeepSeek`, mais qualquer endpoint `OpenAI-compatible` que exponha `/v1/models` e `/v1/chat/completions` (LM Studio, OpenRouter, vLLM, etc.)
+- baseados em LLM: `OpenAI`, `Gemini`, `Claude`, `DeepSeek`, `OpenRouter`, `LM Studio`, mais qualquer endpoint `OpenAI-compatible` que exponha `/v1/models` e `/v1/chat/completions` (vLLM, llama-server, etc.)
 - tradução automática: `DeepL`, `Google Cloud Translation`, `Caiyun`
 
 Provedores de tradução automática são serviços de tradução puros, não modelos de chat. Eles recebem o texto fonte e um idioma de destino e devolvem uma tradução; não há system prompt nem seletor de modelo.
@@ -95,11 +85,15 @@ Provedores de tradução automática são serviços de tradução puros, não mo
 
 O catálogo interno dos provedores baseados em LLM inclui:
 
-- OpenAI: GPT-5.5, GPT-5.4, GPT-5.x, GPT-4.1, série o, GPT-4o e modelos GPT chat legados
-- Gemini: modelos de saída de texto Gemini 3.1, Gemini 3, Gemini 2.5 e Gemini 2.0, além do Gemma 4 hospedado pela Gemini API
-- Claude: modelos Claude Opus, Sonnet e Haiku 4.x atuais, além de snapshots Claude 4 obsoletos que continuam disponíveis até as datas de desativação upstream
-- DeepSeek: DeepSeek V4 Flash, DeepSeek V4 Pro e os aliases de compatibilidade `deepseek-chat` / `deepseek-reasoner`
+- OpenAI: GPT-5.6 Sol, Terra e Luna; GPT-5.5, GPT-5.4, modelos GPT-5 anteriores, GPT-4.1, o3 e GPT-4o mini
+- Gemini: modelos de saída de texto Gemini 3.5 Flash, Gemini 3.1 Pro e Flash-Lite, Gemini 3 Flash e Gemini 2.5
+- Claude: Claude Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5 e alguns modelos Claude 4 anteriores
+- DeepSeek: DeepSeek V4 Flash e DeepSeek V4 Pro
+- OpenRouter: os modelos de saída de texto são descobertos dinamicamente no OpenRouter
+- LM Studio: os LLMs locais são descobertos pela API REST v1 nativa
 - APIs compatíveis com OpenAI: os modelos são descobertos dinamicamente a partir do endpoint configurado
+
+As configurações dos provedores de chat também incluem temperatura, máximo de tokens de saída e uma opção de raciocínio compatível com o modelo, desativada por padrão.
 
 ### Provedores de tradução automática
 

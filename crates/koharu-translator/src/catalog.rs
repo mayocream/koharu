@@ -66,6 +66,8 @@ macro_rules! define_local_models {
     };
 }
 
+// Use each publisher's documented default or explicitly recommended GGUF.
+// Prefer QAT-derived artifacts when the publisher provides them.
 define_local_models! {
     Lfm2_5_1_2bInstruct => {
         id: "lfm2.5-1.2b-instruct",
@@ -83,104 +85,52 @@ define_local_models! {
             Language::Spanish,
         ])
     };
-    SakuraGalTransl7Bv3_7 => {
-        id: "sakura-galtransl-7b-v3.7",
-        repository: "SakuraLLM/Sakura-GalTransl-7B-v3.7",
-        filename: "Sakura-Galtransl-7B-v3.7-IQ4_XS.gguf",
-        languages: SupportedLanguages::Limited(&[Language::ChineseSimplified])
-    };
-    Sakura1_5bQwen2_5v1_0 => {
-        id: "sakura-1.5b-qwen2.5-v1.0",
-        repository: "shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX",
-        filename: "sakura-1.5b-qwen2.5-v1.0-Q5KS.gguf",
-        languages: SupportedLanguages::Limited(&[Language::ChineseSimplified])
-    };
-    HunyuanMT7B => {
-        id: "hunyuan-mt-7b",
-        repository: "Mungert/Hunyuan-MT-7B-GGUF",
-        filename: "Hunyuan-MT-7B-q4_k_m.gguf",
+    Ministral3_8bInstruct => {
+        id: "ministral-3-8b-instruct",
+        repository: "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+        filename: "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf",
         languages: SupportedLanguages::Limited(&[
-            Language::ChineseSimplified,
             Language::English,
-            Language::French,
-            Language::Portuguese,
-            Language::BrazilianPortuguese,
-            Language::Spanish,
-            Language::Japanese,
-            Language::Turkish,
-            Language::Russian,
             Language::Arabic,
-            Language::Korean,
-            Language::Thai,
-            Language::Italian,
+            Language::ChineseSimplified,
+            Language::French,
             Language::German,
-            Language::Vietnamese,
-            Language::Malay,
-            Language::Indonesian,
-            Language::Filipino,
-            Language::Hindi,
-            Language::ChineseTraditional,
-            Language::Polish,
-            Language::Czech,
+            Language::Italian,
+            Language::Japanese,
+            Language::Korean,
+            Language::Portuguese,
+            Language::Spanish,
             Language::Dutch,
-            Language::Khmer,
-            Language::Burmese,
-            Language::Persian,
-            Language::Gujarati,
-            Language::Urdu,
-            Language::Telugu,
-            Language::Marathi,
-            Language::Hebrew,
-            Language::Bengali,
-            Language::Tamil,
-            Language::Ukrainian,
-            Language::Tibetan,
-            Language::Kazakh,
-            Language::Mongolian,
-            Language::Uyghur,
-            Language::Cantonese,
         ])
-    };
-    Sugoi14bUltra => {
-        id: "sugoi-14b-ultra",
-        repository: "sugoitoolkit/Sugoi-14B-Ultra-GGUF",
-        filename: "Sugoi-14B-Ultra-Q4_K_M.gguf",
-        languages: SupportedLanguages::Limited(&[Language::English])
-    };
-    Sugoi32bUltra => {
-        id: "sugoi-32b-ultra",
-        repository: "sugoitoolkit/Sugoi-32B-Ultra-GGUF",
-        filename: "Sugoi-32B-Ultra-Q4_K_M.gguf",
-        languages: SupportedLanguages::Limited(&[Language::English])
     };
     Gemma4E2bIt => {
         id: "gemma4-e2b-it",
-        repository: "unsloth/gemma-4-E2B-it-GGUF",
-        filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+        repository: "unsloth/gemma-4-E2B-it-qat-GGUF",
+        filename: "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4E4bIt => {
         id: "gemma4-e4b-it",
-        repository: "unsloth/gemma-4-E4B-it-GGUF",
-        filename: "gemma-4-E4B-it-Q4_K_M.gguf",
+        repository: "unsloth/gemma-4-E4B-it-qat-GGUF",
+        filename: "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_12bIt => {
         id: "gemma4-12b-it",
-        repository: "unsloth/gemma-4-12b-it-GGUF",
-        filename: "gemma-4-12b-it-Q4_K_M.gguf",
+        repository: "unsloth/gemma-4-12B-it-qat-GGUF",
+        filename: "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_26bA4bIt => {
         id: "gemma4-26b-a4b-it",
-        repository: "unsloth/gemma-4-26B-A4B-it-GGUF",
-        filename: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+        repository: "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+        filename: "gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_31bIt => {
         id: "gemma4-31b-it",
-        repository: "unsloth/gemma-4-31B-it-GGUF",
-        filename: "gemma-4-31B-it-Q4_K_M.gguf",
+        repository: "unsloth/gemma-4-31B-it-qat-GGUF",
+        filename: "gemma-4-31B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4E2bUncensored => {
@@ -195,52 +145,70 @@ define_local_models! {
         filename: "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
+    Gemma4_12bUncensored => {
+        id: "gemma4-12b-uncensored",
+        repository: "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+        filename: "Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
+        languages: SupportedLanguages::All
+    };
+    Gemma4_26bA4bUncensored => {
+        id: "gemma4-26b-a4b-uncensored",
+        repository: "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        filename: "Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
+        languages: SupportedLanguages::All
+    };
+    Gemma4_31bUncensored => {
+        id: "gemma4-31b-uncensored",
+        repository: "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        filename: "Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
+        languages: SupportedLanguages::All
+    };
     Qwen3_5_0_8b => {
         id: "qwen3.5-0.8b",
         repository: "unsloth/Qwen3.5-0.8B-GGUF",
-        filename: "Qwen3.5-0.8B-Q4_K_M.gguf",
+        filename: "Qwen3.5-0.8B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_2b => {
         id: "qwen3.5-2b",
         repository: "unsloth/Qwen3.5-2B-GGUF",
-        filename: "Qwen3.5-2B-Q4_K_M.gguf",
+        filename: "Qwen3.5-2B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_4b => {
         id: "qwen3.5-4b",
         repository: "unsloth/Qwen3.5-4B-GGUF",
-        filename: "Qwen3.5-4B-Q4_K_M.gguf",
+        filename: "Qwen3.5-4B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_9b => {
         id: "qwen3.5-9b",
         repository: "unsloth/Qwen3.5-9B-GGUF",
-        filename: "Qwen3.5-9B-Q4_K_M.gguf",
+        filename: "Qwen3.5-9B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_27b => {
         id: "qwen3.5-27b",
         repository: "unsloth/Qwen3.5-27B-GGUF",
-        filename: "Qwen3.5-27B-Q4_K_M.gguf",
+        filename: "Qwen3.5-27B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_35bA3b => {
         id: "qwen3.5-35b-a3b",
         repository: "unsloth/Qwen3.5-35B-A3B-GGUF",
-        filename: "Qwen3.5-35B-A3B-Q4_K_M.gguf",
+        filename: "Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_27b => {
         id: "qwen3.6-27b",
         repository: "unsloth/Qwen3.6-27B-GGUF",
-        filename: "Qwen3.6-27B-IQ4_XS.gguf",
+        filename: "Qwen3.6-27B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_35bA3b => {
         id: "qwen3.6-35b-a3b",
         repository: "unsloth/Qwen3.6-35B-A3B-GGUF",
-        filename: "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
+        filename: "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_2bUncensored => {
@@ -261,28 +229,16 @@ define_local_models! {
         filename: "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
-    Qwen3_5_27bUncensored => {
-        id: "qwen3.5-27b-uncensored",
-        repository: "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
-        filename: "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
-        languages: SupportedLanguages::All
-    };
-    Qwen3_5_35bA3bUncensored => {
-        id: "qwen3.5-35b-a3b-uncensored",
-        repository: "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
-        filename: "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
-        languages: SupportedLanguages::All
-    };
     Qwen3_6_27bUncensored => {
         id: "qwen3.6-27b-uncensored",
-        repository: "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Aggressive",
-        filename: "Qwen3.6-27B-Uncensored-HauhauCS-Aggressive-IQ4_XS.gguf",
+        repository: "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced",
+        filename: "Qwen3.6-27B-Uncensored-HauhauCS-Balanced-Q4_K_P.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_35bA3bUncensored => {
         id: "qwen3.6-35b-a3b-uncensored",
         repository: "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
-        filename: "Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-IQ4_XS.gguf",
+        filename: "Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf",
         languages: SupportedLanguages::All
     };
 }
@@ -310,6 +266,10 @@ impl LocalModel {
                 repeat_penalty: 1.05,
                 ..translation_generation_defaults()
             },
+            Ministral3_8bInstruct => GenerationOptions {
+                temperature: 0.05,
+                ..translation_generation_defaults()
+            },
             Gemma4E2bIt | Gemma4E4bIt | Gemma4_12bIt | Gemma4_26bA4bIt | Gemma4_31bIt
             | Gemma4E2bUncensored | Gemma4E4bUncensored => GenerationOptions {
                 temperature: 1.0,
@@ -318,25 +278,28 @@ impl LocalModel {
                 repeat_penalty: 1.0,
                 ..translation_generation_defaults()
             },
-            Qwen3_5_0_8b
-            | Qwen3_5_2b
-            | Qwen3_5_4b
-            | Qwen3_5_9b
-            | Qwen3_5_27b
-            | Qwen3_5_35bA3b
-            | Qwen3_5_2bUncensored
-            | Qwen3_5_4bUncensored
-            | Qwen3_5_9bUncensored
-            | Qwen3_5_27bUncensored
-            | Qwen3_5_35bA3bUncensored => GenerationOptions {
-                temperature: 1.0,
-                top_k: Some(20),
-                top_p: Some(1.0),
-                min_p: Some(0.0),
-                presence_penalty: 2.0,
-                repeat_penalty: 1.0,
-                ..translation_generation_defaults()
-            },
+            Gemma4_12bUncensored | Gemma4_26bA4bUncensored | Gemma4_31bUncensored => {
+                GenerationOptions {
+                    temperature: 0.6,
+                    top_k: Some(64),
+                    top_p: Some(0.9),
+                    min_p: Some(0.05),
+                    repeat_penalty: 1.1,
+                    ..translation_generation_defaults()
+                }
+            }
+            Qwen3_5_0_8b | Qwen3_5_2b | Qwen3_5_4b | Qwen3_5_9b | Qwen3_5_27b | Qwen3_5_35bA3b
+            | Qwen3_5_2bUncensored | Qwen3_5_4bUncensored | Qwen3_5_9bUncensored => {
+                GenerationOptions {
+                    temperature: 1.0,
+                    top_k: Some(20),
+                    top_p: Some(1.0),
+                    min_p: Some(0.0),
+                    presence_penalty: 2.0,
+                    repeat_penalty: 1.0,
+                    ..translation_generation_defaults()
+                }
+            }
             Qwen3_6_27b | Qwen3_6_35bA3b | Qwen3_6_27bUncensored | Qwen3_6_35bA3bUncensored => {
                 GenerationOptions {
                     temperature: 0.7,
@@ -348,15 +311,6 @@ impl LocalModel {
                     ..translation_generation_defaults()
                 }
             }
-            Sugoi14bUltra | Sugoi32bUltra => GenerationOptions {
-                temperature: 0.1,
-                top_k: Some(40),
-                top_p: Some(0.95),
-                min_p: Some(0.05),
-                repeat_penalty: 1.1,
-                ..translation_generation_defaults()
-            },
-            _ => translation_generation_defaults(),
         }
     }
 }
@@ -385,6 +339,10 @@ pub enum RemoteProviderKind {
     DeepSeek,
     #[strum(serialize = "openai-compatible")]
     OpenAiCompatible,
+    #[strum(serialize = "openrouter")]
+    OpenRouter,
+    #[strum(serialize = "lm-studio")]
+    LmStudio,
     #[strum(serialize = "deepl")]
     DeepL,
     #[strum(serialize = "google-cloud-translation")]
@@ -415,6 +373,8 @@ impl RemoteProviderKind {
             Self::Claude => "claude",
             Self::DeepSeek => "deepseek",
             Self::OpenAiCompatible => "openai-compatible",
+            Self::OpenRouter => "openrouter",
+            Self::LmStudio => "lm-studio",
             Self::DeepL => "deepl",
             Self::GoogleCloudTranslation => "google-cloud-translation",
             Self::Caiyun => "caiyun",
@@ -444,6 +404,22 @@ impl RemoteProviderKind {
             ),
             Self::OpenAiCompatible => (
                 "OpenAI-compatible",
+                false,
+                true,
+                SupportedLanguages::All,
+                true,
+                true,
+            ),
+            Self::OpenRouter => (
+                "OpenRouter",
+                true,
+                false,
+                SupportedLanguages::All,
+                true,
+                true,
+            ),
+            Self::LmStudio => (
+                "LM Studio",
                 false,
                 true,
                 SupportedLanguages::All,
@@ -523,17 +499,14 @@ macro_rules! remote_models {
 pub fn remote_models(provider: RemoteProviderKind) -> Option<&'static [RemoteModelDescriptor]> {
     match provider {
         RemoteProviderKind::OpenAi => Some(remote_models![
+            "gpt-5.6" => "GPT-5.6 (Sol)", "gpt-5.6-sol" => "GPT-5.6 Sol",
+            "gpt-5.6-terra" => "GPT-5.6 Terra", "gpt-5.6-luna" => "GPT-5.6 Luna",
             "gpt-5.5" => "GPT-5.5", "gpt-5.4" => "GPT-5.4",
             "gpt-5.4-mini" => "GPT-5.4 mini", "gpt-5.4-nano" => "GPT-5.4 nano",
             "gpt-5.2" => "GPT-5.2", "gpt-5.1" => "GPT-5.1", "gpt-5" => "GPT-5",
             "gpt-5-mini" => "GPT-5 mini", "gpt-5-nano" => "GPT-5 nano",
-            "gpt-5-chat-latest" => "GPT-5 Chat latest", "gpt-4.1" => "GPT-4.1",
-            "gpt-4.1-mini" => "GPT-4.1 mini", "gpt-4.1-nano" => "GPT-4.1 nano",
-            "o3" => "o3", "o4-mini" => "o4-mini", "o3-mini" => "o3-mini",
-            "o1" => "o1", "o1-mini" => "o1-mini", "o1-preview" => "o1 preview",
-            "gpt-4o" => "GPT-4o", "gpt-4o-mini" => "GPT-4o mini",
-            "gpt-4-turbo" => "GPT-4 Turbo", "gpt-4" => "GPT-4",
-            "gpt-3.5-turbo" => "GPT-3.5 Turbo",
+            "o3" => "o3", "gpt-4.1" => "GPT-4.1",
+            "gpt-4.1-mini" => "GPT-4.1 mini", "gpt-4o-mini" => "GPT-4o mini",
         ]),
         RemoteProviderKind::Gemini => Some(remote_models![
             "gemini-flash-lite-latest" => "Gemini Flash-Lite Latest",
@@ -546,31 +519,25 @@ pub fn remote_models(provider: RemoteProviderKind) -> Option<&'static [RemoteMod
             "gemini-3-flash-preview" => "Gemini 3 Flash Preview",
             "gemini-2.5-pro" => "Gemini 2.5 Pro", "gemini-2.5-flash" => "Gemini 2.5 Flash",
             "gemini-2.5-flash-lite" => "Gemini 2.5 Flash-Lite",
-            "gemini-2.0-flash" => "Gemini 2.0 Flash",
-            "gemini-2.0-flash-001" => "Gemini 2.0 Flash 001",
-            "gemini-2.0-flash-lite" => "Gemini 2.0 Flash-Lite",
-            "gemini-2.0-flash-lite-001" => "Gemini 2.0 Flash-Lite 001",
-            "gemma-4-31b-it" => "Gemma 4 31B", "gemma-4-26b-a4b-it" => "Gemma 4 26B",
         ]),
         RemoteProviderKind::Claude => Some(remote_models![
+            "claude-fable-5" => "Claude Fable 5",
+            "claude-opus-4-8" => "Claude Opus 4.8",
+            "claude-sonnet-5" => "Claude Sonnet 5",
+            "claude-haiku-4-5" => "Claude Haiku 4.5",
             "claude-opus-4-7" => "Claude Opus 4.7",
             "claude-sonnet-4-6" => "Claude Sonnet 4.6",
-            "claude-haiku-4-5" => "Claude Haiku 4.5",
             "claude-opus-4-6" => "Claude Opus 4.6",
             "claude-opus-4-5-20251101" => "Claude Opus 4.5",
-            "claude-opus-4-1-20250805" => "Claude Opus 4.1",
-            "claude-sonnet-4-5-20250929" => "Claude Sonnet 4.5",
             "claude-haiku-4-5-20251001" => "Claude Haiku 4.5 snapshot",
-            "claude-opus-4-20250514" => "Claude Opus 4 (deprecated)",
-            "claude-sonnet-4-20250514" => "Claude Sonnet 4 (deprecated)",
         ]),
         RemoteProviderKind::DeepSeek => Some(remote_models![
             "deepseek-v4-flash" => "DeepSeek V4 Flash",
             "deepseek-v4-pro" => "DeepSeek V4 Pro",
-            "deepseek-chat" => "DeepSeek Chat",
-            "deepseek-reasoner" => "DeepSeek Reasoner",
         ]),
-        RemoteProviderKind::OpenAiCompatible => None,
+        RemoteProviderKind::OpenAiCompatible
+        | RemoteProviderKind::OpenRouter
+        | RemoteProviderKind::LmStudio => None,
         RemoteProviderKind::DeepL
         | RemoteProviderKind::GoogleCloudTranslation
         | RemoteProviderKind::Caiyun => Some(remote_models!["mt" => "Machine Translation"]),
@@ -583,7 +550,7 @@ mod tests {
 
     #[test]
     fn local_catalog_has_unique_complete_entries() {
-        assert_eq!(local_models().len(), 29);
+        assert_eq!(local_models().len(), 25);
         for (index, model) in local_models().iter().enumerate() {
             assert!(!model.id.is_empty());
             assert!(!model.repository.is_empty());
@@ -598,13 +565,33 @@ mod tests {
     }
 
     #[test]
+    fn ministral_8b_uses_official_gguf_and_production_sampling() {
+        let descriptor = LocalModel::Ministral3_8bInstruct.descriptor();
+        assert_eq!(
+            descriptor.repository,
+            "mistralai/Ministral-3-8B-Instruct-2512-GGUF"
+        );
+        assert_eq!(
+            descriptor.filename,
+            "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf"
+        );
+        assert!(descriptor.target_languages.contains(Language::Japanese));
+        assert!(!descriptor.target_languages.contains(Language::Vietnamese));
+
+        let options = descriptor.model.generation_options();
+        assert!(options.temperature < 0.1);
+    }
+
+    #[test]
     fn catalogs_cover_main_branch_provider_families() {
-        assert_eq!(remote_providers().len(), 8);
+        assert_eq!(remote_providers().len(), 10);
         assert!(
             RemoteProviderKind::OpenAiCompatible
                 .descriptor()
                 .discovers_models
         );
+        assert!(RemoteProviderKind::OpenRouter.descriptor().discovers_models);
+        assert!(RemoteProviderKind::LmStudio.descriptor().discovers_models);
         assert!(
             RemoteProviderKind::Caiyun
                 .descriptor()
@@ -624,7 +611,7 @@ mod tests {
             remote_models(RemoteProviderKind::OpenAi)
                 .unwrap()
                 .iter()
-                .any(|model| model.id == "gpt-5.5")
+                .any(|model| model.id == "gpt-5.6-sol")
         );
         assert!(
             remote_models(RemoteProviderKind::Gemini)
@@ -636,7 +623,7 @@ mod tests {
             remote_models(RemoteProviderKind::Claude)
                 .unwrap()
                 .iter()
-                .any(|model| model.id == "claude-opus-4-7")
+                .any(|model| model.id == "claude-opus-4-8")
         );
         assert!(
             remote_models(RemoteProviderKind::DeepSeek)
@@ -644,7 +631,21 @@ mod tests {
                 .iter()
                 .any(|model| model.id == "deepseek-v4-pro")
         );
+        assert!(
+            remote_models(RemoteProviderKind::DeepSeek)
+                .unwrap()
+                .iter()
+                .all(|model| !matches!(model.id, "deepseek-chat" | "deepseek-reasoner"))
+        );
+        assert!(
+            remote_models(RemoteProviderKind::Gemini)
+                .unwrap()
+                .iter()
+                .all(|model| !model.id.starts_with("gemini-2.0"))
+        );
         assert!(remote_models(RemoteProviderKind::OpenAiCompatible).is_none());
+        assert!(remote_models(RemoteProviderKind::OpenRouter).is_none());
+        assert!(remote_models(RemoteProviderKind::LmStudio).is_none());
     }
 
     #[test]
@@ -653,5 +654,114 @@ mod tests {
         assert_eq!(options.temperature, 1.0);
         assert_eq!(options.top_k, Some(64));
         assert_eq!(options.top_p, Some(0.95));
+    }
+
+    #[test]
+    fn gemma_instruct_models_use_recommended_dynamic_qat_artifacts() {
+        let expected = [
+            (
+                LocalModel::Gemma4E2bIt,
+                "unsloth/gemma-4-E2B-it-qat-GGUF",
+                "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
+            ),
+            (
+                LocalModel::Gemma4E4bIt,
+                "unsloth/gemma-4-E4B-it-qat-GGUF",
+                "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
+            ),
+            (
+                LocalModel::Gemma4_12bIt,
+                "unsloth/gemma-4-12B-it-qat-GGUF",
+                "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
+            ),
+            (
+                LocalModel::Gemma4_26bA4bIt,
+                "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+                "gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+            ),
+            (
+                LocalModel::Gemma4_31bIt,
+                "unsloth/gemma-4-31B-it-qat-GGUF",
+                "gemma-4-31B-it-qat-UD-Q4_K_XL.gguf",
+            ),
+        ];
+
+        for (model, repository, filename) in expected {
+            let descriptor = model.descriptor();
+            assert_eq!(descriptor.repository, repository);
+            assert_eq!(descriptor.filename, filename);
+        }
+    }
+
+    #[test]
+    fn hauhau_gemma_models_use_recommended_qat_artifacts() {
+        let expected = [
+            (
+                LocalModel::Gemma4_12bUncensored,
+                "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+                "Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
+            ),
+            (
+                LocalModel::Gemma4_26bA4bUncensored,
+                "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+                "Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
+            ),
+            (
+                LocalModel::Gemma4_31bUncensored,
+                "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+                "Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
+            ),
+        ];
+
+        for (model, repository, filename) in expected {
+            let descriptor = model.descriptor();
+            assert_eq!(descriptor.repository, repository);
+            assert_eq!(descriptor.filename, filename);
+
+            let options = model.generation_options();
+            assert_eq!(options.temperature, 0.6);
+            assert_eq!(options.top_k, Some(64));
+            assert_eq!(options.top_p, Some(0.9));
+            assert_eq!(options.min_p, Some(0.05));
+            assert_eq!(options.repeat_penalty, 1.1);
+        }
+    }
+
+    #[test]
+    fn unsloth_qwen_models_use_recommended_dynamic_quant() {
+        let models = [
+            LocalModel::Qwen3_5_0_8b,
+            LocalModel::Qwen3_5_2b,
+            LocalModel::Qwen3_5_4b,
+            LocalModel::Qwen3_5_9b,
+            LocalModel::Qwen3_5_27b,
+            LocalModel::Qwen3_5_35bA3b,
+            LocalModel::Qwen3_6_27b,
+            LocalModel::Qwen3_6_35bA3b,
+        ];
+
+        for model in models {
+            let descriptor = model.descriptor();
+            assert!(descriptor.repository.starts_with("unsloth/Qwen3."));
+            assert!(descriptor.filename.ends_with("-UD-Q4_K_XL.gguf"));
+        }
+    }
+
+    #[test]
+    fn qwen_uncensored_models_use_publisher_recommendations() {
+        let qwen_27b = LocalModel::Qwen3_6_27bUncensored.descriptor();
+        assert_eq!(
+            qwen_27b.repository,
+            "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced"
+        );
+        assert_eq!(
+            qwen_27b.filename,
+            "Qwen3.6-27B-Uncensored-HauhauCS-Balanced-Q4_K_P.gguf"
+        );
+
+        assert_eq!(
+            LocalModel::Qwen3_6_35bA3bUncensored.descriptor().filename,
+            "Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf"
+        );
     }
 }

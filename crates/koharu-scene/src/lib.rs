@@ -15,14 +15,14 @@ mod session;
 mod storage;
 mod style;
 
-pub use command::{Command, Commands, ElementChange};
+pub use command::{Command, CommandParts, Commands, ElementChange};
 pub use edit::{Edit, ImageEdit, PageEdit, TextEdit};
 pub use error::{Error, Result};
 pub use geometry::{Frame, Quad, Size};
 pub use id::{BlobId, ElementId, PageId, ProjectId, Revision};
 pub use model::{
-    Element, ElementKind, ImageElement, Page, PageAsset, PageAssets, Project, SourceText,
-    TextBlock, TextDirection,
+    Element, ElementKind, ImageElement, ModelPrediction, Page, PageAsset, PageAssets, Project,
+    Region, RegionKind, SourceText, TextAnalysis, TextBlock, TextDirection, TextRole,
 };
 pub use session::{ChangeSet, GcReport, Options, Session};
 pub use style::{

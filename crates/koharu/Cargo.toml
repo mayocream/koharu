@@ -30,8 +30,8 @@ koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
+koharu-secrets = { workspace = true }
 koharu-translator = { workspace = true }
-koharu-worker = { workspace = true }
 rfd = { workspace = true }
 rayon = { workspace = true }
 rust-embed = { workspace = true }

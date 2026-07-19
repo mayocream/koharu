@@ -21,5 +21,5 @@ pub use image::{
 };
 pub use responses::{CodexInputContent, CodexInputItem};
 pub use task::CodexTaskRequest;
-pub use token_store::{DEFAULT_SECRET_SERVICE, DEFAULT_TOKEN_SECRET_KEY, TokenStore};
+pub use token_store::{DEFAULT_TOKEN_SECRET_KEY, TokenStore};
 pub use tokens::CodexTokens;

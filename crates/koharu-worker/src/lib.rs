@@ -1,204 +1,84 @@
+//! Small subprocess RPC transport with file-backed shared memory.
+
+mod shared;
+
 use std::{
-    collections::HashMap,
-    io::{Read, Write},
-    path::PathBuf,
+    ffi::OsStr,
+    future::Future,
+    marker::PhantomData,
     process::Stdio,
-    sync::{Arc, Mutex},
-    time::Duration,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Instant,
 };
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use koharu_config::Config;
-use koharu_pipeline::{
-    CancellationToken, InpaintingModel, OcrModel, Pipeline, PipelineConfig, ProgressSink,
-    RunReport, Scope, Stage, TranslationModel,
-};
-use koharu_scene::Revision;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     process::Command,
+    sync::mpsc,
 };
 
-const WORKER_ARGUMENT: &str = "--worker";
+pub use shared::{ArenaDescriptor, ArenaFile, MappedArena, SharedBytes, SharedSlice};
 
 const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Request {
-    pub path: PathBuf,
-    pub config: PipelineConfig,
-    pub stage: Stage,
-    pub scope: Scope,
-    pub target_language: Option<String>,
-    pub instructions: Option<String>,
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CallMetrics {
+    pub generation: u64,
+    pub request_bytes: usize,
+    pub response_bytes: usize,
+    pub round_trip: std::time::Duration,
 }
 
-impl Request {
-    #[must_use]
-    pub fn new(path: PathBuf, config: PipelineConfig, stage: Stage, scope: Scope) -> Self {
-        Self {
-            path,
-            config,
-            stage,
-            scope,
-            target_language: None,
-            instructions: None,
-        }
-    }
-
-    #[must_use]
-    pub fn target_language(mut self, target_language: Option<String>) -> Self {
-        self.target_language = target_language;
-        self
-    }
-
-    #[must_use]
-    pub fn instructions(mut self, instructions: Option<String>) -> Self {
-        self.instructions = instructions;
-        self
-    }
-
-    fn runtime(&self) -> RuntimeKind {
-        RuntimeKind::for_stage(&self.config, self.stage)
-    }
+#[derive(Debug)]
+pub struct CallResult<T> {
+    pub value: T,
+    pub metrics: CallMetrics,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum RuntimeKind {
-    Torch,
-    Llama,
-    Diffusion,
-}
-
-impl RuntimeKind {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Torch => "torch",
-            Self::Llama => "llama",
-            Self::Diffusion => "diffusion",
-        }
-    }
-
-    fn parse(value: &str) -> Result<Self> {
-        match value {
-            "torch" => Ok(Self::Torch),
-            "llama" => Ok(Self::Llama),
-            "diffusion" => Ok(Self::Diffusion),
-            _ => bail!("unknown model worker runtime '{value}'"),
-        }
-    }
-
-    fn for_stage(config: &PipelineConfig, stage: Stage) -> Self {
-        match stage {
-            Stage::Ocr if matches!(config.ocr, OcrModel::PaddleOcrVl1_6(_)) => Self::Llama,
-            Stage::Translation if matches!(config.translation, TranslationModel::Local(_)) => {
-                Self::Llama
-            }
-            Stage::Inpainting if matches!(config.inpainting, InpaintingModel::Flux2Klein(_)) => {
-                Self::Diffusion
-            }
-            _ => Self::Torch,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Event {
-    Progress {
-        stage: Stage,
-        model: String,
-        completed: usize,
-        total: usize,
-    },
-    Download(koharu_runtime::download::Event),
-    Finished(Report),
-    Failed(Failure),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Report {
-    pub revisions: Vec<Revision>,
-    pub processors: usize,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Failure {
-    pub revisions: Vec<Revision>,
-    pub error: String,
-}
-
-#[derive(Clone, Debug)]
-pub enum Outcome {
-    Finished(Report),
-    Failed(Failure),
+#[derive(Debug, Error)]
+pub enum CallError {
+    #[error("worker request was cancelled")]
     Cancelled,
+    #[error("worker returned an error: {0}")]
+    Remote(String),
+    #[error("worker process stopped: {0}")]
+    Crashed(String),
 }
 
-#[derive(Default)]
-pub struct Pool {
-    config: Option<PipelineConfig>,
-    clients: HashMap<RuntimeKind, Client>,
+#[derive(Serialize, Deserialize)]
+enum WorkerMessage<E, T> {
+    Event(E),
+    Finished(T),
+    Failed(String),
 }
 
-impl Pool {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub async fn execute<F>(
-        &mut self,
-        request: &Request,
-        cancellation: &CancellationToken,
-        on_event: F,
-    ) -> Result<Outcome>
-    where
-        F: FnMut(Event),
-    {
-        if self.config.as_ref() != Some(&request.config) {
-            self.shutdown().await;
-            self.config = Some(request.config.clone());
-        }
-        let runtime = request.runtime();
-        if !self.clients.contains_key(&runtime) {
-            self.clients.insert(runtime, Client::spawn(runtime).await?);
-        }
-
-        let result = self
-            .clients
-            .get_mut(&runtime)
-            .expect("worker client was inserted above")
-            .execute(request, cancellation, on_event)
-            .await;
-        if result.is_err() || matches!(&result, Ok(Outcome::Cancelled)) {
-            self.clients.remove(&runtime);
-        }
-        result
-    }
-
-    pub async fn shutdown(&mut self) {
-        let clients = std::mem::take(&mut self.clients);
-        for client in clients.into_values() {
-            client.stop().await;
-        }
-    }
-}
-
-struct Client {
+pub struct Client {
+    generation: u64,
     child: tokio::process::Child,
     stdin: tokio::process::ChildStdin,
     stdout: tokio::process::ChildStdout,
 }
 
 impl Client {
-    async fn spawn(runtime: RuntimeKind) -> Result<Self> {
+    pub async fn spawn(argument: impl AsRef<OsStr>) -> Result<Self> {
         let executable =
             std::env::current_exe().context("failed to locate the Koharu executable")?;
+        Self::spawn_executable(executable, argument).await
+    }
+
+    pub async fn spawn_executable(
+        executable: impl AsRef<OsStr>,
+        argument: impl AsRef<OsStr>,
+    ) -> Result<Self> {
         let mut command = Command::new(executable);
         command
-            .arg(WORKER_ARGUMENT)
-            .arg(runtime.as_str())
+            .arg(argument)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -207,75 +87,104 @@ impl Client {
 
         let mut child = command
             .spawn()
-            .context("failed to start the model worker")?;
+            .context("failed to start the worker process")?;
         let stdin = child
             .stdin
             .take()
-            .context("model worker stdin was not available")?;
+            .context("worker stdin was not available")?;
         let stdout = child
             .stdout
             .take()
-            .context("model worker stdout was not available")?;
+            .context("worker stdout was not available")?;
         Ok(Self {
+            generation: NEXT_GENERATION.fetch_add(1, Ordering::Relaxed),
             child,
             stdin,
             stdout,
         })
     }
 
-    async fn execute<F>(
-        &mut self,
-        request: &Request,
-        cancellation: &CancellationToken,
-        mut on_event: F,
-    ) -> Result<Outcome>
-    where
-        F: FnMut(Event),
-    {
-        if let Err(error) = write_async_frame(&mut self.stdin, request).await {
-            self.stop_in_place().await;
-            return Err(error).context("failed to send the model worker request");
-        }
-
-        let cancelled = async {
-            while !cancellation.is_cancelled() {
-                tokio::time::sleep(Duration::from_millis(40)).await;
-            }
-        };
-        tokio::pin!(cancelled);
-        let mut active_downloads = HashMap::new();
-
-        let outcome = loop {
-            let event = tokio::select! {
-                () = &mut cancelled => {
-                    self.stop_in_place().await;
-                    break Ok(Outcome::Cancelled);
-                }
-                event = read_async_frame::<_, Event>(&mut self.stdout) => event,
-            };
-
-            let event = match event {
-                Ok(event) => event,
-                Err(error) => {
-                    self.stop_in_place().await;
-                    break Err(error).context("model worker stopped before returning a result");
-                }
-            };
-            match event {
-                Event::Finished(report) => break Ok(Outcome::Finished(report)),
-                Event::Failed(failure) => break Ok(Outcome::Failed(failure)),
-                Event::Download(event) => {
-                    track_download(&mut active_downloads, &event);
-                    on_event(Event::Download(event));
-                }
-                event => on_event(event),
-            }
-        };
-        fail_active_downloads(&mut active_downloads, &mut on_event);
-        outcome
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
     }
 
-    async fn stop(mut self) {
+    pub async fn call<Request, Response, Event, Cancel, OnEvent>(
+        &mut self,
+        request: &Request,
+        cancelled: Cancel,
+        mut on_event: OnEvent,
+    ) -> std::result::Result<CallResult<Response>, CallError>
+    where
+        Request: Serialize,
+        Response: DeserializeOwned,
+        Event: DeserializeOwned,
+        Cancel: Future<Output = ()>,
+        OnEvent: FnMut(Event),
+    {
+        let request_bytes = match write_async_frame(&mut self.stdin, request).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                self.stop_in_place().await;
+                return Err(CallError::Crashed(format!(
+                    "failed to send request: {error:#}"
+                )));
+            }
+        };
+        let started = Instant::now();
+        let generation = self.generation;
+        let mut response_bytes = 0_usize;
+        tokio::pin!(cancelled);
+
+        loop {
+            enum Wait<T> {
+                Cancelled,
+                Read(Result<T>),
+            }
+            let outcome = {
+                let read = read_async_frame::<_, WorkerMessage<Event, Response>>(&mut self.stdout);
+                tokio::pin!(read);
+                tokio::select! {
+                    biased;
+                    () = &mut cancelled => Wait::Cancelled,
+                    result = &mut read => Wait::Read(result),
+                }
+            };
+            let (message, bytes) = match outcome {
+                Wait::Cancelled => {
+                    self.stop_in_place().await;
+                    return Err(CallError::Cancelled);
+                }
+                Wait::Read(Ok(message)) => message,
+                Wait::Read(Err(error)) => {
+                    let status = self.exit_description();
+                    self.stop_in_place().await;
+                    return Err(CallError::Crashed(format!(
+                        "{status}; failed to read response: {error:#}"
+                    )));
+                }
+            };
+            response_bytes = response_bytes.saturating_add(bytes);
+
+            match message {
+                WorkerMessage::Event(event) => on_event(event),
+                WorkerMessage::Finished(value) => {
+                    return Ok(CallResult {
+                        value,
+                        metrics: CallMetrics {
+                            generation,
+                            request_bytes,
+                            response_bytes,
+                            round_trip: started.elapsed(),
+                        },
+                    });
+                }
+                WorkerMessage::Failed(error) => return Err(CallError::Remote(error)),
+            }
+        }
+    }
+
+    pub async fn shutdown(mut self) {
         self.stop_in_place().await;
     }
 
@@ -283,201 +192,91 @@ impl Client {
         let _ = self.child.kill().await;
         let _ = self.child.wait().await;
     }
-}
 
-pub fn serve(expected_runtime: &str) -> Result<()> {
-    serve_stdio(expected_runtime)
-}
-
-fn track_download(active: &mut HashMap<u64, String>, event: &koharu_runtime::download::Event) {
-    match event {
-        koharu_runtime::download::Event::Started { id, name }
-        | koharu_runtime::download::Event::Progress { id, name, .. } => {
-            active.insert(*id, name.clone());
-        }
-        koharu_runtime::download::Event::Finished { id }
-        | koharu_runtime::download::Event::Failed { id, .. } => {
-            active.remove(id);
+    fn exit_description(&mut self) -> String {
+        match self.child.try_wait() {
+            Ok(Some(status)) => format!("exit status {status}"),
+            Ok(None) => "output pipe closed while the process was running".into(),
+            Err(error) => format!("exit status unavailable: {error}"),
         }
     }
 }
 
-fn fail_active_downloads<F>(active: &mut HashMap<u64, String>, on_event: &mut F)
-where
-    F: FnMut(Event),
-{
-    for (id, name) in active.drain() {
-        on_event(Event::Download(koharu_runtime::download::Event::Failed {
-            id,
-            name,
-            error: "Model worker stopped before the download finished.".into(),
-        }));
+impl Drop for Client {
+    fn drop(&mut self) {
+        let _ = self.child.start_kill();
     }
 }
 
-fn serve_stdio(expected_runtime: &str) -> Result<()> {
-    let expected_runtime = RuntimeKind::parse(expected_runtime)?;
-    let mut input = std::io::stdin().lock();
-    let output = Arc::new(Mutex::new(std::io::BufWriter::new(std::io::stdout())));
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("koharu-model-worker")
-        .build()
-        .context("failed to create the model worker runtime")?;
-    let mut state = None;
-    while let Some(request) = read_optional_frame::<_, Request>(&mut input)
-        .context("failed to read the model worker request")?
+#[async_trait]
+pub trait Handler: Send {
+    type Request: DeserializeOwned + Send;
+    type Response: Serialize + Send;
+    type Event: Serialize + Send + Sync + 'static;
+
+    async fn handle(
+        &mut self,
+        request: Self::Request,
+        events: Emitter<Self::Event>,
+    ) -> Result<Self::Response>;
+}
+
+pub struct Emitter<E> {
+    output: mpsc::UnboundedSender<Vec<u8>>,
+    marker: PhantomData<fn(E)>,
+}
+
+impl<E> Clone for Emitter<E> {
+    fn clone(&self) -> Self {
+        Self {
+            output: self.output.clone(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<E: Serialize> Emitter<E> {
+    pub fn emit(&self, event: E) -> Result<()> {
+        let frame = encode_frame(&WorkerMessage::<E, ()>::Event(event))?;
+        self.output
+            .send(frame)
+            .map_err(|_| anyhow!("worker output has closed"))
+    }
+}
+
+pub async fn serve<H: Handler>(mut handler: H) -> Result<()> {
+    let mut input = tokio::io::stdin();
+    let (output, receiver) = mpsc::unbounded_channel();
+    let writer = tokio::spawn(write_output(receiver));
+
+    while let Some(request) = read_optional_async_frame::<_, H::Request>(&mut input)
+        .await
+        .context("failed to read worker request")?
     {
-        if expected_runtime != request.runtime() {
-            bail!("model worker received a request for an unexpected runtime");
-        }
-        runtime.block_on(run(request, output.clone(), &mut state))?;
+        let emitter = Emitter {
+            output: output.clone(),
+            marker: PhantomData,
+        };
+        let terminal: WorkerMessage<H::Event, H::Response> =
+            match handler.handle(request, emitter).await {
+                Ok(response) => WorkerMessage::Finished(response),
+                Err(error) => WorkerMessage::Failed(format!("{error:#}")),
+            };
+        output
+            .send(encode_frame(&terminal)?)
+            .map_err(|_| anyhow!("worker output has closed"))?;
     }
+    drop(output);
+    writer.await.context("worker output task stopped")??;
     Ok(())
 }
 
-async fn run(
-    request: Request,
-    output: Arc<Mutex<std::io::BufWriter<std::io::Stdout>>>,
-    state: &mut Option<WorkerState>,
-) -> Result<()> {
-    let mut downloads = koharu_runtime::download::subscribe();
-    let pipeline = run_pipeline(request, output.clone(), state);
-    tokio::pin!(pipeline);
-    let mut downloads_open = true;
-    let result = loop {
-        tokio::select! {
-            result = &mut pipeline => break result,
-            event = downloads.recv(), if downloads_open => match event {
-                Ok(event) => write_event(&output, &Event::Download(event))?,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                    bail!("model worker download relay missed {skipped} events");
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => downloads_open = false,
-            },
-        }
-    };
-    loop {
-        match downloads.try_recv() {
-            Ok(event) => write_event(&output, &Event::Download(event))?,
-            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(skipped)) => {
-                bail!("model worker download relay missed {skipped} events");
-            }
-            Err(
-                tokio::sync::broadcast::error::TryRecvError::Empty
-                | tokio::sync::broadcast::error::TryRecvError::Closed,
-            ) => break,
-        }
-    }
-    let event = match result {
-        Ok(report) => Event::Finished(report),
-        Err(failure) => Event::Failed(failure),
-    };
-    write_event(&output, &event)
-}
-
-struct WorkerState {
-    config: PipelineConfig,
-    pipeline: Pipeline,
-}
-
-async fn run_pipeline(
-    request: Request,
-    output: Arc<Mutex<std::io::BufWriter<std::io::Stdout>>>,
-    state: &mut Option<WorkerState>,
-) -> std::result::Result<Report, Failure> {
-    let prepare = (|| -> Result<()> {
-        if let Some(state) = state.as_ref() {
-            if state.config != request.config {
-                bail!("model worker received a different pipeline configuration");
-            }
-        } else {
-            let config = Config::memory(request.config.clone());
-            *state = Some(WorkerState {
-                config: request.config.clone(),
-                pipeline: Pipeline::new(config),
-            });
-        }
-        Ok(())
-    })();
-    if let Err(error) = prepare {
-        return Err(Failure {
-            revisions: Vec::new(),
-            error: format!("{error:#}"),
-        });
-    }
-    let pipeline = &state
-        .as_ref()
-        .expect("model worker state was prepared above")
-        .pipeline;
-    let mut session = koharu_scene::Session::open(&request.path).map_err(|error| Failure {
-        revisions: Vec::new(),
-        error: format!("failed to open {}: {error}", request.path.display()),
-    })?;
-    let progress_output = output.clone();
-    let progress: ProgressSink = Arc::new(move |progress| {
-        let _ = write_event(
-            &progress_output,
-            &Event::Progress {
-                stage: progress.stage,
-                model: progress.model,
-                completed: progress.completed,
-                total: progress.total,
-            },
-        );
-    });
-    let mut run = pipeline
-        .run(&mut session)
-        .only(request.stage)
-        .progress(progress);
-    run = match request.scope {
-        Scope::Project => run,
-        Scope::Pages(pages) => run.pages(pages),
-        Scope::Region { page, frame } => run.region(page, frame),
-        Scope::Elements(elements) => run.elements(elements),
-    };
-    if let Some(language) = request.target_language {
-        run = run.target_language(language);
-    }
-    if let Some(instructions) = request.instructions {
-        run = run.instructions(instructions);
-    }
-    let result = run.execute().await;
-
-    match result {
-        Ok(RunReport {
-            revisions,
-            processors,
-        }) => Ok(Report {
-            revisions,
-            processors,
-        }),
-        Err(error) => Err(Failure {
-            revisions: error.committed_revisions.clone(),
-            error: format!("{error:#}"),
-        }),
-    }
-}
-
-fn write_event(
-    output: &Arc<Mutex<std::io::BufWriter<std::io::Stdout>>>,
-    event: &Event,
-) -> Result<()> {
-    let mut output = output
-        .lock()
-        .map_err(|_| anyhow!("model worker output lock is poisoned"))?;
-    write_frame(&mut *output, event)?;
-    output
-        .flush()
-        .context("failed to flush model worker output")
-}
-
 fn encode_frame<T: Serialize>(value: &T) -> Result<Vec<u8>> {
-    let payload = rmp_serde::to_vec_named(value).context("failed to encode model worker frame")?;
+    let payload = rmp_serde::to_vec_named(value).context("failed to encode worker frame")?;
     if payload.len() > MAX_FRAME_SIZE {
-        bail!("model worker frame exceeds the size limit");
+        bail!("worker frame exceeds the size limit");
     }
-    let length = u32::try_from(payload.len()).context("model worker frame is too large")?;
+    let length = u32::try_from(payload.len()).context("worker frame is too large")?;
     let mut frame = Vec::with_capacity(size_of::<u32>() + payload.len());
     frame.extend_from_slice(&length.to_le_bytes());
     frame.extend_from_slice(&payload);
@@ -485,56 +284,64 @@ fn encode_frame<T: Serialize>(value: &T) -> Result<Vec<u8>> {
 }
 
 fn decode_frame<T: DeserializeOwned>(payload: &[u8]) -> Result<T> {
-    rmp_serde::from_slice(payload).context("failed to decode model worker frame")
+    rmp_serde::from_slice(payload).context("failed to decode worker frame")
 }
 
 fn frame_length(bytes: [u8; 4]) -> Result<usize> {
     let length = usize::try_from(u32::from_le_bytes(bytes))?;
     if length > MAX_FRAME_SIZE {
-        bail!("model worker frame exceeds the size limit");
+        bail!("worker frame exceeds the size limit");
     }
     Ok(length)
 }
 
-fn write_frame(writer: &mut impl Write, value: &impl Serialize) -> Result<()> {
-    writer.write_all(&encode_frame(value)?)?;
+async fn write_output(mut receiver: mpsc::UnboundedReceiver<Vec<u8>>) -> Result<()> {
+    let mut output = tokio::io::stdout();
+    while let Some(frame) = receiver.recv().await {
+        output.write_all(&frame).await?;
+        output.flush().await?;
+    }
     Ok(())
 }
 
-fn read_optional_frame<R, T>(reader: &mut R) -> Result<Option<T>>
+async fn read_optional_async_frame<R, T>(reader: &mut R) -> Result<Option<T>>
 where
-    R: Read,
+    R: AsyncRead + Unpin,
     T: DeserializeOwned,
 {
     let mut length = [0_u8; 4];
-    if reader.read(&mut length[..1])? == 0 {
+    if reader.read(&mut length[..1]).await? == 0 {
         return Ok(None);
     }
-    reader.read_exact(&mut length[1..])?;
+    reader.read_exact(&mut length[1..]).await?;
     let mut payload = vec![0; frame_length(length)?];
-    reader.read_exact(&mut payload)?;
+    reader.read_exact(&mut payload).await?;
     decode_frame(&payload).map(Some)
 }
 
-async fn write_async_frame<W, T>(writer: &mut W, value: &T) -> Result<()>
+async fn write_async_frame<W, T>(writer: &mut W, value: &T) -> Result<usize>
 where
     W: AsyncWrite + Unpin,
     T: Serialize,
 {
-    writer.write_all(&encode_frame(value)?).await?;
-    Ok(())
+    let frame = encode_frame(value)?;
+    let bytes = frame.len();
+    writer.write_all(&frame).await?;
+    writer.flush().await?;
+    Ok(bytes)
 }
 
-async fn read_async_frame<R, T>(reader: &mut R) -> Result<T>
+async fn read_async_frame<R, T>(reader: &mut R) -> Result<(T, usize)>
 where
     R: AsyncRead + Unpin,
     T: DeserializeOwned,
 {
     let mut length = [0_u8; 4];
     reader.read_exact(&mut length).await?;
-    let mut payload = vec![0; frame_length(length)?];
+    let length = frame_length(length)?;
+    let mut payload = vec![0; length];
     reader.read_exact(&mut payload).await?;
-    decode_frame(&payload)
+    Ok((decode_frame(&payload)?, size_of::<u32>() + length))
 }
 
 #[cfg(windows)]
@@ -547,3 +354,23 @@ fn hide_window(command: &mut Command) {
 
 #[cfg(not(windows))]
 fn hide_window(_command: &mut Command) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+    enum TestEvent {
+        Ready,
+    }
+
+    #[test]
+    fn event_frames_do_not_depend_on_the_response_type() {
+        let encoded =
+            encode_frame(&WorkerMessage::<TestEvent, ()>::Event(TestEvent::Ready)).unwrap();
+        let decoded: WorkerMessage<TestEvent, String> =
+            decode_frame(&encoded[size_of::<u32>()..]).unwrap();
+
+        assert!(matches!(decoded, WorkerMessage::Event(TestEvent::Ready)));
+    }
+}

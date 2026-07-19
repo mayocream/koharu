@@ -225,6 +225,7 @@ impl Renderer {
                     };
                     has_content = SceneRenderer::encode_image_element(&mut scene, element, &data);
                 }
+                ElementKind::Region(_) => {}
             }
         }
         if !has_content {

@@ -183,6 +183,7 @@ These models recognize source text after detection.
 
 - [PaddleOCR-VL-1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6) for multilingual OCR
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr) for OCR
+- [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr) for Japanese speech-bubble OCR
 - [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr) for OCR
 
 #### Inpainting
@@ -213,7 +214,11 @@ Koharu supports both local and remote LLM backends. Local models run through [ll
 
 These are broad instruct models that work well when you want one local model for many translation tasks.
 
-- Gemma 4 instruct: [gemma4-e2b-it](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF), [gemma4-e4b-it](https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF), [gemma4-12b-it](https://huggingface.co/unsloth/gemma-4-12b-it-GGUF), [gemma4-26b-a4b-it](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF), [gemma4-31b-it](https://huggingface.co/unsloth/gemma-4-31B-it-GGUF)
+The default local translator is `gemma4-12b-it`.
+
+- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a compact multilingual model for CPUs and low-memory GPUs
+- [ministral-3-8b-instruct](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF): Mistral's balanced multilingual model with native JSON output
+- Gemma 4 instruct (Unsloth QAT-derived Dynamic GGUFs): [gemma4-e2b-it](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF), [gemma4-e4b-it](https://huggingface.co/unsloth/gemma-4-E4B-it-qat-GGUF), [gemma4-12b-it](https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF), [gemma4-26b-a4b-it](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF), [gemma4-31b-it](https://huggingface.co/unsloth/gemma-4-31B-it-qat-GGUF)
 - Qwen 3.5: [qwen3.5-0.8b](https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF), [qwen3.5-2b](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF), [qwen3.5-4b](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF), [qwen3.5-9b](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF), [qwen3.5-27b](https://huggingface.co/unsloth/Qwen3.5-27B-GGUF), [qwen3.5-35b-a3b](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF)
 - Qwen 3.6: [qwen3.6-27b](https://huggingface.co/unsloth/Qwen3.6-27B-GGUF), [qwen3.6-35b-a3b](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF)
 
@@ -221,35 +226,17 @@ These are broad instruct models that work well when you want one local model for
 
 These variants relax the safety tuning applied to the corresponding base instruct models.
 
-- Gemma 4 uncensored: [gemma4-e2b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive), [gemma4-e4b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive)
-- Qwen 3.5 uncensored: [qwen3.5-2b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive), [qwen3.5-4b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive), [qwen3.5-9b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive), [qwen3.5-27b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive), [qwen3.5-35b-a3b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive)
+- Gemma 4 uncensored (HauhauCS QAT when available): [gemma4-e2b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive), [gemma4-e4b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive), [gemma4-12b-uncensored](https://huggingface.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced), [gemma4-26b-a4b-uncensored](https://huggingface.co/HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP), [gemma4-31b-uncensored](https://huggingface.co/HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP)
+- Qwen 3.5 uncensored: [qwen3.5-2b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive), [qwen3.5-4b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive), [qwen3.5-9b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive)
 - Qwen 3.6 uncensored: [qwen3.6-27b-uncensored](https://huggingface.co/HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced), [qwen3.6-35b-a3b-uncensored](https://huggingface.co/HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive)
-
-#### Fine-Tuned Translation Models
-
-These models are more specialized for translation quality, language coverage, or lower-resource setups.
-
-- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a smaller multilingual instruct model that is easier to run on CPUs or low-memory GPUs
-- [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) and [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): larger translation-oriented options when you have more VRAM or RAM available
-- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): a smaller IQ4_XS GGUF, a good balance of quality and speed on 8 GB GPUs
-- [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): lighter and faster, useful on mid-range GPUs or CPU-only setups
-- [hunyuan-mt-7b](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): a Q4_K_M GGUF with broad multilingual translation coverage
 
 LLMs are downloaded on demand when you activate a model. For constrained memory environments, start with a smaller model. When VRAM or RAM permits, 7B and 8B class models generally provide better translation quality.
 
 #### Cloud Providers
 
-Koharu supports hosted APIs from [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), and [DeepSeek](https://platform.deepseek.com/) instead of a local GGUF model.
+Koharu supports hosted APIs from [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/) instead of a local GGUF model.
 
-Built-in cloud catalogs include current text-output models for OpenAI, Gemini, Claude, and DeepSeek, including GPT-5.5/5.4/5.x, Gemini 3.1/3/2.5/2.0, Claude Opus/Sonnet/Haiku 4.x, DeepSeek V4, and compatibility aliases such as `deepseek-chat` and `deepseek-reasoner`.
-
-#### Codex Image-to-Image Generation
-
-Koharu can use Codex for end-to-end image-to-image generation. This workflow sends the current source page image plus a user prompt to Codex, then stores the generated image as a rendered page result.
-
-This feature requires a ChatGPT account with Codex access. Two-factor authentication must be enabled on the account before device-code login can complete successfully.
-
-Codex image generation is useful when you want the model to translate visible text, remove the original lettering, and redraw the page in one pass. Because the image request is processed by the ChatGPT Codex backend, failures can include upstream OpenAI request IDs and may need to be retried.
+Built-in cloud catalogs include current text-output models for OpenAI, Gemini, Claude, and DeepSeek, including GPT-5.6/5.5/5.4, Gemini 3.5/3.1/3/2.5, Claude Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5, and DeepSeek V4. OpenRouter models are discovered dynamically from its API.
 
 #### Machine Translation Providers
 
@@ -257,9 +244,9 @@ For pure machine-translation use cases, Koharu also supports [DeepL](https://www
 
 #### OpenAI-Compatible Providers
 
-Koharu supports OpenAI-compatible endpoints such as LM Studio, OpenRouter, and other self-hosted or third-party APIs that expose `/v1/models` and `/v1/chat/completions`.
+Koharu supports LM Studio through its native `/api/v1/chat` and `/api/v1/models` API. Other self-hosted or third-party servers can use the generic OpenAI-compatible provider when they expose `/v1/models` and `/v1/chat/completions`. OpenRouter also has a dedicated provider entry.
 
-Cloud providers can be configured with API keys. OpenAI-compatible providers also need a custom base URL. API keys are stored securely in your system keychain instead of plain text config files. API keys are optional for local servers such as LM Studio, but are usually required for hosted services such as OpenRouter.
+Cloud providers can be configured with API keys. OpenAI-compatible providers also need a custom base URL. API keys are stored securely in your system keychain instead of plain text config files. LM Studio API tokens are optional; OpenRouter requires its own API key.
 
 Use a remote provider to avoid local model downloads, reduce VRAM or RAM requirements, or integrate with an existing hosted or self-hosted endpoint. Keep in mind that the OCR text selected for translation is sent to the provider you configured.
 

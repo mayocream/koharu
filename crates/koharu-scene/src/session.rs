@@ -651,6 +651,11 @@ impl State {
                 }
             }
         }
+        if let Err(error) = self.project.validate() {
+            let applied = StoredBatch { changes };
+            self.apply_batch(&applied.reversed())?;
+            return Err(error);
+        }
         Ok(StoredBatch { changes })
     }
 
@@ -1035,30 +1040,48 @@ fn apply_element_edit(element: &mut Element, edit: ElementChange) -> Result<()> 
         ElementChange::Opacity(opacity) => element.opacity = opacity,
         ElementChange::Source(source) => match &mut element.kind {
             ElementKind::Text(text) => text.source = source,
-            ElementKind::Image(_) => return Err(Error::ElementKind(element.id)),
+            ElementKind::Image(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
         },
         ElementChange::Translation(translation) => match &mut element.kind {
             ElementKind::Text(text) => text.translation = translation,
-            ElementKind::Image(_) => return Err(Error::ElementKind(element.id)),
+            ElementKind::Image(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
         },
         ElementChange::Style(style) => match &mut element.kind {
             ElementKind::Text(text) => text.style = style,
-            ElementKind::Image(_) => return Err(Error::ElementKind(element.id)),
+            ElementKind::Image(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
         },
         ElementChange::Layout(layout) => match &mut element.kind {
             ElementKind::Text(text) => text.layout = layout,
-            ElementKind::Image(_) => return Err(Error::ElementKind(element.id)),
+            ElementKind::Image(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
+        },
+        ElementChange::Analysis(analysis) => match &mut element.kind {
+            ElementKind::Text(text) => text.set_analysis(analysis),
+            ElementKind::Image(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
         },
         ElementChange::Image { blob, natural_size } => match &mut element.kind {
             ElementKind::Image(image) => {
                 image.blob = blob;
                 image.natural_size = natural_size;
             }
-            ElementKind::Text(_) => return Err(Error::ElementKind(element.id)),
+            ElementKind::Text(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
         },
         ElementChange::ImageName(name) => match &mut element.kind {
             ElementKind::Image(image) => image.name = name,
-            ElementKind::Text(_) => return Err(Error::ElementKind(element.id)),
+            ElementKind::Text(_) | ElementKind::Region(_) => {
+                return Err(Error::ElementKind(element.id));
+            }
         },
     }
     Ok(())

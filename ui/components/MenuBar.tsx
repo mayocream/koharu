@@ -15,7 +15,7 @@ import {
   MenubarShortcut,
   MenubarTrigger,
 } from '@/components/ui/menubar'
-import { koharuClient, useEditorStore, type PipelineScope } from '@/lib/koharu'
+import { koharuClient, useEditorStore, type Force, type Phase, type Scope } from '@/lib/koharu'
 
 export function MenuBar() {
   const { t } = useTranslation()
@@ -26,23 +26,21 @@ export function MenuBar() {
   const page = useEditorStore((state) => state.page)
   const selectedPages = useEditorStore((state) => state.selectedPages)
   const selectedElements = useEditorStore((state) => state.selectedElements)
+  const settings = useEditorStore((state) => state.settings)
   const selectElements = useEditorStore((state) => state.selectElements)
   const display = useEditorStore((state) => state.display)
   const setDisplay = useEditorStore((state) => state.setDisplay)
-  const targetLanguage = useEditorStore((state) => state.targetLanguage)
-  const instructions = useEditorStore((state) => state.instructions)
   const showTextBounds = useEditorStore((state) => state.showTextBounds)
   const setShowTextBounds = useEditorStore((state) => state.setShowTextBounds)
   const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
   const native = connection === 'connected'
 
-  const run = (scope: PipelineScope) =>
+  const run = (scope: Scope, phase?: Phase, force?: Force) =>
     koharuClient.fire({
       type: 'run_pipeline',
       scope,
-      stages: { mode: 'all' },
-      target_language: targetLanguage.trim() || null,
-      instructions: instructions.trim() || null,
+      target: phase ? { target: 'phase', phase } : { target: 'all' },
+      force: force ?? (phase ? 'targets' : 'none'),
     })
 
   const updateDisplay = (next: typeof display) => {
@@ -185,6 +183,39 @@ export function MenuBar() {
             >
               {t('native.menu.processElements', { defaultValue: 'Process Selected Elements' })}
             </MenubarItem>
+            <MenubarItem
+              disabled={!project || pages.length === 0}
+              onSelect={() => run({ scope: 'project' }, undefined, 'all')}
+            >
+              {t('native.menu.reprocessProject', { defaultValue: 'Rerun Entire Project' })}
+            </MenubarItem>
+            <MenubarSeparator />
+            {(
+              [
+                'detection',
+                'segmentation',
+                'ocr',
+                'translation',
+                'typography',
+                'inpainting',
+              ] as Phase[]
+            ).map((phase) => (
+              <MenubarItem
+                key={phase}
+                disabled={
+                  !project ||
+                  pages.length === 0 ||
+                  !settings ||
+                  (phase !== 'translation' && settings.pipeline[phase] === null)
+                }
+                onSelect={() => run({ scope: 'project' }, phase)}
+              >
+                {t('native.menu.runPhase', {
+                  phase: t(`native.phase.${phase}`, { defaultValue: phase }),
+                  defaultValue: 'Run {{phase}}',
+                })}
+              </MenubarItem>
+            ))}
           </MenubarContent>
         </MenubarMenu>
 

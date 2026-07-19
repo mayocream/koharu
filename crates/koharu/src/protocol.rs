@@ -1,9 +1,12 @@
 use std::fmt;
 
+use koharu_pipeline::{Force, RunTarget, Scope};
 use koharu_scene::{
     Element, ElementId, Frame, Page, PageAssets, PageId, ProjectId, Revision, Size, TextLayout,
     TextStyle,
 };
+use koharu_secrets::{ExposeSecret, SecretString};
+use koharu_translator::{Providers, TranslationConfig, TranslationCredentials};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use uuid::Uuid;
@@ -142,10 +145,9 @@ pub enum UiCommand {
     Undo,
     Redo,
     RunPipeline {
-        scope: PipelineScope,
-        stages: PipelineStages,
-        target_language: Option<String>,
-        instructions: Option<String>,
+        scope: Scope,
+        target: RunTarget,
+        force: Force,
     },
     CancelJob {
         job: RequestId,
@@ -155,12 +157,9 @@ pub enum UiCommand {
         format: ExportFormat,
     },
     GetSettings,
-    SetPipelineConfig {
-        config: koharu_pipeline::PipelineConfig,
-    },
-    SetSecret {
-        provider: SecretProvider,
-        value: Option<String>,
+    SetSettings {
+        pipeline: koharu_pipeline::PipelineConfig,
+        translation: TranslationSettings,
     },
     CollectGarbage,
 }
@@ -182,36 +181,6 @@ pub struct ElementTextStyle {
 pub struct ElementTextLayout {
     pub element: ElementId,
     pub layout: TextLayout,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Type)]
-#[serde(tag = "scope", rename_all = "snake_case")]
-pub enum PipelineScope {
-    #[default]
-    Project,
-    Pages {
-        pages: Vec<PageId>,
-    },
-    Region {
-        page: PageId,
-        frame: Frame,
-    },
-    Elements {
-        elements: Vec<ElementId>,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Type)]
-#[serde(tag = "mode", rename_all = "snake_case")]
-pub enum PipelineStages {
-    #[default]
-    All,
-    Through {
-        stage: koharu_pipeline::Stage,
-    },
-    Only {
-        stage: koharu_pipeline::Stage,
-    },
 }
 
 #[derive(Debug, Deserialize, Type)]
@@ -397,62 +366,103 @@ pub enum UiErrorCode {
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct SettingsView {
     pub pipeline: koharu_pipeline::PipelineConfig,
+    pub translation: TranslationSettings,
     pub local_translation_models: Vec<String>,
     pub target_languages: Vec<TargetLanguageView>,
-    pub credentials: Vec<CredentialStatus>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Type)]
+pub struct TranslationSettings {
+    pub model: Providers,
+    pub target_language: String,
+    pub instructions: Option<String>,
+    pub credentials: TranslationCredentialsView,
+}
+
+impl TranslationSettings {
+    pub fn from_config(config: &TranslationConfig) -> anyhow::Result<Self> {
+        Ok(Self {
+            model: config.model.clone(),
+            target_language: config.target_language.clone(),
+            instructions: config.instructions.clone(),
+            credentials: TranslationCredentialsView::from(&TranslationCredentials::load()?),
+        })
+    }
+
+    pub fn into_parts(self) -> (TranslationConfig, TranslationCredentials) {
+        (
+            TranslationConfig {
+                model: self.model,
+                target_language: self.target_language,
+                instructions: self.instructions,
+            },
+            self.credentials.into(),
+        )
+    }
+}
+
+#[derive(Clone, Default, Deserialize, Serialize, Type)]
+pub struct TranslationCredentialsView {
+    pub openai: String,
+    pub gemini: String,
+    pub claude: String,
+    pub deepseek: String,
+    pub openai_compatible: String,
+    pub openrouter: String,
+    pub lm_studio: String,
+    pub deepl: String,
+    pub google_cloud_translation: String,
+    pub caiyun: String,
+}
+
+impl fmt::Debug for TranslationCredentialsView {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("TranslationCredentialsView([REDACTED])")
+    }
+}
+
+impl From<&TranslationCredentials> for TranslationCredentialsView {
+    fn from(credentials: &TranslationCredentials) -> Self {
+        Self {
+            openai: exposed(&credentials.openai),
+            gemini: exposed(&credentials.gemini),
+            claude: exposed(&credentials.claude),
+            deepseek: exposed(&credentials.deepseek),
+            openai_compatible: exposed(&credentials.openai_compatible),
+            openrouter: exposed(&credentials.openrouter),
+            lm_studio: exposed(&credentials.lm_studio),
+            deepl: exposed(&credentials.deepl),
+            google_cloud_translation: exposed(&credentials.google_cloud_translation),
+            caiyun: exposed(&credentials.caiyun),
+        }
+    }
+}
+
+impl From<TranslationCredentialsView> for TranslationCredentials {
+    fn from(credentials: TranslationCredentialsView) -> Self {
+        Self {
+            openai: SecretString::from(credentials.openai),
+            gemini: SecretString::from(credentials.gemini),
+            claude: SecretString::from(credentials.claude),
+            deepseek: SecretString::from(credentials.deepseek),
+            openai_compatible: SecretString::from(credentials.openai_compatible),
+            openrouter: SecretString::from(credentials.openrouter),
+            lm_studio: SecretString::from(credentials.lm_studio),
+            deepl: SecretString::from(credentials.deepl),
+            google_cloud_translation: SecretString::from(credentials.google_cloud_translation),
+            caiyun: SecretString::from(credentials.caiyun),
+        }
+    }
+}
+
+fn exposed(secret: &SecretString) -> String {
+    secret.expose_secret().to_owned()
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct TargetLanguageView {
     pub tag: String,
     pub name: String,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum SecretProvider {
-    Openai,
-    Gemini,
-    Claude,
-    Deepseek,
-    #[serde(rename = "openai_compatible")]
-    OpenaiCompatible,
-    Deepl,
-    GoogleCloudTranslation,
-    Caiyun,
-}
-
-impl SecretProvider {
-    pub const ALL: [Self; 8] = [
-        Self::Openai,
-        Self::Gemini,
-        Self::Claude,
-        Self::Deepseek,
-        Self::OpenaiCompatible,
-        Self::Deepl,
-        Self::GoogleCloudTranslation,
-        Self::Caiyun,
-    ];
-
-    #[must_use]
-    pub const fn key(self) -> &'static str {
-        match self {
-            Self::Openai => "openai",
-            Self::Gemini => "gemini",
-            Self::Claude => "claude",
-            Self::Deepseek => "deepseek",
-            Self::OpenaiCompatible => "openai-compatible",
-            Self::Deepl => "deepl",
-            Self::GoogleCloudTranslation => "google-cloud-translation",
-            Self::Caiyun => "caiyun",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Type)]
-pub struct CredentialStatus {
-    pub provider: SecretProvider,
-    pub configured: bool,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -490,6 +500,7 @@ pub struct AssetView {
     pub clean: Option<String>,
     pub rendered: Option<String>,
     pub text_mask: Option<String>,
+    pub coo_mask: Option<String>,
     pub bubble_mask: Option<String>,
     pub brush_mask: Option<String>,
 }
@@ -549,7 +560,7 @@ pub enum JobStatus {
         completed: usize,
         #[specta(type = f64)]
         total: usize,
-        stage: Option<koharu_pipeline::Stage>,
+        phase: Option<koharu_pipeline::Phase>,
         model: Option<String>,
     },
     Finished {
@@ -630,6 +641,7 @@ impl From<&PageAssets> for AssetView {
             clean: assets.clean.map(|blob| blob.to_string()),
             rendered: assets.rendered.map(|blob| blob.to_string()),
             text_mask: assets.text_mask.map(|blob| blob.to_string()),
+            coo_mask: assets.coo_mask.map(|blob| blob.to_string()),
             bubble_mask: assets.bubble_mask.map(|blob| blob.to_string()),
             brush_mask: assets.brush_mask.map(|blob| blob.to_string()),
         }
@@ -719,24 +731,32 @@ mod tests {
     }
 
     #[test]
-    fn settings_projection_is_redacted_by_construction() {
+    fn settings_projection_exposes_credentials_for_editing() {
+        let config = TranslationConfig::default();
+        let translation = TranslationSettings {
+            model: config.model,
+            target_language: config.target_language,
+            instructions: config.instructions,
+            credentials: TranslationCredentialsView {
+                openai: "secret-value".to_owned(),
+                ..TranslationCredentialsView::default()
+            },
+        };
         let value = serde_json::to_value(UiEvent::SettingsChanged {
             settings: SettingsView {
                 pipeline: koharu_pipeline::PipelineConfig::default(),
+                translation,
                 local_translation_models: vec!["lfm2.5-1.2b-instruct".into()],
                 target_languages: vec![TargetLanguageView {
                     tag: "en-US".into(),
                     name: "English".into(),
                 }],
-                credentials: vec![CredentialStatus {
-                    provider: SecretProvider::Openai,
-                    configured: true,
-                }],
             },
         })
         .unwrap();
-        assert_eq!(value["settings"]["credentials"][0]["configured"], true);
-        assert!(value.to_string().find("secret").is_none());
-        assert!(value.to_string().find("value").is_none());
+        assert_eq!(
+            value["settings"]["translation"]["credentials"]["openai"],
+            "secret-value"
+        );
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     ChangeSet, Command, Commands, ElementChange, ElementId, ElementKind, Error, Frame, PageAsset,
-    PageId, Result, Session, SourceText, TextLayout, TextStyle,
+    PageId, Result, Session, SourceText, TextAnalysis, TextLayout, TextStyle,
 };
 
 pub struct Edit<'session> {
@@ -242,6 +242,10 @@ impl TextEdit<'_, '_> {
 
     pub fn set_layout(&mut self, layout: TextLayout) -> &mut Self {
         self.change(ElementChange::Layout(layout))
+    }
+
+    pub fn set_analysis(&mut self, analysis: TextAnalysis) -> &mut Self {
+        self.change(ElementChange::Analysis(analysis))
     }
 }
 

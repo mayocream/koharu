@@ -67,7 +67,10 @@ impl Resources {
                 [
                     page.assets.clean,
                     page.assets.rendered,
+                    page.assets.text_mask_candidate,
+                    page.assets.layout_text_mask,
                     page.assets.text_mask,
+                    page.assets.coo_mask,
                     page.assets.bubble_mask,
                     page.assets.brush_mask,
                 ]
@@ -79,7 +82,7 @@ impl Resources {
                     .iter()
                     .filter_map(|element| match element.kind {
                         ElementKind::Image(ref image) => Some(image.blob),
-                        ElementKind::Text(_) => None,
+                        ElementKind::Text(_) | ElementKind::Region(_) => None,
                     }),
             );
         }

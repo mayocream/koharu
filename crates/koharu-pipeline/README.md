@@ -1,36 +1,28 @@
 # koharu-pipeline
 
-`koharu-pipeline` runs Koharu's models against a `koharu_scene::Session`. It
-selects configured models, schedules their dependencies, and commits their
-results as scene commands.
-
-This is a greenfield design. The existing implementation is not an API or data
-compatibility constraint.
+`koharu-pipeline` runs Koharu processors against a `koharu_scene::Session`. It
+constructs a typed data-flow graph, executes the requested portion, and commits
+processor results as scene commands.
 
 ## Boundary
 
-- `koharu-scene` owns projects, text, images, masks, commands, history, blobs,
-  and SQLite.
+- `koharu-scene` owns projects, elements, masks, commands, history, blobs, and SQLite.
 - `koharu-ml` and `koharu-translator` provide inference implementations.
-- `koharu-config` owns live configuration and secrets.
-- `koharu-renderer` and the canvas render the scene. Rendering is not a
-  pipeline stage.
-
-The pipeline owns only model adapters, scheduling, model lifetime, progress,
-and cancellation. It has no document model, storage layer, renderer, generic
-artifact system, or second mutation language.
+- `koharu-config` owns live configuration handles.
+- `koharu-renderer` and the canvas render the scene.
 
 The central invariant is:
 
 > A processor reads one immutable scene revision and returns
 > `koharu_scene::Commands`. Only the executor applies commands.
 
-## Stages and scheduling
+## Phases and artifacts
 
-Stages are fixed UI, configuration, and reporting names:
+A phase is presentation metadata used by the UI, progress events, and phase
+run buttons. It does not define execution order.
 
 ```rust
-pub enum Stage {
+pub enum Phase {
     Detection,
     Segmentation,
     Ocr,
@@ -40,208 +32,180 @@ pub enum Stage {
 }
 ```
 
-| Stage | Durable scene result |
-| --- | --- |
-| Detection | text elements and frames |
-| Segmentation | text or bubble page masks |
-| OCR | `TextBlock::source` |
-| Translation | `TextBlock::translation` |
-| Typography | `TextStyle` and `TextLayout` |
-| Inpainting | clean page image |
+Dependencies come exclusively from typed artifacts:
 
-Koharu derives a small DAG directly from the outputs and dependencies declared
-for each configured model. There is no user-defined graph and no general graph
-library. A typical plan is:
-
-```text
-source -> detection -> OCR -> translation -> typography
-              |                              ^
-              +-> text segmentation --------+
-                         +-> inpainting
-source -> bubble segmentation ---------------+
+```rust
+pub enum Artifact {
+    SourceImage,
+    PanelRegion,
+    BubbleRegion,
+    TextRegion,
+    CooRegion,
+    TextMaskCandidate,
+    LayoutTextMask,
+    TextMask,
+    CooMask,
+    BrushMask,
+    BubbleMask,
+    SourceText,
+    CooText,
+    Translation,
+    Typography,
+    CleanImage,
+}
 ```
 
-Users select one model for each stage; they never define step IDs, edges,
-`after`, inputs, or outputs. The planner maps each result to its single
-configured producer, walks dependencies for `through(stage)`, and groups nodes
-by dependency depth. Two selected models that write the same scene result are
-rejected before weights are loaded.
+`ComicLayoutYolo26s`, for example, emits panel, bubble, and text regions plus
+layout and bubble masks. `ComicOnomatopoeia` separately detects the COO branch
+and recognizes its text. `MaskFusion` then separates the pixel-level
+candidate into `TextMask` and `CooMask`. One inference remains one DAG node even
+when it contributes artifacts to multiple phases.
+
+Configuration is an ordered list of named processors. Multiple processors may
+contribute to one phase, and one processor may contribute to multiple phases.
+Processors that write the same artifact form an ordered writer chain, and
+consumers bind to the latest configured producer. Write ordering is not treated
+as an input dependency.
 
 ## Configuration
 
-Each stage has one typed model enum and a built-in default selection.
-The default pipeline uses PP-DocLayoutV3, Manga Text Segmentation,
-PaddleOCR-VL 1.6, the `lfm2.5-1.2b-instruct` local translator, Font Detector, and
-LaMa.
+The processor list is explicit and does not use one mutually exclusive model
+slot per phase:
 
 ```rust
 pub struct PipelineConfig {
-    pub detection: DetectionModel,
-    pub segmentation: SegmentationModel,
-    pub ocr: OcrModel,
-    pub translation: TranslationModel,
-    pub typography: TypographyModel,
-    pub inpainting: InpaintingModel,
-}
-
-#[serde(tag = "model", rename_all = "snake_case")]
-pub enum DetectionModel {
-    ComicTextDetector(ComicTextDetectorConfig),
-    PPDocLayoutV3(PPDocLayoutV3Config),
-}
-
-pub struct PPDocLayoutV3Config {
-    pub confidence: f32,
+    pub processors: Vec<ProcessorConfig>,
 }
 ```
 
-This keeps model-only options beside that model and makes invalid stage/model
-combinations unrepresentable. Device and concurrency choices are automatic.
-
 ```toml
-[pipeline.detection]
+[[pipeline.processors]]
 model = "pp_doclayout_v3"
-confidence = 0.35
+confidence = 0.25
 
-[pipeline.ocr]
+[[pipeline.processors]]
+model = "comic_layout_yolo26s"
+
+[[pipeline.processors]]
+model = "manga_text_mask"
+
+[[pipeline.processors]]
+model = "comic_onomatopoeia"
+
+[[pipeline.processors]]
+model = "mask_fusion"
+
+[[pipeline.processors]]
 model = "paddleocr_vl_1.6"
 
-[pipeline.translation]
-model = "openai"
-remote_model = "gpt-4.1-mini"
-
-[pipeline.inpainting]
-model = "lama"
+[[pipeline.processors]]
+model = "rorem_mixed"
+resolution = 1024
+mask_dilation = 20
 ```
 
-`Pipeline` owns the live `Config<PipelineConfig>` returned by
-`koharu_config::load("pipeline")`. A run snapshots the latest value, so a
-configuration change affects the next run but cannot change an active run.
-Secrets come from `koharu_config::secrets()` and are not fields in this config.
-
-Translation supports every backend in `koharu-translator`: every catalogued
-local GGUF model, OpenAI, Gemini, Claude, DeepSeek, OpenAI-compatible servers,
-DeepL, Google Cloud Translation, and Caiyun. For example:
+To have the dedicated YOLO11n segmenter produce the final bubble mask, add it
+after `comic_layout_yolo26s`:
 
 ```toml
-[pipeline.translation]
-model = "local"
-local_model = "lfm2.5-1.2b-instruct"
+[[pipeline.processors]]
+model = "speech_bubble_yolo11n"
+# confidence = 0.25
+# nms_iou = 0.7
 ```
 
-Or select one hosted backend instead:
-
-```toml
-[pipeline.translation]
-model = "openai_compatible"
-base_url = "http://localhost:1234/v1"
-remote_model = "local-model"
-```
-
-Only one translation model may be active because translation is one durable
-scene result. Remote processors reuse their HTTP client but read the current
-credential before every run. Local translators follow the normal lazy
-load/unload lifecycle.
+Translation configuration remains in `koharu-translator` because it also owns
+target language, instructions, providers, and credential lookup.
 
 ## Processor contract
 
-Every selectable model has one adapter in this crate:
+Every configured processor declares the same contract used by the planner and
+the command validator:
 
 ```rust
 #[async_trait::async_trait]
 pub trait Processor: Send {
     fn name(&self) -> &'static str;
-    fn stage(&self) -> Stage;
+    fn inputs(&self) -> &'static [Artifact];
+    fn outputs(&self) -> &'static [Artifact];
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands>;
 }
 ```
 
-`Context` is immutable and has private fields. It provides the revision,
-scope, selected scene data, required image bytes, a run-local lazy decode
-cache, and cancellation. `context.commands()` creates a command batch at the
-correct base revision.
+`Context` is immutable. It provides the revision, scope, selected scene data,
+encoded and lazily decoded images, cancellation, and events. Each model runs in
+an isolated reusable worker process. The parent validates the declared
+contract, merges one topological wave, and performs the scene commit.
 
-An adapter owns its loaded model and converts model-specific results into scene
-values. The executor adds cross-stage invalidations before committing: for
-example, new OCR text clears stale translation, and a new text mask clears the
-stale clean image. A processor never receives a `Session`, accesses SQLite, or
-commits its own output.
+## Run targets
 
-## Execution API
+Runs target the whole graph, one phase, processor IDs, or requested artifacts:
 
 ```rust
-pub enum Scope {
-    Project,
-    Pages(Vec<PageId>),
-    Region { page: PageId, frame: Frame },
-    Elements(Vec<ElementId>),
+pub enum RunTarget {
+    All,
+    Phase { phase: Phase },
+    Processors { processors: Vec<ProcessorId> },
+    Artifacts { artifacts: Vec<Artifact> },
+}
+
+pub enum Force {
+    None,
+    Targets,
+    All,
 }
 ```
 
-The executor validates that inputs and emitted commands stay within the scope.
-Regions use page coordinates.
+Selecting a phase means “run processors displayed in this phase and ensure
+their prerequisites.” It does not mean “run every numerically earlier phase.”
 
 ```rust
 let report = pipeline
     .run(&mut session)
     .pages([page_1, page_2])
-    .through(Stage::Translation)
-    .target_language("en")
+    .phase(Phase::Translation)
     .execute()
     .await?;
 ```
 
-The default is the whole project and every configured stage.
-`through(stage)` includes its required ancestors; `only(stage)` uses existing
-scene inputs. The fluent API only builds a `RunRequest`.
+`Force::Targets` is the interactive default: clicking OCR reruns OCR while
+fresh detection dependencies are skipped. `Force::None` ensures cached output,
+and `Force::All` recomputes the complete dependency closure.
+
+## Freshness
+
+Output existence alone is not a cache hit. The pipeline records, per project,
+scope, processor, and output port:
+
+- processor implementation and typed configuration;
+- translation target and instructions where applicable;
+- fingerprints of declared input artifacts;
+- fingerprints of each emitted output artifact.
+
+Changing an input or manually editing an output makes the corresponding node
+stale. Output ports are checked independently, so replacing a candidate mask
+does not invalidate its producer's still-current text regions. The cache is
+conservative and process-local: reopening the application safely recomputes
+outputs instead of trusting provenance it cannot verify.
+
+## Execution
 
 Execution proceeds in topological waves:
 
-1. Capture the revision and scoped inputs.
-2. Run all ready processors concurrently.
-3. Sort their batches by stable plan order and merge them.
-4. Apply one scene transaction.
-5. Read the committed scene for the next wave.
+1. Resolve the requested targets and their dependency closure.
+2. Prune fresh processors according to `Force`.
+3. Capture scoped inputs into a shared-memory arena.
+4. Run ready workers concurrently where device constraints allow it.
+5. Validate and merge command batches in stable plan order.
+6. Commit one scene revision and fingerprint the emitted output ports.
 
-Completion order never determines output order. A processor error, cancellation,
-or `Commands::merge` conflict discards the current wave. A concurrent scene
-edit produces `RevisionConflict`; the pipeline never silently rebases stale
-model output. Earlier waves remain committed and their revisions are returned
-for undo.
+Scope is part of freshness. Project, page, region, and element runs therefore
+cannot accidentally reuse results computed for a different scope. Earlier
+committed waves remain available for undo if a later wave fails.
 
-## Model lifetime and performance
+## Adding a processor
 
-Processors load lazily and are reused while their typed configuration is
-unchanged. Changed or removed processors are dropped before the next run.
-
-```rust
-pipeline.load(Stage::Detection).await?;   // optional warm-up
-pipeline.unload(Stage::Detection).await?;
-pipeline.unload_all().await?;
-```
-
-Dropping a processor releases native and GPU resources through RAII. One model
-instance is not used concurrently unless its implementation supports it;
-different ready models run in parallel when their resources allow it. GPU
-inference is serialized by default to avoid oversubscription. Synchronous
-native inference runs outside async runtime workers.
-
-Performance requirements:
-
-- capture scoped metadata once per wave and share it with `Arc`;
-- read each blob once per run and cache decoded images by `BlobId`;
-- never hold a SQLite transaction during inference;
-- batch pages, crops, OCR, or translation when a model benefits;
-- choose devices and safe concurrency from available hardware;
-- keep command order, errors, and progress deterministic.
-
-There is no global registry, `inventory`, LRU, model lease, or cross-run output
-cache. Add those only if profiling demonstrates a need.
-
-## Adding and testing a model
-
-Each adapter is one self-contained file under `src/builtin/`;
-`builtin/mod.rs` contains only factory wiring. Adding a model requires one
-stage-enum variant, one typed config, one processor file, and one
-factory/dependency match arm. Tests inject fake processors and use
-`koharu_scene::Session::memory`.
+Add its typed configuration and adapter under `src/builtin/`, assign a stable
+`ProcessorId`, declare phase/input/output contracts in both the configured
+model descriptor and processor, and wire its factory arm. Startup validation
+rejects contract drift before inference runs.

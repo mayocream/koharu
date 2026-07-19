@@ -4,9 +4,17 @@ use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
 use image::DynamicImage;
 use koharu_ml::manga_ocr::MangaOcr;
-use koharu_scene::{Command, ElementChange, ElementId, PageId, SourceText, TextDirection};
+use koharu_scene::{
+    Command, ElementChange, ElementId, PageId, SourceText, TextDirection, TextRole,
+};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{Context, MangaOcrConfig, Processor, Stage};
+use crate::{Artifact, Context, Processor};
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct MangaOcrConfig {}
 
 pub(super) struct MangaOcrProcessor {
     model: Arc<Mutex<MangaOcr>>,
@@ -26,8 +34,12 @@ impl Processor for MangaOcrProcessor {
         "MangaOcr"
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Ocr
+    fn inputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceImage, Artifact::TextRegion]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceText]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
@@ -35,6 +47,9 @@ impl Processor for MangaOcrProcessor {
         for page in context.pages() {
             let source = context.source(page.id)?;
             for (element, text) in page.texts() {
+                if text.role == TextRole::Onomatopoeia {
+                    continue;
+                }
                 if !context.includes_element(page.id, element.id, element.frame) {
                     continue;
                 }

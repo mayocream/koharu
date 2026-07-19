@@ -103,7 +103,7 @@ describe('KoharuClient', () => {
     client.disconnect()
   })
 
-  it('accepts settings with one selected model per pipeline stage', () => {
+  it('accepts settings with one model per phase', () => {
     useEditorStore.setState({ error: null, settings: null })
     const { bridge, client } = connected()
     bridge.emit({
@@ -112,26 +112,41 @@ describe('KoharuClient', () => {
         pipeline: {
           detection: { model: 'comic_text_detector' },
           segmentation: {
-            model: 'speech_bubble_segmentation',
+            model: 'speech_bubble_yolov8m',
             confidence: null,
             nms_iou: null,
           },
           ocr: { model: 'paddleocr_vl_1.6' },
-          translation: { model: 'local', local_model: 'lfm2.5-1.2b-instruct' },
           typography: { model: 'font_detector', top_k: 3 },
           inpainting: { model: 'lama' },
+        },
+        translation: {
+          model: { provider: 'local', model: 'lfm2.5-1.2b-instruct' },
+          target_language: 'en-US',
+          instructions: null,
+          credentials: {
+            openai: '',
+            gemini: '',
+            claude: '',
+            deepseek: '',
+            openai_compatible: '',
+            openrouter: '',
+            lm_studio: '',
+            deepl: '',
+            google_cloud_translation: '',
+            caiyun: '',
+          },
         },
         local_translation_models: ['lfm2.5-1.2b-instruct'],
         target_languages: [
           { tag: 'en-US', name: 'English' },
           { tag: 'ja-JP', name: 'Japanese' },
         ],
-        credentials: [{ provider: 'openai', configured: false }],
       },
     })
 
     expect(useEditorStore.getState().error).toBeNull()
-    expect(useEditorStore.getState().settings?.pipeline.translation.model).toBe('local')
+    expect(useEditorStore.getState().settings?.translation.model.provider).toBe('local')
     client.disconnect()
   })
 })

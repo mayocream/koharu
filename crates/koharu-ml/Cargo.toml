@@ -13,9 +13,11 @@ publish.workspace = true
 
 [dependencies]
 koharu-diffusion = { workspace = true }
+koharu-fonts = { workspace = true }
 koharu-llama = { workspace = true, features = ["llguidance"] }
 koharu-runtime = { workspace = true }
 koharu-torch = { workspace = true }
+ab_glyph = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
@@ -68,7 +70,19 @@ name = "comic_text_bubble_detector"
 harness = false
 
 [[bench]]
-name = "speech_bubble_segmentation"
+name = "comic_onomatopoeia"
+harness = false
+
+[[bench]]
+name = "speech_bubble_yolov8m"
+harness = false
+
+[[bench]]
+name = "speech_bubble_yolo11n"
+harness = false
+
+[[bench]]
+name = "comic_layout_yolo26s"
 harness = false
 
 [[bench]]
@@ -88,7 +102,7 @@ name = "baberu_ocr"
 harness = false
 
 [[bench]]
-name = "manga_text_segmentation"
+name = "manga_text_mask"
 harness = false
 
 [[bench]]

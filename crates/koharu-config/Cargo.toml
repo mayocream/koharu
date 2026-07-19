@@ -15,7 +15,6 @@ publish.workspace = true
 anyhow = { workspace = true }
 atomicwrites = { workspace = true }
 dirs = { workspace = true }
-koharu-secrets = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }

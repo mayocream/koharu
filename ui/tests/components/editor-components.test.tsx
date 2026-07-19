@@ -45,6 +45,12 @@ const textElement: Element = {
         overflow: 'Visible',
         fit: 'Bubble',
       },
+      role: 'Dialogue',
+      panel: null,
+      bubble: null,
+      reading_order: 0,
+      polygon: [],
+      predictions: [],
     },
   },
 }
@@ -79,6 +85,7 @@ function installProject() {
         clean: 'clean',
         rendered: null,
         text_mask: null,
+        coo_mask: null,
         bubble_mask: null,
         brush_mask: null,
       },
@@ -100,10 +107,11 @@ describe('native editor components', () => {
     )
     expect(screen.queryByText('Book')).not.toBeInTheDocument()
     expect(screen.getByText('File')).toBeInTheDocument()
-    expect(container.querySelector('img')).toHaveAttribute(
-      'src',
-      'koharu-resource://project/project/blob/clean?width=320',
-    )
+    expect(
+      [...container.querySelectorAll('img')].find((image) =>
+        image.getAttribute('src')?.startsWith('koharu-resource:'),
+      ),
+    ).toHaveAttribute('src', 'koharu-resource://project/project/blob/clean?width=320')
   })
 
   it('switches canvas tools and exposes the practical inspector', () => {
@@ -116,8 +124,11 @@ describe('native editor components', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Brush mask' }))
     expect(useEditorStore.getState().tool).toBe('brush_mask')
-    expect(screen.getByText('Typography')).toBeInTheDocument()
+    const inspect = screen.getByRole('tab', { name: /inspect/i })
+    fireEvent.mouseDown(inspect, { button: 0, ctrlKey: false })
+    expect(inspect).toHaveAttribute('data-state', 'active')
     expect(screen.getByText('Frame')).toBeInTheDocument()
+    expect(screen.getByText('Typography')).toBeInTheDocument()
   })
 
   it('shows retained job progress and the typed settings builder', () => {
@@ -129,30 +140,49 @@ describe('native editor components', () => {
           kind: 'pipeline',
           completed: 1,
           total: 4,
-          stage: 'ocr',
+          phase: 'ocr',
           model: 'manga_ocr',
         },
       },
       settingsOpen: true,
       settings: {
         pipeline: {
-          detection: { model: 'comic_text_detector' },
-          segmentation: {
-            model: 'speech_bubble_segmentation',
-            confidence: null,
-            nms_iou: null,
+          processors: [
+            { model: 'comic_text_detector' },
+            { model: 'speech_bubble_yolov8m', confidence: null, nms_iou: null },
+            { model: 'paddleocr_vl_1.6' },
+            { model: 'font_detector', top_k: 3 },
+            { model: 'lama' },
+          ],
+        },
+        translation: {
+          model: {
+            provider: 'openai',
+            model: 'gpt-4.1-mini',
+            temperature: null,
+            max_tokens: null,
+            thinking: false,
           },
-          ocr: { model: 'paddleocr_vl_1.6' },
-          translation: { model: 'local', local_model: 'lfm2.5-1.2b-instruct' },
-          typography: { model: 'font_detector', top_k: 3 },
-          inpainting: { model: 'lama' },
+          target_language: 'en-US',
+          instructions: null,
+          credentials: {
+            openai: 'secret-value',
+            gemini: '',
+            claude: '',
+            deepseek: '',
+            openai_compatible: '',
+            openrouter: '',
+            lm_studio: '',
+            deepl: '',
+            google_cloud_translation: '',
+            caiyun: '',
+          },
         },
         local_translation_models: ['lfm2.5-1.2b-instruct'],
         target_languages: [
           { tag: 'en-US', name: 'English' },
           { tag: 'ja-JP', name: 'Japanese' },
         ],
-        credentials: [{ provider: 'openai', configured: false }],
       },
     })
     render(
@@ -162,9 +192,13 @@ describe('native editor components', () => {
       </ThemeProvider>,
     )
     expect(screen.getByText('25%')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /pipeline/i }))
     expect(screen.getByText('Pipeline', { selector: 'h3' })).toBeInTheDocument()
-    expect(screen.getByText('Credentials')).toBeInTheDocument()
-    expect(screen.getByLabelText('openai credential')).toHaveAttribute('type', 'password')
+    const credential = screen.getByLabelText('openai credential')
+    expect(credential).toHaveAttribute('type', 'password')
+    expect(credential).toHaveValue('secret-value')
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal credential' }))
+    expect(credential).toHaveAttribute('type', 'text')
   })
 
   it('shows runtime download progress', () => {

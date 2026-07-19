@@ -155,7 +155,9 @@ base64 = "0.22"
 unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
 git-version = "0.3"
-keyring = "3.6"
+keyring = { version = "4.1", features = ["linux-keyutils-keyring-store"] }
+keyring-core = "1.0"
+linux-keyutils-keyring-store = "1.0"
 lru = "0.18"
 llguidance = "1.7.5"
 petname = "3"

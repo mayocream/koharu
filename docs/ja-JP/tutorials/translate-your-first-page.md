@@ -60,7 +60,7 @@ Koharu 組み込みの vision パイプラインで次を行います。
 - すべてを手元で完結させたいならローカル GGUF モデル
 - ローカルモデルのダウンロードや重い推論を避けたいならリモートプロバイダ
 
-Koharu は OpenAI、Gemini、Claude、DeepSeek に加えて、LM Studio や OpenRouter のような OpenAI 互換エンドポイントにも対応しています。
+Koharu は OpenAI、Gemini、Claude、DeepSeek、OpenRouter、LM Studio、およびその他の OpenAI 互換エンドポイントに対応しています。
 
 LM Studio、OpenRouter、その他の OpenAI 形式エンドポイントを使いたい場合は、[OpenAI 互換 API を使う](../how-to/use-openai-compatible-api.md) を参照してください。
 

@@ -481,8 +481,9 @@ hide:
         <div class="kh-hero__model-row">
           <div class="kh-hero__model-label">Local models include</div>
           <div class="kh-chip-list kh-hero__models">
-            <span class="kh-chip">sakura</span>
-            <span class="kh-chip">hunyuan</span>
+            <span class="kh-chip">ministral</span>
+            <span class="kh-chip">gemma</span>
+            <span class="kh-chip">qwen</span>
             <span class="kh-chip">lfm2</span>
           </div>
         </div>

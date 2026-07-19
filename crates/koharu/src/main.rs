@@ -13,19 +13,15 @@ struct Arguments {
     #[arg(value_name = "PROJECT", conflicts_with = "worker")]
     project: Option<PathBuf>,
 
-    #[arg(
-        long,
-        hide = true,
-        value_name = "RUNTIME",
-        value_parser = ["torch", "llama", "diffusion"]
-    )]
-    worker: Option<String>,
+    #[arg(long, hide = true)]
+    worker: bool,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let arguments = Arguments::parse();
-    if let Some(runtime) = arguments.worker {
-        return koharu_worker::serve(&runtime);
+    if arguments.worker {
+        return koharu_pipeline::serve_worker().await;
     }
     let _guard = sentry::initialize();
     panic::install();

@@ -1,20 +1,15 @@
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
 use koharu_scene::{Command, ElementChange};
 use koharu_translator::{
-    ApiKey, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
-    GoogleCloudConfig, Language, LocalModel, LocalTranslator, OpenAiCompatibleConfig, OpenAiConfig,
-    RemoteGenerationOptions, RemoteProvider, RemoteProviderKind, RemoteTranslator,
+    Language, LocalModel, LocalTranslator, Providers, RemoteProvider, RemoteTranslator,
     TranslationRequest, Translator,
 };
 
-use crate::{
-    ChatTranslationConfig, Context, OpenAiCompatibleTranslationConfig, Processor, Stage,
-    TranslationModel,
-};
+use crate::{Artifact, Context, Processor};
 
 pub(super) struct TranslationProcessor {
-    config: TranslationModel,
+    config: Providers,
     backend: Backend,
 }
 
@@ -24,13 +19,13 @@ enum Backend {
 }
 
 impl TranslationProcessor {
-    pub(super) async fn load(device: koharu_ml::Device, config: &TranslationModel) -> Result<Self> {
-        validate(config)?;
+    pub(super) async fn load(device: koharu_ml::Device, config: &Providers) -> Result<Self> {
         let backend = match config {
-            TranslationModel::Local(config) => {
-                let model = config.local_model.parse::<LocalModel>().with_context(|| {
-                    format!("unknown local translator '{}'", config.local_model)
-                })?;
+            Providers::Local(config) => {
+                let model = config
+                    .model
+                    .parse::<LocalModel>()
+                    .with_context(|| format!("unknown local translator '{}'", config.model))?;
                 Backend::Local(LocalTranslator::load(device, model).await?)
             }
             _ => Backend::Remote(reqwest::Client::new()),
@@ -42,70 +37,22 @@ impl TranslationProcessor {
     }
 
     fn remote_translator(&self, client: &reqwest::Client) -> Result<RemoteTranslator> {
-        let (provider, generation) = match &self.config {
-            TranslationModel::OpenAi(config) => (
-                RemoteProvider::OpenAi(OpenAiConfig::new(
-                    api_key(RemoteProviderKind::OpenAi)?,
-                    &config.remote_model,
-                )),
-                generation(config),
-            ),
-            TranslationModel::Gemini(config) => (
-                RemoteProvider::Gemini(GeminiConfig::new(
-                    api_key(RemoteProviderKind::Gemini)?,
-                    &config.remote_model,
-                )),
-                generation(config),
-            ),
-            TranslationModel::Claude(config) => (
-                RemoteProvider::Claude(ClaudeConfig::new(
-                    api_key(RemoteProviderKind::Claude)?,
-                    &config.remote_model,
-                )),
-                generation(config),
-            ),
-            TranslationModel::DeepSeek(config) => (
-                RemoteProvider::DeepSeek(DeepSeekConfig::new(
-                    api_key(RemoteProviderKind::DeepSeek)?,
-                    &config.remote_model,
-                )),
-                generation(config),
-            ),
-            TranslationModel::OpenAiCompatible(config) => {
-                let mut provider =
-                    OpenAiCompatibleConfig::new(config.base_url.clone(), &config.remote_model);
-                if let Some(key) = ApiKey::load(RemoteProviderKind::OpenAiCompatible)? {
-                    provider = provider.with_api_key(key);
-                }
-                (
-                    RemoteProvider::OpenAiCompatible(provider),
-                    RemoteGenerationOptions {
-                        temperature: config.temperature,
-                        max_tokens: config.max_tokens,
-                    },
-                )
+        let provider = match &self.config {
+            Providers::OpenAi(config) => RemoteProvider::OpenAi(config.clone()),
+            Providers::Gemini(config) => RemoteProvider::Gemini(config.clone()),
+            Providers::Claude(config) => RemoteProvider::Claude(config.clone()),
+            Providers::DeepSeek(config) => RemoteProvider::DeepSeek(config.clone()),
+            Providers::OpenAiCompatible(config) => RemoteProvider::OpenAiCompatible(config.clone()),
+            Providers::OpenRouter(config) => RemoteProvider::OpenRouter(config.clone()),
+            Providers::LmStudio(config) => RemoteProvider::LmStudio(config.clone()),
+            Providers::DeepL(config) => RemoteProvider::DeepL(config.clone()),
+            Providers::GoogleCloudTranslation(config) => {
+                RemoteProvider::GoogleCloudTranslation(config.clone())
             }
-            TranslationModel::DeepL(config) => {
-                let mut provider = DeepLConfig::new(api_key(RemoteProviderKind::DeepL)?);
-                if let Some(base_url) = &config.base_url {
-                    provider = provider.with_base_url(base_url.clone());
-                }
-                (RemoteProvider::DeepL(provider), Default::default())
-            }
-            TranslationModel::GoogleCloudTranslation => (
-                RemoteProvider::GoogleCloudTranslation(GoogleCloudConfig::new(api_key(
-                    RemoteProviderKind::GoogleCloudTranslation,
-                )?)),
-                Default::default(),
-            ),
-            TranslationModel::Caiyun => (
-                RemoteProvider::Caiyun(CaiyunConfig::new(api_key(RemoteProviderKind::Caiyun)?)),
-                Default::default(),
-            ),
-            TranslationModel::Local(_) => bail!("local translator has no remote provider"),
+            Providers::Caiyun(config) => RemoteProvider::Caiyun(config.clone()),
+            Providers::Local(_) => bail!("local translator has no remote provider"),
         };
-        Ok(RemoteTranslator::with_client(client.clone(), provider)
-            .with_generation_options(generation))
+        Ok(RemoteTranslator::with_client(client.clone(), provider))
     }
 }
 
@@ -113,20 +60,26 @@ impl TranslationProcessor {
 impl Processor for TranslationProcessor {
     fn name(&self) -> &'static str {
         match self.config {
-            TranslationModel::Local(_) => "LocalTranslator",
-            TranslationModel::OpenAi(_) => "OpenAI",
-            TranslationModel::Gemini(_) => "Gemini",
-            TranslationModel::Claude(_) => "Claude",
-            TranslationModel::DeepSeek(_) => "DeepSeek",
-            TranslationModel::OpenAiCompatible(_) => "OpenAI-compatible",
-            TranslationModel::DeepL(_) => "DeepL",
-            TranslationModel::GoogleCloudTranslation => "Google Cloud Translation",
-            TranslationModel::Caiyun => "Caiyun",
+            Providers::Local(_) => "LocalTranslator",
+            Providers::OpenAi(_) => "OpenAI",
+            Providers::Gemini(_) => "Gemini",
+            Providers::Claude(_) => "Claude",
+            Providers::DeepSeek(_) => "DeepSeek",
+            Providers::OpenAiCompatible(_) => "OpenAI-compatible",
+            Providers::OpenRouter(_) => "OpenRouter",
+            Providers::LmStudio(_) => "LM Studio",
+            Providers::DeepL(_) => "DeepL",
+            Providers::GoogleCloudTranslation(_) => "Google Cloud Translation",
+            Providers::Caiyun(_) => "Caiyun",
         }
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Translation
+    fn inputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceText, Artifact::CooText]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::Translation]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
@@ -147,7 +100,6 @@ impl Processor for TranslationProcessor {
         }
         let target = context
             .target_language()
-            .ok_or_else(|| anyhow!("translation requires a target language"))?
             .parse::<Language>()
             .context("invalid translation target language")?;
         let translator: &dyn Translator = match &self.backend {
@@ -182,54 +134,4 @@ async fn translate(
         });
     }
     Ok(commands)
-}
-
-fn api_key(provider: RemoteProviderKind) -> Result<ApiKey> {
-    ApiKey::load(provider)?.ok_or_else(|| anyhow!("{} API key is not configured", provider.id()))
-}
-
-const fn generation(config: &ChatTranslationConfig) -> RemoteGenerationOptions {
-    RemoteGenerationOptions {
-        temperature: config.temperature,
-        max_tokens: config.max_tokens,
-    }
-}
-
-fn validate(config: &TranslationModel) -> Result<()> {
-    match config {
-        TranslationModel::Local(config) if config.local_model.trim().is_empty() => {
-            bail!("local_model must not be empty")
-        }
-        TranslationModel::OpenAi(config)
-        | TranslationModel::Gemini(config)
-        | TranslationModel::Claude(config)
-        | TranslationModel::DeepSeek(config) => {
-            validate_generation(&config.remote_model, config.temperature, config.max_tokens)?
-        }
-        TranslationModel::OpenAiCompatible(config) => validate_compatible(config)?,
-        _ => {}
-    }
-    Ok(())
-}
-
-fn validate_generation(
-    remote_model: &str,
-    temperature: Option<f32>,
-    max_tokens: Option<u32>,
-) -> Result<()> {
-    if remote_model.trim().is_empty() {
-        bail!("remote_model must not be empty");
-    }
-    if temperature.is_some_and(|value| !value.is_finite()) {
-        bail!("temperature must be finite");
-    }
-    if max_tokens == Some(0) {
-        bail!("max_tokens must be positive");
-    }
-    Ok(())
-}
-
-fn validate_compatible(config: &OpenAiCompatibleTranslationConfig) -> Result<()> {
-    validate_generation(&config.remote_model, config.temperature, config.max_tokens)?;
-    Ok(())
 }

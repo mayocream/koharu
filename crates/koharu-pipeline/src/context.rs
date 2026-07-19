@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -7,24 +8,53 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::DynamicImage;
 use koharu_scene::{BlobId, Commands, ElementId, Frame, Page, PageAsset, PageId, Revision};
 
-use crate::{CancellationToken, Scope};
+use crate::{CancellationToken, EventSink, ModelMeasurement, Phase, PipelineEvent, Scope};
+
+#[derive(Clone)]
+pub enum BlobBytes {
+    Owned(Arc<[u8]>),
+    Shared(koharu_worker::SharedBytes),
+}
+
+pub(crate) struct SharedSnapshot {
+    _arena: Option<koharu_worker::ArenaFile>,
+    pub descriptor: Option<koharu_worker::ArenaDescriptor>,
+    pub blobs: Vec<(BlobId, koharu_worker::SharedSlice)>,
+}
+
+impl AsRef<[u8]> for BlobBytes {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Owned(bytes) => bytes,
+            Self::Shared(bytes) => bytes.as_ref(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Context {
+    phase: Option<Phase>,
     revision: Revision,
     scope: Scope,
     pages: Arc<[Page]>,
-    blobs: Arc<HashMap<BlobId, Arc<[u8]>>>,
+    blobs: Arc<HashMap<BlobId, BlobBytes>>,
     decoded: Arc<Mutex<HashMap<BlobId, Arc<DynamicImage>>>>,
-    target_language: Option<String>,
-    instructions: Option<String>,
-    cancellation: CancellationToken,
+    options: ContextOptions,
+    shared: Arc<Mutex<Option<Arc<SharedSnapshot>>>>,
 }
 
+#[derive(Clone)]
 pub(crate) struct ContextOptions {
-    pub target_language: Option<String>,
-    pub instructions: Option<String>,
+    pub translation: TranslationOptions,
     pub cancellation: CancellationToken,
+    pub events: Option<EventSink>,
+    pub measurements: Arc<Mutex<Vec<ModelMeasurement>>>,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct TranslationOptions {
+    pub target_language: String,
+    pub instructions: Option<String>,
 }
 
 impl Context {
@@ -32,20 +62,30 @@ impl Context {
         revision: Revision,
         scope: Scope,
         pages: Vec<Page>,
-        blobs: HashMap<BlobId, Arc<[u8]>>,
+        blobs: HashMap<BlobId, BlobBytes>,
         decoded: Arc<Mutex<HashMap<BlobId, Arc<DynamicImage>>>>,
         options: ContextOptions,
     ) -> Self {
         Self {
+            phase: None,
             revision,
             scope,
             pages: pages.into(),
             blobs: Arc::new(blobs),
             decoded,
-            target_language: options.target_language,
-            instructions: options.instructions,
-            cancellation: options.cancellation,
+            options,
+            shared: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub(crate) fn for_phase(&self, phase: Phase) -> Self {
+        let mut context = self.clone();
+        context.phase = Some(phase);
+        context
+    }
+
+    pub(crate) fn phase(&self) -> Phase {
+        self.phase.expect("execution context has a phase")
     }
 
     #[must_use]
@@ -68,7 +108,7 @@ impl Context {
         self.pages.iter().find(|page| page.id == id)
     }
 
-    pub fn blob(&self, id: BlobId) -> Result<Arc<[u8]>> {
+    pub fn blob(&self, id: BlobId) -> Result<BlobBytes> {
         self.blobs
             .get(&id)
             .cloned()
@@ -85,7 +125,7 @@ impl Context {
         }
         let bytes = self.blob(id)?;
         let image = Arc::new(
-            image::load_from_memory(&bytes)
+            image::load_from_memory(bytes.as_ref())
                 .with_context(|| format!("failed to decode scene blob {id}"))?,
         );
         decoded.insert(id, image.clone());
@@ -107,18 +147,67 @@ impl Context {
     }
 
     #[must_use]
-    pub fn target_language(&self) -> Option<&str> {
-        self.target_language.as_deref()
+    pub fn target_language(&self) -> &str {
+        &self.options.translation.target_language
     }
 
     #[must_use]
     pub fn instructions(&self) -> Option<&str> {
-        self.instructions.as_deref()
+        self.options.translation.instructions.as_deref()
     }
 
     #[must_use]
     pub fn cancellation(&self) -> &CancellationToken {
-        &self.cancellation
+        &self.options.cancellation
+    }
+
+    pub(crate) fn shared_snapshot(&self, directory: &Path) -> Result<Arc<SharedSnapshot>> {
+        let mut shared = self
+            .shared
+            .lock()
+            .map_err(|_| anyhow!("pipeline shared snapshot lock is poisoned"))?;
+        if let Some(snapshot) = shared.as_ref() {
+            return Ok(snapshot.clone());
+        }
+        let mut blobs = self.blobs.iter().collect::<Vec<_>>();
+        blobs.sort_by_key(|(id, _)| **id);
+        let (arena, descriptor, slices) = if blobs.is_empty() {
+            (None, None, Vec::new())
+        } else {
+            let (arena, slices) = koharu_worker::ArenaFile::create(
+                directory,
+                blobs.iter().map(|(_, bytes)| (*bytes).as_ref()),
+            )?;
+            let descriptor = arena.descriptor().clone();
+            (Some(arena), Some(descriptor), slices)
+        };
+        let blobs = blobs.into_iter().map(|(id, _)| *id).zip(slices).collect();
+        let snapshot = Arc::new(SharedSnapshot {
+            _arena: arena,
+            descriptor,
+            blobs,
+        });
+        *shared = Some(snapshot.clone());
+        Ok(snapshot)
+    }
+
+    pub(crate) fn emit(&self, event: PipelineEvent) {
+        if let Some(events) = &self.options.events {
+            events(event);
+        }
+    }
+
+    pub(crate) fn event_sink(&self) -> Option<EventSink> {
+        self.options.events.clone()
+    }
+
+    pub(crate) fn record_measurement(&self, measurement: ModelMeasurement) {
+        self.options
+            .measurements
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(measurement.clone());
+        self.emit(PipelineEvent::Measurement(measurement));
     }
 
     #[must_use]
@@ -129,12 +218,12 @@ impl Context {
     #[must_use]
     pub fn includes_element(&self, page: PageId, element: ElementId, frame: Frame) -> bool {
         match &self.scope {
-            Scope::Project | Scope::Pages(_) => self.page(page).is_some(),
+            Scope::Project | Scope::Pages { .. } => self.page(page).is_some(),
             Scope::Region {
                 page: scoped_page,
                 frame: region,
             } => *scoped_page == page && intersects(*region, frame),
-            Scope::Elements(elements) => elements.contains(&element),
+            Scope::Elements { elements } => elements.contains(&element),
         }
     }
 

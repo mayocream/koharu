@@ -2,33 +2,29 @@
 // https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/caiyun.rs
 
 use anyhow::{Context, anyhow};
+use koharu_secrets::ExposeSecret;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use super::{ApiKey, send_json};
-use crate::{Error, Language, Result, TranslationRequest};
+use super::send_json;
+use crate::{Error, Language, RemoteProviderKind, Result, TranslationRequest};
 
 const URL: &str = "https://api.interpreter.caiyunai.com/v1/translator";
 
-#[derive(Debug, Clone)]
-pub struct CaiyunConfig {
-    pub api_key: ApiKey,
-}
-
-impl CaiyunConfig {
-    #[must_use]
-    pub fn new(api_key: impl Into<ApiKey>) -> Self {
-        Self {
-            api_key: api_key.into(),
-        }
-    }
-}
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct CaiyunConfig {}
 
 pub(super) async fn translate(
     client: &Client,
-    config: &CaiyunConfig,
+    _config: &CaiyunConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
+    let provider = RemoteProviderKind::Caiyun;
+    let api_key = koharu_secrets::get(provider.id())?
+        .filter(|value| !value.expose_secret().trim().is_empty())
+        .with_context(|| format!("{} API key is not configured", provider.id()))?;
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "caiyun",
         language: request.target_language,
@@ -39,7 +35,7 @@ pub(super) async fn translate(
             .post(URL)
             .header(
                 "X-Authorization",
-                format!("token {}", config.api_key.expose()),
+                format!("token {}", api_key.expose_secret()),
             )
             .json(&Request {
                 source: &request.segments,

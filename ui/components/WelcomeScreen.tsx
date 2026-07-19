@@ -80,10 +80,10 @@ function WorkflowPreview() {
   const [phase, setPhase] = useState(reduceMotion ? 3 : 0)
   const [typedCharacters, setTypedCharacters] = useState(reduceMotion ? FINAL_TEXT.length : 0)
   const steps = [
-    t('native.stage.detection', { defaultValue: 'Detection' }),
-    t('native.stage.segmentation', { defaultValue: 'Segmentation' }),
-    t('native.stage.inpainting', { defaultValue: 'Inpainting' }),
-    t('native.stage.typography', { defaultValue: 'Typography' }),
+    t('native.phase.detection', { defaultValue: 'Detection' }),
+    t('native.phase.segmentation', { defaultValue: 'Segmentation' }),
+    t('native.phase.inpainting', { defaultValue: 'Inpainting' }),
+    t('native.phase.typography', { defaultValue: 'Typography' }),
   ]
 
   useEffect(() => {

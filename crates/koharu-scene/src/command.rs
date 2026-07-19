@@ -7,8 +7,8 @@ use revision::revisioned;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BlobId, Element, ElementId, Frame, ImageElement, Page, PageAsset, PageAssets, PageId, Result,
-    Revision, Size, SourceText, TextBlock, TextLayout, TextStyle, blob,
+    BlobId, Element, ElementId, Frame, ImageElement, Page, PageAsset, PageAssets, PageId, Region,
+    Result, Revision, Size, SourceText, TextAnalysis, TextBlock, TextLayout, TextStyle, blob,
 };
 
 #[derive(Clone)]
@@ -16,6 +16,12 @@ pub struct Commands {
     pub(crate) base: Revision,
     pub(crate) ops: Vec<Command>,
     pub(crate) attachments: HashMap<BlobId, blob::Attachment>,
+}
+
+pub struct CommandParts {
+    pub base: Revision,
+    pub ops: Vec<Command>,
+    pub attachments: Vec<(BlobId, Arc<[u8]>)>,
 }
 
 impl Commands {
@@ -61,6 +67,66 @@ impl Commands {
             }
         }
         Ok(())
+    }
+
+    /// Splits a command batch into its validated wire-transfer representation.
+    #[must_use]
+    pub fn into_parts(self) -> CommandParts {
+        let mut attachments = self
+            .attachments
+            .into_iter()
+            .map(|(id, attachment)| (id, attachment.bytes))
+            .collect::<Vec<_>>();
+        attachments.sort_by_key(|(id, _)| *id);
+        CommandParts {
+            base: self.base,
+            ops: self.ops,
+            attachments,
+        }
+    }
+
+    /// Reconstructs a command batch received across a trusted transport.
+    ///
+    /// Attachment hashes, image metadata, and mask channel constraints are
+    /// revalidated before the batch can be applied to a session.
+    pub fn from_parts(parts: CommandParts) -> Result<Self> {
+        let mask_ids = parts
+            .ops
+            .iter()
+            .filter_map(|command| match command {
+                Command::SetPageAsset {
+                    asset:
+                        PageAsset::TextMaskCandidate
+                        | PageAsset::LayoutTextMask
+                        | PageAsset::TextMask
+                        | PageAsset::CooMask
+                        | PageAsset::BubbleMask
+                        | PageAsset::BrushMask,
+                    blob: Some(id),
+                    ..
+                } => Some(*id),
+                _ => None,
+            })
+            .collect::<HashSet<_>>();
+        let mut validated = HashMap::new();
+        for (claimed_id, bytes) in parts.attachments {
+            let attachment = blob::attach(bytes, mask_ids.contains(&claimed_id))?;
+            if attachment.id != claimed_id {
+                return Err(crate::Error::invalid(
+                    "command attachment does not match its content hash",
+                ));
+            }
+            if validated.insert(claimed_id, attachment).is_some() {
+                return Err(crate::Error::invalid(
+                    "command batch contains a duplicate attachment",
+                ));
+            }
+        }
+        Ok(Self {
+            base: parts.base,
+            ops: parts.ops,
+            attachments: validated,
+        })
     }
 
     pub fn add_page(
@@ -109,10 +175,24 @@ impl Commands {
     }
 
     pub fn add_text(&mut self, page: PageId, frame: Frame) -> ElementId {
+        self.add_text_block(page, frame, TextBlock::default())
+    }
+
+    pub fn add_text_block(&mut self, page: PageId, frame: Frame, text: TextBlock) -> ElementId {
         let id = ElementId::new();
         self.push(Command::InsertElement {
             page,
-            element: Element::new_text(id, frame, TextBlock::default()),
+            element: Element::new_text(id, frame, text),
+            index: usize::MAX,
+        });
+        id
+    }
+
+    pub fn add_region(&mut self, page: PageId, frame: Frame, region: Region) -> ElementId {
+        let id = ElementId::new();
+        self.push(Command::InsertElement {
+            page,
+            element: Element::new_region(id, frame, region),
             index: usize::MAX,
         });
         id
@@ -225,6 +305,7 @@ pub enum ElementChange {
     Translation(Option<String>),
     Style(TextStyle),
     Layout(TextLayout),
+    Analysis(TextAnalysis),
     Image { blob: BlobId, natural_size: Size },
     ImageName(String),
 }
@@ -255,6 +336,7 @@ enum ElementField {
     Translation,
     Style,
     Layout,
+    Analysis,
     Image,
     Name,
 }
@@ -358,6 +440,7 @@ impl ElementChange {
             Self::Translation(_) => ElementField::Translation,
             Self::Style(_) => ElementField::Style,
             Self::Layout(_) => ElementField::Layout,
+            Self::Analysis(_) => ElementField::Analysis,
             Self::Image { .. } => ElementField::Image,
             Self::ImageName(_) => ElementField::Name,
         }

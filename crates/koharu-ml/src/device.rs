@@ -1,9 +1,10 @@
 use std::fmt;
 
 use koharu_llama::{LlamaBackendDevice, LlamaBackendDeviceType};
+use serde::{Deserialize, Serialize};
 
 /// Compute backend used by a machine-learning device.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize)]
 pub enum Backend {
     Cpu,
     Cuda,
@@ -50,7 +51,7 @@ impl fmt::Display for Backend {
 }
 
 /// Broad device category reported by GGML backends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash, Serialize)]
 pub enum DeviceType {
     Cpu,
     Accelerator,
@@ -60,7 +61,7 @@ pub enum DeviceType {
 }
 
 /// Device representation shared by Torch, stable-diffusion.cpp, and llama.cpp.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Hash, Serialize)]
 pub struct Device {
     pub index: usize,
     pub name: String,

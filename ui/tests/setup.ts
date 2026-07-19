@@ -50,6 +50,9 @@ beforeEach(() => {
     selectedElements: [],
     selectedPages: [],
     hoveredElement: null,
+    tool: 'select',
+    settingsOpen: false,
+    showNavigator: true,
   })
 })
 

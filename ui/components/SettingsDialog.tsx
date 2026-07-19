@@ -1,16 +1,10 @@
 'use client'
 
-import { Cpu, KeyRound, Keyboard, Monitor, Moon, Palette, Save, Sun } from 'lucide-react'
+import { Cpu, Eye, EyeOff, Keyboard, Monitor, Moon, Palette, Save, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -29,35 +23,26 @@ import { supportedLanguages } from '@/lib/i18n'
 import {
   koharuClient,
   useEditorStore,
-  type DetectionModel,
-  type InpaintingModel,
-  type OcrModel,
   type PipelineConfig,
-  type SecretProvider,
+  type ProcessorConfig,
   type ShortcutAction,
-  type SegmentationModel,
-  type Stage,
+  type Phase,
   type TargetLanguageView,
-  type TranslationModel,
-  type TypographyModel,
+  type TranslationCredentialsView,
+  type TranslationSettings,
+  type Providers,
 } from '@/lib/koharu'
 
 const settingsTabs = [
   { id: 'appearance', icon: Palette, label: 'native.settings.appearance' },
   { id: 'pipeline', icon: Cpu, label: 'native.settings.pipeline' },
-  { id: 'credentials', icon: KeyRound, label: 'native.settings.credentials' },
   { id: 'shortcuts', icon: Keyboard, label: 'native.settings.shortcuts' },
 ] as const
 type SettingsTab = (typeof settingsTabs)[number]['id']
 
-type PipelineModel =
-  | DetectionModel
-  | SegmentationModel
-  | OcrModel
-  | TranslationModel
-  | TypographyModel
-  | InpaintingModel
-const stages: Stage[] = [
+type PipelineModel = ProcessorConfig
+type ModelName = PipelineModel['model'] | Providers['provider']
+const phases: Phase[] = [
   'detection',
   'segmentation',
   'ocr',
@@ -65,10 +50,11 @@ const stages: Stage[] = [
   'typography',
   'inpainting',
 ]
-const modelOptions: Record<Stage, PipelineModel['model'][]> = {
-  detection: ['pp_doclayout_v3', 'comic_text_detector'],
-  segmentation: ['manga_text_segmentation', 'speech_bubble_segmentation'],
-  ocr: ['paddleocr_vl_1.6', 'manga_ocr'],
+type PipelinePhase = Exclude<Phase, 'translation'>
+const modelOptions = {
+  detection: ['pp_doclayout_v3', 'comic_text_detector', 'koharu_yolo26s', 'comic_onomatopoeia'],
+  segmentation: ['manga_text_mask', 'speech_bubble_yolov8m', 'mask_fusion'],
+  ocr: ['paddleocr_vl_1.6', 'manga_ocr', 'baberu_ocr'],
   translation: [
     'local',
     'openai',
@@ -76,26 +62,50 @@ const modelOptions: Record<Stage, PipelineModel['model'][]> = {
     'claude',
     'deepseek',
     'openai_compatible',
+    'openrouter',
+    'lm_studio',
     'deepl',
     'google_cloud_translation',
     'caiyun',
   ],
   typography: ['font_detector'],
   inpainting: ['lama', 'aot_inpainting', 'flux2_klein'],
-}
-const modelLabels: Record<PipelineModel['model'], string> = {
+} satisfies Record<Phase, ModelName[]>
+const processorOrder: PipelineModel['model'][] = [
+  'pp_doclayout_v3',
+  'comic_text_detector',
+  'koharu_yolo26s',
+  'manga_text_mask',
+  'speech_bubble_yolov8m',
+  'comic_onomatopoeia',
+  'mask_fusion',
+  'paddleocr_vl_1.6',
+  'manga_ocr',
+  'baberu_ocr',
+  'font_detector',
+  'lama',
+  'aot_inpainting',
+  'flux2_klein',
+]
+const modelLabels: Record<ModelName, string> = {
   comic_text_detector: 'Comic Text Detector',
   pp_doclayout_v3: 'PP-DocLayoutV3',
-  manga_text_segmentation: 'Manga Text Segmentation',
-  speech_bubble_segmentation: 'Speech Bubble Segmentation',
+  koharu_yolo26s: 'Koharu YOLO26s Layout',
+  comic_onomatopoeia: 'COO Detector + OCR',
+  mask_fusion: 'Semantic Mask Fusion',
+  manga_text_mask: 'Manga Text Mask',
+  speech_bubble_yolov8m: 'Speech Bubble (YOLOv8m)',
   'paddleocr_vl_1.6': 'PaddleOCR-VL 1.6',
   manga_ocr: 'Manga OCR',
+  baberu_ocr: 'Baberu OCR',
   local: 'Local',
   openai: 'OpenAI',
   gemini: 'Gemini',
   claude: 'Claude',
   deepseek: 'DeepSeek',
   openai_compatible: 'OpenAI-compatible',
+  openrouter: 'OpenRouter',
+  lm_studio: 'LM Studio',
   deepl: 'DeepL',
   google_cloud_translation: 'Google Cloud Translation',
   caiyun: 'Caiyun',
@@ -104,7 +114,7 @@ const modelLabels: Record<PipelineModel['model'], string> = {
   aot_inpainting: 'AOT Inpainting',
   flux2_klein: 'FLUX.2 Klein',
 }
-const stageDescriptions: Record<Stage, string> = {
+const phaseDescriptions: Record<Phase, string> = {
   detection: 'Locate text on the page.',
   segmentation: 'Refine the areas that should be cleaned.',
   ocr: 'Read the text inside each region.',
@@ -119,41 +129,29 @@ export function SettingsDialog() {
   const open = useEditorStore((state) => state.settingsOpen)
   const setOpen = useEditorStore((state) => state.setSettingsOpen)
   const settings = useEditorStore((state) => state.settings)
-  const targetLanguage = useEditorStore((state) => state.targetLanguage)
-  const setTargetLanguage = useEditorStore((state) => state.setTargetLanguage)
-  const instructions = useEditorStore((state) => state.instructions)
-  const setInstructions = useEditorStore((state) => state.setInstructions)
   const [draft, setDraft] = useState<PipelineConfig | null>(settings?.pipeline ?? null)
-  const [targetLanguageDraft, setTargetLanguageDraft] = useState(targetLanguage)
-  const [instructionsDraft, setInstructionsDraft] = useState(instructions)
-  const [secrets, setSecrets] = useState<Partial<Record<SecretProvider, string>>>({})
+  const [translationDraft, setTranslationDraft] = useState<TranslationSettings | null>(
+    settings?.translation ?? null,
+  )
   const [tab, setTab] = useState<SettingsTab>('appearance')
 
   useEffect(() => {
     if (open) {
       setTab('appearance')
-      setTargetLanguageDraft(targetLanguage)
-      setInstructionsDraft(instructions)
       koharuClient.fire({ type: 'get_settings' })
     }
-  }, [instructions, open, targetLanguage])
+  }, [open])
   useEffect(() => {
     setDraft(settings?.pipeline ?? null)
-    if (open && settings) {
-      setTargetLanguageDraft((current) =>
-        normalizeTargetLanguage(current, settings.target_languages),
-      )
-    }
+    setTranslationDraft(settings?.translation ?? null)
   }, [open, settings])
 
   const save = () => {
-    if (!draft) return
+    if (!draft || !translationDraft) return
     koharuClient
-      .command({ type: 'set_pipeline_config', config: draft })
+      .command({ type: 'set_settings', pipeline: draft, translation: translationDraft })
       .then((result) => {
         if (result === 'accepted') {
-          setTargetLanguage(targetLanguageDraft)
-          setInstructions(instructionsDraft)
           setOpen(false)
         }
       })
@@ -204,22 +202,26 @@ export function SettingsDialog() {
                         'Choose how Koharu detects, reads, translates, and rebuilds each page.',
                     })}
                   >
-                    {draft ? (
+                    {draft && translationDraft ? (
                       <div className='divide-y divide-border'>
-                        {stages.map((stage) => (
-                          <StageEditor
-                            key={stage}
-                            stage={stage}
-                            config={draft}
-                            localModels={settings?.local_translation_models ?? []}
-                            targetLanguages={settings?.target_languages ?? []}
-                            targetLanguage={targetLanguageDraft}
-                            instructions={instructionsDraft}
-                            onTargetLanguageChange={setTargetLanguageDraft}
-                            onInstructionsChange={setInstructionsDraft}
-                            onChange={setDraft}
-                          />
-                        ))}
+                        {phases.map((phase) =>
+                          phase === 'translation' ? (
+                            <TranslationEditor
+                              key={phase}
+                              config={translationDraft}
+                              localModels={settings?.local_translation_models ?? []}
+                              targetLanguages={settings?.target_languages ?? []}
+                              onChange={setTranslationDraft}
+                            />
+                          ) : (
+                            <PhaseEditor
+                              key={phase}
+                              phase={phase}
+                              config={draft}
+                              onChange={setDraft}
+                            />
+                          ),
+                        )}
                       </div>
                     ) : (
                       <div className='rounded-xl border p-4 text-xs text-muted-foreground'>
@@ -231,104 +233,6 @@ export function SettingsDialog() {
                   </Section>
                 )}
 
-                {tab === 'credentials' && (
-                  <Section
-                    title={t('native.settings.credentials', { defaultValue: 'Credentials' })}
-                    description={t('native.settings.credentialsHelp', {
-                      defaultValue: 'Secret values are write-only and never returned to the UI.',
-                    })}
-                  >
-                    <Accordion type='multiple' className='-mx-1'>
-                      {settings?.credentials.map(({ provider, configured }) => (
-                        <AccordionItem key={provider} value={provider} className='border-border'>
-                          <AccordionTrigger className='px-1 py-3 hover:no-underline'>
-                            <div className='flex flex-1 items-center gap-2.5 pr-2'>
-                              <span
-                                className={`size-2 shrink-0 rounded-full ${configured ? 'bg-green-500' : 'bg-muted-foreground/35'}`}
-                              />
-                              <span className='text-sm font-medium capitalize'>
-                                {provider.replaceAll('_', ' ')}
-                              </span>
-                              <span className='ml-auto text-xs font-normal text-muted-foreground'>
-                                {configured
-                                  ? t('native.settings.configured', {
-                                      defaultValue: 'Configured',
-                                    })
-                                  : t('native.settings.notConfigured', {
-                                      defaultValue: 'Not configured',
-                                    })}
-                              </span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className='space-y-2 px-1 pt-1 pb-4'>
-                            <Label className='text-xs' htmlFor={`secret-${provider}`}>
-                              {t('native.settings.credentials', { defaultValue: 'Credential' })}
-                            </Label>
-                            <div className='flex gap-2'>
-                              <Input
-                                id={`secret-${provider}`}
-                                type='password'
-                                autoComplete='new-password'
-                                className='[&::-ms-reveal]:hidden'
-                                placeholder={
-                                  configured
-                                    ? t('native.settings.configured', {
-                                        defaultValue: 'Configured',
-                                      })
-                                    : t('native.settings.notConfigured', {
-                                        defaultValue: 'Not configured',
-                                      })
-                                }
-                                value={secrets[provider] ?? ''}
-                                onChange={(event) =>
-                                  setSecrets((current) => ({
-                                    ...current,
-                                    [provider]: event.currentTarget.value,
-                                  }))
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key !== 'Enter') return
-                                  const value = secrets[provider]?.trim()
-                                  if (!value) return
-                                  koharuClient.fire({ type: 'set_secret', provider, value })
-                                  setSecrets((current) => ({ ...current, [provider]: '' }))
-                                }}
-                              />
-                              <Button
-                                size='sm'
-                                disabled={!secrets[provider]?.trim()}
-                                onClick={() => {
-                                  const value = secrets[provider]?.trim()
-                                  if (!value) return
-                                  koharuClient.fire({ type: 'set_secret', provider, value })
-                                  setSecrets((current) => ({ ...current, [provider]: '' }))
-                                }}
-                              >
-                                {t('native.settings.set', { defaultValue: 'Set' })}
-                              </Button>
-                              {configured && (
-                                <Button
-                                  size='sm'
-                                  variant='destructive'
-                                  onClick={() =>
-                                    koharuClient.fire({
-                                      type: 'set_secret',
-                                      provider,
-                                      value: null,
-                                    })
-                                  }
-                                >
-                                  {t('native.settings.clear', { defaultValue: 'Clear' })}
-                                </Button>
-                              )}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </Section>
-                )}
-
                 {tab === 'shortcuts' && <ShortcutSettings />}
               </div>
             </ScrollArea>
@@ -337,7 +241,7 @@ export function SettingsDialog() {
               <Button variant='outline' onClick={() => setOpen(false)}>
                 {t('common.cancel', { defaultValue: 'Cancel' })}
               </Button>
-              <Button disabled={!draft} onClick={save}>
+              <Button disabled={!draft || !translationDraft} onClick={save}>
                 <Save />
                 {t('common.save', { defaultValue: 'Save' })}
               </Button>
@@ -422,77 +326,211 @@ function Section({
   )
 }
 
-function StageEditor({
-  stage,
+function PhaseEditor({
+  phase,
   config,
-  localModels,
-  targetLanguages,
-  targetLanguage,
-  instructions,
-  onTargetLanguageChange,
-  onInstructionsChange,
   onChange,
 }: {
-  stage: Stage
+  phase: PipelinePhase
   config: PipelineConfig
-  localModels: string[]
-  targetLanguages: TargetLanguageView[]
-  targetLanguage: string
-  instructions: string
-  onTargetLanguageChange: (language: string) => void
-  onInstructionsChange: (instructions: string) => void
   onChange: (config: PipelineConfig) => void
 }) {
   const { t } = useTranslation()
-  const model = config[stage] as PipelineModel
-  const replace = (next: PipelineModel) => onChange(setStage(config, stage, next))
-  const hasOptions = hasModelOptions(model)
   return (
     <article className='grid grid-cols-[minmax(8rem,150px)_minmax(0,1fr)] gap-5 py-3 first:pt-0 last:pb-0'>
       <div className='min-w-0 pt-1'>
-        <Label htmlFor={`pipeline-${stage}`} className='text-xs leading-none font-semibold'>
-          {t(`native.stage.${stage}`, { defaultValue: stage })}
+        <Label className='text-xs leading-none font-semibold'>
+          {t(`native.phase.${phase}`, { defaultValue: phase })}
         </Label>
         <p
-          id={`pipeline-${stage}-description`}
+          id={`pipeline-${phase}-description`}
           className='mt-1 text-[10px] leading-snug text-muted-foreground'
         >
-          {t(`native.stageDescription.${stage}`, { defaultValue: stageDescriptions[stage] })}
+          {t(`native.phaseDescription.${phase}`, { defaultValue: phaseDescriptions[phase] })}
+        </p>
+      </div>
+      <div className='min-w-0 space-y-2' aria-describedby={`pipeline-${phase}-description`}>
+        {modelOptions[phase].map((name) => {
+          const index = config.processors.findIndex((processor) => processor.model === name)
+          const model = index >= 0 ? config.processors[index] : null
+          return (
+            <div key={name} className='rounded-lg border border-border bg-background p-2.5'>
+              <div className='flex items-center justify-between gap-3'>
+                <Label className='text-xs font-medium'>{modelLabels[name]}</Label>
+                <Switch
+                  checked={model !== null}
+                  aria-label={modelLabels[name]}
+                  onCheckedChange={(enabled) =>
+                    onChange(
+                      enabled
+                        ? {
+                            ...config,
+                            processors: insertPipelineModel(config.processors, name),
+                          }
+                        : {
+                            ...config,
+                            processors: config.processors.filter(
+                              (processor) => processor.model !== name,
+                            ),
+                          },
+                    )
+                  }
+                />
+              </div>
+              {model && hasPipelineModelOptions(model) && (
+                <div className='mt-2 border-t border-border pt-2'>
+                  <PipelineModelFields
+                    model={model}
+                    onChange={(next) =>
+                      onChange({
+                        ...config,
+                        processors: config.processors.map((processor, processorIndex) =>
+                          processorIndex === index ? next : processor,
+                        ),
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </article>
+  )
+}
+
+function TranslationEditor({
+  config,
+  localModels,
+  targetLanguages,
+  onChange,
+}: {
+  config: TranslationSettings
+  localModels: string[]
+  targetLanguages: TargetLanguageView[]
+  onChange: (config: TranslationSettings) => void
+}) {
+  const { t } = useTranslation()
+  const replace = (model: Providers) => onChange({ ...config, model })
+  const credential = credentialField(config.model.provider)
+  const value = credential ? config.credentials[credential] : null
+  const configured = Boolean(value)
+  const [revealCredential, setRevealCredential] = useState(false)
+
+  useEffect(() => setRevealCredential(false), [credential])
+
+  return (
+    <article className='grid grid-cols-[minmax(8rem,150px)_minmax(0,1fr)] gap-5 py-3 first:pt-0 last:pb-0'>
+      <div className='min-w-0 pt-1'>
+        <Label htmlFor='pipeline-translation' className='text-xs leading-none font-semibold'>
+          {t('native.phase.translation', { defaultValue: 'translation' })}
+        </Label>
+        <p
+          id='pipeline-translation-description'
+          className='mt-1 text-[10px] leading-snug text-muted-foreground'
+        >
+          {t('native.phaseDescription.translation', {
+            defaultValue: phaseDescriptions.translation,
+          })}
         </p>
       </div>
       <div className='min-w-0 space-y-2'>
         <Select
-          value={model.model}
-          onValueChange={(value) => replace(defaultModel(value as PipelineModel['model']))}
+          value={config.model.provider}
+          onValueChange={(provider) => replace(defaultProvider(provider as Providers['provider']))}
         >
           <SelectTrigger
-            id={`pipeline-${stage}`}
-            aria-describedby={`pipeline-${stage}-description`}
+            id='pipeline-translation'
+            aria-describedby='pipeline-translation-description'
             className='w-full bg-background'
           >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {modelOptions[stage].map((option) => (
+            {modelOptions.translation.map((option) => (
               <SelectItem key={option} value={option}>
                 {modelLabels[option]}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {hasOptions && <ModelFields model={model} localModels={localModels} onChange={replace} />}
-        {stage === 'translation' && (
-          <TranslationPreferences
-            languages={targetLanguages}
-            targetLanguage={targetLanguage}
-            instructions={instructions}
-            onTargetLanguageChange={onTargetLanguageChange}
-            onInstructionsChange={onInstructionsChange}
-          />
+        {hasProviderOptions(config.model) && (
+          <ProviderFields model={config.model} localModels={localModels} onChange={replace} />
         )}
+        {credential && (
+          <div className='grid gap-0.5'>
+            <Label htmlFor={`translation-credential-${credential}`} className='text-xs font-normal'>
+              {t('native.settings.credentials', { defaultValue: 'Credential' })}
+            </Label>
+            <div className='flex gap-2'>
+              <Input
+                id={`translation-credential-${credential}`}
+                aria-label={`${credential.replaceAll('_', ' ')} credential`}
+                type={revealCredential ? 'text' : 'password'}
+                autoComplete='new-password'
+                className='[&::-ms-reveal]:hidden'
+                value={value ?? ''}
+                placeholder={
+                  configured
+                    ? t('native.settings.configured', { defaultValue: 'Configured' })
+                    : t('native.settings.notConfigured', { defaultValue: 'Not configured' })
+                }
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    credentials: {
+                      ...config.credentials,
+                      [credential]: event.currentTarget.value,
+                    },
+                  })
+                }
+              />
+              <Button
+                type='button'
+                size='icon-sm'
+                variant='outline'
+                disabled={!configured}
+                aria-label={
+                  revealCredential
+                    ? t('native.settings.hideCredential', { defaultValue: 'Hide credential' })
+                    : t('native.settings.revealCredential', { defaultValue: 'Reveal credential' })
+                }
+                onClick={() => setRevealCredential((reveal) => !reveal)}
+              >
+                {revealCredential ? <EyeOff /> : <Eye />}
+              </Button>
+              {configured && (
+                <Button
+                  size='sm'
+                  variant='destructive'
+                  onClick={() =>
+                    onChange({
+                      ...config,
+                      credentials: { ...config.credentials, [credential]: '' },
+                    })
+                  }
+                >
+                  {t('native.settings.clear', { defaultValue: 'Clear' })}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+        <TranslationPreferences
+          languages={targetLanguages}
+          targetLanguage={config.target_language}
+          instructions={config.instructions ?? ''}
+          onTargetLanguageChange={(target_language) => onChange({ ...config, target_language })}
+          onInstructionsChange={(instructions) => onChange({ ...config, instructions })}
+        />
       </div>
     </article>
   )
+}
+
+function credentialField(provider: Providers['provider']): keyof TranslationCredentialsView | null {
+  return provider === 'local' ? null : provider
 }
 
 function TranslationPreferences({
@@ -559,28 +597,25 @@ function normalizeTargetLanguage(value: string, languages: TargetLanguageView[])
   return languages.find((language) => language.name === value)?.tag ?? languages[0]?.tag ?? value
 }
 
-function hasModelOptions(model: PipelineModel): boolean {
+function hasPipelineModelOptions(model: PipelineModel): boolean {
   switch (model.model) {
     case 'comic_text_detector':
     case 'paddleocr_vl_1.6':
     case 'manga_ocr':
+    case 'baberu_ocr':
     case 'lama':
     case 'flux2_klein':
-    case 'google_cloud_translation':
-    case 'caiyun':
       return false
     default:
       return true
   }
 }
 
-function ModelFields({
+function PipelineModelFields({
   model,
-  localModels,
   onChange,
 }: {
   model: PipelineModel
-  localModels: string[]
   onChange: (model: PipelineModel) => void
 }) {
   const { t } = useTranslation()
@@ -588,11 +623,77 @@ function ModelFields({
     case 'comic_text_detector':
     case 'paddleocr_vl_1.6':
     case 'manga_ocr':
+    case 'baberu_ocr':
     case 'lama':
     case 'flux2_klein':
-    case 'google_cloud_translation':
-    case 'caiyun':
       return null
+    case 'koharu_yolo26s':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <NumberSetting
+            label={t('native.model.confidence', { defaultValue: 'Confidence' })}
+            value={model.confidence ?? 0.25}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(confidence) => onChange({ ...model, confidence })}
+          />
+          <BooleanSetting
+            label='Dialogue regions'
+            value={model.dialogue_regions ?? false}
+            onChange={(dialogue_regions) => onChange({ ...model, dialogue_regions })}
+          />
+          <BooleanSetting
+            label='COO proposals'
+            value={model.onomatopoeia_regions ?? true}
+            onChange={(onomatopoeia_regions) => onChange({ ...model, onomatopoeia_regions })}
+          />
+          <BooleanSetting
+            label='Instance text masks'
+            value={model.text_masks ?? true}
+            onChange={(text_masks) => onChange({ ...model, text_masks })}
+          />
+        </div>
+      )
+    case 'comic_onomatopoeia':
+      return (
+        <div className='grid gap-2 sm:grid-cols-3'>
+          <NumberSetting
+            label='COO confidence'
+            value={model.onomatopoeia_threshold ?? 0.5}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(onomatopoeia_threshold) => onChange({ ...model, onomatopoeia_threshold })}
+          />
+          <NumberSetting
+            label='OCR confidence'
+            value={model.ocr_threshold ?? 0.5}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(ocr_threshold) => onChange({ ...model, ocr_threshold })}
+          />
+          <NumberSetting
+            label='Dedup IoU'
+            value={model.dedup_iou ?? 0.3}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(dedup_iou) => onChange({ ...model, dedup_iou })}
+          />
+        </div>
+      )
+    case 'mask_fusion':
+      return (
+        <NumberSetting
+          label='COO region padding'
+          value={model.coo_padding ?? 4}
+          min={0}
+          step={1}
+          onChange={(coo_padding) => onChange({ ...model, coo_padding })}
+        />
+      )
     case 'pp_doclayout_v3':
       return (
         <NumberSetting
@@ -604,7 +705,7 @@ function ModelFields({
           onChange={(confidence) => onChange({ ...model, confidence })}
         />
       )
-    case 'manga_text_segmentation':
+    case 'manga_text_mask':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
           <NumberSetting
@@ -633,7 +734,7 @@ function ModelFields({
           />
         </div>
       )
-    case 'speech_bubble_segmentation':
+    case 'speech_bubble_yolov8m':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
           <OptionalNumberSetting
@@ -653,71 +754,6 @@ function ModelFields({
             onChange={(nms_iou) => onChange({ ...model, nms_iou })}
           />
         </div>
-      )
-    case 'local':
-      return (
-        <div className='grid gap-0.5'>
-          <Label htmlFor='local-translation-model' className='text-xs font-normal'>
-            {t('native.model.localModel', { defaultValue: 'Local model' })}
-          </Label>
-          <Select
-            value={model.local_model}
-            onValueChange={(local_model) => onChange({ ...model, local_model })}
-          >
-            <SelectTrigger id='local-translation-model' className='w-full bg-background'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {localModels.map((localModel) => (
-                <SelectItem key={localModel} value={localModel}>
-                  {localModel}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )
-    case 'openai':
-    case 'gemini':
-    case 'claude':
-    case 'deepseek':
-      return <ChatFields model={model} onChange={onChange} />
-    case 'openai_compatible':
-      return (
-        <div className='grid gap-2 sm:grid-cols-2'>
-          <TextSetting
-            label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
-            type='url'
-            value={model.base_url}
-            onChange={(base_url) => onChange({ ...model, base_url })}
-          />
-          <TextSetting
-            label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
-            value={model.remote_model}
-            onChange={(remote_model) => onChange({ ...model, remote_model })}
-          />
-          <OptionalNumberSetting
-            label={t('native.model.temperature', { defaultValue: 'Temperature' })}
-            value={model.temperature}
-            min={0}
-            onChange={(temperature) => onChange({ ...model, temperature })}
-          />
-          <OptionalNumberSetting
-            label={t('native.model.maxTokens', { defaultValue: 'Maximum tokens' })}
-            value={model.max_tokens}
-            min={1}
-            onChange={(max_tokens) => onChange({ ...model, max_tokens })}
-          />
-        </div>
-      )
-    case 'deepl':
-      return (
-        <TextSetting
-          label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
-          type='url'
-          value={model.base_url ?? ''}
-          onChange={(base_url) => onChange({ ...model, base_url: base_url || null })}
-        />
       )
     case 'font_detector':
       return (
@@ -742,20 +778,144 @@ function ModelFields({
   }
 }
 
+function hasProviderOptions(model: Providers): boolean {
+  return model.provider !== 'google_cloud_translation' && model.provider !== 'caiyun'
+}
+
+function ProviderFields({
+  model,
+  localModels,
+  onChange,
+}: {
+  model: Providers
+  localModels: string[]
+  onChange: (model: Providers) => void
+}) {
+  const { t } = useTranslation()
+  switch (model.provider) {
+    case 'local':
+      return (
+        <div className='grid gap-0.5'>
+          <Label htmlFor='local-translation-model' className='text-xs font-normal'>
+            {t('native.model.localModel', { defaultValue: 'Local model' })}
+          </Label>
+          <Select
+            value={model.model}
+            onValueChange={(value) => onChange({ ...model, model: value })}
+          >
+            <SelectTrigger id='local-translation-model' className='w-full bg-background'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {localModels.map((localModel) => (
+                <SelectItem key={localModel} value={localModel}>
+                  {localModel}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )
+    case 'openai':
+    case 'gemini':
+    case 'claude':
+    case 'deepseek':
+    case 'openrouter':
+      return <ChatFields model={model} onChange={onChange} />
+    case 'lm_studio':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <TextSetting
+            label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
+            type='url'
+            value={model.base_url}
+            onChange={(base_url) => onChange({ ...model, base_url })}
+          />
+          <TextSetting
+            label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
+            value={model.model}
+            onChange={(value) => onChange({ ...model, model: value })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.temperature', { defaultValue: 'Temperature' })}
+            value={model.temperature}
+            min={0}
+            max={1}
+            onChange={(temperature) => onChange({ ...model, temperature })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.maxTokens', { defaultValue: 'Maximum tokens' })}
+            value={model.max_tokens}
+            min={1}
+            onChange={(max_tokens) => onChange({ ...model, max_tokens })}
+          />
+          <BooleanSetting
+            label={t('native.model.thinking', { defaultValue: 'Thinking' })}
+            value={model.thinking}
+            onChange={(thinking) => onChange({ ...model, thinking })}
+          />
+        </div>
+      )
+    case 'openai_compatible':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <TextSetting
+            label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
+            type='url'
+            value={model.base_url}
+            onChange={(base_url) => onChange({ ...model, base_url })}
+          />
+          <TextSetting
+            label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
+            value={model.model}
+            onChange={(value) => onChange({ ...model, model: value })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.temperature', { defaultValue: 'Temperature' })}
+            value={model.temperature}
+            min={0}
+            onChange={(temperature) => onChange({ ...model, temperature })}
+          />
+          <OptionalNumberSetting
+            label={t('native.model.maxTokens', { defaultValue: 'Maximum tokens' })}
+            value={model.max_tokens}
+            min={1}
+            onChange={(max_tokens) => onChange({ ...model, max_tokens })}
+          />
+        </div>
+      )
+    case 'deepl':
+      return (
+        <TextSetting
+          label={t('native.model.baseUrl', { defaultValue: 'Base URL' })}
+          type='url'
+          value={model.base_url ?? ''}
+          onChange={(base_url) => onChange({ ...model, base_url: base_url || null })}
+        />
+      )
+    case 'google_cloud_translation':
+    case 'caiyun':
+      return null
+  }
+}
+
 function ChatFields({
   model,
   onChange,
 }: {
-  model: Extract<TranslationModel, { model: 'openai' | 'gemini' | 'claude' | 'deepseek' }>
-  onChange: (model: PipelineModel) => void
+  model: Extract<
+    Providers,
+    { provider: 'openai' | 'gemini' | 'claude' | 'deepseek' | 'openrouter' }
+  >
+  onChange: (model: Providers) => void
 }) {
   const { t } = useTranslation()
   return (
     <div className='grid gap-2 sm:grid-cols-2'>
       <TextSetting
         label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
-        value={model.remote_model}
-        onChange={(remote_model) => onChange({ ...model, remote_model })}
+        value={model.model}
+        onChange={(value) => onChange({ ...model, model: value })}
       />
       <OptionalNumberSetting
         label={t('native.model.temperature', { defaultValue: 'Temperature' })}
@@ -768,6 +928,11 @@ function ChatFields({
         value={model.max_tokens}
         min={1}
         onChange={(max_tokens) => onChange({ ...model, max_tokens })}
+      />
+      <BooleanSetting
+        label={t('native.model.thinking', { defaultValue: 'Thinking' })}
+        value={model.thinking}
+        onChange={(thinking) => onChange({ ...model, thinking })}
       />
     </div>
   )
@@ -922,65 +1087,38 @@ function BooleanSetting({
   )
 }
 
-function setStage(config: PipelineConfig, stage: Stage, model: PipelineModel): PipelineConfig {
-  switch (stage) {
-    case 'detection':
-      return { ...config, detection: model as DetectionModel }
-    case 'segmentation':
-      return { ...config, segmentation: model as SegmentationModel }
-    case 'ocr':
-      return { ...config, ocr: model as OcrModel }
-    case 'translation':
-      return { ...config, translation: model as TranslationModel }
-    case 'typography':
-      return { ...config, typography: model as TypographyModel }
-    case 'inpainting':
-      return { ...config, inpainting: model as InpaintingModel }
-  }
-}
-
-function defaultModel(model: PipelineModel['model']): PipelineModel {
+function defaultPipelineModel(model: PipelineModel['model']): PipelineModel {
   switch (model) {
     case 'comic_text_detector':
       return { model }
     case 'pp_doclayout_v3':
       return { model, confidence: 0.25 }
-    case 'manga_text_segmentation':
+    case 'koharu_yolo26s':
+      return {
+        model,
+        confidence: 0.25,
+        dialogue_regions: false,
+        onomatopoeia_regions: true,
+        text_masks: true,
+      }
+    case 'comic_onomatopoeia':
+      return {
+        model,
+        onomatopoeia_threshold: 0.5,
+        ocr_threshold: 0.5,
+        dedup_iou: 0.3,
+      }
+    case 'mask_fusion':
+      return { model, coo_padding: 4 }
+    case 'manga_text_mask':
       return { model, threshold: 0.5, max_side: null, horizontal_flip: false, vertical_flip: false }
-    case 'speech_bubble_segmentation':
+    case 'speech_bubble_yolov8m':
       return { model, confidence: null, nms_iou: null }
     case 'paddleocr_vl_1.6':
       return { model }
     case 'manga_ocr':
       return { model }
-    case 'local':
-      return { model, local_model: 'lfm2.5-1.2b-instruct' }
-    case 'openai':
-      return { model, remote_model: 'gpt-4.1-mini', temperature: null, max_tokens: null }
-    case 'gemini':
-      return { model, remote_model: 'gemini-2.5-flash', temperature: null, max_tokens: null }
-    case 'claude':
-      return {
-        model,
-        remote_model: 'claude-sonnet-4-20250514',
-        temperature: null,
-        max_tokens: null,
-      }
-    case 'deepseek':
-      return { model, remote_model: 'deepseek-chat', temperature: null, max_tokens: null }
-    case 'openai_compatible':
-      return {
-        model,
-        base_url: 'http://localhost:11434/v1',
-        remote_model: 'model',
-        temperature: null,
-        max_tokens: null,
-      }
-    case 'deepl':
-      return { model, base_url: null }
-    case 'google_cloud_translation':
-      return { model }
-    case 'caiyun':
+    case 'baberu_ocr':
       return { model }
     case 'font_detector':
       return { model, top_k: 3 }
@@ -990,5 +1128,89 @@ function defaultModel(model: PipelineModel['model']): PipelineModel {
       return { model, max_side: 2048 }
     case 'flux2_klein':
       return { model }
+  }
+}
+
+function insertPipelineModel(
+  processors: PipelineModel[],
+  model: PipelineModel['model'],
+): PipelineModel[] {
+  const priority = processorOrder.indexOf(model)
+  const index = processors.findIndex(
+    (processor) => processorOrder.indexOf(processor.model) > priority,
+  )
+  const next = defaultPipelineModel(model)
+  return index < 0
+    ? [...processors, next]
+    : [...processors.slice(0, index), next, ...processors.slice(index)]
+}
+
+function defaultProvider(provider: Providers['provider']): Providers {
+  switch (provider) {
+    case 'local':
+      return { provider, model: 'gemma4-12b-it' }
+    case 'openai':
+      return {
+        provider,
+        model: 'gpt-4.1-mini',
+        temperature: null,
+        max_tokens: null,
+        thinking: false,
+      }
+    case 'gemini':
+      return {
+        provider,
+        model: 'gemini-2.5-flash',
+        temperature: null,
+        max_tokens: null,
+        thinking: false,
+      }
+    case 'claude':
+      return {
+        provider,
+        model: 'claude-sonnet-5',
+        temperature: null,
+        max_tokens: null,
+        thinking: false,
+      }
+    case 'deepseek':
+      return {
+        provider,
+        model: 'deepseek-v4-flash',
+        temperature: null,
+        max_tokens: null,
+        thinking: false,
+      }
+    case 'openai_compatible':
+      return {
+        provider,
+        base_url: 'http://localhost:11434/v1',
+        model: 'model',
+        temperature: null,
+        max_tokens: null,
+      }
+    case 'openrouter':
+      return {
+        provider,
+        model: 'openrouter/auto',
+        temperature: null,
+        max_tokens: null,
+        thinking: false,
+      }
+    case 'lm_studio':
+      return {
+        provider,
+        base_url: 'http://localhost:1234',
+        model: 'model',
+        temperature: null,
+        max_tokens: null,
+        thinking: false,
+      }
+    case 'deepl':
+      return { provider, base_url: null }
+    case 'google_cloud_translation':
+      return { provider }
+    case 'caiyun':
+      return { provider }
   }
 }

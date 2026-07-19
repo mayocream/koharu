@@ -22,9 +22,7 @@ export function CanvasToolbar() {
   const selectedPages = useEditorStore((state) => state.selectedPages)
   const display = useEditorStore((state) => state.display)
   const setDisplay = useEditorStore((state) => state.setDisplay)
-  const targetLanguage = useEditorStore((state) => state.targetLanguage)
-  const setTargetLanguage = useEditorStore((state) => state.setTargetLanguage)
-  const instructions = useEditorStore((state) => state.instructions)
+  const settings = useEditorStore((state) => state.settings)
   const targetLanguages = useEditorStore(
     (state) => state.settings?.target_languages ?? noTargetLanguages,
   )
@@ -32,7 +30,10 @@ export function CanvasToolbar() {
   const runningPipeline = Object.values(jobs).some(
     (job) => job.state === 'running' && job.kind === 'pipeline',
   )
-  const selectedTargetLanguage = normalizeTargetLanguage(targetLanguage, targetLanguages)
+  const selectedTargetLanguage = normalizeTargetLanguage(
+    settings?.translation.target_language ?? '',
+    targetLanguages,
+  )
   const languageNames = new Intl.DisplayNames([i18n.resolvedLanguage ?? i18n.language], {
     type: 'language',
   })
@@ -52,10 +53,20 @@ export function CanvasToolbar() {
     koharuClient.fire({
       type: 'run_pipeline',
       scope,
-      stages: { mode: 'all' },
-      target_language: selectedTargetLanguage.trim() || null,
-      instructions: instructions.trim() || null,
+      target: { target: 'all' },
+      force: 'none',
     })
+  }
+
+  const setTargetLanguage = (target_language: string) => {
+    if (!settings) return
+    koharuClient
+      .command({
+        type: 'set_settings',
+        pipeline: settings.pipeline,
+        translation: { ...settings.translation, target_language },
+      })
+      .catch(() => undefined)
   }
 
   return (

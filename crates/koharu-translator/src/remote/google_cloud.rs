@@ -1,37 +1,34 @@
 // Ported from:
 // https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/google_translate.rs
 
+use anyhow::Context;
+use koharu_secrets::ExposeSecret;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use url::Url;
 
-use super::{ApiKey, send_json};
-use crate::{Result, TranslationRequest};
+use super::send_json;
+use crate::{RemoteProviderKind, Result, TranslationRequest};
 
 const URL: &str = "https://translation.googleapis.com/language/translate/v2";
 
-#[derive(Debug, Clone)]
-pub struct GoogleCloudConfig {
-    pub api_key: ApiKey,
-}
-
-impl GoogleCloudConfig {
-    #[must_use]
-    pub fn new(api_key: impl Into<ApiKey>) -> Self {
-        Self {
-            api_key: api_key.into(),
-        }
-    }
-}
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct GoogleCloudConfig {}
 
 pub(super) async fn translate(
     client: &Client,
-    config: &GoogleCloudConfig,
+    _config: &GoogleCloudConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
+    let provider = RemoteProviderKind::GoogleCloudTranslation;
+    let api_key = koharu_secrets::get(provider.id())?
+        .filter(|value| !value.expose_secret().trim().is_empty())
+        .with_context(|| format!("{} API key is not configured", provider.id()))?;
     let mut url = Url::parse(URL).expect("Google API URL is valid");
     url.query_pairs_mut()
-        .append_pair("key", config.api_key.expose());
+        .append_pair("key", api_key.expose_secret());
     let response: Response = send_json(
         "google-cloud-translation",
         client.post(url).json(&Request {

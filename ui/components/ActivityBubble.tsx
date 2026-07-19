@@ -12,7 +12,7 @@ function JobCard({ job }: { job: JobStatus }) {
   if (job.state === 'running') {
     const percent =
       job.total > 0 ? Math.min(100, Math.round((job.completed / job.total) * 100)) : null
-    const detail = [job.stage, job.model].filter(Boolean).join(' · ')
+    const detail = [job.phase, job.model].filter(Boolean).join(' · ')
     return (
       <div className='rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur'>
         <div className='flex items-start gap-3'>

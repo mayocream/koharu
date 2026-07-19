@@ -60,6 +60,7 @@ describe('projection reducer', () => {
           clean: null,
           rendered: null,
           text_mask: null,
+          coo_mask: null,
           bubble_mask: null,
           brush_mask: null,
         },

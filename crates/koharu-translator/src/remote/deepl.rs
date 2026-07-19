@@ -1,28 +1,23 @@
 // Ported from:
 // https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/deepl.rs
 
+use anyhow::Context;
+use koharu_secrets::ExposeSecret;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use url::Url;
 
-use super::{ApiKey, send_json};
-use crate::{Error, Language, Result, TranslationRequest};
+use super::send_json;
+use crate::{Error, Language, RemoteProviderKind, Result, TranslationRequest};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
 pub struct DeepLConfig {
-    pub api_key: ApiKey,
     pub base_url: Option<Url>,
 }
 
 impl DeepLConfig {
-    #[must_use]
-    pub fn new(api_key: impl Into<ApiKey>) -> Self {
-        Self {
-            api_key: api_key.into(),
-            base_url: None,
-        }
-    }
-
     #[must_use]
     pub fn with_base_url(mut self, base_url: Url) -> Self {
         self.base_url = Some(base_url);
@@ -35,6 +30,10 @@ pub(super) async fn translate(
     config: &DeepLConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
+    let provider = RemoteProviderKind::DeepL;
+    let api_key = koharu_secrets::get(provider.id())?
+        .filter(|value| !value.expose_secret().trim().is_empty())
+        .with_context(|| format!("{} API key is not configured", provider.id()))?;
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "deepl",
         language: request.target_language,
@@ -50,7 +49,7 @@ pub(super) async fn translate(
         .transpose()?;
     let root = config.base_url.as_ref().map_or_else(
         || {
-            if config.api_key.expose().trim_end().ends_with(":fx") {
+            if api_key.expose_secret().trim_end().ends_with(":fx") {
                 "https://api-free.deepl.com".to_owned()
             } else {
                 "https://api.deepl.com".to_owned()
@@ -83,7 +82,7 @@ pub(super) async fn translate(
             .post(format!("{root}/v2/translate"))
             .header(
                 "Authorization",
-                format!("DeepL-Auth-Key {}", config.api_key.expose()),
+                format!("DeepL-Auth-Key {}", api_key.expose_secret()),
             )
             .form(&form),
     )

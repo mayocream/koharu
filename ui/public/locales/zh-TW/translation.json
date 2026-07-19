@@ -121,7 +121,6 @@
       "pipelineHelp": "選擇 Koharu 偵測、讀取、翻譯與重建每一頁的方式。",
       "unavailable": "未連線時無法使用設定。",
       "credentials": "憑證",
-      "credentialsHelp": "密鑰為唯寫，絕不會傳回介面。",
       "configured": "已設定",
       "notConfigured": "未設定",
       "set": "設定",
@@ -129,7 +128,7 @@
       "shortcuts": "快捷鍵",
       "shortcutsHelp": "單鍵工具快捷鍵會儲存在此裝置。"
     },
-    "stage": {
+    "phase": {
       "detection": "偵測",
       "segmentation": "分割",
       "ocr": "OCR",
@@ -137,7 +136,7 @@
       "typography": "排版",
       "inpainting": "修補"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "找出頁面上的文字。",
       "segmentation": "細化需要清理的區域。",
       "ocr": "讀取每個區域中的文字。",
@@ -171,6 +170,7 @@
       "remoteModel": "遠端模型",
       "temperature": "溫度",
       "maxTokens": "最大權杖數",
+      "thinking": "思考",
       "topK": "前 K 項",
       "default": "預設"
     },

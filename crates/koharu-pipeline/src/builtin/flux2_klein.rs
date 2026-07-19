@@ -8,8 +8,14 @@ use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat, Luma};
 use koharu_ml::flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions};
 use koharu_scene::{PageAsset, PageId};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{Context, Flux2KleinConfig, Processor, Stage};
+use crate::{Artifact, Context, Processor};
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct Flux2KleinConfig {}
 
 const PROMPT: &str = "Remove the text and reconstruct the background.";
 
@@ -34,8 +40,17 @@ impl Processor for Flux2KleinProcessor {
         "FLUX.2 Klein"
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Inpainting
+    fn inputs(&self) -> &'static [Artifact] {
+        &[
+            Artifact::SourceImage,
+            Artifact::TextMask,
+            Artifact::CooMask,
+            Artifact::BrushMask,
+        ]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::CleanImage]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
@@ -51,7 +66,11 @@ impl Processor for Flux2KleinProcessor {
                     context.source(page.id)?
                 };
                 let mut mask = GrayImage::new(page.size.width, page.size.height);
-                for asset in [PageAsset::TextMask, PageAsset::BrushMask] {
+                for asset in [
+                    PageAsset::TextMask,
+                    PageAsset::CooMask,
+                    PageAsset::BrushMask,
+                ] {
                     if let Some(value) = context.asset(page.id, asset)? {
                         for (target, source) in
                             mask.as_mut().iter_mut().zip(value.to_luma8().as_raw())

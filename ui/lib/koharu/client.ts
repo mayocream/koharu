@@ -273,7 +273,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
           JOB_KINDS.has(value.kind) &&
           typeof value.completed === 'number' &&
           typeof value.total === 'number' &&
-          (value.stage === null || typeof value.stage === 'string') &&
+          (value.phase === null || typeof value.phase === 'string') &&
           (value.model === null || typeof value.model === 'string')
         )
       }
@@ -299,28 +299,27 @@ export function isUiEvent(value: unknown): value is UiEvent {
       if (
         !isRecord(settings) ||
         !isRecord(settings.pipeline) ||
+        !isRecord(settings.translation) ||
         !Array.isArray(settings.local_translation_models) ||
-        !Array.isArray(settings.target_languages) ||
-        !Array.isArray(settings.credentials)
+        !Array.isArray(settings.target_languages)
       )
         return false
       const pipeline = settings.pipeline
+      const translation = settings.translation
       return (
-        ['detection', 'segmentation', 'ocr', 'translation', 'typography', 'inpainting'].every(
-          (stage) => isModelConfig(pipeline[stage]),
+        ['detection', 'segmentation', 'ocr', 'typography', 'inpainting'].every(
+          (phase) => pipeline[phase] === null || isModelConfig(pipeline[phase]),
         ) &&
+        isModelConfig(translation.model) &&
+        typeof translation.target_language === 'string' &&
+        (translation.instructions === null || typeof translation.instructions === 'string') &&
+        isTranslationCredentials(translation.credentials) &&
         settings.local_translation_models.every((model) => typeof model === 'string') &&
         settings.target_languages.every(
           (language) =>
             isRecord(language) &&
             typeof language.tag === 'string' &&
             typeof language.name === 'string',
-        ) &&
-        settings.credentials.every(
-          (credential) =>
-            isRecord(credential) &&
-            typeof credential.provider === 'string' &&
-            typeof credential.configured === 'boolean',
         )
       )
     }
@@ -337,6 +336,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isModelConfig(value: unknown): boolean {
   return isRecord(value) && typeof value.model === 'string'
+}
+
+function isTranslationCredentials(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    [
+      'openai',
+      'gemini',
+      'claude',
+      'deepseek',
+      'openai_compatible',
+      'openrouter',
+      'lm_studio',
+      'deepl',
+      'google_cloud_translation',
+      'caiyun',
+    ].every((provider) => typeof value[provider] === 'string')
+  )
 }
 
 function isError(value: unknown): boolean {

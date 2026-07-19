@@ -15,15 +15,18 @@ publish.workspace = true
 koharu-config = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-runtime = { workspace = true }
+koharu-secrets = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }
-schemars = { workspace = true }
-secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+specta = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+toml = { workspace = true }

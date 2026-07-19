@@ -126,7 +126,6 @@
       "pipelineHelp": "Escolha como o Koharu detecta, lê, traduz e reconstrói cada página.",
       "unavailable": "As configurações ficam indisponíveis sem conexão.",
       "credentials": "Credenciais",
-      "credentialsHelp": "Os segredos são somente para gravação e nunca retornam à interface.",
       "configured": "Configurado",
       "notConfigured": "Não configurado",
       "set": "Definir",
@@ -134,7 +133,7 @@
       "shortcuts": "Atalhos",
       "shortcutsHelp": "Os atalhos de uma tecla são salvos neste dispositivo."
     },
-    "stage": {
+    "phase": {
       "detection": "Detecção",
       "segmentation": "Segmentação",
       "ocr": "OCR",
@@ -142,7 +141,7 @@
       "typography": "Tipografia",
       "inpainting": "Preenchimento"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "Localiza o texto na página.",
       "segmentation": "Refina as áreas que devem ser limpas.",
       "ocr": "Lê o texto dentro de cada região.",
@@ -176,6 +175,7 @@
       "remoteModel": "Modelo remoto",
       "temperature": "Temperatura",
       "maxTokens": "Máximo de tokens",
+      "thinking": "Raciocínio",
       "topK": "Top K",
       "default": "Padrão"
     },

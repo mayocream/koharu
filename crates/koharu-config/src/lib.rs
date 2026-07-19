@@ -31,11 +31,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio::sync::watch;
 
-pub use koharu_secrets::{ExposeSecret, SecretStore, SecretString};
-
 const CONFIG_DIRECTORY: &str = ".koharu";
 const CONFIG_FILE: &str = "config.toml";
-const SECRET_SERVICE: &str = "koharu";
 
 static MANAGER: OnceLock<Result<Arc<Manager>, String>> = OnceLock::new();
 
@@ -398,12 +395,6 @@ where
     manager()?.load(Target::Root)
 }
 
-/// Returns Koharu's platform-backed secret store.
-#[must_use]
-pub fn secrets() -> SecretStore {
-    SecretStore::new(SECRET_SERVICE)
-}
-
 fn manager() -> Result<Arc<Manager>> {
     match MANAGER.get_or_init(|| {
         path()
@@ -443,10 +434,12 @@ where
 fn merge(base: &mut toml::Value, update: toml::Value) {
     match (base, update) {
         (toml::Value::Table(base), toml::Value::Table(update)) => {
-            let changes_tag = matches!(
-                (base.get("model"), update.get("model")),
-                (Some(base), Some(update)) if base != update
-            );
+            let changes_tag = ["provider", "model"].into_iter().find_map(|tag| {
+                match (base.get(tag), update.get(tag)) {
+                    (Some(base), Some(update)) => Some(base != update),
+                    _ => None,
+                }
+            }) == Some(true);
             if changes_tag {
                 *base = update;
                 return;
@@ -667,27 +660,52 @@ mod tests {
     }
 
     #[test]
-    fn changing_a_model_tag_replaces_its_configuration() {
+    fn changing_a_provider_tag_replaces_its_configuration() {
         let mut base: toml::Value = toml::from_str(
             r#"
-                model = "local"
-                local_model = "lfm2.5-1.2b-instruct"
+                provider = "local"
+                model = "lfm2.5-1.2b-instruct"
+                gpu_layers = 99
             "#,
         )
         .unwrap();
         let update = toml::from_str(
             r#"
-                model = "openai"
-                remote_model = "gpt-4.1-mini"
+                provider = "openai"
+                model = "gpt-4.1-mini"
             "#,
         )
         .unwrap();
 
         merge(&mut base, update);
 
-        assert_eq!(base["model"].as_str(), Some("openai"));
-        assert_eq!(base["remote_model"].as_str(), Some("gpt-4.1-mini"));
-        assert!(base.get("local_model").is_none());
+        assert_eq!(base["provider"].as_str(), Some("openai"));
+        assert_eq!(base["model"].as_str(), Some("gpt-4.1-mini"));
+        assert!(base.get("gpu_layers").is_none());
+    }
+
+    #[test]
+    fn changing_a_model_within_a_provider_preserves_defaults() {
+        let mut base: toml::Value = toml::from_str(
+            r#"
+                provider = "openai"
+                model = "gpt-4.1-mini"
+                temperature = 0.5
+            "#,
+        )
+        .unwrap();
+        let update = toml::from_str(
+            r#"
+                provider = "openai"
+                model = "gpt-5"
+            "#,
+        )
+        .unwrap();
+
+        merge(&mut base, update);
+
+        assert_eq!(base["model"].as_str(), Some("gpt-5"));
+        assert_eq!(base["temperature"].as_float(), Some(0.5));
     }
 
     #[test]

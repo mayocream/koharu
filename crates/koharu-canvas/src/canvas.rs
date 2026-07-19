@@ -927,7 +927,7 @@ impl Canvas {
                     };
                     SceneRenderer::encode_image_element(&mut encoded, element, &data);
                 }
-                ElementKind::Text(_) => {}
+                ElementKind::Text(_) | ElementKind::Region(_) => {}
             }
             self.element_cache.insert(
                 element.id,

@@ -7,8 +7,8 @@
 //! };
 //!
 //! # async fn example() -> koharu_translator::Result<()> {
+//! koharu_secrets::set("openai", &koharu_secrets::SecretString::from("api-key"))?;
 //! let translator = RemoteTranslator::new(RemoteProvider::OpenAi(OpenAiConfig::new(
-//!     "api-key",
 //!     "gpt-4.1-mini",
 //! )));
 //! let translation = translator
@@ -24,8 +24,12 @@
 //! ```
 
 mod catalog;
+mod config;
+mod credentials;
+mod json;
 mod language;
 mod local;
+mod prompt;
 mod remote;
 
 use async_trait::async_trait;
@@ -35,14 +39,17 @@ pub use catalog::{
     LocalModel, LocalModelDescriptor, RemoteModelDescriptor, RemoteProviderDescriptor,
     RemoteProviderKind, SupportedLanguages, local_models, remote_models, remote_providers,
 };
+pub use config::{Providers, TranslationConfig};
+pub use credentials::TranslationCredentials;
 pub use koharu_ml::Device;
 pub use koharu_ml::llm::GenerationOptions as LocalGenerationOptions;
 pub use language::Language;
-pub use local::{LocalTranslator, LocalTranslatorOptions};
+pub use local::{LocalConfig, LocalTranslator, LocalTranslatorOptions};
 pub use remote::{
-    ApiKey, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
-    GoogleCloudConfig, OpenAiCompatibleConfig, OpenAiConfig, RemoteGenerationOptions,
-    RemoteProvider, RemoteTranslator, discover_openai_compatible_models,
+    CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig, GoogleCloudConfig,
+    LmStudioConfig, OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig,
+    RemoteGenerationOptions, RemoteProvider, RemoteTranslator, discover_lm_studio_models,
+    discover_openai_compatible_models, discover_openrouter_models,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -126,7 +126,6 @@
       "pipelineHelp": "ページの検出、読み取り、翻訳、再構成に使う処理方法を選びます。",
       "unavailable": "未接続時は設定を利用できません。",
       "credentials": "認証情報",
-      "credentialsHelp": "秘密情報は書き込み専用で、UI へ返されません。",
       "configured": "設定済み",
       "notConfigured": "未設定",
       "set": "設定",
@@ -134,7 +133,7 @@
       "shortcuts": "ショートカット",
       "shortcutsHelp": "単一キーのツール操作をこの端末に保存します。"
     },
-    "stage": {
+    "phase": {
       "detection": "検出",
       "segmentation": "セグメンテーション",
       "ocr": "OCR",
@@ -142,7 +141,7 @@
       "typography": "タイポグラフィ",
       "inpainting": "インペイント"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "ページ上のテキストを見つけます。",
       "segmentation": "消去する領域を正確に整えます。",
       "ocr": "各領域内の原文を読み取ります。",
@@ -176,6 +175,7 @@
       "remoteModel": "リモートモデル",
       "temperature": "温度",
       "maxTokens": "最大トークン数",
+      "thinking": "思考",
       "topK": "上位 K 件",
       "default": "既定"
     },

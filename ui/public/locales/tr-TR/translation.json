@@ -126,7 +126,6 @@
       "pipelineHelp": "Koharu'nun her sayfayı nasıl algılayacağını, okuyacağını, çevireceğini ve yeniden oluşturacağını seçin.",
       "unavailable": "Bağlantı yokken ayarlar kullanılamaz.",
       "credentials": "Kimlik bilgileri",
-      "credentialsHelp": "Gizli değerler yalnızca yazılabilir ve arayüze geri dönmez.",
       "configured": "Yapılandırıldı",
       "notConfigured": "Yapılandırılmadı",
       "set": "Ayarla",
@@ -134,7 +133,7 @@
       "shortcuts": "Kısayollar",
       "shortcutsHelp": "Tek tuşlu araç kısayolları bu cihazda saklanır."
     },
-    "stage": {
+    "phase": {
       "detection": "Algılama",
       "segmentation": "Bölütleme",
       "ocr": "OCR",
@@ -142,7 +141,7 @@
       "typography": "Tipografi",
       "inpainting": "Doldurma"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "Sayfadaki metni bulur.",
       "segmentation": "Temizlenecek alanları hassaslaştırır.",
       "ocr": "Her bölgenin içindeki metni okur.",
@@ -176,6 +175,7 @@
       "remoteModel": "Uzak model",
       "temperature": "Sıcaklık",
       "maxTokens": "En fazla belirteç",
+      "thinking": "Düşünme",
       "topK": "İlk K",
       "default": "Varsayılan"
     },

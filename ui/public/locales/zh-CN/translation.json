@@ -121,7 +121,6 @@
       "pipelineHelp": "选择 Koharu 检测、读取、翻译和重建每一页的方式。",
       "unavailable": "未连接时设置不可用。",
       "credentials": "凭据",
-      "credentialsHelp": "密钥为只写，绝不会返回到界面。",
       "configured": "已配置",
       "notConfigured": "未配置",
       "set": "设置",
@@ -129,7 +128,7 @@
       "shortcuts": "快捷键",
       "shortcutsHelp": "单键工具快捷键保存在此设备上。"
     },
-    "stage": {
+    "phase": {
       "detection": "检测",
       "segmentation": "分割",
       "ocr": "OCR",
@@ -137,7 +136,7 @@
       "typography": "排版",
       "inpainting": "修补"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "定位页面上的文本。",
       "segmentation": "细化需要清理的区域。",
       "ocr": "读取每个区域中的文本。",
@@ -171,6 +170,7 @@
       "remoteModel": "远程模型",
       "temperature": "温度",
       "maxTokens": "最大令牌数",
+      "thinking": "思考",
       "topK": "前 K 项",
       "default": "默认"
     },

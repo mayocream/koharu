@@ -6,10 +6,25 @@ use image::DynamicImage;
 use koharu_ml::font_detector::{FontDetector, FontPrediction};
 use koharu_scene::{
     Command, ElementChange, ElementId, PageId, StrokePosition, TextEffect, TextEffectKind,
-    TextLayout, TextStyle, WritingMode,
+    TextLayout, TextRole, TextStyle, WritingMode,
 };
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{Context, FontDetectorConfig, Processor, Stage};
+use crate::{Artifact, Context, Processor};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct FontDetectorConfig {
+    #[specta(type = f64)]
+    pub top_k: usize,
+}
+
+impl Default for FontDetectorConfig {
+    fn default() -> Self {
+        Self { top_k: 3 }
+    }
+}
 
 pub(super) struct FontDetectorProcessor {
     model: Arc<Mutex<FontDetector>>,
@@ -21,9 +36,6 @@ impl FontDetectorProcessor {
         device: koharu_ml::Device,
         config: &FontDetectorConfig,
     ) -> Result<Self> {
-        if config.top_k == 0 {
-            bail!("font detector top_k must be positive");
-        }
         Ok(Self {
             model: Arc::new(Mutex::new(FontDetector::load(device).await?)),
             top_k: config.top_k,
@@ -37,15 +49,22 @@ impl Processor for FontDetectorProcessor {
         "FontDetector"
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Typography
+    fn inputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceImage, Artifact::TextRegion]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::Typography]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
         let mut inputs = Vec::new();
         for page in context.pages() {
             let source = context.source(page.id)?;
-            for (element, _) in page.texts() {
+            for (element, text) in page.texts() {
+                if text.role == TextRole::Onomatopoeia {
+                    continue;
+                }
                 if !context.includes_element(page.id, element.id, element.frame) {
                     continue;
                 }

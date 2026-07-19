@@ -48,6 +48,8 @@ title: 设置参考
 - `Gemini`
 - `Claude`
 - `DeepSeek`
+- `OpenRouter`
+- `LM Studio`
 - `DeepL`
 - `Google Cloud Translation`
 - `Caiyun`

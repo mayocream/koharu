@@ -60,8 +60,8 @@ DAG, repository layer, service container, event bus, or application database.
 | `koharu-canvas` | Handles the visible page, camera geometry, hit testing, overlays, and immediate mask editing. |
 | `koharu-renderer` | Renders canvas text transitively and produces headless raster exports and thumbnails. |
 | `koharu-pipeline` | Owns model selection, scheduling, progress, cancellation, and model lifetime. |
-| `koharu-config` | Supplies live typed configuration handles. Values are read when used, not cached in `App`. |
-| `koharu-secrets` | Stores provider credentials in the platform secret store; secret values never enter UI state. |
+| `koharu-config` | Supplies live typed configuration handles. |
+| `koharu-secrets` | Implements the platform credential-store backend used by translation credentials. |
 | `koharu-runtime` | Supplies current HTTP clients, package paths, model/font downloads, and device discovery. |
 | `koharu-fonts` | Browses and downloads fonts, then causes canvas/export font caches to be invalidated. |
 | `koharu-psd` | Writes PSD exports from an immutable project revision. |
@@ -83,7 +83,7 @@ There is one authority for each kind of state:
 | Tools, gestures, selection, text-field drafts, panels, and dialogs | React |
 | Pipeline models and loaded weights | `koharu-pipeline` on the background runtime |
 | Runtime settings | typed `koharu-config::Config<T>` handles |
-| Credentials | platform `SecretStore` |
+| Credentials | platform credential store |
 | Job progress and cancellation | `koharu::App` plus the job that performs the work |
 
 React keeps a read-only projection of scene metadata because inspectors,
@@ -335,6 +335,7 @@ Load independently owned sections once and keep their handles:
 ```rust,ignore
 let app = koharu_config::load::<AppConfig>("app")?;
 let pipeline = koharu_config::load::<PipelineConfig>("pipeline")?;
+let translation = TranslationConfig::load()?;
 let http = koharu_config::load::<HttpConfig>("http")?;
 ```
 
@@ -342,13 +343,15 @@ The background runtime receives the same live pipeline handle. A run snapshots
 the latest configuration through `koharu-pipeline`; changing the translator or
 model affects the next run and never mutates a running plan. Callers do not keep
 cloned config values or hold read/write guards across `.await`. A settings edit
-uses `write()`, validates the complete typed value, calls `save()`, and emits a
-redacted settings view.
+uses `write()`, validates the complete typed value, calls `save()`, and emits
+the current settings view.
 
-Provider keys go through `koharu_config::secrets()`. React may receive whether a
-credential exists, but never its value. Logs, errors, Sentry events, recent-file
-metadata, job descriptions, and resource URLs must not contain secrets or page
-text/image content.
+`koharu_translator::TranslationConfig` loads and saves its `SecretString`
+provider keys through the platform credential store. The trusted settings UI
+receives their values
+so users can reveal and edit them; the TOML file stores only a redacted value.
+Logs, errors, Sentry events, recent-file metadata, job descriptions, and
+resource URLs must not contain secrets or page text/image content.
 
 UI-only preferences such as theme, panel sizes, and shortcuts may stay in
 browser local storage. Model, network, secret, recent-project, and other

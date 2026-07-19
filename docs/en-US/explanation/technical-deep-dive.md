@@ -66,7 +66,7 @@ This matters because manga pages are visually dense:
 
 Koharu first converts detector output into `TextBlock` records, then uses those blocks to drive OCR and later rendering. Bubble regions are kept as separate geometry so the UI and downstream tooling can still reason about the speech-balloon area.
 
-In the current implementation, the default detect stage:
+In the current implementation, the default detection phase:
 
 - runs the Candle port of `ogkalu/comic-text-and-bubble-detector`
 - converts text detections into `TextBlock` values

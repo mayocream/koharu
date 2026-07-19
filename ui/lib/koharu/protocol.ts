@@ -6,13 +6,18 @@ export type AotInpaintingConfig = {
 	max_side?: number,
 };
 
+export type Artifact = "source_image" | "panel_region" | "bubble_region" | "text_region" | "coo_region" | "text_mask_candidate" | "layout_text_mask" | "text_mask" | "coo_mask" | "brush_mask" | "bubble_mask" | "source_text" | "coo_text" | "translation" | "typography" | "clean_image";
+
 export type AssetView = {
 	clean: string | null,
 	rendered: string | null,
 	text_mask: string | null,
+	coo_mask: string | null,
 	bubble_mask: string | null,
 	brush_mask: string | null,
 };
+
+export type BaberuOcrConfig = Record<string, never>;
 
 export type BevelStyle = "Inner" | "Outer" | "Emboss" | "Pillow" | "Stroke";
 
@@ -23,6 +28,8 @@ export type BlobId = [number, number, number, number, number, number, number, nu
 export type BridgeEvent = { type: "app"; payload: UiEvent };
 
 export type BridgeMessage = { type: "ready"; dpr: number; width: number; height: number } | { type: "viewport"; x: number; y: number; width: number; height: number; dpr: number; background: [number, number, number] } | { type: "window"; action: WindowAction } | { type: "command"; id: RequestId; base: Revision; command: UiCommand } | { type: "interaction"; interaction: CanvasInteraction };
+
+export type CaiyunConfig = Record<string, never>;
 
 export type CanvasBrushCursor = {
 	x: number,
@@ -48,26 +55,31 @@ export type CanvasMaskOverlay = {
 
 export type CanvasPageView = "source" | "clean" | "rendered";
 
-export type ChatTranslationConfig = {
-	remote_model: string,
+export type ClaudeConfig = {
+	model: string,
 	temperature: number | null,
 	max_tokens: number | null,
+	thinking: boolean,
+};
+
+export type ComicOnomatopoeiaConfig = {
+	onomatopoeia_threshold?: number,
+	ocr_threshold?: number,
+	dedup_iou?: number,
 };
 
 export type ComicTextDetectorConfig = Record<string, never>;
 
-export type CredentialStatus = {
-	provider: SecretProvider,
-	configured: boolean,
-};
-
-export type DeepLTranslationConfig = {
+export type DeepLConfig = {
 	base_url?: string | null,
 };
 
-export type DetectionModel = { model: "comic_text_detector" } | {
-	model: "pp_doclayout_v3",
-} & PPDocLayoutV3Config;
+export type DeepSeekConfig = {
+	model: string,
+	temperature: number | null,
+	max_tokens: number | null,
+	thinking: boolean,
+};
 
 export type DownloadStatus = { state: "running"; id: number; name: string; completed: number; total: number } | { state: "finished"; id: number } | { state: "failed"; id: number; name: string; error: string };
 
@@ -87,7 +99,7 @@ export type ElementFrame = {
 
 export type ElementId = string;
 
-export type ElementKind = ({ Text: TextBlock }) & { Image?: never } | ({ Image: ImageElement }) & { Text?: never };
+export type ElementKind = ({ Text: TextBlock }) & { Image?: never; Region?: never } | ({ Image: ImageElement }) & { Region?: never; Text?: never } | ({ Region: Region }) & { Image?: never; Text?: never };
 
 export type ElementPreview = {
 	element: ElementId,
@@ -116,6 +128,8 @@ export type FontSlant = "Normal" | "Italic" | { Oblique: {
 	angle_degrees: number,
 } };
 
+export type Force = "none" | "targets" | "all";
+
 export type Frame = {
 	x: number,
 	y: number,
@@ -123,6 +137,15 @@ export type Frame = {
 	height: number,
 	angle_degrees: number,
 };
+
+export type GeminiConfig = {
+	model: string,
+	temperature: number | null,
+	max_tokens: number | null,
+	thinking: boolean,
+};
+
+export type GoogleCloudConfig = Record<string, never>;
 
 export type GradientStop = {
 	offset: number,
@@ -139,38 +162,79 @@ export type ImageElement = {
 	name: string,
 };
 
-export type InpaintingModel = { model: "lama" } | {
-	model: "aot_inpainting",
-} & AotInpaintingConfig | { model: "flux2_klein" };
-
 export type JobKind = "pipeline" | "import" | "export";
 
-export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; stage: Stage | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "cancelled"; id: RequestId };
+export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; phase: Phase | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "cancelled"; id: RequestId };
+
+export type KoharuYolo26sConfig = {
+	confidence?: number,
+	/**
+	 *  Add dialogue instances as editable text. Keep this off when a stronger
+	 *  ordinary-text detector is configured alongside the layout model.
+	 */
+	dialogue_regions?: boolean,
+	/**
+	 *  Retain the fine-tuned model's COO proposals for the dedicated COO
+	 *  recognizer to verify and deduplicate.
+	 */
+	onomatopoeia_regions?: boolean,
+	text_masks?: boolean,
+};
 
 export type LaMaConfig = Record<string, never>;
 
-export type LocalTranslationConfig = {
-	local_model: string,
+export type LmStudioConfig = {
+	base_url: string,
+	model: string,
+	temperature: number | null,
+	max_tokens: number | null,
+	thinking: boolean,
+};
+
+export type LocalConfig = {
+	model: string,
 };
 
 export type MangaOcrConfig = Record<string, never>;
 
-export type MangaTextSegmentationConfig = {
+export type MangaTextMaskConfig = {
 	threshold?: number,
 	max_side?: number | null,
 	horizontal_flip?: boolean,
 	vertical_flip?: boolean,
 };
 
+export type MaskFusionConfig = {
+	/**  Extra page pixels around a COO region used when the detector has no polygon. */
+	coo_padding?: number,
+};
+
 export type MaskPlane = "text" | "brush";
 
-export type OcrModel = { model: "paddleocr_vl_1.6" } | { model: "manga_ocr" };
+export type ModelPrediction = {
+	model: string,
+	confidence: number,
+};
 
-export type OpenAiCompatibleTranslationConfig = {
+export type OpenAiCompatibleConfig = {
 	base_url: string,
-	remote_model: string,
+	model: string,
 	temperature: number | null,
 	max_tokens: number | null,
+};
+
+export type OpenAiConfig = {
+	model: string,
+	temperature: number | null,
+	max_tokens: number | null,
+	thinking: boolean,
+};
+
+export type OpenRouterConfig = {
+	model: string,
+	temperature: number | null,
+	max_tokens: number | null,
+	thinking: boolean,
 };
 
 export type PPDocLayoutV3Config = {
@@ -210,18 +274,31 @@ export type PageView = {
 	elements: Element[],
 };
 
+export type Phase = "detection" | "segmentation" | "ocr" | "translation" | "typography" | "inpainting";
+
 export type PipelineConfig = {
-	detection: DetectionModel,
-	segmentation: SegmentationModel,
-	ocr: OcrModel,
-	translation: TranslationModel,
-	typography: TypographyModel,
-	inpainting: InpaintingModel,
+	processors: ProcessorConfig[],
 };
 
-export type PipelineScope = { scope: "project" } | { scope: "pages"; pages: PageId[] } | { scope: "region"; page: PageId; frame: Frame } | { scope: "elements"; elements: ElementId[] };
+export type ProcessorConfig = { model: "comic_text_detector" } | {
+	model: "pp_doclayout_v3",
+} & PPDocLayoutV3Config | {
+	model: "koharu_yolo26s",
+} & KoharuYolo26sConfig | {
+	model: "manga_text_mask",
+} & MangaTextMaskConfig | {
+	model: "speech_bubble_yolov8m",
+} & YoloV8mSpeechBubbleConfig | {
+	model: "comic_onomatopoeia",
+} & ComicOnomatopoeiaConfig | {
+	model: "mask_fusion",
+} & MaskFusionConfig | { model: "paddleocr_vl_1.6" } | { model: "manga_ocr" } | { model: "baberu_ocr" } | {
+	model: "font_detector",
+} & FontDetectorConfig | { model: "lama" } | {
+	model: "aot_inpainting",
+} & AotInpaintingConfig | { model: "flux2_klein" };
 
-export type PipelineStages = { mode: "all" } | { mode: "through"; stage: Stage } | { mode: "only"; stage: Stage };
+export type ProcessorId = "comic_text_detector" | "pp_doclayout_v3" | "koharu_yolo26s" | "manga_text_mask" | "speech_bubble_yolov8m" | "comic_onomatopoeia" | "mask_fusion" | "paddleocr_vl_1.6" | "manga_ocr" | "baberu_ocr" | "translation" | "font_detector" | "lama" | "aot_inpainting" | "flux2_klein";
 
 export type ProjectDelta = {
 	from: Revision,
@@ -245,23 +322,51 @@ export type ProjectHeader = {
 
 export type ProjectId = string;
 
+export type Providers = {
+	provider: "local",
+} & LocalConfig | {
+	provider: "openai",
+} & OpenAiConfig | {
+	provider: "gemini",
+} & GeminiConfig | {
+	provider: "claude",
+} & ClaudeConfig | {
+	provider: "deepseek",
+} & DeepSeekConfig | {
+	provider: "openai_compatible",
+} & OpenAiCompatibleConfig | {
+	provider: "openrouter",
+} & OpenRouterConfig | {
+	provider: "lm_studio",
+} & LmStudioConfig | {
+	provider: "deepl",
+} & DeepLConfig | { provider: "google_cloud_translation" } | { provider: "caiyun" };
+
+export type Region = {
+	kind: RegionKind,
+	/**  Page-space polygon. An empty polygon means the element frame is authoritative. */
+	polygon: ([number, number])[],
+	/**  Non-zero label in the corresponding page mask, when an instance mask exists. */
+	mask_id: number | null,
+	reading_order: number | null,
+	predictions: ModelPrediction[],
+};
+
+export type RegionKind = "Panel" | "Bubble";
+
 export type RequestId = string;
 
 export type Revision = number;
 
-export type SecretProvider = "openai" | "gemini" | "claude" | "deepseek" | "openai_compatible" | "deepl" | "google_cloud_translation" | "caiyun";
+export type RunTarget = { target: "all" } | { target: "phase"; phase: Phase } | { target: "processors"; processors: ProcessorId[] } | { target: "artifacts"; artifacts: Artifact[] };
 
-export type SegmentationModel = {
-	model: "manga_text_segmentation",
-} & MangaTextSegmentationConfig | {
-	model: "speech_bubble_segmentation",
-} & SpeechBubbleSegmentationConfig;
+export type Scope = { scope: "project" } | { scope: "pages"; pages: PageId[] } | { scope: "region"; page: PageId; frame: Frame } | { scope: "elements"; elements: ElementId[] };
 
 export type SettingsView = {
 	pipeline: PipelineConfig,
+	translation: TranslationSettings,
 	local_translation_models: string[],
 	target_languages: TargetLanguageView[],
-	credentials: CredentialStatus[],
 };
 
 export type Size = {
@@ -277,13 +382,6 @@ export type SourceText = {
 	lines: ([([number, number]), ([number, number]), ([number, number]), ([number, number])])[],
 };
 
-export type SpeechBubbleSegmentationConfig = {
-	confidence?: number | null,
-	nms_iou?: number | null,
-};
-
-export type Stage = "detection" | "segmentation" | "ocr" | "translation" | "typography" | "inpainting";
-
 export type StrokePosition = "Inside" | "Center" | "Outside";
 
 export type TargetLanguageView = {
@@ -298,6 +396,13 @@ export type TextBlock = {
 	translation: string | null,
 	style: TextStyle,
 	layout: TextLayout,
+	role: TextRole,
+	panel: ElementId | null,
+	bubble: ElementId | null,
+	reading_order: number | null,
+	/**  Page-space region polygon. Empty means the element frame is authoritative. */
+	polygon: ([number, number])[],
+	predictions: ModelPrediction[],
 };
 
 export type TextDecoration = {
@@ -368,6 +473,8 @@ export type TextLayout = {
 
 export type TextOverflow = "Visible" | "Clip";
 
+export type TextRole = "Dialogue" | "Narration" | "FreeText" | "Onomatopoeia" | "Furigana";
+
 export type TextStyle = {
 	font_families: string[],
 	font_size: number,
@@ -390,27 +497,27 @@ export type TextStyle = {
 	effects: TextEffect[],
 };
 
-export type TranslationModel = {
-	model: "local",
-} & LocalTranslationConfig | {
-	model: "openai",
-} & ChatTranslationConfig | {
-	model: "gemini",
-} & ChatTranslationConfig | {
-	model: "claude",
-} & ChatTranslationConfig | {
-	model: "deepseek",
-} & ChatTranslationConfig | {
-	model: "openai_compatible",
-} & OpenAiCompatibleTranslationConfig | {
-	model: "deepl",
-} & DeepLTranslationConfig | { model: "google_cloud_translation" } | { model: "caiyun" };
+export type TranslationCredentialsView = {
+	openai: string,
+	gemini: string,
+	claude: string,
+	deepseek: string,
+	openai_compatible: string,
+	openrouter: string,
+	lm_studio: string,
+	deepl: string,
+	google_cloud_translation: string,
+	caiyun: string,
+};
 
-export type TypographyModel = {
-	model: "font_detector",
-} & FontDetectorConfig;
+export type TranslationSettings = {
+	model: Providers,
+	target_language: string,
+	instructions: string | null,
+	credentials: TranslationCredentialsView,
+};
 
-export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: PageId; name: string } | { type: "delete_page"; page: PageId } | { type: "delete_pages"; pages: PageId[] } | { type: "move_page"; page: PageId; index: number } | { type: "add_text"; page: PageId; frame: Frame } | { type: "set_translation"; page: PageId; element: ElementId; translation: string | null } | { type: "set_text_style"; page: PageId; element: ElementId; style: TextStyle } | { type: "set_text_layout"; page: PageId; element: ElementId; layout: TextLayout } | { type: "set_text_styles"; page: PageId; elements: ElementTextStyle[] } | { type: "set_text_layouts"; page: PageId; elements: ElementTextLayout[] } | { type: "set_element_frames"; elements: ElementFrame[] } | { type: "set_element_opacity"; page: PageId; elements: ElementId[]; opacity: number } | { type: "set_element_visibility"; page: PageId; elements: ElementId[]; visible: boolean } | { type: "delete_elements"; page: PageId; elements: ElementId[] } | { type: "move_element"; page: PageId; element: ElementId; index: number } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: PipelineScope; stages: PipelineStages; target_language: string | null; instructions: string | null } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: PageId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_pipeline_config"; config: PipelineConfig } | { type: "set_secret"; provider: SecretProvider; value: string | null } | { type: "collect_garbage" };
+export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: PageId; name: string } | { type: "delete_page"; page: PageId } | { type: "delete_pages"; pages: PageId[] } | { type: "move_page"; page: PageId; index: number } | { type: "add_text"; page: PageId; frame: Frame } | { type: "set_translation"; page: PageId; element: ElementId; translation: string | null } | { type: "set_text_style"; page: PageId; element: ElementId; style: TextStyle } | { type: "set_text_layout"; page: PageId; element: ElementId; layout: TextLayout } | { type: "set_text_styles"; page: PageId; elements: ElementTextStyle[] } | { type: "set_text_layouts"; page: PageId; elements: ElementTextLayout[] } | { type: "set_element_frames"; elements: ElementFrame[] } | { type: "set_element_opacity"; page: PageId; elements: ElementId[]; opacity: number } | { type: "set_element_visibility"; page: PageId; elements: ElementId[]; visible: boolean } | { type: "delete_elements"; page: PageId; elements: ElementId[] } | { type: "move_element"; page: PageId; element: ElementId; index: number } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: RunTarget; force: Force } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: PageId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
 
 export type UiError = {
 	code: UiErrorCode,
@@ -433,3 +540,8 @@ export type VerticalAlign = "Top" | "Center" | "Bottom";
 export type WindowAction = "drag" | "minimize" | "toggle_maximize" | "close";
 
 export type WritingMode = "Auto" | "Horizontal" | "VerticalRightToLeft" | "VerticalLeftToRight";
+
+export type YoloV8mSpeechBubbleConfig = {
+	confidence?: number | null,
+	nms_iou?: number | null,
+};

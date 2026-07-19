@@ -115,7 +115,7 @@
     },
     "settings": {
       "title": "Settings",
-      "description": "Pipeline models and write-only provider credentials are stored by Rust.",
+      "description": "Pipeline models and provider credentials are stored by Rust.",
       "appearance": "Appearance",
       "theme": "Theme",
       "language": "Language",
@@ -126,7 +126,6 @@
       "pipelineHelp": "Choose how Koharu detects, reads, translates, and rebuilds each page.",
       "unavailable": "Settings are unavailable while disconnected.",
       "credentials": "Credentials",
-      "credentialsHelp": "Secret values are write-only and never returned to the UI.",
       "configured": "Configured",
       "notConfigured": "Not configured",
       "set": "Set",
@@ -134,7 +133,7 @@
       "shortcuts": "Shortcuts",
       "shortcutsHelp": "Single-key tool shortcuts are stored on this device."
     },
-    "stage": {
+    "phase": {
       "detection": "Detection",
       "segmentation": "Segmentation",
       "ocr": "OCR",
@@ -142,7 +141,7 @@
       "typography": "Typography",
       "inpainting": "Inpainting"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "Locate text on the page.",
       "segmentation": "Refine the areas that should be cleaned.",
       "ocr": "Read the text inside each region.",
@@ -176,6 +175,7 @@
       "remoteModel": "Remote model",
       "temperature": "Temperature",
       "maxTokens": "Maximum tokens",
+      "thinking": "Thinking",
       "topK": "Top K",
       "default": "Default"
     },
@@ -601,7 +601,7 @@
     "restartApplying": "Applying...",
     "restartRequiredDescription": "These settings are loaded at startup. Applying them will save the config and restart the app.",
     "engines": "Engines",
-    "enginesDescription": "Select which ML engine to use for each pipeline stage.",
+    "enginesDescription": "Select which processors to use in each pipeline phase.",
     "detector": "Detector",
     "fontDetector": "Font Detector",
     "segmenter": "Segmenter",

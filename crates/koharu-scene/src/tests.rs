@@ -1,12 +1,10 @@
 use std::io::Cursor;
 
-use image::{DynamicImage, GrayImage, ImageFormat, RgbaImage};
-use revision::revisioned;
-
 use crate::{
-    Command, ElementChange, Error, Frame, PageAsset, Project, Revision, Session, SourceText,
-    TextDirection,
+    Command, Commands, ElementChange, Error, Frame, ModelPrediction, PageAsset, Project, Region,
+    RegionKind, Revision, Session, SourceText, TextBlock, TextDirection, TextRole,
 };
+use image::{DynamicImage, GrayImage, ImageFormat, RgbaImage};
 
 fn rgba_png(color: [u8; 4]) -> Vec<u8> {
     encode(DynamicImage::ImageRgba8(RgbaImage::from_pixel(
@@ -36,26 +34,6 @@ fn revision_round_trips_the_public_model() {
     let bytes = revision::to_vec(&project).unwrap();
     let decoded: Project = revision::from_slice(&bytes).unwrap();
     assert_eq!(decoded, project);
-}
-
-#[revisioned(revision = 1)]
-struct RevisionOne {
-    value: u32,
-}
-
-#[revisioned(revision = 2)]
-struct RevisionTwo {
-    value: u32,
-    #[revision(start = 2)]
-    added: u8,
-}
-
-#[test]
-fn revision_reads_an_older_shape() {
-    let bytes = revision::to_vec(&RevisionOne { value: 7 }).unwrap();
-    let decoded: RevisionTwo = revision::from_slice(&bytes).unwrap();
-    assert_eq!(decoded.value, 7);
-    assert_eq!(decoded.added, 0);
 }
 
 #[test]
@@ -95,6 +73,92 @@ fn commands_build_a_koharu_page() {
             .as_deref(),
         Some("Hello")
     );
+}
+
+#[test]
+fn typed_regions_and_text_relationships_persist() {
+    let mut session = Session::memory().unwrap();
+    let mut commands = session.commands();
+    let page = commands
+        .add_page("relationships.png", rgba_png([1, 2, 3, 255]))
+        .unwrap();
+    let panel = commands.add_region(
+        page,
+        Frame::new(0.0, 0.0, 8.0, 6.0),
+        Region {
+            kind: RegionKind::Panel,
+            polygon: Vec::new(),
+            mask_id: None,
+            reading_order: Some(0),
+            predictions: vec![ModelPrediction::new("layout", 0.9)],
+        },
+    );
+    let bubble = commands.add_region(
+        page,
+        Frame::new(1.0, 1.0, 6.0, 4.0),
+        Region {
+            kind: RegionKind::Bubble,
+            polygon: Vec::new(),
+            mask_id: Some(1),
+            reading_order: Some(0),
+            predictions: vec![ModelPrediction::new("layout", 0.8)],
+        },
+    );
+    let text = commands.add_text_block(
+        page,
+        Frame::new(2.0, 1.5, 4.0, 3.0),
+        TextBlock {
+            role: TextRole::Dialogue,
+            panel: Some(panel),
+            bubble: Some(bubble),
+            reading_order: Some(0),
+            ..TextBlock::default()
+        },
+    );
+    session.apply(commands).unwrap();
+
+    let bytes = revision::to_vec(session.project()).unwrap();
+    let decoded: Project = revision::from_slice(&bytes).unwrap();
+    let decoded_text = decoded.pages[0].text(text).unwrap();
+    assert_eq!(decoded_text.panel, Some(panel));
+    assert_eq!(decoded_text.bubble, Some(bubble));
+
+    let before = session.revision();
+    let mut commands = session.commands();
+    commands.push(Command::DeleteElement {
+        page,
+        element: bubble,
+    });
+    assert!(session.apply(commands).is_err());
+    assert_eq!(session.revision(), before);
+}
+
+#[test]
+fn transferred_commands_revalidate_and_apply_attachments() {
+    let mut session = Session::memory().unwrap();
+    let mut commands = session.commands();
+    let page = commands
+        .add_page("shared.png", rgba_png([8, 7, 6, 255]))
+        .unwrap();
+    commands
+        .set_asset(page, PageAsset::TextMask, Some(mask_png(255)))
+        .unwrap();
+
+    let parts = commands.into_parts();
+    let commands = Commands::from_parts(parts).unwrap();
+    session.apply(commands).unwrap();
+
+    assert!(session.page(page).unwrap().assets.text_mask.is_some());
+}
+
+#[test]
+fn transferred_commands_reject_a_false_attachment_hash() {
+    let mut commands = Commands::new(Revision::ZERO);
+    commands.add_page("page", rgba_png([1, 2, 3, 255])).unwrap();
+    let mut parts = commands.into_parts();
+    parts.attachments[0].1 = rgba_png([9, 9, 9, 255]).into();
+
+    assert!(Commands::from_parts(parts).is_err());
 }
 
 #[test]

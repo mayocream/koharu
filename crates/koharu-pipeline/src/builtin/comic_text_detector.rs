@@ -8,10 +8,17 @@ use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat};
 use koharu_ml::comic_text_detector::{ComicTextDetector, TextBlock};
 use koharu_scene::{
-    Command, ElementChange, ElementKind, Frame, PageAsset, PageId, SourceText, TextDirection,
+    Command, Frame, ModelPrediction, PageAsset, PageId, SourceText, TextBlock as SceneTextBlock,
+    TextDirection, TextRole,
 };
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{ComicTextDetectorConfig, Context, Processor, Stage};
+use crate::{Artifact, Context, Processor};
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct ComicTextDetectorConfig {}
 
 pub(super) struct ComicTextDetectorProcessor {
     model: Arc<Mutex<ComicTextDetector>>,
@@ -34,8 +41,12 @@ impl Processor for ComicTextDetectorProcessor {
         "ComicTextDetector"
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Detection
+    fn inputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceImage]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::TextRegion, Artifact::TextMaskCandidate]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
@@ -103,8 +114,11 @@ impl Processor for ComicTextDetectorProcessor {
         for (input, mask, blocks) in outputs {
             let page = context.page(input.page).expect("captured page");
             for element in &page.elements {
-                if matches!(element.kind, ElementKind::Text(_))
-                    && context.includes_element(input.page, element.id, element.frame)
+                if element.text().is_some_and(|text| {
+                    text.predictions
+                        .iter()
+                        .any(|prediction| prediction.model == "ComicTextDetector")
+                }) && context.includes_element(input.page, element.id, element.frame)
                 {
                     commands.push(Command::DeleteElement {
                         page: input.page,
@@ -123,12 +137,16 @@ impl Processor for ComicTextDetectorProcessor {
                     .then_with(|| right.frame.x.total_cmp(&left.frame.x))
             });
             for text in texts {
-                let element = commands.add_text(input.page, text.frame);
-                commands.push(Command::EditElement {
-                    page: input.page,
-                    element,
-                    edit: ElementChange::Source(Some(text.source)),
-                });
+                commands.add_text_block(
+                    input.page,
+                    text.frame,
+                    SceneTextBlock {
+                        source: Some(text.source),
+                        role: TextRole::FreeText,
+                        predictions: vec![ModelPrediction::new("ComicTextDetector", 1.0)],
+                        ..SceneTextBlock::default()
+                    },
+                );
             }
 
             ensure!(
@@ -143,7 +161,7 @@ impl Processor for ComicTextDetectorProcessor {
                 mask
             } else {
                 let mut full = context
-                    .asset(input.page, PageAsset::TextMask)?
+                    .asset(input.page, PageAsset::TextMaskCandidate)?
                     .map(|image| image.to_luma8())
                     .unwrap_or_else(|| GrayImage::new(page.size.width, page.size.height));
                 image::imageops::replace(
@@ -157,7 +175,7 @@ impl Processor for ComicTextDetectorProcessor {
             let mut bytes = Cursor::new(Vec::new());
             DynamicImage::ImageLuma8(mask).write_to(&mut bytes, ImageFormat::Png)?;
             let bytes: Arc<[u8]> = Arc::from(bytes.into_inner());
-            commands.set_asset(input.page, PageAsset::TextMask, Some(bytes))?;
+            commands.set_asset(input.page, PageAsset::TextMaskCandidate, Some(bytes))?;
         }
         Ok(commands)
     }

@@ -3,13 +3,27 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat, Luma};
 use koharu_ml::aot_inpainting::AotInpainting;
 use koharu_scene::{PageAsset, PageId};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{AotInpaintingConfig, Context, Processor, Stage};
+use crate::{Artifact, Context, Processor};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct AotInpaintingConfig {
+    pub max_side: u32,
+}
+
+impl Default for AotInpaintingConfig {
+    fn default() -> Self {
+        Self { max_side: 2048 }
+    }
+}
 
 pub(super) struct AotInpaintingProcessor {
     model: Arc<Mutex<AotInpainting>>,
@@ -21,9 +35,6 @@ impl AotInpaintingProcessor {
         device: koharu_ml::Device,
         config: &AotInpaintingConfig,
     ) -> Result<Self> {
-        if config.max_side == 0 {
-            bail!("AOT max_side must be positive");
-        }
         Ok(Self {
             model: Arc::new(Mutex::new(AotInpainting::load(device).await?)),
             max_side: config.max_side,
@@ -37,8 +48,17 @@ impl Processor for AotInpaintingProcessor {
         "AotInpainting"
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Inpainting
+    fn inputs(&self) -> &'static [Artifact] {
+        &[
+            Artifact::SourceImage,
+            Artifact::TextMask,
+            Artifact::CooMask,
+            Artifact::BrushMask,
+        ]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::CleanImage]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
@@ -54,7 +74,11 @@ impl Processor for AotInpaintingProcessor {
                     context.source(page.id)?
                 };
                 let mut mask = GrayImage::new(page.size.width, page.size.height);
-                for asset in [PageAsset::TextMask, PageAsset::BrushMask] {
+                for asset in [
+                    PageAsset::TextMask,
+                    PageAsset::CooMask,
+                    PageAsset::BrushMask,
+                ] {
                     if let Some(value) = context.asset(page.id, asset)? {
                         for (target, source) in
                             mask.as_mut().iter_mut().zip(value.to_luma8().as_raw())

@@ -13,6 +13,8 @@ mod device;
 
 pub mod aot_inpainting;
 pub mod baberu_ocr;
+pub mod comic_layout_yolo26s;
+pub mod comic_onomatopoeia;
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
 pub mod flux2_klein;
@@ -20,11 +22,13 @@ pub mod font_detector;
 pub mod lama;
 pub mod llm;
 pub mod manga_ocr;
-pub mod manga_text_segmentation;
+pub mod manga_text_mask;
 pub mod paddle_ocr_vl;
 pub mod pp_doclayout_v3;
 pub mod pp_ocr_v6;
-pub mod speech_bubble_segmentation;
+pub mod rorem_mixed;
+pub mod speech_bubble_yolo11n;
+pub mod speech_bubble_yolov8m;
 
 pub use device::{Backend, Device, DeviceConversionError, DeviceType};
 pub use koharu_diffusion as diffusion;

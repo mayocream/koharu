@@ -28,7 +28,7 @@ fn resolve(
     state: &Mutex<Option<VersionedClient>>,
     config: &koharu_config::Config<HttpConfig>,
 ) -> anyhow::Result<HttpClient> {
-    let config = config.read()?;
+    let value = config.read()?;
     let revision = config.revision();
     let mut state = state
         .lock()
@@ -40,7 +40,7 @@ fn resolve(
         return Ok(current.client.clone());
     }
 
-    let client = build(&config)?;
+    let client = build(&value)?;
     *state = Some(VersionedClient {
         revision,
         client: client.clone(),

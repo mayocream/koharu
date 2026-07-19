@@ -19,17 +19,18 @@ use koharu_pipeline::{CancellationToken, PipelineConfig};
 use koharu_scene::{
     ChangeSet, Command, Commands, ElementChange, PageAsset, PageId, Revision, Session,
 };
+use koharu_translator::TranslationConfig;
 use rust_embed::Embed;
 use serde_json::Value;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
-    background::{Background, ExportRequest, NativeEvent, PipelineRequest},
+    jobs::{Background, ExportRequest, NativeEvent, PipelineRequest},
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
-        CanvasPageView, CredentialStatus, DownloadStatus, Handle, HitTarget, JobKind, JobStatus,
-        MaskPlane, PageDelta, PageSummary, PageView, ProjectDelta, ProjectHeader, RequestId,
-        SecretProvider, SettingsView, TargetLanguageView,
+        CanvasPageView, DownloadStatus, Handle, HitTarget, JobKind, JobStatus, MaskPlane,
+        PageDelta, PageSummary, PageView, ProjectDelta, ProjectHeader, RequestId, SettingsView,
+        TargetLanguageView, TranslationSettings,
     },
     resources::Resources,
 };
@@ -53,7 +54,8 @@ pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
         .init();
 
     let pipeline = koharu_config::load::<PipelineConfig>("pipeline")?;
-    let background = Background::new(pipeline.clone())?;
+    let translation = TranslationConfig::load()?;
+    let background = Background::new(pipeline.clone(), translation.clone());
     let resources = Resources::new();
     koharu_desktop::run(
         DesktopOptions {
@@ -62,7 +64,7 @@ pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
             protocols: vec![resources.protocol()],
             ..DesktopOptions::default()
         },
-        App::new(background, pipeline, resources, initial_path),
+        App::new(background, pipeline, translation, resources, initial_path),
     )
 }
 
@@ -80,6 +82,7 @@ pub struct App {
     visible_page: Option<PageId>,
     background: Background,
     pipeline: Config<PipelineConfig>,
+    translation: Config<TranslationConfig>,
     resources: Resources,
     jobs: HashMap<RequestId, RunningJob>,
     downloads: HashMap<u64, DownloadStatus>,
@@ -111,6 +114,7 @@ impl App {
     fn new(
         background: Background,
         pipeline: Config<PipelineConfig>,
+        translation: Config<TranslationConfig>,
         resources: Resources,
         initial_path: Option<PathBuf>,
     ) -> Self {
@@ -120,6 +124,7 @@ impl App {
             visible_page: None,
             background,
             pipeline,
+            translation,
             resources,
             jobs: HashMap::new(),
             downloads: HashMap::new(),
@@ -281,7 +286,7 @@ impl App {
                     kind: JobKind::Import,
                     completed: 0,
                     total: 0,
-                    stage: None,
+                    phase: None,
                     model: None,
                 };
                 self.jobs.insert(
@@ -302,9 +307,8 @@ impl App {
             }
             AppCommand::RunPipeline {
                 scope,
-                stages,
-                target_language,
-                instructions,
+                target,
+                force,
             } => {
                 self.require_base(base)?;
                 self.ensure_free_job(id)?;
@@ -314,9 +318,8 @@ impl App {
                         id,
                         path: self.project_path()?.to_owned(),
                         scope,
-                        stages,
-                        target_language,
-                        instructions,
+                        target,
+                        force,
                     },
                     desktop.handle(),
                 )?;
@@ -325,7 +328,7 @@ impl App {
                     kind: JobKind::Pipeline,
                     completed: 0,
                     total: 0,
-                    stage: None,
+                    phase: None,
                     model: None,
                 };
                 self.jobs.insert(
@@ -387,7 +390,7 @@ impl App {
                     kind: JobKind::Export,
                     completed: 0,
                     total: 0,
-                    stage: None,
+                    phase: None,
                     model: None,
                 };
                 self.jobs.insert(
@@ -422,25 +425,21 @@ impl App {
                 self.emit_settings(desktop)?;
                 return Ok(CommandOutcome::Accepted(self.current_revision()));
             }
-            AppCommand::SetPipelineConfig { config } => {
-                config
-                    .validate()
-                    .map_err(|error| app_failure(AppErrorCode::InvalidInput, error))?;
+            AppCommand::SetSettings {
+                pipeline,
+                translation,
+            } => {
+                let (translation, credentials) = translation.into_parts();
                 {
                     let mut current = self.pipeline.write()?;
-                    *current = config;
+                    *current = pipeline;
                     current.save()?;
                 }
-                self.emit_settings(desktop)?;
-                return Ok(CommandOutcome::Accepted(self.current_revision()));
-            }
-            AppCommand::SetSecret { provider, value } => {
-                let secrets = koharu_config::secrets();
-                match value.filter(|value| !value.trim().is_empty()) {
-                    Some(value) => {
-                        secrets.set(provider.key(), &koharu_config::SecretString::from(value))?
-                    }
-                    None => secrets.delete(provider.key())?,
+                {
+                    credentials.save()?;
+                    let mut current = self.translation.write()?;
+                    *current = translation;
+                    current.save()?;
                 }
                 self.emit_settings(desktop)?;
                 return Ok(CommandOutcome::Accepted(self.current_revision()));
@@ -776,25 +775,12 @@ impl App {
     }
 
     fn emit_settings(&self, desktop: &DesktopContext<'_, NativeEvent>) -> Result<()> {
-        let secrets = koharu_config::secrets();
-        let credentials = SecretProvider::ALL
-            .into_iter()
-            .map(|provider| CredentialStatus {
-                provider,
-                configured: match secrets.get(provider.key()) {
-                    Ok(value) => value.is_some(),
-                    Err(error) => {
-                        tracing::warn!(%error, provider = provider.key(), "could not read credential status");
-                        false
-                    }
-                },
-            })
-            .collect();
         desktop.emit(
             EVENT_NAME,
             AppEvent::SettingsChanged {
                 settings: SettingsView {
                     pipeline: self.pipeline.read()?.clone(),
+                    translation: TranslationSettings::from_config(&*self.translation.read()?)?,
                     local_translation_models: koharu_translator::local_models()
                         .into_iter()
                         .map(|model| model.id.to_owned())
@@ -806,7 +792,6 @@ impl App {
                             name: language.to_string(),
                         })
                         .collect(),
-                    credentials,
                 },
             },
         )
@@ -1045,7 +1030,7 @@ impl Application for App {
     type Event = NativeEvent;
 
     fn started(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
-        self.background.subscribe_downloads(desktop.handle())?;
+        self.background.subscribe_downloads(desktop.handle());
         if let Some(path) = self.initial_path.take()
             && let Err(error) = self.open(path, desktop)
         {
@@ -1147,7 +1132,7 @@ impl Application for App {
                     kind: JobKind::Pipeline,
                     completed: progress.completed,
                     total: progress.total,
-                    stage: Some(progress.stage),
+                    phase: Some(progress.phase),
                     model: Some(progress.model),
                 };
                 running.status = status.clone();
@@ -1166,7 +1151,7 @@ impl Application for App {
                     kind: JobKind::Import,
                     completed,
                     total,
-                    stage: None,
+                    phase: None,
                     model: None,
                 };
                 running.status = status.clone();
@@ -1185,7 +1170,7 @@ impl Application for App {
                     kind: JobKind::Export,
                     completed,
                     total,
-                    stage: None,
+                    phase: None,
                     model: None,
                 };
                 running.status = status.clone();
@@ -1533,7 +1518,7 @@ mod tests {
             .iter()
             .map(|element| match &element.kind {
                 ElementKind::Text(text) => text.style.font_size,
-                ElementKind::Image(_) => unreachable!(),
+                ElementKind::Image(_) | ElementKind::Region(_) => unreachable!(),
             })
             .collect::<Vec<_>>();
         assert_eq!(sizes, [24.0, 30.0]);

@@ -1,89 +1,31 @@
 mod caiyun;
-mod chat;
-mod chat_completions;
 mod claude;
 mod deepl;
+mod deepseek;
 mod gemini;
 mod google_cloud;
+mod lm_studio;
+mod openai;
+mod openai_compatible;
+mod openrouter;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use reqwest::{Client, RequestBuilder, StatusCode};
-use secrecy::{ExposeSecret, SecretString};
 use serde::de::DeserializeOwned;
 
 pub use caiyun::CaiyunConfig;
-pub use chat_completions::{
-    DeepSeekConfig, OpenAiCompatibleConfig, OpenAiConfig, discover_openai_compatible_models,
-};
 pub use claude::ClaudeConfig;
 pub use deepl::DeepLConfig;
+pub use deepseek::DeepSeekConfig;
 pub use gemini::GeminiConfig;
 pub use google_cloud::GoogleCloudConfig;
+pub use lm_studio::{LmStudioConfig, discover_lm_studio_models};
+pub use openai::OpenAiConfig;
+pub use openai_compatible::{OpenAiCompatibleConfig, discover_openai_compatible_models};
+pub use openrouter::{OpenRouterConfig, discover_openrouter_models};
 
 use crate::{Error, RemoteProviderKind, Result, Translation, TranslationRequest, Translator};
-
-/// An API credential whose `Debug` output is always redacted.
-#[derive(Clone)]
-pub struct ApiKey(SecretString);
-
-impl ApiKey {
-    #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(SecretString::from(value.into()))
-    }
-
-    /// Loads a provider API key from Koharu's platform credential store.
-    pub fn load(provider: RemoteProviderKind) -> Result<Option<Self>> {
-        Ok(koharu_config::secrets()
-            .get(provider.id())?
-            .filter(|value| !value.expose_secret().trim().is_empty())
-            .map(Self))
-    }
-
-    /// Stores this API key for a provider. An empty key clears the credential.
-    pub fn store(&self, provider: RemoteProviderKind) -> Result<()> {
-        if self.expose().trim().is_empty() {
-            return Self::delete(provider);
-        }
-        koharu_config::secrets().set(provider.id(), &self.0)?;
-        Ok(())
-    }
-
-    /// Clears a provider API key. A missing credential is treated as success.
-    pub fn delete(provider: RemoteProviderKind) -> Result<()> {
-        koharu_config::secrets().delete(provider.id())?;
-        Ok(())
-    }
-
-    pub(super) fn expose(&self) -> &str {
-        self.0.expose_secret()
-    }
-}
-
-impl std::fmt::Debug for ApiKey {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("ApiKey([REDACTED])")
-    }
-}
-
-impl From<String> for ApiKey {
-    fn from(value: String) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<SecretString> for ApiKey {
-    fn from(value: SecretString) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ApiKey {
-    fn from(value: &str) -> Self {
-        Self::new(value)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum RemoteProvider {
@@ -92,6 +34,8 @@ pub enum RemoteProvider {
     Claude(ClaudeConfig),
     DeepSeek(DeepSeekConfig),
     OpenAiCompatible(OpenAiCompatibleConfig),
+    OpenRouter(OpenRouterConfig),
+    LmStudio(LmStudioConfig),
     DeepL(DeepLConfig),
     GoogleCloudTranslation(GoogleCloudConfig),
     Caiyun(CaiyunConfig),
@@ -106,6 +50,8 @@ impl RemoteProvider {
             Self::Claude(_) => RemoteProviderKind::Claude,
             Self::DeepSeek(_) => RemoteProviderKind::DeepSeek,
             Self::OpenAiCompatible(_) => RemoteProviderKind::OpenAiCompatible,
+            Self::OpenRouter(_) => RemoteProviderKind::OpenRouter,
+            Self::LmStudio(_) => RemoteProviderKind::LmStudio,
             Self::DeepL(_) => RemoteProviderKind::DeepL,
             Self::GoogleCloudTranslation(_) => RemoteProviderKind::GoogleCloudTranslation,
             Self::Caiyun(_) => RemoteProviderKind::Caiyun,
@@ -118,13 +64,13 @@ impl RemoteProvider {
 pub struct RemoteGenerationOptions {
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
+    pub thinking: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct RemoteTranslator {
     client: Client,
     provider: RemoteProvider,
-    generation: RemoteGenerationOptions,
 }
 
 impl RemoteTranslator {
@@ -135,16 +81,50 @@ impl RemoteTranslator {
 
     #[must_use]
     pub fn with_client(client: Client, provider: RemoteProvider) -> Self {
-        Self {
-            client,
-            provider,
-            generation: RemoteGenerationOptions::default(),
-        }
+        Self { client, provider }
     }
 
     #[must_use]
     pub fn with_generation_options(mut self, options: RemoteGenerationOptions) -> Self {
-        self.generation = options;
+        match &mut self.provider {
+            RemoteProvider::OpenAi(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+                config.thinking = options.thinking;
+            }
+            RemoteProvider::Gemini(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+                config.thinking = options.thinking;
+            }
+            RemoteProvider::Claude(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+                config.thinking = options.thinking;
+            }
+            RemoteProvider::DeepSeek(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+                config.thinking = options.thinking;
+            }
+            RemoteProvider::OpenAiCompatible(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+            }
+            RemoteProvider::OpenRouter(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+                config.thinking = options.thinking;
+            }
+            RemoteProvider::LmStudio(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+                config.thinking = options.thinking;
+            }
+            RemoteProvider::DeepL(_)
+            | RemoteProvider::GoogleCloudTranslation(_)
+            | RemoteProvider::Caiyun(_) => {}
+        }
         self
     }
 
@@ -170,20 +150,25 @@ impl Translator for RemoteTranslator {
         let expected = request.segments.len();
         let segments = match &self.provider {
             RemoteProvider::OpenAi(config) => {
-                chat_completions::openai(&self.client, config, self.generation, &request).await?
+                openai::translate(&self.client, config, &request).await?
             }
             RemoteProvider::Gemini(config) => {
-                gemini::translate(&self.client, config, self.generation, &request).await?
+                gemini::translate(&self.client, config, &request).await?
             }
             RemoteProvider::Claude(config) => {
-                claude::translate(&self.client, config, self.generation, &request).await?
+                claude::translate(&self.client, config, &request).await?
             }
             RemoteProvider::DeepSeek(config) => {
-                chat_completions::deepseek(&self.client, config, self.generation, &request).await?
+                deepseek::translate(&self.client, config, &request).await?
             }
             RemoteProvider::OpenAiCompatible(config) => {
-                chat_completions::compatible(&self.client, config, self.generation, &request)
-                    .await?
+                openai_compatible::compatible(&self.client, config, &request).await?
+            }
+            RemoteProvider::OpenRouter(config) => {
+                openrouter::translate(&self.client, config, &request).await?
+            }
+            RemoteProvider::LmStudio(config) => {
+                lm_studio::translate(&self.client, config, &request).await?
             }
             RemoteProvider::DeepL(config) => {
                 deepl::translate(&self.client, config, &request).await?
@@ -248,19 +233,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn api_keys_are_redacted() {
-        assert_eq!(
-            format!("{:?}", ApiKey::new("top-secret")),
-            "ApiKey([REDACTED])"
-        );
-    }
-
-    #[test]
     fn provider_ids_are_credential_keys() {
         assert_eq!(RemoteProviderKind::OpenAi.id(), "openai");
+        assert_eq!(RemoteProviderKind::OpenRouter.id(), "openrouter");
+        assert_eq!(RemoteProviderKind::LmStudio.id(), "lm-studio");
         assert_eq!(
             RemoteProviderKind::GoogleCloudTranslation.id(),
             "google-cloud-translation"
         );
+    }
+
+    #[test]
+    fn thinking_is_disabled_by_default() {
+        assert!(!OpenAiConfig::default().thinking);
+        assert!(!GeminiConfig::default().thinking);
+        assert!(!ClaudeConfig::default().thinking);
+        assert!(!DeepSeekConfig::default().thinking);
+        assert!(!OpenRouterConfig::default().thinking);
+        assert!(!LmStudioConfig::default().thinking);
+        assert!(!RemoteGenerationOptions::default().thinking);
     }
 }

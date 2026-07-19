@@ -41,8 +41,6 @@ interface EditorStore {
   erase: boolean
   display: CanvasDisplay
   showTextBounds: boolean
-  targetLanguage: string
-  instructions: string
   settingsOpen: boolean
   showNavigator: boolean
   shortcuts: EditorShortcuts
@@ -57,8 +55,6 @@ interface EditorStore {
   setErase: (erase: boolean) => void
   setDisplay: (display: CanvasDisplay) => void
   setShowTextBounds: (show: boolean) => void
-  setTargetLanguage: (language: string) => void
-  setInstructions: (instructions: string) => void
   setSettingsOpen: (open: boolean) => void
   setShowNavigator: (show: boolean) => void
   setShortcut: (action: ShortcutAction, key: string) => void
@@ -122,8 +118,6 @@ export const useEditorStore = create<EditorStore>()(
       erase: false,
       display: defaultDisplay,
       showTextBounds: false,
-      targetLanguage: 'en-US',
-      instructions: '',
       settingsOpen: false,
       showNavigator: true,
       shortcuts: defaultShortcuts,
@@ -139,8 +133,6 @@ export const useEditorStore = create<EditorStore>()(
       setErase: (erase) => set({ erase }),
       setDisplay: (display) => set({ display }),
       setShowTextBounds: (showTextBounds) => set({ showTextBounds }),
-      setTargetLanguage: (targetLanguage) => set({ targetLanguage }),
-      setInstructions: (instructions) => set({ instructions }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setShowNavigator: (showNavigator) => set({ showNavigator }),
       setShortcut: (action, key) =>
@@ -169,8 +161,6 @@ export const useEditorStore = create<EditorStore>()(
         erase: state.erase,
         display: state.display,
         showTextBounds: state.showTextBounds,
-        targetLanguage: state.targetLanguage,
-        instructions: state.instructions,
         showNavigator: state.showNavigator,
         shortcuts: state.shortcuts,
       }),

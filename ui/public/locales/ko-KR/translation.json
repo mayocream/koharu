@@ -121,7 +121,6 @@
       "pipelineHelp": "Koharu가 각 페이지를 감지하고 읽고 번역하고 복원하는 방식을 선택합니다.",
       "unavailable": "연결되지 않은 동안 설정을 사용할 수 없습니다.",
       "credentials": "자격 증명",
-      "credentialsHelp": "비밀 값은 쓰기 전용이며 UI로 반환되지 않습니다.",
       "configured": "설정됨",
       "notConfigured": "설정 안 됨",
       "set": "설정",
@@ -129,7 +128,7 @@
       "shortcuts": "단축키",
       "shortcutsHelp": "한 키 도구 단축키는 이 장치에 저장됩니다."
     },
-    "stage": {
+    "phase": {
       "detection": "감지",
       "segmentation": "분할",
       "ocr": "OCR",
@@ -137,7 +136,7 @@
       "typography": "타이포그래피",
       "inpainting": "인페인팅"
     },
-    "stageDescription": {
+    "phaseDescription": {
       "detection": "페이지의 텍스트를 찾습니다.",
       "segmentation": "지워야 할 영역을 정교하게 다듬습니다.",
       "ocr": "각 영역 안의 텍스트를 읽습니다.",
@@ -171,6 +170,7 @@
       "remoteModel": "원격 모델",
       "temperature": "온도",
       "maxTokens": "최대 토큰",
+      "thinking": "사고",
       "topK": "상위 K개",
       "default": "기본값"
     },

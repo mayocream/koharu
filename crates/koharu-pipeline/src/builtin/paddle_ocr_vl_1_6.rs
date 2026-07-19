@@ -4,9 +4,17 @@ use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
 use image::DynamicImage;
 use koharu_ml::paddle_ocr_vl::{PaddleOCRVL, PaddleOCRVLTask};
-use koharu_scene::{Command, ElementChange, ElementId, PageId, SourceText, TextDirection};
+use koharu_scene::{
+    Command, ElementChange, ElementId, PageId, SourceText, TextDirection, TextRole,
+};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 
-use crate::{Context, PaddleOcrVl1_6Config, Processor, Stage};
+use crate::{Artifact, Context, Processor};
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct PaddleOcrVl1_6Config {}
 
 pub(super) struct PaddleOcrVl1_6Processor {
     model: Arc<Mutex<PaddleOCRVL>>,
@@ -29,8 +37,12 @@ impl Processor for PaddleOcrVl1_6Processor {
         "PaddleOCR-VL 1.6"
     }
 
-    fn stage(&self) -> Stage {
-        Stage::Ocr
+    fn inputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceImage, Artifact::TextRegion]
+    }
+
+    fn outputs(&self) -> &'static [Artifact] {
+        &[Artifact::SourceText]
     }
 
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
@@ -38,6 +50,9 @@ impl Processor for PaddleOcrVl1_6Processor {
         for page in context.pages() {
             let source = context.source(page.id)?;
             for (element, text) in page.texts() {
+                if text.role == TextRole::Onomatopoeia {
+                    continue;
+                }
                 if !context.includes_element(page.id, element.id, element.frame) {
                     continue;
                 }
