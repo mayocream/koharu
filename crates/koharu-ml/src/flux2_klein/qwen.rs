@@ -1,7 +1,9 @@
+use lru::LruCache;
 use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Seek},
+    num::NonZeroUsize,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -399,11 +401,18 @@ fn causal_padding_mask(
     Tensor::from_vec(values, (batch, 1, seq_len, seq_len), device)?.to_dtype(dtype)
 }
 
+/// Upper bound on cached prompt embeddings. Each entry retains a
+/// `(1, max_sequence_len, hidden)` tensor; keys are full prompt strings, which
+/// are effectively unique per translated block, so an unbounded map grew one
+/// large tensor per page for the whole run. Reuse across pages is rare, so a
+/// small LRU is plenty (it still absorbs the repeated empty/negative prompt).
+const PROMPT_CACHE_CAP: usize = 8;
+
 #[derive(Debug)]
 pub struct PromptEmbedder {
     tokenizer: Tokenizer,
     text_encoder: QwenTextEncoder,
-    cache: Mutex<HashMap<String, Arc<QwenPromptEmbeddings>>>,
+    cache: Mutex<LruCache<String, Arc<QwenPromptEmbeddings>>>,
     pad_token_id: u32,
     max_sequence_len: usize,
     hidden_layer_indices: Vec<usize>,
@@ -425,7 +434,9 @@ impl PromptEmbedder {
         Ok(Self {
             tokenizer,
             text_encoder,
-            cache: Mutex::new(HashMap::new()),
+            cache: Mutex::new(LruCache::new(
+                NonZeroUsize::new(PROMPT_CACHE_CAP).expect("cache capacity is non-zero"),
+            )),
             pad_token_id,
             max_sequence_len: DEFAULT_MAX_PROMPT_SEQUENCE_LEN,
             hidden_layer_indices: DEFAULT_HIDDEN_LAYERS.to_vec(),
@@ -471,7 +482,7 @@ impl PromptEmbedder {
         self.cache
             .lock()
             .expect("prompt cache poisoned")
-            .insert(key, embeddings.clone());
+            .put(key, embeddings.clone());
         Ok(embeddings)
     }
 }

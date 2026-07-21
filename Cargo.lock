@@ -4354,6 +4354,7 @@ dependencies = [
  "image",
  "imageproc",
  "koharu-runtime",
+ "lru",
  "objc2",
  "objc2-foundation",
  "objc2-metal",

@@ -21,6 +21,18 @@ const HF_REPO: &str = "mayocream/lama-manga";
 const BLOCK_WINDOW_RATIO: f64 = 1.7;
 const BLOCK_WINDOW_ASPECT_RATIO: f64 = 1.0;
 
+/// Run `f` inside an Objective-C autorelease pool on Metal builds so the Metal
+/// temporaries it creates are freed immediately; a plain call elsewhere.
+#[cfg(feature = "metal")]
+fn drain_autorelease_pool<T>(f: impl FnOnce() -> T) -> T {
+    objc2::rc::autoreleasepool(|_| f())
+}
+
+#[cfg(not(feature = "metal"))]
+fn drain_autorelease_pool<T>(f: impl FnOnce() -> T) -> T {
+    f()
+}
+
 type Xyxy = [u32; 4];
 
 koharu_runtime::declare_hf_model_package!(
@@ -164,9 +176,18 @@ impl Lama {
 
     #[instrument(level = "debug", skip_all)]
     fn inference_model(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
-        let (image_tensor, mask_tensor) = self.preprocess(image, mask)?;
-        let output = self.forward(&image_tensor, &mask_tensor)?;
-        self.postprocess(&output)
+        // Drain autoreleased Metal temporaries per crop. candle's Metal ops
+        // (and the FFC layers' MPSGraph FFTs) allocate command buffers and MPS
+        // intermediates that are autoreleased; on the pool-less pipeline worker
+        // threads a leaked command buffer also pins every GPU buffer it
+        // referenced, so without a pool GPU/unified memory climbs crop after
+        // crop for the whole run. The returned `RgbImage` is heap-owned and
+        // safely outlives the pool.
+        drain_autorelease_pool(|| {
+            let (image_tensor, mask_tensor) = self.preprocess(image, mask)?;
+            let output = self.forward(&image_tensor, &mask_tensor)?;
+            self.postprocess(&output)
+        })
     }
 
     #[instrument(level = "debug", skip_all)]

@@ -4,14 +4,28 @@ use candle_core::{
     bail,
     metal_backend::{DeviceId, MetalError, MetalStorage},
 };
-use objc2::{AnyThread, rc::Retained, runtime::ProtocolObject};
+use objc2::{
+    AnyThread,
+    rc::{Retained, autoreleasepool},
+    runtime::ProtocolObject,
+};
 use objc2_foundation::{NSArray, NSCopying, NSDictionary, NSNumber};
 use objc2_metal_performance_shaders::MPSDataType;
 use objc2_metal_performance_shaders_graph::{
     MPSGraph, MPSGraphFFTDescriptor, MPSGraphFFTScalingMode, MPSGraphTensor, MPSGraphTensorData,
     MPSGraphTensorDataDictionary,
 };
-use std::{cell::RefCell, collections::HashMap, ptr::NonNull};
+use lru::LruCache;
+use std::{cell::RefCell, num::NonZeroUsize, ptr::NonNull};
+
+/// Upper bound on distinct cached FFT plans (MPSGraphs). Each LaMa crop runs
+/// at its native resolution, and crop sizes vary per bubble/page, so this map
+/// is keyed by a continuously-varying shape. Without a cap it grows one
+/// retained `MPSGraph` per distinct crop size for the whole run — the source
+/// of the steady RAM climb when processing many pages. The working set of
+/// shapes touched by a single inpaint pass is small, so an LRU comfortably
+/// keeps hot plans while evicting (and freeing) stale ones.
+const FFT_PLAN_CACHE_CAP: usize = 64;
 
 fn nsarray_from_usize(values: &[usize]) -> Result<Retained<objc2_foundation::NSArray<NSNumber>>> {
     let nums: Vec<Retained<NSNumber>> = values
@@ -78,8 +92,10 @@ struct FftPlan {
 }
 
 thread_local! {
-    static FFT_PLANS: RefCell<HashMap<FftKey, FftPlan>> = RefCell::new(HashMap::new());
-    static COMMAND_QUEUES: RefCell<HashMap<DeviceId, Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>>> = RefCell::new(HashMap::new());
+    static FFT_PLANS: RefCell<LruCache<FftKey, FftPlan>> = RefCell::new(LruCache::new(
+        NonZeroUsize::new(FFT_PLAN_CACHE_CAP).expect("cache capacity is non-zero"),
+    ));
+    static COMMAND_QUEUES: RefCell<std::collections::HashMap<DeviceId, Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>>> = RefCell::new(std::collections::HashMap::new());
 }
 
 fn shared_command_queue(
@@ -101,7 +117,7 @@ fn shared_command_queue(
 
 fn fft_plan(key: FftKey) -> Result<FftPlan> {
     FFT_PLANS.with(|plans| {
-        if let Some(plan) = plans.borrow().get(&key) {
+        if let Some(plan) = plans.borrow_mut().get(&key) {
             return Ok(plan.clone());
         }
 
@@ -164,12 +180,25 @@ fn fft_plan(key: FftKey) -> Result<FftPlan> {
             output_shape,
         };
 
-        plans.borrow_mut().insert(key, plan.clone());
+        plans.borrow_mut().put(key, plan.clone());
         Ok(plan)
     })
 }
 
+/// Each MPSGraph run and the Cocoa factory calls below (`NSArray`,
+/// `NSDictionary`, `MPSGraphTensorData`, and the command buffers allocated
+/// inside `runWithMTLCommandQueue`) return autoreleased objects. The pipeline
+/// runs on tokio worker threads that have no autorelease pool draining, so
+/// without an explicit pool these temporaries — including sizeable Metal
+/// command buffers and MPS intermediates — accumulate for the entire run and
+/// are the dominant per-page RAM climb on the LaMa+Metal path. Wrapping each
+/// call drains them immediately; the returned `output_buffer` is candle-owned
+/// (held by an `Arc`), so it safely outlives the pool.
 pub fn rfft2(storage: &MetalStorage, layout: &Layout) -> Result<(MetalStorage, Shape)> {
+    autoreleasepool(|_| rfft2_impl(storage, layout))
+}
+
+fn rfft2_impl(storage: &MetalStorage, layout: &Layout) -> Result<(MetalStorage, Shape)> {
     let dims = layout.dims();
     if dims.len() != 4 {
         bail!("rfft2 expects rank-4 input, got {:?}", dims)
@@ -247,6 +276,15 @@ pub fn rfft2(storage: &MetalStorage, layout: &Layout) -> Result<(MetalStorage, S
 }
 
 pub fn irfft2(
+    storage: &MetalStorage,
+    layout: &Layout,
+    width: usize,
+) -> Result<(MetalStorage, Shape)> {
+    // See `rfft2` — drain autoreleased Metal/MPS temporaries per call.
+    autoreleasepool(|_| irfft2_impl(storage, layout, width))
+}
+
+fn irfft2_impl(
     storage: &MetalStorage,
     layout: &Layout,
     width: usize,

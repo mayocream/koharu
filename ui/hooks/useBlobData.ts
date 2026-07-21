@@ -5,6 +5,14 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getBlob } from '@/lib/api/default/default'
 import { convertToBlob } from '@/lib/io/blobConvert'
 
+// Each cached entry holds a full-resolution decoded image (raw bytes, or a
+// Blob pinned by an object URL). Batch runs touch a new set of hashes per page,
+// so a long gcTime keeps a large sliding window of full images resident at
+// once. Keep just enough to make navigating a few pages back instant; inactive
+// entries are evicted quickly (and their object URLs revoked — see
+// `queryClient.ts`). Actively-observed queries are never evicted regardless.
+const BLOB_GC_TIME = 60 * 1000
+
 const blobQueryOptions = (hash: string) => ({
   queryKey: ['blob', hash] as const,
   queryFn: async () => {
@@ -13,7 +21,7 @@ const blobQueryOptions = (hash: string) => ({
     return new Uint8Array(buf)
   },
   staleTime: Infinity,
-  gcTime: 10 * 60 * 1000,
+  gcTime: BLOB_GC_TIME,
   structuralSharing: false as const,
 })
 
@@ -44,7 +52,7 @@ const blobImageQueryOptions = (hash: string) => ({
     return url
   },
   staleTime: Infinity,
-  gcTime: 10 * 60 * 1000,
+  gcTime: BLOB_GC_TIME,
   structuralSharing: false as const,
 })
 
