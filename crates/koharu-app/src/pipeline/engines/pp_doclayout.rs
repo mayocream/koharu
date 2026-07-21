@@ -21,7 +21,9 @@ pub struct Model(PPDocLayoutV3);
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        let layout = self.0.inference_one_fast(&image, CONFIDENCE_THRESHOLD)?;
+        let layout = koharu_ml::autorelease_scope(|| {
+            self.0.inference_one_fast(&image, CONFIDENCE_THRESHOLD)
+        })?;
         let blocks = build_text_blocks(&layout.regions);
 
         let mut ops = clear_text_nodes_ops(ctx.scene, ctx.page);

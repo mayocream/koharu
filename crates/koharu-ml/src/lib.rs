@@ -44,3 +44,30 @@ pub fn device(cpu: bool) -> Result<Device> {
         Ok(Device::Cpu)
     }
 }
+
+/// Run a synchronous inference `f` inside an Objective-C autorelease pool on
+/// Metal builds; a plain call on every other backend.
+///
+/// candle's Metal ops (and our MPSGraph FFT) allocate autoreleased objects —
+/// command buffers, MPS intermediates — and a leaked command buffer also pins
+/// every GPU buffer it referenced. The pipeline runs inference on tokio worker
+/// threads that have no autorelease pool of their own, so without draining, one
+/// "process all pages" run accumulates these across every page until the run
+/// ends. Wrap each model's synchronous Metal inference entry point with this so
+/// the temporaries are freed as soon as that page's inference returns. Results
+/// returned from `f` are heap/`Arc`-owned and safely outlive the pool.
+#[cfg(feature = "metal")]
+pub fn autorelease_scope<T, F>(f: F) -> T
+where
+    F: objc2::rc::AutoreleaseSafe + FnOnce() -> T,
+{
+    objc2::rc::autoreleasepool(|_| f())
+}
+
+#[cfg(not(feature = "metal"))]
+pub fn autorelease_scope<T, F>(f: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    f()
+}

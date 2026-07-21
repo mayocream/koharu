@@ -20,7 +20,7 @@ pub struct Model(ComicTextDetector);
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        let prob_mask = self.0.inference_segmentation(&image)?;
+        let prob_mask = koharu_ml::autorelease_scope(|| self.0.inference_segmentation(&image))?;
 
         let regions: Vec<TextRegion> = text_nodes(ctx.scene, ctx.page)
             .iter()

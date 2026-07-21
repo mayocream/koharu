@@ -53,9 +53,10 @@ impl Engine for Model {
             Some(r) => DynamicImage::ImageLuma8(clip_gray_mask_to_region(&expanded, &r)),
             None => DynamicImage::ImageLuma8(expanded),
         };
-        let result =
+        let result = koharu_ml::autorelease_scope(|| {
             self.0
-                .inpaint_with_reference(&image, &mask, None, &Flux2InpaintOptions::default())?;
+                .inpaint_with_reference(&image, &mask, None, &Flux2InpaintOptions::default())
+        })?;
         let (w, h) = image_dimensions(&result);
         let blob = ctx.blobs.put_webp(&result)?;
         Ok(vec![upsert_image_blob(

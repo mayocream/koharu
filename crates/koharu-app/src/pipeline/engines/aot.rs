@@ -58,7 +58,8 @@ impl Engine for Model {
             None => DynamicImage::ImageLuma8(expanded),
         };
 
-        let result = self.0.inference(&image, &mask, &bubble_mask)?;
+        let result =
+            koharu_ml::autorelease_scope(|| self.0.inference(&image, &mask, &bubble_mask))?;
         let (w, h) = image_dimensions(&result);
         let blob = ctx.blobs.put_webp(&result)?;
         Ok(vec![upsert_image_blob(

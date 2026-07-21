@@ -105,7 +105,8 @@ inventory::submit! {
 
                     // Listen continuously for pipeline requests
                     while let Some(msg) = rx.recv().await {
-                        let result = detector.inference(&msg.image);
+                        let result =
+                            koharu_ml::autorelease_scope(|| detector.inference(&msg.image));
                         let _ = msg.respond_to.send(result);
                     }
                 });

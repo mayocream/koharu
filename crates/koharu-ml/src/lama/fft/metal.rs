@@ -4,6 +4,7 @@ use candle_core::{
     bail,
     metal_backend::{DeviceId, MetalError, MetalStorage},
 };
+use lru::LruCache;
 use objc2::{
     AnyThread,
     rc::{Retained, autoreleasepool},
@@ -15,7 +16,6 @@ use objc2_metal_performance_shaders_graph::{
     MPSGraph, MPSGraphFFTDescriptor, MPSGraphFFTScalingMode, MPSGraphTensor, MPSGraphTensorData,
     MPSGraphTensorDataDictionary,
 };
-use lru::LruCache;
 use std::{cell::RefCell, num::NonZeroUsize, ptr::NonNull};
 
 /// Upper bound on distinct cached FFT plans (MPSGraphs). Each LaMa crop runs
