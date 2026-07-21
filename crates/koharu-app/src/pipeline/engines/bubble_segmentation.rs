@@ -19,7 +19,7 @@ pub struct Model(SpeechBubbleSegmentation);
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        let result = self.0.inference(&image)?;
+        let result = koharu_ml::autorelease_scope(|| self.0.inference(&image))?;
 
         let mut regions: Vec<_> = result.regions.iter().collect();
         regions.sort_by_key(|region| std::cmp::Reverse(region.area));

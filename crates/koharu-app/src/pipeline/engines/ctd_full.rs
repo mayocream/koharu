@@ -23,7 +23,7 @@ pub struct Model(ComicTextDetector);
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        let det = self.0.inference(&image)?;
+        let det = koharu_ml::autorelease_scope(|| self.0.inference(&image))?;
 
         // Segmentation mask blob.
         let mask_blob = ctx.blobs.put_webp(&DynamicImage::ImageLuma8(det.mask))?;

@@ -33,7 +33,7 @@ impl Engine for Model {
             })
             .collect();
 
-        let mut preds = self.0.inference(&crops, 1)?;
+        let mut preds = koharu_ml::autorelease_scope(|| self.0.inference(&crops, 1))?;
         for p in &mut preds {
             normalize_font_prediction(p);
         }

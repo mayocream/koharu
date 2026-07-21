@@ -29,7 +29,7 @@ impl Engine for Model {
                 crop_text_block_bbox(&image, &region)
             })
             .collect();
-        let recognised = self.0.inference(&crops)?;
+        let recognised = koharu_ml::autorelease_scope(|| self.0.inference(&crops))?;
 
         let mut ops = Vec::with_capacity(texts.len());
         for ((node_id, _, _), text) in texts.iter().zip(recognised) {

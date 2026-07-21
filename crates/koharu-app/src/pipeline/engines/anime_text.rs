@@ -20,7 +20,7 @@ pub struct Model(AnimeTextDetector);
 impl Engine for Model {
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         let image = load_source_image(ctx.scene, ctx.page, ctx.blobs)?;
-        let det = self.0.inference(&image)?;
+        let det = koharu_ml::autorelease_scope(|| self.0.inference(&image))?;
 
         let mut pairs: Vec<([f32; 4], TextData)> = det
             .text_blocks

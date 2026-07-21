@@ -164,9 +164,18 @@ impl Lama {
 
     #[instrument(level = "debug", skip_all)]
     fn inference_model(&self, image: &RgbImage, mask: &GrayImage) -> Result<RgbImage> {
-        let (image_tensor, mask_tensor) = self.preprocess(image, mask)?;
-        let output = self.forward(&image_tensor, &mask_tensor)?;
-        self.postprocess(&output)
+        // Drain autoreleased Metal temporaries per crop. candle's Metal ops
+        // (and the FFC layers' MPSGraph FFTs) allocate command buffers and MPS
+        // intermediates that are autoreleased; on the pool-less pipeline worker
+        // threads a leaked command buffer also pins every GPU buffer it
+        // referenced, so without a pool GPU/unified memory climbs crop after
+        // crop for the whole run. The returned `RgbImage` is heap-owned and
+        // safely outlives the pool.
+        crate::autorelease_scope(|| {
+            let (image_tensor, mask_tensor) = self.preprocess(image, mask)?;
+            let output = self.forward(&image_tensor, &mask_tensor)?;
+            self.postprocess(&output)
+        })
     }
 
     #[instrument(level = "debug", skip_all)]

@@ -22,6 +22,7 @@ candle-transformers = { workspace = true }
 candle-nn = { workspace = true }
 candle-flash-attn = { workspace = true, optional = true }
 tokenizers = { workspace = true }
+lru = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

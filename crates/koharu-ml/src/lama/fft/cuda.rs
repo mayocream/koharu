@@ -8,10 +8,18 @@ use cudarc::{
     cufft::{result as cufft, sys},
     driver::{DevicePtr, DevicePtrMut},
 };
+use lru::LruCache;
 use std::{
-    collections::HashMap,
+    num::NonZeroUsize,
     sync::{Arc, Mutex, OnceLock},
 };
+
+/// Upper bound on distinct cached cuFFT plans. Keyed by FFT shape, which
+/// varies per LaMa crop resolution, so an unbounded map retains one
+/// `cufftHandle` per distinct crop size for the whole run. Cap it so stale
+/// handles are evicted (and destroyed via `CachedPlan::drop`) as new shapes
+/// appear. Mirrors the Metal path's `FFT_PLAN_CACHE_CAP`.
+const FFT_PLAN_CACHE_CAP: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum PlanKind {
@@ -41,9 +49,13 @@ impl Drop for CachedPlan {
     }
 }
 
-fn plan_cache() -> &'static Mutex<HashMap<PlanKey, Arc<CachedPlan>>> {
-    static CACHE: OnceLock<Mutex<HashMap<PlanKey, Arc<CachedPlan>>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+fn plan_cache() -> &'static Mutex<LruCache<PlanKey, Arc<CachedPlan>>> {
+    static CACHE: OnceLock<Mutex<LruCache<PlanKey, Arc<CachedPlan>>>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        Mutex::new(LruCache::new(
+            NonZeroUsize::new(FFT_PLAN_CACHE_CAP).expect("cache capacity is non-zero"),
+        ))
+    })
 }
 
 fn get_or_create_plan(
@@ -104,7 +116,7 @@ fn get_or_create_plan(
         handle,
         lock: Mutex::new(()),
     });
-    cache.insert(key, plan.clone());
+    cache.put(key, plan.clone());
     Ok(plan)
 }
 

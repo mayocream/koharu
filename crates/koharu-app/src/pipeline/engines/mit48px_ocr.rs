@@ -25,7 +25,8 @@ impl Engine for Model {
             .iter()
             .map(|(_, transform, text)| text_node_to_region(transform, text))
             .collect();
-        let predictions = self.0.inference_text_blocks(&image, &regions)?;
+        let predictions =
+            koharu_ml::autorelease_scope(|| self.0.inference_text_blocks(&image, &regions))?;
 
         let mut ops = Vec::with_capacity(predictions.len());
         for prediction in predictions {
