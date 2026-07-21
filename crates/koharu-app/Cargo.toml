@@ -1,0 +1,42 @@
+[package]
+name = "koharu-app"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+include = ["src/**", "README.md"]
+
+[dependencies]
+anyhow = { workspace = true }
+dirs = { workspace = true }
+image = { workspace = true }
+koharu-canvas = { workspace = true }
+koharu-config = { workspace = true }
+koharu-desktop = { workspace = true }
+koharu-pipeline = { workspace = true }
+koharu-psd = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-secrets = { workspace = true }
+koharu-translator = { workspace = true }
+rayon = { workspace = true }
+rfd = { workspace = true }
+rust-embed = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+specta = { workspace = true }
+specta-serde = { workspace = true }
+specta-typescript = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+webp = { workspace = true }

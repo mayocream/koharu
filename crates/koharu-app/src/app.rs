@@ -4,33 +4,30 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, anyhow, bail};
+use crate::{Project, classify_error, failure};
+use anyhow::{Result, anyhow};
 use koharu_canvas::{
-    Brush, BrushCursor, Camera, DisplayState, ElementPreview as CanvasElementPreview,
-    Guide as CanvasGuide, Handle as CanvasHandle, HitTarget as CanvasHitTarget,
-    MaskOverlay as CanvasMaskOverlay, MaskPlane as CanvasMaskPlane, OverlayState,
-    PageView as NativePageView, PhysicalPoint, StrokeMode,
+    Brush, BrushCursor, Camera, DisplayState, Guide as CanvasGuide, Handle as CanvasHandle,
+    HitTarget as CanvasHitTarget, MaskOverlay as CanvasMaskOverlay, MaskPlane as CanvasMaskPlane,
+    OverlayState, PageView as NativePageView, PhysicalPoint, StrokeMode,
 };
 use koharu_config::Config;
 use koharu_desktop::{
     Application, DesktopContext, Frontend, MaskEncodingResult, Options as DesktopOptions,
 };
 use koharu_pipeline::{CancellationToken, PipelineConfig};
-use koharu_scene::{
-    ChangeSet, Command, Commands, ElementChange, PageAsset, PageId, Revision, Session,
-};
+use koharu_scene::{ChangeSet, PageAsset, PageId, Revision, Session};
 use koharu_translator::TranslationConfig;
 use rust_embed::Embed;
 use serde_json::Value;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
     jobs::{Background, ExportRequest, NativeEvent, PipelineRequest},
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
-        CanvasPageView, DownloadStatus, FontFaceView, Handle, HitTarget, JobKind, JobStatus,
-        MaskPlane, PageDelta, PageSummary, PageView, ProjectDelta, ProjectHeader, RequestId,
-        SettingsView, TargetLanguageView, TranslationSettings,
+        CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, Handle,
+        HitTarget, JobKind, JobStatus, MaskPlane, PageSummary, PageView, RequestId, SettingsView,
+        TargetLanguageView, TranslationSettings,
     },
     resources::Resources,
 };
@@ -43,16 +40,6 @@ const EVENT_NAME: &str = "app";
 struct Assets;
 
 pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::filter::EnvFilter::builder()
-                .with_default_directive(tracing::Level::INFO.into())
-                .from_env_lossy(),
-        )
-        .with(crate::sentry::tracing_layer())
-        .with(crate::tracing::TimingLayer::new())
-        .init();
-
     let pipeline = koharu_config::load::<PipelineConfig>("pipeline")?;
     let translation = TranslationConfig::load()?;
     let background = Background::new(pipeline.clone(), translation.clone());
@@ -61,7 +48,7 @@ pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
     let fonts = font_renderer
         .available_fonts()?
         .into_iter()
-        .map(FontFaceView::from)
+        .map(font_face_view)
         .collect();
     koharu_desktop::run(
         DesktopOptions {
@@ -90,10 +77,28 @@ fn frontend() -> Frontend {
     }
 }
 
+fn font_face_view(value: koharu_renderer::FontFaceInfo) -> FontFaceView {
+    FontFaceView {
+        family_name: value.family_name,
+        post_script_name: value.post_script_name,
+        weight: value.weight,
+        stretch: value.stretch,
+        style: match value.style {
+            koharu_renderer::FontFaceStyle::Normal => FontFaceStyleView::Normal,
+            koharu_renderer::FontFaceStyle::Italic => FontFaceStyleView::Italic,
+            koharu_renderer::FontFaceStyle::Oblique => FontFaceStyleView::Oblique,
+        },
+        source: match value.source {
+            koharu_renderer::FontSource::System => FontSourceView::System,
+            koharu_renderer::FontSource::Google => FontSourceView::Google,
+        },
+        category: value.category,
+        cached: value.cached,
+    }
+}
+
 pub struct App {
-    session: Option<Session>,
-    path: Option<PathBuf>,
-    visible_page: Option<PageId>,
+    project: Option<Project>,
     background: Background,
     pipeline: Config<PipelineConfig>,
     translation: Config<TranslationConfig>,
@@ -103,8 +108,6 @@ pub struct App {
     jobs: HashMap<RequestId, RunningJob>,
     downloads: HashMap<u64, DownloadStatus>,
     pending_masks: HashSet<(PageId, CanvasMaskPlane, u64)>,
-    undo: Vec<Vec<Revision>>,
-    redo: Vec<Vec<Revision>>,
     initial_path: Option<PathBuf>,
     auto_fit: bool,
 }
@@ -119,13 +122,6 @@ enum CommandOutcome {
     Cancelled(Revision),
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("{message}")]
-struct AppFailure {
-    code: AppErrorCode,
-    message: String,
-}
-
 impl App {
     fn new(
         background: Background,
@@ -137,9 +133,7 @@ impl App {
         initial_path: Option<PathBuf>,
     ) -> Self {
         Self {
-            session: None,
-            path: None,
-            visible_page: None,
+            project: None,
             background,
             pipeline,
             translation,
@@ -149,17 +143,14 @@ impl App {
             jobs: HashMap::new(),
             downloads: HashMap::new(),
             pending_masks: HashSet::new(),
-            undo: Vec::new(),
-            redo: Vec::new(),
             initial_path,
             auto_fit: true,
         }
     }
 
     fn open(&mut self, path: PathBuf, desktop: &mut DesktopContext<'_, NativeEvent>) -> Result<()> {
-        let session =
-            Session::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
-        self.install_session(session, path, desktop)
+        let project = Project::open(path)?;
+        self.install_project(project, desktop)
     }
 
     fn create(
@@ -167,15 +158,13 @@ impl App {
         path: PathBuf,
         desktop: &mut DesktopContext<'_, NativeEvent>,
     ) -> Result<()> {
-        let session = Session::create(&path)
-            .with_context(|| format!("failed to create {}", path.display()))?;
-        self.install_session(session, path, desktop)
+        let project = Project::create(path)?;
+        self.install_project(project, desktop)
     }
 
-    fn install_session(
+    fn install_project(
         &mut self,
-        session: Session,
-        path: PathBuf,
+        project: Project,
         desktop: &mut DesktopContext<'_, NativeEvent>,
     ) -> Result<()> {
         for job in self.jobs.values() {
@@ -183,12 +172,8 @@ impl App {
         }
         self.jobs.clear();
         self.pending_masks.clear();
-        self.resources.install(&session, &path);
-        self.visible_page = session.project().pages.first().map(|page| page.id);
-        self.session = Some(session);
-        self.path = Some(path);
-        self.undo.clear();
-        self.redo.clear();
+        self.resources.install(project.session(), project.path());
+        self.project = Some(project);
         self.auto_fit = true;
         self.show_visible_page(desktop)?;
         Ok(())
@@ -200,12 +185,8 @@ impl App {
         }
         self.jobs.clear();
         self.pending_masks.clear();
-        self.session = None;
+        self.project = None;
         self.resources.clear();
-        self.path = None;
-        self.visible_page = None;
-        self.undo.clear();
-        self.redo.clear();
         self.auto_fit = true;
         desktop.clear_page();
         desktop.emit(EVENT_NAME, AppEvent::ProjectClosed)
@@ -486,6 +467,28 @@ impl App {
                 });
                 return Ok(CommandOutcome::Accepted(self.current_revision()));
             }
+            AppCommand::FinishTransform => {
+                if let Err(error) = self.require_base(base) {
+                    desktop.canvas().cancel_transform();
+                    return Err(error);
+                }
+                let Some(commit) = desktop.canvas().finish_transform()? else {
+                    return Ok(CommandOutcome::Accepted(base));
+                };
+                let changes = self.project_mut()?.apply(AppCommand::SetElementFrames {
+                    elements: commit
+                        .elements
+                        .into_iter()
+                        .map(|element| crate::protocol::ElementFrame {
+                            page: commit.page,
+                            element: element.element,
+                            frame: element.frame,
+                        })
+                        .collect(),
+                })?;
+                self.present_changes(desktop, &changes)?;
+                return Ok(CommandOutcome::Accepted(changes.to));
+            }
             _ => {}
         }
 
@@ -498,12 +501,7 @@ impl App {
                 "a page mask is still being committed",
             ));
         }
-        let commands = build_commands(self.session()?, command)?;
-        let changes = self.session_mut()?.apply(commands)?;
-        if changes.to != changes.from {
-            self.undo.push(vec![changes.to]);
-            self.redo.clear();
-        }
+        let changes = self.project_mut()?.apply(command)?;
         self.present_changes(desktop, &changes)?;
         Ok(CommandOutcome::Accepted(changes.to))
     }
@@ -513,17 +511,7 @@ impl App {
         desktop: &mut DesktopContext<'_, NativeEvent>,
         base: Revision,
     ) -> Result<Revision> {
-        self.require_base(base)?;
-        let group = self.undo.pop().ok_or_else(|| anyhow!("nothing to undo"))?;
-        let result = self.session_mut()?.revert(group.iter().copied());
-        let changes = match result {
-            Ok(changes) => changes,
-            Err(error) => {
-                self.undo.push(group);
-                return Err(error.into());
-            }
-        };
-        self.redo.push(vec![changes.to]);
+        let changes = self.project_mut()?.undo(base)?;
         self.present_changes(desktop, &changes)?;
         Ok(changes.to)
     }
@@ -533,17 +521,7 @@ impl App {
         desktop: &mut DesktopContext<'_, NativeEvent>,
         base: Revision,
     ) -> Result<Revision> {
-        self.require_base(base)?;
-        let group = self.redo.pop().ok_or_else(|| anyhow!("nothing to redo"))?;
-        let result = self.session_mut()?.revert(group.iter().copied());
-        let changes = match result {
-            Ok(changes) => changes,
-            Err(error) => {
-                self.redo.push(group);
-                return Err(error.into());
-            }
-        };
-        self.undo.push(vec![changes.to]);
+        let changes = self.project_mut()?.redo(base)?;
         self.present_changes(desktop, &changes)?;
         Ok(changes.to)
     }
@@ -556,8 +534,7 @@ impl App {
         match interaction {
             CanvasInteraction::ShowPage { page } => {
                 self.ensure_masks_committed()?;
-                self.session()?.page(page)?;
-                self.visible_page = Some(page);
+                self.project_mut()?.show_page(page)?;
                 desktop.show_page(self.session()?, page)?;
                 self.auto_fit = true;
                 self.fit_window(desktop)?;
@@ -631,7 +608,6 @@ impl App {
             CanvasInteraction::SetOverlays {
                 selected,
                 hovered,
-                previews,
                 draft,
                 guides,
                 show_text_bounds,
@@ -656,14 +632,6 @@ impl App {
                     point: PhysicalPoint::new(cursor.x, cursor.y),
                     diameter: cursor.diameter,
                 }),
-                element_previews: previews
-                    .into_iter()
-                    .map(|preview| CanvasElementPreview {
-                        element: preview.element,
-                        frame: preview.frame,
-                    })
-                    .collect(),
-                ..OverlayState::default()
             }),
             CanvasInteraction::HitTest { id, x, y } => {
                 let target = desktop
@@ -672,6 +640,20 @@ impl App {
                     .map(hit_target);
                 desktop.emit(EVENT_NAME, AppEvent::HitTest { id, target })?;
             }
+            CanvasInteraction::BeginTransform {
+                elements,
+                target,
+                x,
+                y,
+            } => desktop.canvas().begin_transform(
+                &elements,
+                canvas_hit_target(target),
+                PhysicalPoint::new(x, y),
+            )?,
+            CanvasInteraction::UpdateTransform { x, y } => desktop
+                .canvas()
+                .update_transform(PhysicalPoint::new(x, y))?,
+            CanvasInteraction::CancelTransform => desktop.canvas().cancel_transform(),
             CanvasInteraction::BeginMaskStroke {
                 plane,
                 diameter,
@@ -706,10 +688,10 @@ impl App {
     }
 
     fn refresh(&mut self, desktop: &mut DesktopContext<'_, NativeEvent>) -> Result<()> {
-        let Some(session) = self.session.as_mut() else {
+        let Some(project) = self.project.as_mut() else {
             return Ok(());
         };
-        let changes = session.refresh()?;
+        let changes = project.refresh()?;
         if changes.to != changes.from {
             self.present_changes(desktop, &changes)?;
         }
@@ -721,26 +703,24 @@ impl App {
         desktop: &mut DesktopContext<'_, NativeEvent>,
         changes: &ChangeSet,
     ) -> Result<()> {
-        let previous_page = self.visible_page;
-        if let (Some(session), Some(path)) = (&self.session, &self.path) {
-            self.resources.install(session, path);
+        let previous_page = self.project()?.visible_page();
+        {
+            let project = self.project()?;
+            self.resources.install(project.session(), project.path());
         }
-        let visible_exists = self.visible_page.is_some_and(|page| {
-            self.session()
-                .is_ok_and(|session| session.page(page).is_ok())
-        });
-        if !visible_exists {
-            self.visible_page = self.session()?.project().pages.first().map(|page| page.id);
+        self.project_mut()?.reconcile_visible_page();
+        let visible_page = self.project()?.visible_page();
+        if visible_page != previous_page {
             self.show_visible_page(desktop)?;
             self.auto_fit = true;
             self.fit_window(desktop)?;
         } else {
             desktop.sync(self.session()?, changes)?;
         }
-        let delta = self.delta(changes)?;
+        let delta = self.project()?.delta(changes)?;
         desktop.emit(EVENT_NAME, AppEvent::ProjectChanged(delta))?;
-        if self.visible_page != previous_page
-            && let Some(page) = self.visible_page
+        if visible_page != previous_page
+            && let Some(page) = visible_page
         {
             desktop.emit(
                 EVENT_NAME,
@@ -754,8 +734,10 @@ impl App {
     }
 
     fn show_visible_page(&self, desktop: &mut DesktopContext<'_, NativeEvent>) -> Result<()> {
-        if let (Some(session), Some(page)) = (self.session.as_ref(), self.visible_page) {
-            desktop.show_page(session, page)?;
+        if let Some(project) = &self.project
+            && let Some(page) = project.visible_page()
+        {
+            desktop.show_page(project.session(), page)?;
         } else {
             desktop.clear_page();
         }
@@ -763,7 +745,7 @@ impl App {
     }
 
     fn fit_window(&mut self, desktop: &mut DesktopContext<'_, NativeEvent>) -> Result<()> {
-        let Some(page) = self.visible_page else {
+        let Some(page) = self.project.as_ref().and_then(Project::visible_page) else {
             return Ok(());
         };
         let size = self.session()?.page(page)?.size;
@@ -788,14 +770,15 @@ impl App {
     }
 
     fn emit_project(&self, desktop: &DesktopContext<'_, NativeEvent>) -> Result<()> {
-        let Some(session) = self.session.as_ref() else {
+        let Some(project) = &self.project else {
             return desktop.emit(EVENT_NAME, AppEvent::ProjectClosed);
         };
+        let session = project.session();
         desktop.emit(
             EVENT_NAME,
             AppEvent::ProjectOpened {
                 revision: session.revision(),
-                project: self.project_header(session),
+                project: project.header(),
                 pages: session
                     .project()
                     .pages
@@ -804,7 +787,7 @@ impl App {
                     .collect(),
             },
         )?;
-        if let Some(page) = self.visible_page {
+        if let Some(page) = project.visible_page() {
             desktop.emit(
                 EVENT_NAME,
                 AppEvent::PageLoaded {
@@ -853,78 +836,6 @@ impl App {
         Ok(())
     }
 
-    fn project_header(&self, session: &Session) -> ProjectHeader {
-        ProjectHeader {
-            id: session.id(),
-            name: self
-                .path
-                .as_deref()
-                .map(project_name)
-                .unwrap_or_else(|| "Untitled".into()),
-            visible_page: self.visible_page,
-            can_undo: !self.undo.is_empty(),
-            can_redo: !self.redo.is_empty(),
-        }
-    }
-
-    fn delta(&self, changes: &ChangeSet) -> Result<ProjectDelta> {
-        let session = self.session()?;
-        let project = session.project();
-        let pages = changes
-            .pages
-            .iter()
-            .filter_map(|id| project.page(*id))
-            .map(PageSummary::from_page)
-            .collect();
-        let deleted_pages = changes
-            .pages
-            .iter()
-            .copied()
-            .filter(|id| project.page(*id).is_none())
-            .collect();
-        let visible_page = self
-            .visible_page
-            .filter(|visible| {
-                changes.pages.contains(visible)
-                    || changes.elements.iter().any(|element| {
-                        project
-                            .page(*visible)
-                            .is_some_and(|page| page.element(*element).is_some())
-                    })
-            })
-            .and_then(|visible| project.page(visible))
-            .map(|page| PageDelta {
-                id: page.id,
-                name: page.name.clone(),
-                size: page.size,
-                source: page.source.to_string(),
-                assets: (&page.assets).into(),
-                element_order: page.elements.iter().map(|element| element.id).collect(),
-                elements: changes
-                    .elements
-                    .iter()
-                    .filter_map(|id| page.element(*id).cloned())
-                    .collect(),
-                deleted_elements: changes
-                    .elements
-                    .iter()
-                    .copied()
-                    .filter(|id| page.element(*id).is_none())
-                    .collect(),
-            });
-        Ok(ProjectDelta {
-            from: changes.from,
-            revision: changes.to,
-            name: project_name(self.project_path()?),
-            page_order: project.pages.iter().map(|page| page.id).collect(),
-            pages,
-            deleted_pages,
-            visible_page,
-            can_undo: !self.undo.is_empty(),
-            can_redo: !self.redo.is_empty(),
-        })
-    }
-
     fn reject(
         &self,
         desktop: &DesktopContext<'_, NativeEvent>,
@@ -964,16 +875,7 @@ impl App {
     }
 
     fn require_base(&self, base: Revision) -> Result<()> {
-        let current = self
-            .revision()
-            .ok_or_else(|| app_failure(AppErrorCode::NoProject, "no project is open"))?;
-        if base != current {
-            return Err(app_failure(
-                AppErrorCode::StaleRevision,
-                format!("stale scene revision {base}; current revision is {current}"),
-            ));
-        }
-        Ok(())
+        self.project()?.require_base(base)
     }
 
     fn ensure_free_job(&self, id: RequestId) -> Result<()> {
@@ -1009,26 +911,32 @@ impl App {
         Ok(())
     }
 
-    fn session(&self) -> Result<&Session> {
-        self.session
+    fn project(&self) -> Result<&Project> {
+        self.project
             .as_ref()
             .ok_or_else(|| app_failure(AppErrorCode::NoProject, "no project is open"))
     }
 
-    fn session_mut(&mut self) -> Result<&mut Session> {
-        self.session
+    fn project_mut(&mut self) -> Result<&mut Project> {
+        self.project
             .as_mut()
             .ok_or_else(|| app_failure(AppErrorCode::NoProject, "no project is open"))
     }
 
+    fn session(&self) -> Result<&Session> {
+        Ok(self.project()?.session())
+    }
+
+    fn session_mut(&mut self) -> Result<&mut Session> {
+        Ok(self.project_mut()?.session_mut())
+    }
+
     fn project_path(&self) -> Result<&Path> {
-        self.path
-            .as_deref()
-            .ok_or_else(|| app_failure(AppErrorCode::NoProject, "no project is open"))
+        Ok(self.project()?.path())
     }
 
     fn revision(&self) -> Option<Revision> {
-        self.session.as_ref().map(Session::revision)
+        self.project.as_ref().map(Project::revision)
     }
 
     fn current_revision(&self) -> Revision {
@@ -1037,36 +945,7 @@ impl App {
 }
 
 fn app_failure(code: AppErrorCode, message: impl std::fmt::Display) -> anyhow::Error {
-    AppFailure {
-        code,
-        message: message.to_string(),
-    }
-    .into()
-}
-
-fn classify_error(error: &anyhow::Error) -> AppErrorCode {
-    if let Some(error) = error.downcast_ref::<AppFailure>() {
-        return error.code;
-    }
-    if let Some(error) = error.downcast_ref::<koharu_scene::Error>() {
-        return match error {
-            koharu_scene::Error::Io(_) | koharu_scene::Error::Sql(_) => AppErrorCode::IoFailed,
-            koharu_scene::Error::PageNotFound(_)
-            | koharu_scene::Error::ElementNotFound(_)
-            | koharu_scene::Error::HistoryNotFound(_) => AppErrorCode::NotFound,
-            koharu_scene::Error::RevisionConflict { .. } => AppErrorCode::StaleRevision,
-            koharu_scene::Error::Invalid(_)
-            | koharu_scene::Error::ElementKind(_)
-            | koharu_scene::Error::CommandConflict
-            | koharu_scene::Error::HistoryConflict(_) => AppErrorCode::InvalidInput,
-            _ => AppErrorCode::IoFailed,
-        };
-    }
-    if error.downcast_ref::<std::io::Error>().is_some() {
-        AppErrorCode::IoFailed
-    } else {
-        AppErrorCode::Internal
-    }
+    failure(code, message)
 }
 
 impl Application for App {
@@ -1252,8 +1131,7 @@ impl Application for App {
                 }
                 self.refresh(desktop)?;
                 if !revisions.is_empty() {
-                    self.undo.push(revisions);
-                    self.redo.clear();
+                    self.project_mut()?.record_revisions(revisions);
                     let revision = self.session()?.revision();
                     self.present_changes(
                         desktop,
@@ -1300,17 +1178,13 @@ impl Application for App {
                 let blob = commands
                     .set_asset(mask.page, asset, Some(mask.bytes))?
                     .expect("a supplied mask creates a blob");
-                let changes = self.session_mut()?.apply(commands)?;
+                let changes = self.project_mut()?.apply_commands(commands)?;
                 desktop.canvas().acknowledge_mask_commit(
                     mask.page,
                     mask.plane,
                     mask.generation,
                     blob,
                 )?;
-                if changes.to != changes.from {
-                    self.undo.push(vec![changes.to]);
-                    self.redo.clear();
-                }
                 self.present_changes(desktop, &changes)
             }
             MaskEncodingResult::Failed(error) => {
@@ -1327,126 +1201,6 @@ impl Application for App {
         }
         Ok(self.pending_masks.is_empty())
     }
-}
-
-fn build_commands(session: &Session, command: AppCommand) -> Result<Commands> {
-    let mut commands = session.commands();
-    match command {
-        AppCommand::RenamePage { page, name } => commands.push(Command::RenamePage { page, name }),
-        AppCommand::DeletePage { page } => commands.push(Command::DeletePage(page)),
-        AppCommand::DeletePages { pages } => {
-            for page in pages {
-                commands.push(Command::DeletePage(page));
-            }
-        }
-        AppCommand::MovePage { page, index } => commands.push(Command::MovePage { page, index }),
-        AppCommand::AddText { page, frame } => {
-            commands.add_text(page, frame);
-        }
-        AppCommand::SetTranslation {
-            page,
-            element,
-            translation,
-        } => commands.push(Command::EditElement {
-            page,
-            element,
-            edit: ElementChange::Translation(translation),
-        }),
-        AppCommand::SetTextStyle {
-            page,
-            element,
-            style,
-        } => commands.push(Command::EditElement {
-            page,
-            element,
-            edit: ElementChange::Style(style),
-        }),
-        AppCommand::SetTextLayout {
-            page,
-            element,
-            layout,
-        } => commands.push(Command::EditElement {
-            page,
-            element,
-            edit: ElementChange::Layout(layout),
-        }),
-        AppCommand::SetTextStyles { page, elements } => {
-            for value in elements {
-                commands.push(Command::EditElement {
-                    page,
-                    element: value.element,
-                    edit: ElementChange::Style(value.style),
-                });
-            }
-        }
-        AppCommand::SetTextLayouts { page, elements } => {
-            for value in elements {
-                commands.push(Command::EditElement {
-                    page,
-                    element: value.element,
-                    edit: ElementChange::Layout(value.layout),
-                });
-            }
-        }
-        AppCommand::SetElementFrames { elements } => {
-            for value in elements {
-                commands.push(Command::EditElement {
-                    page: value.page,
-                    element: value.element,
-                    edit: ElementChange::Frame(value.frame),
-                });
-            }
-        }
-        AppCommand::SetElementOpacity {
-            page,
-            elements,
-            opacity,
-        } => {
-            for element in elements {
-                commands.push(Command::EditElement {
-                    page,
-                    element,
-                    edit: ElementChange::Opacity(opacity),
-                });
-            }
-        }
-        AppCommand::SetElementVisibility {
-            page,
-            elements,
-            visible,
-        } => {
-            for element in elements {
-                commands.push(Command::EditElement {
-                    page,
-                    element,
-                    edit: ElementChange::Visible(visible),
-                });
-            }
-        }
-        AppCommand::DeleteElements { page, elements } => {
-            for element in elements {
-                commands.push(Command::DeleteElement { page, element });
-            }
-        }
-        AppCommand::MoveElement {
-            page,
-            element,
-            index,
-        } => commands.push(Command::MoveElement {
-            page,
-            element,
-            index,
-        }),
-        _ => bail!("command is not a scene edit"),
-    }
-    Ok(commands)
-}
-
-fn project_name(path: &Path) -> String {
-    path.file_stem()
-        .filter(|name| !name.is_empty())
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "Untitled".into())
 }
 
 fn project_dialog() -> rfd::FileDialog {
@@ -1487,6 +1241,27 @@ fn hit_target(target: CanvasHitTarget) -> HitTarget {
                 CanvasHandle::South => Handle::South,
                 CanvasHandle::SouthWest => Handle::SouthWest,
                 CanvasHandle::West => Handle::West,
+                CanvasHandle::Rotate => Handle::Rotate,
+            },
+        },
+    }
+}
+
+const fn canvas_hit_target(target: HitTarget) -> CanvasHitTarget {
+    match target {
+        HitTarget::Element { element } => CanvasHitTarget::Element(element),
+        HitTarget::Handle { element, handle } => CanvasHitTarget::Handle {
+            element,
+            handle: match handle {
+                Handle::NorthWest => CanvasHandle::NorthWest,
+                Handle::North => CanvasHandle::North,
+                Handle::NorthEast => CanvasHandle::NorthEast,
+                Handle::East => CanvasHandle::East,
+                Handle::SouthEast => CanvasHandle::SouthEast,
+                Handle::South => CanvasHandle::South,
+                Handle::SouthWest => CanvasHandle::SouthWest,
+                Handle::West => CanvasHandle::West,
+                Handle::Rotate => CanvasHandle::Rotate,
             },
         },
     }
@@ -1495,34 +1270,6 @@ fn hit_target(target: CanvasHitTarget) -> HitTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_scene::{ElementKind, Frame, TextStyle};
-
-    #[test]
-    fn maps_one_ui_edit_to_one_scene_batch() {
-        let mut session = Session::memory().unwrap();
-        let mut commands = session.commands();
-        let page = commands.add_page("page.png", png()).unwrap();
-        session.apply(commands).unwrap();
-
-        let commands = build_commands(
-            &session,
-            AppCommand::AddText {
-                page,
-                frame: Frame::new(1.0, 2.0, 30.0, 40.0),
-            },
-        )
-        .unwrap();
-        let changes = session.apply(commands).unwrap();
-
-        assert_eq!(changes.elements.len(), 1);
-        assert_eq!(session.page(page).unwrap().elements.len(), 1);
-    }
-
-    #[test]
-    fn project_names_follow_the_file_name() {
-        assert_eq!(project_name(Path::new("Volume 1.khr")), "Volume 1");
-        assert_eq!(project_name(Path::new("Untitled")), "Untitled");
-    }
 
     #[test]
     fn frontend_matches_the_build_profile() {
@@ -1536,88 +1283,5 @@ mod tests {
         } else {
             assert!(matches!(frontend, Frontend::Embedded(_)));
         }
-    }
-
-    #[test]
-    fn bulk_styles_share_one_scene_revision() {
-        let mut session = Session::memory().unwrap();
-        let mut commands = session.commands();
-        let page = commands.add_page("page.png", png()).unwrap();
-        session.apply(commands).unwrap();
-        let mut commands = session.commands();
-        let first = commands.add_text(page, Frame::new(0.0, 0.0, 20.0, 20.0));
-        let second = commands.add_text(page, Frame::new(30.0, 0.0, 20.0, 20.0));
-        session.apply(commands).unwrap();
-        let before = session.revision();
-
-        let mut first_style = TextStyle::default();
-        first_style.font_size = 24.0;
-        let mut second_style = TextStyle::default();
-        second_style.font_size = 30.0;
-        let commands = build_commands(
-            &session,
-            AppCommand::SetTextStyles {
-                page,
-                elements: vec![
-                    crate::protocol::ElementTextStyle {
-                        element: first,
-                        style: first_style,
-                    },
-                    crate::protocol::ElementTextStyle {
-                        element: second,
-                        style: second_style,
-                    },
-                ],
-            },
-        )
-        .unwrap();
-        assert_eq!(commands.as_slice().len(), 2);
-        let changes = session.apply(commands).unwrap();
-        assert_eq!(changes.from, before);
-        assert_eq!(changes.to.get(), before.get() + 1);
-        let sizes = session
-            .page(page)
-            .unwrap()
-            .elements
-            .iter()
-            .map(|element| match &element.kind {
-                ElementKind::Text(text) => text.style.font_size,
-                ElementKind::Image(_) | ElementKind::Region(_) => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(sizes, [24.0, 30.0]);
-    }
-
-    #[test]
-    fn delete_pages_is_one_batch_and_app_failures_keep_stable_codes() {
-        let mut session = Session::memory().unwrap();
-        let mut commands = session.commands();
-        let first = commands.add_page("one.png", png()).unwrap();
-        let second = commands.add_page("two.png", png()).unwrap();
-        session.apply(commands).unwrap();
-        let before = session.revision();
-        let commands = build_commands(
-            &session,
-            AppCommand::DeletePages {
-                pages: vec![first, second],
-            },
-        )
-        .unwrap();
-        assert_eq!(commands.as_slice().len(), 2);
-        let changes = session.apply(commands).unwrap();
-        assert_eq!(changes.to.get(), before.get() + 1);
-        assert!(session.project().pages.is_empty());
-
-        let error = app_failure(AppErrorCode::StaleRevision, "stale");
-        assert_eq!(classify_error(&error), AppErrorCode::StaleRevision);
-    }
-
-    fn png() -> Vec<u8> {
-        vec![
-            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
-            8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 248, 207,
-            192, 240, 31, 0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
-            96, 130,
-        ]
     }
 }

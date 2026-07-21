@@ -13,9 +13,8 @@ import {
   type CanvasDisplay,
   type CanvasMaskOverlay,
   type Frame,
-  type HitTarget,
 } from '@/lib/koharu'
-import { draftFrame, pagePoint, transformFrame, zoomAtPoint } from '@/lib/koharu/geometry'
+import { draftFrame, pagePoint, zoomAtPoint } from '@/lib/koharu/geometry'
 
 interface PendingHit {
   id: number
@@ -27,9 +26,6 @@ interface PendingHit {
 
 interface ElementDrag {
   pointer: number
-  start: [number, number]
-  target: HitTarget
-  frames: Map<string, Frame>
 }
 
 interface TextDraft {
@@ -54,7 +50,6 @@ export function Workspace() {
   const textDraft = useRef<TextDraft | null>(null)
   const pan = useRef<PanDrag | null>(null)
   const masking = useRef<number | null>(null)
-  const previewFrames = useRef<Map<string, Frame>>(new Map())
   const cursor = useRef<[number, number] | null>(null)
   const spaceHeld = useRef(false)
 
@@ -74,7 +69,6 @@ export function Workspace() {
       type: 'set_overlays',
       selected: state.selectedElements,
       hovered: state.hoveredElement,
-      previews: [...previewFrames.current].map(([element, frame]) => ({ element, frame })),
       draft,
       guides: [],
       show_text_bounds: state.showTextBounds,
@@ -87,12 +81,12 @@ export function Workspace() {
 
   const cancelGesture = useCallback(() => {
     if (masking.current !== null) koharuClient.interact({ type: 'cancel_mask_stroke' })
+    if (drag.current !== null) koharuClient.interact({ type: 'cancel_transform' })
     pendingHit.current = null
     drag.current = null
     textDraft.current = null
     pan.current = null
     masking.current = null
-    previewFrames.current.clear()
     sendOverlays()
   }, [sendOverlays])
 
@@ -175,12 +169,15 @@ export function Workspace() {
           : [target.element]
       state.selectElements(selected)
 
-      if (pending.released || !state.page) return
-      const frames = new Map<string, Frame>()
-      for (const element of state.page.elements) {
-        if (selected.includes(element.id)) frames.set(element.id, element.frame)
-      }
-      drag.current = { pointer: pending.pointer, start: pending.start, target, frames }
+      if (pending.released || !state.page || !selected.includes(target.element)) return
+      drag.current = { pointer: pending.pointer }
+      koharuClient.interact({
+        type: 'begin_transform',
+        elements: selected,
+        target,
+        x: pending.start[0],
+        y: pending.start[1],
+      })
     })
   }, [cancelGesture])
 
@@ -283,7 +280,7 @@ export function Workspace() {
       pendingHit.current = {
         id,
         pointer: event.pointerId,
-        start: pageCoordinates(event.clientX, event.clientY),
+        start: point,
         additive: event.shiftKey || event.ctrlKey || event.metaKey,
         released: false,
       }
@@ -350,18 +347,7 @@ export function Workspace() {
 
     const currentDrag = drag.current
     if (currentDrag?.pointer === event.pointerId) {
-      const now = pageCoordinates(event.clientX, event.clientY)
-      const dx = now[0] - currentDrag.start[0]
-      const dy = now[1] - currentDrag.start[1]
-      previewFrames.current.clear()
-      for (const [id, frame] of currentDrag.frames) {
-        const target =
-          id === currentDrag.target.element
-            ? currentDrag.target
-            : ({ type: 'element', element: id } as const)
-        previewFrames.current.set(id, transformFrame(frame, target, dx, dy))
-      }
-      sendOverlays()
+      koharuClient.interact({ type: 'update_transform', x: point[0], y: point[1] })
       return
     }
 
@@ -401,14 +387,10 @@ export function Workspace() {
     }
 
     if (drag.current?.pointer === event.pointerId) {
-      const frames = [...previewFrames.current].map(([element, frame]) => ({
-        page: page.id,
-        element,
-        frame,
-      }))
+      const point = physicalPoint(event.clientX, event.clientY)
+      koharuClient.interact({ type: 'update_transform', x: point[0], y: point[1] })
       drag.current = null
-      previewFrames.current.clear()
-      if (frames.length) koharuClient.fire({ type: 'set_element_frames', elements: frames })
+      koharuClient.fire({ type: 'finish_transform' })
     }
     sendOverlays()
   }

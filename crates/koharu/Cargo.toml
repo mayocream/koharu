@@ -19,36 +19,21 @@ include = [
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-dirs = { workspace = true }
 git-version = { workspace = true }
-image = { workspace = true }
-koharu-config = { workspace = true }
-koharu-canvas = { workspace = true }
-koharu-desktop = { workspace = true }
-koharu-pipeline = { workspace = true }
-koharu-psd = { workspace = true }
-koharu-renderer = { workspace = true }
-koharu-runtime = { workspace = true }
-koharu-scene = { workspace = true }
-koharu-secrets = { workspace = true }
-koharu-translator = { workspace = true }
+koharu-app = { workspace = true }
 rfd = { workspace = true }
-rayon = { workspace = true }
-rust-embed = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-specta = { workspace = true }
-specta-serde = { workspace = true }
-specta-typescript = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 console = { workspace = true }
 tracing-subscriber = { workspace = true }
 sentry = { workspace = true }
-uuid = { workspace = true }
-url = { workspace = true }
-webp = { workspace = true }
+
+[dev-dependencies]
+image = { workspace = true }
+koharu-config = { workspace = true }
+koharu-pipeline = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-translator = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }

@@ -14,7 +14,6 @@ publish.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 image = { workspace = true }
-imageproc = { workspace = true }
 fast_image_resize = { workspace = true }
 koharu-fonts = { workspace = true }
 koharu-scene = { workspace = true }

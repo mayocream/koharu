@@ -1,7 +1,7 @@
 use std::{borrow::Cow, fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use koharu::protocol::{BridgeEvent, BridgeMessage};
+use koharu_app::protocol::{BridgeEvent, BridgeMessage};
 use specta::{Format, FormatError, Types, datatype::DataType};
 use specta_typescript::{Typescript, semantic::Configuration};
 
@@ -23,7 +23,7 @@ fn generate() -> Result<String> {
         .register::<BridgeEvent>();
     Typescript::default()
         .header(
-            "// This file is generated from the Rust desktop protocol by `cargo run -p koharu --bin generate`.\n// Do not edit it by hand.\n",
+            "// This file is generated from the Rust desktop protocol by `cargo run -p koharu-app --bin generate`.\n// Do not edit it by hand.\n",
         )
         .export(&types, DesktopFormat::default())
         .context("failed to export the Rust desktop protocol")

@@ -12,6 +12,10 @@ use crate::{
     StrokeMode,
 };
 
+// Masks stay as single-channel page-sized data, split into copy-on-write tiles.
+// A stroke clones only touched tiles; cancel restores their previous Arcs and
+// finish can snapshot the result without copying every unchanged tile.
+
 const TILE_SIZE: u32 = 256;
 
 #[derive(Clone)]

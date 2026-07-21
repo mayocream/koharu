@@ -22,4 +22,6 @@ vello = { workspace = true }
 wgpu = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
 pollster = { workspace = true }
+winit = { workspace = true }

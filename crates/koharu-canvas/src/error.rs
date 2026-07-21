@@ -20,6 +20,8 @@ pub enum Error {
     NoPage,
     #[error("no mask stroke is active")]
     NoStroke,
+    #[error("no element transform is active")]
+    NoTransform,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

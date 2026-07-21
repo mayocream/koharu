@@ -3603,35 +3603,18 @@ dependencies = [
  "anyhow",
  "clap",
  "console",
- "dirs",
  "git-version",
  "image 0.25.10",
- "koharu-canvas",
+ "koharu-app",
  "koharu-config",
- "koharu-desktop",
  "koharu-pipeline",
- "koharu-psd",
- "koharu-renderer",
- "koharu-runtime",
  "koharu-scene",
- "koharu-secrets",
  "koharu-translator",
- "rayon",
  "rfd",
- "rust-embed",
  "sentry",
- "serde",
- "serde_json",
- "specta",
- "specta-serde",
- "specta-typescript",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "url",
- "uuid",
- "webp",
  "windows 0.62.2",
  "windows-sys 0.61.2",
  "winreg",
@@ -3658,6 +3641,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "koharu-app"
+version = "0.62.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "image 0.25.10",
+ "koharu-canvas",
+ "koharu-config",
+ "koharu-desktop",
+ "koharu-pipeline",
+ "koharu-psd",
+ "koharu-renderer",
+ "koharu-runtime",
+ "koharu-scene",
+ "koharu-secrets",
+ "koharu-translator",
+ "rayon",
+ "rfd",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "specta",
+ "specta-serde",
+ "specta-typescript",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "webp",
+]
+
+[[package]]
 name = "koharu-bindgen"
 version = "0.62.0-alpha.1"
 dependencies = [
@@ -3674,6 +3690,7 @@ dependencies = [
 name = "koharu-canvas"
 version = "0.62.0-alpha.1"
 dependencies = [
+ "anyhow",
  "bytemuck",
  "image 0.25.10",
  "koharu-renderer",
@@ -3683,6 +3700,7 @@ dependencies = [
  "thiserror 2.0.18",
  "vello",
  "wgpu",
+ "winit",
 ]
 
 [[package]]
@@ -3854,7 +3872,6 @@ dependencies = [
  "icu_properties",
  "icu_segmenter",
  "image 0.25.10",
- "imageproc",
  "jieba-rs",
  "koharu-fonts",
  "koharu-scene",

@@ -10,8 +10,9 @@ mod segment;
 mod shape;
 mod types;
 
-pub use bubble::{BubbleIndex, BubbleMatch, LayoutBox};
-pub use compositor::{PageRenderOptions, RenderedElement, RenderedPage, Renderer, SceneRenderer};
+pub use compositor::{
+    ElementRenderKey, PageRenderOptions, RenderedElement, RenderedPage, Renderer, SceneRenderer,
+};
 pub use font::{Font, FontSystem};
 pub use layout::{LayoutLine, LayoutRun, TextLayout, WritingMode};
 pub use renderer::{DownsampleFilter, RasterOptions, RenderOptions, StrokeOptions, WgpuRenderer};

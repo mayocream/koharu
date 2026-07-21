@@ -42,17 +42,8 @@ pub(super) fn run(
             let base_id = page.assets.clean.unwrap_or(page.source);
             let base = image::load_from_memory(&session.read_blob(base_id)?)
                 .with_context(|| format!("failed to decode page {}", page.name))?;
-            let bubble = page
-                .assets
-                .bubble_mask
-                .map(|blob| session.read_blob(blob))
-                .transpose()?
-                .map(|bytes| image::load_from_memory(&bytes))
-                .transpose()
-                .with_context(|| format!("failed to decode bubble mask for {}", page.name))?;
             let rendered = renderer.composite_page(
                 &base,
-                bubble.as_ref(),
                 page,
                 |blob| session.read_blob(blob).map_err(Into::into),
                 &PageRenderOptions::default(),

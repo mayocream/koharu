@@ -4,15 +4,18 @@ use std::{
 };
 
 use image::GrayImage;
-use koharu_renderer::BubbleIndex;
 use koharu_scene::BlobId;
 use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
+
+// Blob bytes come from the Session, but decoding them on the event-loop thread
+// would stall pointer handling and presentation. Resources performs CPU decode
+// work on Rayon, wakes the host, and installs completed results on the next
+// Canvas render.
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum ResourceKind {
     Color,
     Gray,
-    Bubble,
 }
 
 #[derive(Clone)]
@@ -37,7 +40,6 @@ pub(crate) enum ResourceEvent {
 enum Decoded {
     Color(ImageData, usize),
     Gray(Arc<GrayImage>, usize),
-    Bubble(Arc<BubbleIndex>, usize),
 }
 
 struct DecodeResult {
@@ -49,7 +51,6 @@ struct DecodeResult {
 pub(crate) struct Resources {
     color: HashMap<BlobId, CacheEntry<ImageData>>,
     gray: HashMap<BlobId, CacheEntry<Arc<GrayImage>>>,
-    bubbles: HashMap<BlobId, CacheEntry<Arc<BubbleIndex>>>,
     loading: HashSet<(BlobId, ResourceKind)>,
     sender: mpsc::Sender<DecodeResult>,
     receiver: mpsc::Receiver<DecodeResult>,
@@ -65,7 +66,6 @@ impl Resources {
         Self {
             color: HashMap::new(),
             gray: HashMap::new(),
-            bubbles: HashMap::new(),
             loading: HashSet::new(),
             sender,
             receiver,
@@ -80,7 +80,6 @@ impl Resources {
         let ready = match kind {
             ResourceKind::Color => self.color.contains_key(&id),
             ResourceKind::Gray => self.gray.contains_key(&id),
-            ResourceKind::Bubble => self.bubbles.contains_key(&id),
         };
         if ready || !self.loading.insert((id, kind)) {
             return;
@@ -135,24 +134,6 @@ impl Resources {
                         kind: decoded.kind,
                     });
                 }
-                Ok(Decoded::Bubble(index, bytes)) => {
-                    self.clock = self.clock.wrapping_add(1);
-                    if let Some(previous) = self.bubbles.insert(
-                        decoded.id,
-                        CacheEntry {
-                            value: index,
-                            bytes,
-                            used: self.clock,
-                        },
-                    ) {
-                        self.bytes = self.bytes.saturating_sub(previous.bytes);
-                    }
-                    self.bytes = self.bytes.saturating_add(bytes);
-                    events.push(ResourceEvent::Ready {
-                        id: decoded.id,
-                        kind: decoded.kind,
-                    });
-                }
                 Err(message) => events.push(ResourceEvent::Failed {
                     id: decoded.id,
                     kind: decoded.kind,
@@ -178,18 +159,10 @@ impl Resources {
         Some(Arc::clone(&entry.value))
     }
 
-    pub fn bubble(&mut self, id: BlobId) -> Option<Arc<BubbleIndex>> {
-        self.clock = self.clock.wrapping_add(1);
-        let entry = self.bubbles.get_mut(&id)?;
-        entry.used = self.clock;
-        Some(Arc::clone(&entry.value))
-    }
-
     pub fn contains(&self, id: BlobId, kind: ResourceKind) -> bool {
         match kind {
             ResourceKind::Color => self.color.contains_key(&id),
             ResourceKind::Gray => self.gray.contains_key(&id),
-            ResourceKind::Bubble => self.bubbles.contains_key(&id),
         }
     }
 
@@ -207,13 +180,7 @@ impl Resources {
                 .filter(|(id, _)| !active.contains(id))
                 .min_by_key(|(_, entry)| entry.used)
                 .map(|(id, entry)| (*id, entry.used, ResourceKind::Gray));
-            let bubble = self
-                .bubbles
-                .iter()
-                .filter(|(id, _)| !active.contains(id))
-                .min_by_key(|(_, entry)| entry.used)
-                .map(|(id, entry)| (*id, entry.used, ResourceKind::Bubble));
-            let candidate = [color, gray, bubble]
+            let candidate = [color, gray]
                 .into_iter()
                 .flatten()
                 .min_by_key(|(_, used, _)| *used);
@@ -223,7 +190,6 @@ impl Resources {
             let removed = match kind {
                 ResourceKind::Color => self.color.remove(&id).map(|entry| entry.bytes),
                 ResourceKind::Gray => self.gray.remove(&id).map(|entry| entry.bytes),
-                ResourceKind::Bubble => self.bubbles.remove(&id).map(|entry| entry.bytes),
             };
             if let Some(bytes) = removed {
                 self.bytes = self.bytes.saturating_sub(bytes);
@@ -233,9 +199,9 @@ impl Resources {
 }
 
 fn decode(kind: ResourceKind, bytes: &[u8]) -> image::ImageResult<Decoded> {
-    let image = image::load_from_memory(bytes)?;
     Ok(match kind {
         ResourceKind::Color => {
+            let image = image::load_from_memory(bytes)?;
             let rgba = image.into_rgba8();
             let width = rgba.width();
             let height = rgba.height();
@@ -254,14 +220,10 @@ fn decode(kind: ResourceKind, bytes: &[u8]) -> image::ImageResult<Decoded> {
             )
         }
         ResourceKind::Gray => {
+            let image = image::load_from_memory(bytes)?;
             let gray = Arc::new(image.into_luma8());
             let bytes = gray.len();
             Decoded::Gray(gray, bytes)
-        }
-        ResourceKind::Bubble => {
-            let gray = image.into_luma8();
-            let bytes = gray.len();
-            Decoded::Bubble(Arc::new(BubbleIndex::new(gray)), bytes)
         }
     })
 }

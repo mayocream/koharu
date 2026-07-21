@@ -33,6 +33,7 @@ koharu-runtime = { path = "crates/koharu-runtime", version = "0.62.0-alpha.1", d
 koharu-torch = { path = "crates/koharu-torch", version = "0.62.0-alpha.1", default-features = false }
 koharu-torch-sys = { path = "crates/koharu-torch-sys", version = "0.62.0-alpha.1", default-features = false }
 koharu-ai = { path = "crates/koharu-ai", version = "0.62.0-alpha.1", default-features = false }
+koharu-app = { path = "crates/koharu-app", version = "0.62.0-alpha.1", default-features = false }
 koharu-ml = { path = "crates/koharu-ml", version = "0.62.0-alpha.1", default-features = false }
 koharu-pipeline = { path = "crates/koharu-pipeline", version = "0.62.0-alpha.1", default-features = false }
 koharu-worker = { path = "crates/koharu-worker", version = "0.62.0-alpha.1", default-features = false }

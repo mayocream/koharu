@@ -7,12 +7,15 @@ use crate::{Camera, PhysicalPoint, PhysicalSize};
 
 pub type Color = [u8; 4];
 
+/// Host-created GPU objects shared with the desktop presenter.
+/// The canvas deliberately does not create its own adapter or device.
 #[derive(Clone)]
 pub struct CanvasGpu {
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
 }
 
+/// Memory, workspace, and text-rendering policy for one canvas.
 #[derive(Clone, Debug)]
 pub struct CanvasOptions {
     pub max_decoded_bytes: usize,
@@ -37,6 +40,7 @@ pub enum BaseImage {
     Clean,
 }
 
+/// Selects either editable live layers or the flattened rendered artifact.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum PageView {
     #[default]
@@ -73,6 +77,7 @@ impl MaskOverlay {
     }
 }
 
+/// Presentation-only choices; changing these never mutates the scene Session.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplayState {
     pub page: PageView,
@@ -94,6 +99,7 @@ impl Default for DisplayState {
     }
 }
 
+/// Viewport-sized state. `size` and camera translations use physical pixels.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ViewState {
     pub size: PhysicalSize,
@@ -107,6 +113,7 @@ pub enum Guide {
     Vertical(f64),
 }
 
+/// One transient frame produced while an element transform is active.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ElementPreview {
     pub element: ElementId,
@@ -119,6 +126,8 @@ pub struct BrushCursor {
     pub diameter: f32,
 }
 
+/// Editor chrome supplied by the UI. Transform previews are intentionally not
+/// included because `Canvas` owns their lifecycle and geometry.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct OverlayState {
     pub selected: Vec<ElementId>,
@@ -126,7 +135,6 @@ pub struct OverlayState {
     pub guides: Vec<Guide>,
     pub show_text_bounds: bool,
     pub draft: Option<Frame>,
-    pub element_previews: Vec<ElementPreview>,
     pub brush_cursor: Option<BrushCursor>,
 }
 
@@ -140,12 +148,20 @@ pub enum Handle {
     South,
     SouthWest,
     West,
+    Rotate,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HitTarget {
     Handle { element: ElementId, handle: Handle },
     Element(ElementId),
+}
+
+/// Final transform result returned to the application for one atomic commit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TransformCommit {
+    pub page: PageId,
+    pub elements: Vec<ElementPreview>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { ThemeProvider } from 'next-themes'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ActivityBubble } from '@/components/ActivityBubble'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
@@ -10,7 +10,7 @@ import { Navigator } from '@/components/Navigator'
 import { Panels } from '@/components/Panels'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { useEditorStore, type Element, type SettingsView } from '@/lib/koharu'
+import { koharuClient, useEditorStore, type Element, type SettingsView } from '@/lib/koharu'
 
 const textElement: Element = {
   id: 'element',
@@ -158,6 +158,35 @@ describe('native editor components', () => {
         image.getAttribute('src')?.startsWith('koharu-resource:'),
       ),
     ).toHaveAttribute('src', 'koharu-resource://project/project/blob/clean?width=320')
+  })
+
+  it('starts native resizing from each frameless window edge and corner', () => {
+    installProject()
+    const resize = vi.spyOn(koharuClient, 'controlWindow').mockImplementation(() => undefined)
+    render(<MenuBar />)
+
+    const actions = [
+      'resize-north',
+      'resize-east',
+      'resize-south',
+      'resize-west',
+      'resize-north-east',
+      'resize-south-east',
+      'resize-south-west',
+      'resize-north-west',
+    ]
+    for (const action of actions) {
+      fireEvent.pointerDown(screen.getByTestId(`window-${action}`), { button: 0 })
+    }
+
+    expect(resize.mock.calls.map(([action]) => action)).toEqual(
+      actions.map((action) => action.replaceAll('-', '_')),
+    )
+    fireEvent.pointerDown(screen.getByTestId('window-resize-east'), { button: 2 })
+    expect(resize).toHaveBeenCalledTimes(actions.length)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize' }))
+    expect(screen.queryByTestId('window-resize-east')).not.toBeInTheDocument()
   })
 
   it('switches canvas tools and restores the compact render controls', () => {

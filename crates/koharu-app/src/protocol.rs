@@ -64,6 +64,14 @@ pub enum BridgeMessage {
 #[serde(rename_all = "snake_case")]
 pub enum WindowAction {
     Drag,
+    ResizeEast,
+    ResizeNorth,
+    ResizeNorthEast,
+    ResizeNorthWest,
+    ResizeSouth,
+    ResizeSouthEast,
+    ResizeSouthWest,
+    ResizeWest,
     Minimize,
     ToggleMaximize,
     Close,
@@ -127,6 +135,7 @@ pub enum UiCommand {
     SetElementFrames {
         elements: Vec<ElementFrame>,
     },
+    FinishTransform,
     SetElementOpacity {
         page: PageId,
         elements: Vec<ElementId>,
@@ -208,7 +217,6 @@ pub enum CanvasInteraction {
     SetOverlays {
         selected: Vec<ElementId>,
         hovered: Option<ElementId>,
-        previews: Vec<ElementPreview>,
         draft: Option<Frame>,
         guides: Vec<CanvasGuide>,
         show_text_bounds: bool,
@@ -220,6 +228,17 @@ pub enum CanvasInteraction {
         x: f64,
         y: f64,
     },
+    BeginTransform {
+        elements: Vec<ElementId>,
+        target: HitTarget,
+        x: f64,
+        y: f64,
+    },
+    UpdateTransform {
+        x: f64,
+        y: f64,
+    },
+    CancelTransform,
     BeginMaskStroke {
         plane: MaskPlane,
         diameter: f32,
@@ -233,12 +252,6 @@ pub enum CanvasInteraction {
     },
     FinishMaskStroke,
     CancelMaskStroke,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct ElementPreview {
-    pub element: ElementId,
-    pub frame: Frame,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
@@ -404,28 +417,6 @@ pub enum FontSourceView {
     Google,
 }
 
-impl From<koharu_renderer::FontFaceInfo> for FontFaceView {
-    fn from(value: koharu_renderer::FontFaceInfo) -> Self {
-        Self {
-            family_name: value.family_name,
-            post_script_name: value.post_script_name,
-            weight: value.weight,
-            stretch: value.stretch,
-            style: match value.style {
-                koharu_renderer::FontFaceStyle::Normal => FontFaceStyleView::Normal,
-                koharu_renderer::FontFaceStyle::Italic => FontFaceStyleView::Italic,
-                koharu_renderer::FontFaceStyle::Oblique => FontFaceStyleView::Oblique,
-            },
-            source: match value.source {
-                koharu_renderer::FontSource::System => FontSourceView::System,
-                koharu_renderer::FontSource::Google => FontSourceView::Google,
-            },
-            category: value.category,
-            cached: value.cached,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
 pub struct TranslationSettings {
     pub model: Providers,
@@ -585,14 +576,14 @@ pub struct PageDelta {
     pub deleted_elements: Vec<ElementId>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HitTarget {
     Element { element: ElementId },
     Handle { element: ElementId, handle: Handle },
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum Handle {
     NorthWest,
@@ -603,6 +594,7 @@ pub enum Handle {
     South,
     SouthWest,
     West,
+    Rotate,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -746,6 +738,52 @@ mod tests {
             message,
             BridgeMessage::Interaction {
                 interaction: CanvasInteraction::FitWindow
+            }
+        ));
+    }
+
+    #[test]
+    fn transform_protocol_carries_native_targets_without_frames() {
+        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
+            "type": "interaction",
+            "interaction": {
+                "type": "begin_transform",
+                "elements": ["018f3b28-7fd8-7d5a-a833-6cb8637e6c00"],
+                "target": {
+                    "type": "handle",
+                    "element": "018f3b28-7fd8-7d5a-a833-6cb8637e6c00",
+                    "handle": "rotate"
+                },
+                "x": 12.0,
+                "y": 34.0
+            }
+        }))
+        .unwrap();
+        assert!(matches!(
+            message,
+            BridgeMessage::Interaction {
+                interaction: CanvasInteraction::BeginTransform {
+                    target: HitTarget::Handle {
+                        handle: Handle::Rotate,
+                        ..
+                    },
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn frameless_resize_actions_are_part_of_the_shared_protocol() {
+        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
+            "type": "window",
+            "action": "resize_south_east"
+        }))
+        .unwrap();
+        assert!(matches!(
+            message,
+            BridgeMessage::Window {
+                action: WindowAction::ResizeSouthEast
             }
         ));
     }

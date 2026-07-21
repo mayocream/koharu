@@ -36,6 +36,7 @@ the earlier standalone experiment.
 - WGPU/Vello rendering into reusable offscreen textures;
 - transient viewport overlays such as selection outlines, block numbers,
   draft rectangles, guides, transform handles, and the brush cursor;
+- transient move, resize, and rotation geometry, including transform previews;
 - low-latency editing of the page's single-channel text and brush masks;
 - page-to-screen and screen-to-page coordinate conversion;
 - scene-aware hit testing, including transform handles;
@@ -47,15 +48,18 @@ It does not own:
 - Wry, Tauri, WebView2, or DOM composition;
 - the final fullscreen pass into the desktop surface;
 - project persistence, history, or scene mutation;
-- tools, gestures, selection policy, panels, shortcuts, or other UI state;
+- tool choice, gesture policy, selection policy, panels, shortcuts, or other UI
+  state;
 - pipeline execution, model loading, export, or network transport;
 - CPU image readback for normal interactive frames.
 
 React remains responsible for interpreting interaction: selecting a tool,
-starting a drag, choosing paint or erase, editing text, and choosing the active
-page. It sends typed pointer and presentation updates through the desktop host.
-The canvas converts coordinates, reports what was hit, and renders immediate
-feedback without deciding selection or tool policy.
+choosing the selection, capturing the pointer, choosing paint or erase, editing
+text, and choosing the active page. For transforms it starts or cancels the
+operation and forwards physical pointer positions through the desktop host. The
+canvas converts coordinates, reports what was hit, computes move/resize/rotate
+geometry, and renders immediate feedback without deciding selection or tool
+policy.
 
 Scene edits are expressed as `koharu-scene::Commands`. The caller applies them
 to the `Session`, then tells the canvas about the resulting `ChangeSet`. A
@@ -66,7 +70,7 @@ the caller encodes and commits it and decides whether to run the pipeline.
 
 ```text
 React in transparent Wry child
-    tools, panels, gestures, text editing
+    tools, panels, gesture policy, text editing
                  |
                  | pointer, view, and overlay messages
                  v
@@ -92,6 +96,27 @@ There is one WGPU device and one queue. `koharu-desktop` creates them and
 shares them with the canvas. `koharu-canvas` must not create a second adapter,
 device, queue, or headless rendering context.
 
+## Maintainer map
+
+Most changes do not require understanding WGPU. Start in the module that owns
+the behavior:
+
+| Module | Responsibility | GPU knowledge needed |
+|---|---|---|
+| `canvas` | public façade, page synchronization, and render-stage orchestration | low |
+| `geometry` | camera conversion, rotated bounds, and dirty rectangles | none |
+| `transform` | move, resize, and rotation previews | none |
+| `mask` | copy-on-write mask tiles and stroke commits | none for editing; Vello image data for display |
+| `resources` | asynchronous image/mask decoding and bounded caches | low |
+| `elements` | cached per-element Vello scenes and preview affines | Vello scene concepts only |
+| `damage` | dependencies between target, content, and overlay invalidation | none |
+| `gpu` | Vello rendering, two offscreen textures, copies, and readback for tests | WGPU/Vello |
+| `overlay` | selection/guide geometry and its small WGPU triangle pipeline | WGPU |
+
+`Canvas` should remain an orchestrator. New transform mathematics belongs in
+`transform`; new editor chrome belongs in `overlay`; texture flags, command
+encoders, and render passes belong in `gpu`.
+
 ## Scene model
 
 The canvas never maintains a second editable scene graph. The active
@@ -100,11 +125,10 @@ The canvas never maintains a second editable scene graph. The active
 On page activation, the canvas reads:
 
 - page size, required source, and optional clean/rendered page images;
-- optional text, bubble, and brush masks;
+- optional text and brush masks;
 - bottom-to-top `Page::elements` order;
 - image blob IDs and image transforms;
-- text content, style, layout, visibility, and opacity;
-- the bubble mask when bubble-fitting text needs it.
+- text content, style, layout, visibility, opacity, and scene relationships.
 
 Selection, hover, handles, guides, the camera, and the viewport rectangle are
 presentation state and are never written to `koharu-scene`.
@@ -183,7 +207,8 @@ The default transition duration for a newly available clean or rendered image
 may match the current UI's 180 ms cross-fade. Transitions are bounded; they do
 not create a permanent animation loop.
 
-React owns gestures, but the canvas owns the geometry used to display them:
+React owns gesture policy and pointer capture, while the canvas owns active
+transform state and the geometry used to display it:
 
 ```rust
 pub struct OverlayState {
@@ -192,13 +217,17 @@ pub struct OverlayState {
     pub guides: Vec<Guide>,
     pub show_text_bounds: bool,
     pub draft: Option<Frame>,
-    pub element_previews: Vec<ElementPreview>,
     pub brush_cursor: Option<BrushCursor>,
 }
 
 pub struct ElementPreview {
     pub element: ElementId,
     pub frame: Frame,
+}
+
+pub struct TransformCommit {
+    pub page: PageId,
+    pub elements: Vec<ElementPreview>,
 }
 
 pub struct BrushCursor {
@@ -215,12 +244,14 @@ pub enum HitTarget {
 Handles are tested before elements; elements are tested top-to-bottom using
 the same transformed bounds and ordering as rendering. Additive selection,
 which tool accepts a target, minimum block size, context menus, and deletion
-remain React policy. An `ElementPreview` temporarily overrides an element's
-overlay frame while it is being moved or resized; it does not mutate or
-re-render the committed element until React sends the final command. The eight
-handle values represent the four edges and four corners. Brush diameter is in
-page pixels, so its screen-space ring follows zoom while its border remains one
-physical pixel.
+remain React policy. After React begins a transform, physical pointer updates
+produce canvas-owned `ElementPreview` values without mutating the session. A
+move translates the selected elements together; resize and rotation affect the
+element that owns the handle. On pointer-up `finish_transform` returns one
+`TransformCommit`, which the application commits as a single scene batch. The
+handle values represent the four edges, four corners, and rotation control.
+Brush diameter is in page pixels, so its screen-space ring follows zoom while
+its border remains one physical pixel.
 
 ## Renderer contract
 
@@ -241,8 +272,8 @@ impl SceneRenderer {
     pub fn encode_text_element(
         &self,
         scene: &mut vello::Scene,
+        page: &koharu_scene::Page,
         element: &koharu_scene::Element,
-        bubbles: Option<&BubbleIndex>,
         options: &PageRenderOptions,
     ) -> Result<Option<RenderedElement>>;
 }
@@ -322,6 +353,16 @@ impl Canvas {
     pub fn screen_to_page(&self, point: PhysicalPoint) -> Option<PagePoint>;
     pub fn page_to_screen(&self, point: PagePoint) -> PhysicalPoint;
     pub fn hit_test(&self, point: PhysicalPoint) -> Option<HitTarget>;
+
+    pub fn begin_transform(
+        &mut self,
+        selected: &[ElementId],
+        target: HitTarget,
+        point: PhysicalPoint,
+    ) -> Result<()>;
+    pub fn update_transform(&mut self, point: PhysicalPoint) -> Result<()>;
+    pub fn finish_transform(&mut self) -> Result<Option<TransformCommit>>;
+    pub fn cancel_transform(&mut self);
 
     pub fn begin_mask_stroke(
         &mut self,
@@ -436,6 +477,10 @@ testing never duplicate camera math in React. Points outside a zero-sized
 viewport return `None`; stroke operations clip otherwise valid points to the
 page.
 
+Transform updates also consume physical pointer positions and use this camera
+and the element's rotation to calculate preview frames. React never implements
+a second resize or rotation transform.
+
 Hit testing uses the same inverse transform and element ordering as rendering.
 It checks visible transform handles first and visible elements from top to
 bottom. Rotated frame bounds use the element angle; glyph- or alpha-precise hit
@@ -472,13 +517,13 @@ passes: doing so would violate the mixed element order stored by
 `koharu-scene`. The persisted rendered-page artifact is also not an editable
 base image because drawing live elements over it would duplicate content.
 
-Page images are textured quads, text comes from `koharu-renderer`, and editor
-overlays are ordinary Vello geometry. Internally the canvas uses two reusable
-viewport-sized targets:
+Page images are textured quads and text comes from `koharu-renderer`. Editor
+overlays are CPU-tessellated triangles drawn by a small WGPU pipeline.
+Internally the canvas uses two reusable viewport-sized targets:
 
 - a content target containing the current page view;
-- the published output target, which samples the content target and adds
-  editor chrome.
+- the published output target, which receives a GPU copy of the content target
+  and then adds editor chrome.
 
 An overlay-only update therefore does not traverse elements, rebuild text, or
 redraw page content. A mask stroke invalidates the content target, while cached
@@ -490,7 +535,8 @@ drafting, dragging, and handle feedback.
 The output contract used by `koharu-desktop` is:
 
 - format: `wgpu::TextureFormat::Rgba8Unorm`;
-- usage: `STORAGE_BINDING | TEXTURE_BINDING | COPY_SRC`;
+- usage: `STORAGE_BINDING | TEXTURE_BINDING | RENDER_ATTACHMENT | COPY_DST |
+  COPY_SRC`;
 - RGB values: display-referred sRGB values stored in the unorm texture;
 - size: the canvas rectangle in physical pixels, never the full DOM window;
 - background: opaque for the initial implementation.
@@ -502,15 +548,19 @@ pass and all surface error handling belong to `koharu-desktop`, not this crate.
 
 ## Invalidation and scheduling
 
-The canvas records why a frame is dirty:
+`RenderDamage` records which render stages are dirty:
 
-- `Target`: physical size or device changed;
-- `View`: camera or displayed page mode changed;
-- `Scene`: visible page content changed;
-- `Mask`: mask pixels or mask presentation changed;
-- `Overlay`: selection, hover, guides, or handles changed;
-- `Resource`: an image or bubble index became available. The host explicitly
-  calls `invalidate_fonts` after changing installed or cached fonts.
+- `Target`: recreate viewport-sized textures;
+- `Content`: rebuild and rasterize the Vello page scene;
+- `Overlay`: copy content to the output and draw editor chrome.
+
+The dependency rules are centralized: target damage includes content and
+overlay damage, while content damage includes overlay damage. Element-scene
+cache invalidation is separate because a transform normally recomposes cached
+scenes without repeating text layout or image encoding. Resource completion,
+mask edits, view changes, and `ChangeSet` synchronization translate into these
+stages. The host calls `invalidate_fonts` after changing installed or cached
+fonts.
 
 Multiple changes before the next event-loop wake produce one redraw request.
 The canvas does not run a permanent animation loop. `koharu-desktop` owns the
@@ -537,8 +587,8 @@ The performance contract is:
 The canvas keeps bounded caches for:
 
 - decoded images keyed by immutable `BlobId`;
-- encoded element scenes keyed by the complete element value and bubble mask;
-- bubble-mask indexes keyed by mask `BlobId`;
+- encoded element scenes keyed by the element and an opaque renderer-owned
+  snapshot of its related scene inputs;
 - single-channel mask planes backed by copy-on-write tiles and lazily tinted
   Vello image tiles;
 - content and output targets, recreated only after a physical-size change.
@@ -550,7 +600,7 @@ motion updates only editor chrome; mask painting copies only touched tiles.
 Full-mask PNG encoding happens after a stroke on a background worker because
 the immutable scene blob necessarily represents the complete plane.
 
-Decoded-image and bubble-index cache limits are byte-based and configurable.
+Decoded-image cache limits are byte-based and configurable.
 Entries used by the active page are pinned for the frame; least-recently-used
 entries from inactive pages may be evicted. The active page's copy-on-write
 mask tiles are bounded by its scene-validated dimensions and are discarded on
@@ -579,15 +629,50 @@ untouched.
 
 ## Testing
 
+### Native playground
+
+Run the interactive playground from the repository root:
+
+```text
+cargo run -p koharu-canvas --example playground
+```
+
+It opens a real Winit window, creates a WGPU surface, and presents the texture
+produced by the public `Canvas` API. The scene is generated in memory, so it
+does not open or modify a project. Its controls are:
+
+- left-click a card to select it;
+- drag a selected card to move it;
+- drag a square selection handle to resize it;
+- drag the round handle above a selection to rotate it;
+- use the mouse wheel to zoom around the pointer;
+- middle-drag to pan;
+- press `F` to fit the page in the window;
+- press `Escape` to cancel an active transform, or clear the selection.
+
+On pointer release the example applies the returned `TransformCommit` to its
+`Session` and sends the resulting `ChangeSet` back through `Canvas::sync`.
+Consequently, it exercises the same preview-to-committed-scene boundary as the
+application rather than moving demo-only rectangles in the presentation pass.
+The `--auto-exit` argument closes the window after a brief delay and exists for
+launch smoke tests.
+
+This playground is the quick manual check for interaction feel and visible GPU
+output. The deterministic geometry unit tests and pixel-probing WGPU visual
+test remain the regression checks suitable for automation.
+
 The crate currently has unit coverage for camera inversion,
-zoom-around-pointer, rotated bounds, dirty rectangles, handle ordering,
-copy-on-write mask cancel, single-channel PNG output, and stale mask commit
-acknowledgement. Desktop integration should add:
+zoom-around-pointer, rotated bounds, dirty rectangles, handle ordering, grouped
+moves, all rotated resize anchors, rotation, transform cancellation/no-op
+completion, copy-on-write mask cancel, single-channel PNG output, and stale mask
+commit acknowledgement. An ignored real-WGPU visual test renders an in-memory
+image element and probes pixels after move, resize, and rotation previews.
+Broader desktop integration should add:
 
 - in-memory `koharu-scene::Session` fixtures for incremental `ChangeSet`
   invalidation;
-- headless WGPU tests for source, clean and rendered views, both mask previews,
-  image elements, text, vertical text, transforms, opacity, and overlays;
+- broader headless WGPU tests for rendered views, both mask previews, text,
+  vertical text, opacity, and overlays;
 - mask-edit tests for paint, erase, page-edge clipping, round joins, cancel,
   dirty-region tracking, tinted-tile regeneration, single-channel PNG output,
   and commit generations;

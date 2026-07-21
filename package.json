@@ -8,14 +8,21 @@
     "dev:native": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec \"cargo run -p koharu --bin koharu --profile release-with-debug\"",
     "build": "bun run --cwd ui build && cargo build -p koharu",
     "lint:ui": "bun run --filter ui lint",
+    "test:desktop": "playwright test --config tests/integration-tests/playwright.config.ts",
+    "test:integration": "bun run test:desktop",
     "test:ui": "bun run --filter ui test",
-    "format": "oxfmt ui package.json .oxfmtrc.json .vscode",
-    "format:check": "oxfmt --check ui package.json .oxfmtrc.json .vscode"
+    "typecheck:desktop": "tsc --project tests/integration-tests/tsconfig.json",
+    "typecheck:integration": "bun run typecheck:desktop",
+    "format": "oxfmt ui tests package.json .oxfmtrc.json .vscode",
+    "format:check": "oxfmt --check ui tests package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
     "git-cliff": "^2.13.1",
     "kill-port": "^2.0.1",
     "nodemon": "^3.1.14",
-    "oxfmt": "^0.56.0"
+    "oxfmt": "^0.56.0",
+    "typescript": "^6.0.3"
   }
 }

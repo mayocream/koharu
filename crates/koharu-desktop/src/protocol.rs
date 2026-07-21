@@ -46,6 +46,14 @@ pub(crate) enum IncomingMessage {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WindowAction {
     Drag,
+    ResizeEast,
+    ResizeNorth,
+    ResizeNorthEast,
+    ResizeNorthWest,
+    ResizeSouth,
+    ResizeSouthEast,
+    ResizeSouthWest,
+    ResizeWest,
     Minimize,
     ToggleMaximize,
     Close,
@@ -128,6 +136,10 @@ mod tests {
         assert_eq!(
             decode_message(br#"{"type":"window","action":"toggle_maximize"}"#).unwrap(),
             IncomingMessage::Window(WindowAction::ToggleMaximize)
+        );
+        assert_eq!(
+            decode_message(br#"{"type":"window","action":"resize_south_east"}"#).unwrap(),
+            IncomingMessage::Window(WindowAction::ResizeSouthEast)
         );
     }
 

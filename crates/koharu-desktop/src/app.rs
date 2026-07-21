@@ -18,7 +18,7 @@ use winit::{
     dpi::LogicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
-    window::{Window, WindowAttributes, WindowId},
+    window::{ResizeDirection, Window, WindowAttributes, WindowId},
 };
 use wry::{
     Rect, RequestAsyncResponder, WebView, WebViewBuilder,
@@ -594,7 +594,8 @@ impl<A: Application> Shell<A> {
     }
 
     fn window_action(&mut self, event_loop: &ActiveEventLoop, action: WindowAction) -> Result<()> {
-        if action == WindowAction::Close {
+        let operation = window_operation(action);
+        if matches!(operation, WindowOperation::Close) {
             return self.close_requested().map(|close| {
                 if close {
                     event_loop.exit();
@@ -605,19 +606,24 @@ impl<A: Application> Shell<A> {
             .window
             .as_ref()
             .context("desktop window is unavailable")?;
-        match action {
-            WindowAction::Drag => window
+        match operation {
+            WindowOperation::Drag => window
                 .drag_window()
                 .context("failed to drag desktop window"),
-            WindowAction::Minimize => {
+            WindowOperation::Resize(direction) => window
+                .drag_resize_window(direction)
+                .context("failed to resize desktop window"),
+            WindowOperation::Minimize => {
                 window.set_minimized(true);
                 Ok(())
             }
-            WindowAction::ToggleMaximize => {
+            WindowOperation::ToggleMaximize => {
                 window.set_maximized(!window.is_maximized());
                 Ok(())
             }
-            WindowAction::Close => unreachable!("close actions return before borrowing the window"),
+            WindowOperation::Close => {
+                unreachable!("close actions return before borrowing the window")
+            }
         }
     }
 
@@ -664,6 +670,32 @@ impl<A: Application> Shell<A> {
         tracing::error!(error = ?error, "desktop application failed");
         self.failure = Some(error);
         event_loop.exit();
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WindowOperation {
+    Drag,
+    Resize(ResizeDirection),
+    Minimize,
+    ToggleMaximize,
+    Close,
+}
+
+const fn window_operation(action: WindowAction) -> WindowOperation {
+    match action {
+        WindowAction::Drag => WindowOperation::Drag,
+        WindowAction::ResizeEast => WindowOperation::Resize(ResizeDirection::East),
+        WindowAction::ResizeNorth => WindowOperation::Resize(ResizeDirection::North),
+        WindowAction::ResizeNorthEast => WindowOperation::Resize(ResizeDirection::NorthEast),
+        WindowAction::ResizeNorthWest => WindowOperation::Resize(ResizeDirection::NorthWest),
+        WindowAction::ResizeSouth => WindowOperation::Resize(ResizeDirection::South),
+        WindowAction::ResizeSouthEast => WindowOperation::Resize(ResizeDirection::SouthEast),
+        WindowAction::ResizeSouthWest => WindowOperation::Resize(ResizeDirection::SouthWest),
+        WindowAction::ResizeWest => WindowOperation::Resize(ResizeDirection::West),
+        WindowAction::Minimize => WindowOperation::Minimize,
+        WindowAction::ToggleMaximize => WindowOperation::ToggleMaximize,
+        WindowAction::Close => WindowOperation::Close,
     }
 }
 
@@ -874,6 +906,55 @@ fn mime_type(path: &Path) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_actions_map_to_platform_operations_without_a_window() {
+        assert_eq!(window_operation(WindowAction::Drag), WindowOperation::Drag);
+        assert_eq!(
+            window_operation(WindowAction::ResizeEast),
+            WindowOperation::Resize(ResizeDirection::East)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeNorth),
+            WindowOperation::Resize(ResizeDirection::North)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeNorthEast),
+            WindowOperation::Resize(ResizeDirection::NorthEast)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeNorthWest),
+            WindowOperation::Resize(ResizeDirection::NorthWest)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeSouth),
+            WindowOperation::Resize(ResizeDirection::South)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeSouthEast),
+            WindowOperation::Resize(ResizeDirection::SouthEast)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeSouthWest),
+            WindowOperation::Resize(ResizeDirection::SouthWest)
+        );
+        assert_eq!(
+            window_operation(WindowAction::ResizeWest),
+            WindowOperation::Resize(ResizeDirection::West)
+        );
+        assert_eq!(
+            window_operation(WindowAction::Minimize),
+            WindowOperation::Minimize
+        );
+        assert_eq!(
+            window_operation(WindowAction::ToggleMaximize),
+            WindowOperation::ToggleMaximize
+        );
+        assert_eq!(
+            window_operation(WindowAction::Close),
+            WindowOperation::Close
+        );
+    }
 
     #[test]
     fn static_frontend_is_rooted_and_typed() {

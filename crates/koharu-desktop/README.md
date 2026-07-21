@@ -13,7 +13,7 @@ example in this crate is now the composition test.
 
 ```text
 trusted React UI in transparent Wry child
-    tools, gestures, panels, keyboard and text input
+    tools, gesture policy, panels, keyboard and text input
         | small JSON messages        ^ application events
         v                            |
 application implementing Application

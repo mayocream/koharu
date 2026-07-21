@@ -45,13 +45,14 @@ jobs:
           path: tests/integration-tests/.cache
           key: ${{ runner.os }}-integration-runtime-${{ hashFiles('koharu-runtime/**/*.rs', 'koharu-llm/**/*.rs') }}
           restore-keys: ${{ runner.os }}-integration-runtime-
-      - name: Run workspace tests (unit + integration)
+      - name: Run headless Rust tests (unit + non-GUI integration)
         run: |
           # Headless dbus + gnome-keyring so the provider-secret integration
           # tests can talk to secret-service on Linux runners.
           eval "$(dbus-launch --sh-syntax)"
           echo -n "" | gnome-keyring-daemon --unlock --components=secrets &>/dev/null &
           export $(echo -n "" | gnome-keyring-daemon --start --components=secrets 2>/dev/null)
+          # Native Playwright and ignored GPU tests are intentionally excluded.
           cargo test --workspace --tests
 
   ui:
@@ -65,5 +66,5 @@ jobs:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
-      - name: Run Vitest
+      - name: Run headless Vitest suite
         run: bun run --filter ui test

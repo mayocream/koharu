@@ -3,6 +3,10 @@ use wgpu::util::DeviceExt as _;
 
 use crate::{Color, PhysicalPoint, PhysicalSize};
 
+// Editor chrome is intentionally rendered with a tiny WGPU pipeline rather
+// than folded into the Vello content scene. Selection or cursor movement can
+// then reuse the existing content texture and upload only these vertices.
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct Vertex {
@@ -172,6 +176,9 @@ fn vertex_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
 
 #[derive(Default)]
 pub(crate) struct OverlayGeometry {
+    // Every primitive is tessellated into independent colored triangles. The
+    // shader only converts physical-pixel positions to clip space and applies
+    // ordinary alpha blending.
     vertices: Vec<Vertex>,
 }
 

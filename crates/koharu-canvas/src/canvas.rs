@@ -4,45 +4,42 @@ use std::{
     time::{Duration, Instant},
 };
 
-use koharu_renderer::{BubbleIndex, PageRenderOptions, SceneRenderer};
+use koharu_renderer::PageRenderOptions;
 use koharu_scene::{
-    BlobId, ChangeSet, Element, ElementId, ElementKind, Frame, Page, PageAsset, PageId, Revision,
-    Session,
+    BlobId, ChangeSet, Element, ElementId, Frame, Page, PageAsset, PageId, Revision, Session,
 };
 use vello::{
-    AaConfig, AaSupport, RenderParams, RendererOptions, Scene,
+    Scene,
     kurbo::{Affine, Rect, Vec2},
     peniko::{Color as VelloColor, Fill, Mix},
 };
 
+use crate::damage::RenderDamage;
 use crate::{
-    ActiveStroke, Brush, Camera, CanvasDiagnostic, CanvasGpu, CanvasOptions, Error, Guide, Handle,
-    HitTarget, MaskCommit, MaskPlane, MaskState, OverlayGeometry, OverlayRenderer, OverlayState,
-    PagePoint, PageView, PhysicalPoint, PhysicalSize, ResourceEvent, ResourceKind, Resources,
-    Result, frame_contains, frame_corners,
+    ActiveStroke, ActiveTransform, Brush, Camera, CanvasDiagnostic, CanvasGpu, CanvasOptions,
+    ElementSceneContext, ElementScenes, Error, GpuRenderer, Guide, Handle, HitTarget, MaskCommit,
+    MaskPlane, MaskState, OverlayGeometry, OverlayState, PagePoint, PageView, PhysicalPoint,
+    PhysicalSize, ResourceEvent, ResourceKind, Resources, Result, TransformCommit, frame_contains,
+    frame_corners,
 };
 
-const HANDLE_SIZE: f64 = 8.0;
+// Handles are editor controls, so they remain a fixed physical-pixel size
+// instead of shrinking and growing with the page zoom. Their hit target is
+// deliberately larger than the painted shape: this keeps the overlay tidy
+// while making the controls forgiving to grab with a mouse or trackpad.
+const HANDLE_VISUAL_SIZE: f64 = 16.0;
+const HANDLE_HIT_SIZE: f64 = 28.0;
+const ROTATE_HANDLE_OFFSET: f64 = 32.0;
 
 pub struct CanvasFrame<'a> {
+    /// Final page pixels plus editor chrome. The desktop host samples this view
+    /// into its window surface; ownership remains with `Canvas`.
     pub texture: &'a wgpu::TextureView,
     pub size: PhysicalSize,
+    /// Changes only after a new output texture image has been composed.
     pub generation: u64,
+    /// True only for bounded animations such as source/clean transitions.
     pub needs_redraw: bool,
-}
-
-struct Targets {
-    size: PhysicalSize,
-    content: wgpu::Texture,
-    content_view: wgpu::TextureView,
-    output: wgpu::Texture,
-    output_view: wgpu::TextureView,
-}
-
-struct CachedElement {
-    element: Element,
-    bubble_mask: Option<BlobId>,
-    scene: Scene,
 }
 
 struct ImageTransition {
@@ -52,78 +49,33 @@ struct ImageTransition {
     duration: Duration,
 }
 
-impl Targets {
-    fn new(device: &wgpu::Device, requested: PhysicalSize) -> Self {
-        let size = PhysicalSize::new(requested.width.max(1), requested.height.max(1));
-        let extent = wgpu::Extent3d {
-            width: size.width,
-            height: size.height,
-            depth_or_array_layers: 1,
-        };
-        let content = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("koharu canvas content"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let output = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("koharu canvas output"),
-            size: extent,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let content_view = content.create_view(&wgpu::TextureViewDescriptor::default());
-        let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
-        Self {
-            size,
-            content,
-            content_view,
-            output,
-            output_view,
-        }
-    }
-}
-
 /// Rust-owned editor viewport. The desktop host only presents the returned texture.
 pub struct Canvas {
-    gpu: CanvasGpu,
+    // GPU details are intentionally hidden behind one backend.
+    gpu: GpuRenderer,
     options: CanvasOptions,
-    renderer: vello::Renderer,
-    scene_renderer: SceneRenderer,
-    overlay_renderer: OverlayRenderer,
+
+    // Authoritative presentation inputs and asynchronously decoded assets.
     resources: Resources,
-    targets: Targets,
     view: crate::ViewState,
     overlays: OverlayState,
     page: Option<Page>,
     revision: Revision,
+
+    // Derived data that may be rebuilt without mutating the Session.
     masks: HashMap<MaskPlane, MaskState>,
-    bubble_index: Option<(BlobId, Arc<BubbleIndex>)>,
-    element_cache: HashMap<ElementId, CachedElement>,
-    elements_scene: Option<Scene>,
-    elements_dirty: bool,
+    element_scenes: ElementScenes,
     displayed_base: Option<BlobId>,
     transition: Option<ImageTransition>,
     reported_fallback: Option<(PageId, PageView)>,
+
+    // At most one low-latency editing operation is active for each category.
     stroke: Option<ActiveStroke>,
+    transform: Option<ActiveTransform>,
+
     diagnostics: Vec<CanvasDiagnostic>,
-    content_dirty: bool,
-    overlay_dirty: bool,
-    target_dirty: bool,
+    // Damage is the only authority for deciding which render stages run.
+    damage: RenderDamage,
     generation: u64,
 }
 
@@ -137,45 +89,26 @@ impl Canvas {
         options: CanvasOptions,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self> {
-        let renderer = vello::Renderer::new(
-            &gpu.device,
-            RendererOptions {
-                antialiasing_support: AaSupport::area_only(),
-                ..Default::default()
-            },
-        )
-        .map_err(|error| Error::Gpu(error.to_string()))?;
-        let scene_renderer =
-            SceneRenderer::new().map_err(|error| Error::Invalid(error.to_string()))?;
-        let overlay_renderer = OverlayRenderer::new(&gpu.device);
         let resources = Resources::new(options.max_decoded_bytes, wake);
         let view = crate::ViewState::default();
-        let targets = Targets::new(&gpu.device, view.size);
+        let gpu = GpuRenderer::new(gpu, view.size)?;
         Ok(Self {
             gpu,
             options,
-            renderer,
-            scene_renderer,
-            overlay_renderer,
             resources,
-            targets,
             view,
             overlays: OverlayState::default(),
             page: None,
             revision: Revision::ZERO,
             masks: HashMap::new(),
-            bubble_index: None,
-            element_cache: HashMap::new(),
-            elements_scene: None,
-            elements_dirty: true,
+            element_scenes: ElementScenes::new()?,
             displayed_base: None,
             transition: None,
             reported_fallback: None,
             stroke: None,
+            transform: None,
             diagnostics: Vec::new(),
-            content_dirty: true,
-            overlay_dirty: true,
-            target_dirty: false,
+            damage: RenderDamage::initial(),
             generation: 0,
         })
     }
@@ -187,11 +120,9 @@ impl Canvas {
         self.page = Some(next);
         self.revision = session.revision();
         self.stroke = None;
+        self.transform = None;
         self.masks.clear();
-        self.bubble_index = None;
-        self.element_cache.clear();
-        self.elements_scene = None;
-        self.elements_dirty = true;
+        self.element_scenes.clear();
         self.displayed_base = None;
         self.transition = None;
         self.reported_fallback = None;
@@ -210,8 +141,7 @@ impl Canvas {
         );
         self.request_page_resources(session);
         self.sync_ready_masks()?;
-        self.content_dirty = true;
-        self.overlay_dirty = true;
+        self.damage.content();
         Ok(())
     }
 
@@ -219,16 +149,13 @@ impl Canvas {
         self.page = None;
         self.revision = Revision::ZERO;
         self.masks.clear();
-        self.bubble_index = None;
-        self.element_cache.clear();
-        self.elements_scene = None;
-        self.elements_dirty = true;
+        self.element_scenes.clear();
         self.displayed_base = None;
         self.transition = None;
         self.reported_fallback = None;
         self.stroke = None;
-        self.content_dirty = true;
-        self.overlay_dirty = true;
+        self.transform = None;
+        self.damage.content();
     }
 
     pub fn sync(&mut self, session: &Session, changes: &ChangeSet) -> Result<()> {
@@ -259,38 +186,27 @@ impl Canvas {
             return Ok(());
         }
 
+        self.transform = None;
         let next = session.page(current)?.clone();
         self.verify_mask_replacement(&next)?;
         self.page = Some(next);
-        if self.bubble_index.as_ref().map(|(blob, _)| *blob)
-            != self.page.as_ref().and_then(|page| page.assets.bubble_mask)
-        {
-            self.bubble_index = None;
-        }
-        self.elements_dirty = true;
-        self.elements_scene = None;
-        self.element_cache.retain(|element, _| {
-            self.page
-                .as_ref()
-                .is_some_and(|page| page.element(*element).is_some())
-        });
+        self.element_scenes
+            .retain_page(self.page.as_ref().expect("active page was refreshed"));
         self.request_page_resources(session);
         self.sync_ready_masks()?;
-        self.content_dirty = true;
-        self.overlay_dirty = true;
+        self.damage.content();
         Ok(())
     }
 
     pub fn set_view(&mut self, view: crate::ViewState) {
         if self.view.size != view.size {
-            self.target_dirty = true;
+            self.damage.target();
         }
         if self.view.camera != view.camera || self.view.display != view.display {
-            self.content_dirty = true;
+            self.damage.content();
         }
         if self.view.display.show_text != view.display.show_text {
-            self.elements_dirty = true;
-            self.elements_scene = None;
+            self.element_scenes.recompose();
         }
         if self.view.display.page != view.display.page {
             self.reported_fallback = None;
@@ -309,7 +225,7 @@ impl Canvas {
             }
         }
         if self.view.camera != view.camera {
-            self.overlay_dirty = true;
+            self.damage.overlay();
         }
         self.view = view;
     }
@@ -317,7 +233,7 @@ impl Canvas {
     pub fn set_overlays(&mut self, overlays: OverlayState) {
         if self.overlays != overlays {
             self.overlays = overlays;
-            self.overlay_dirty = true;
+            self.damage.overlay();
         }
     }
 
@@ -332,17 +248,14 @@ impl Canvas {
     }
 
     fn invalidate_text_scenes(&mut self) {
-        self.element_cache
-            .retain(|_, cached| cached.element.text().is_none());
-        self.elements_scene = None;
-        self.elements_dirty = true;
-        self.content_dirty = true;
+        self.element_scenes.invalidate_text();
+        self.damage.content();
     }
 
     pub fn set_workspace_color(&mut self, color: [u8; 4]) {
         if self.options.workspace_color != color {
             self.options.workspace_color = color;
-            self.content_dirty = true;
+            self.damage.content();
         }
     }
 
@@ -373,9 +286,7 @@ impl Canvas {
             }
             let frame = self.preview_frame(selected);
             for (handle, position) in handle_positions(frame, self.view.camera) {
-                if (point.x - position.x).abs() <= HANDLE_SIZE * 0.5
-                    && (point.y - position.y).abs() <= HANDLE_SIZE * 0.5
-                {
+                if handle_contains(handle, position, point) {
                     return Some(HitTarget::Handle { element, handle });
                 }
             }
@@ -389,6 +300,59 @@ impl Canvas {
                     && frame_contains(self.preview_frame(element), page_point)
             })
             .map(|element| HitTarget::Element(element.id))
+    }
+
+    pub fn begin_transform(
+        &mut self,
+        selected: &[ElementId],
+        target: HitTarget,
+        point: PhysicalPoint,
+    ) -> Result<()> {
+        if self.transform.is_some() {
+            return Err(Error::Invalid(
+                "an element transform is already active".into(),
+            ));
+        }
+        if self.stroke.is_some() {
+            return Err(Error::Invalid(
+                "an element transform cannot start during a mask stroke".into(),
+            ));
+        }
+        let page_point = self.screen_to_page(point).ok_or(Error::NoPage)?;
+        let page = self.page.as_ref().ok_or(Error::NoPage)?;
+        self.transform = Some(ActiveTransform::new(page, selected, target, page_point)?);
+        self.damage.overlay();
+        Ok(())
+    }
+
+    pub fn update_transform(&mut self, point: PhysicalPoint) -> Result<()> {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return Err(Error::Invalid(
+                "transform point must contain finite coordinates".into(),
+            ));
+        }
+        let page_point = self.view.camera.screen_to_page(point);
+        self.transform
+            .as_mut()
+            .ok_or(Error::NoTransform)?
+            .update(page_point)?;
+        self.element_scenes.recompose();
+        self.damage.content();
+        Ok(())
+    }
+
+    pub fn finish_transform(&mut self) -> Result<Option<TransformCommit>> {
+        let transform = self.transform.take().ok_or(Error::NoTransform)?;
+        self.element_scenes.recompose();
+        self.damage.content();
+        Ok(transform.finish())
+    }
+
+    pub fn cancel_transform(&mut self) {
+        if self.transform.take().is_some() {
+            self.element_scenes.recompose();
+            self.damage.content();
+        }
     }
 
     pub fn begin_mask_stroke(
@@ -424,7 +388,7 @@ impl Canvas {
         }
         stroke.dirty = state.paint(page_point, page_point, brush, &mut stroke.before);
         self.stroke = Some(stroke);
-        self.content_dirty = true;
+        self.damage.content();
         Ok(())
     }
 
@@ -441,7 +405,7 @@ impl Canvas {
         let dirty = state.paint(stroke.last, next, stroke.brush, &mut stroke.before);
         stroke.dirty = stroke.dirty.union(dirty);
         stroke.last = next;
-        self.content_dirty = true;
+        self.damage.content();
         Ok(())
     }
 
@@ -460,7 +424,7 @@ impl Canvas {
             && let Some(state) = self.masks.get_mut(&stroke.plane)
         {
             state.restore(stroke.before);
-            self.content_dirty = true;
+            self.damage.content();
         }
     }
 
@@ -482,17 +446,21 @@ impl Canvas {
             .acknowledge(generation, blob)
     }
 
+    /// Produces the latest offscreen viewport texture.
+    ///
+    /// The stages are intentionally explicit: install newly decoded resources,
+    /// rebuild Vello content only when required, then copy that stable content
+    /// and draw inexpensive editor chrome. `render` never presents a window
+    /// surface; that is the desktop host's responsibility.
     pub fn render(&mut self, now: Instant) -> Result<CanvasFrame<'_>> {
         self.drain_resources()?;
-        if self.target_dirty {
-            self.targets = Targets::new(&self.gpu.device, self.view.size);
-            self.target_dirty = false;
-            self.content_dirty = true;
-            self.overlay_dirty = true;
+        if self.damage.target_pending() {
+            self.gpu.resize(self.view.size);
+            self.damage.clear_target();
         }
         if self.view.size.is_empty() {
             return Ok(CanvasFrame {
-                texture: &self.targets.output_view,
+                texture: self.gpu.output(),
                 size: self.view.size,
                 generation: self.generation,
                 needs_redraw: false,
@@ -502,61 +470,25 @@ impl Canvas {
         self.update_transition(now);
         let needs_redraw = self.transition.is_some();
 
-        if self.content_dirty {
+        if self.damage.content_pending() {
             let scene = self.build_scene(now);
-            self.renderer
-                .render_to_texture(
-                    &self.gpu.device,
-                    &self.gpu.queue,
-                    &scene,
-                    &self.targets.content_view,
-                    &RenderParams {
-                        base_color: vello_color(self.options.workspace_color),
-                        width: self.targets.size.width,
-                        height: self.targets.size.height,
-                        antialiasing_method: AaConfig::Area,
-                    },
-                )
-                .map_err(|error| Error::Gpu(error.to_string()))?;
-            self.content_dirty = false;
-            self.overlay_dirty = true;
+            self.gpu
+                .render_content(&scene, self.options.workspace_color)?;
+            self.damage.clear_content();
         }
 
-        if self.overlay_dirty {
+        if self.damage.overlay_pending() {
             let geometry = self.build_overlay_geometry();
-            let mut encoder =
-                self.gpu
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("koharu canvas frame"),
-                    });
-            encoder.copy_texture_to_texture(
-                self.targets.content.as_image_copy(),
-                self.targets.output.as_image_copy(),
-                wgpu::Extent3d {
-                    width: self.targets.size.width,
-                    height: self.targets.size.height,
-                    depth_or_array_layers: 1,
-                },
-            );
-            self.overlay_renderer.draw(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &mut encoder,
-                &self.targets.output_view,
-                self.targets.size,
-                &geometry,
-            );
-            self.gpu.queue.submit([encoder.finish()]);
-            self.overlay_dirty = false;
+            self.gpu.compose_overlay(&geometry);
+            self.damage.clear_overlay();
             self.generation = self.generation.wrapping_add(1);
         }
         if needs_redraw {
-            self.content_dirty = true;
+            self.damage.content();
         }
 
         Ok(CanvasFrame {
-            texture: &self.targets.output_view,
+            texture: self.gpu.output(),
             size: self.view.size,
             generation: self.generation,
             needs_redraw,
@@ -567,11 +499,18 @@ impl Canvas {
         std::mem::take(&mut self.diagnostics)
     }
 
+    #[cfg(test)]
+    pub(crate) fn read_output_for_test(&self) -> Vec<u8> {
+        self.gpu.read_output()
+    }
+
     fn request_page_resources(&mut self, session: &Session) {
         let Some(page) = self.page.as_ref() else {
             return;
         };
         let id = page.id;
+        // Blob reads are cheap database/storage operations here; image decoding
+        // is delegated to Resources and completes asynchronously.
         let mut resources = vec![(page.source, ResourceKind::Color)];
         resources.extend(
             [PageAsset::Clean, PageAsset::Rendered]
@@ -584,11 +523,6 @@ impl Canvas {
                 .into_iter()
                 .filter_map(|asset| page.assets.get(asset))
                 .map(|blob| (blob, ResourceKind::Gray)),
-        );
-        resources.extend(
-            page.assets
-                .bubble_mask
-                .map(|blob| (blob, ResourceKind::Bubble)),
         );
         resources.extend(page.elements.iter().filter_map(|element| {
             element
@@ -623,7 +557,6 @@ impl Canvas {
                 page.assets.clean,
                 page.assets.rendered,
                 page.assets.text_mask,
-                page.assets.bubble_mask,
                 page.assets.brush_mask,
             ]
             .into_iter()
@@ -638,6 +571,9 @@ impl Canvas {
     }
 
     fn drain_resources(&mut self) -> Result<()> {
+        // Worker results are installed only if their blob is still referenced
+        // by the visible page. This prevents a late page-A decode from
+        // invalidating page B after a page switch.
         let active = self.active_blobs();
         let events = self.resources.drain(&active);
         if events.is_empty() {
@@ -648,27 +584,11 @@ impl Canvas {
                 ResourceEvent::Ready { id, kind } => {
                     match kind {
                         ResourceKind::Gray => self.install_gray_resource(id)?,
-                        ResourceKind::Bubble => {
-                            if self
-                                .page
-                                .as_ref()
-                                .is_some_and(|page| page.assets.bubble_mask == Some(id))
-                                && let Some(index) = self.resources.bubble(id)
-                            {
-                                self.bubble_index = Some((id, index));
-                                self.elements_dirty = true;
-                                self.elements_scene = None;
-                            }
-                        }
                         ResourceKind::Color => {
-                            self.element_cache.retain(|_, cached| {
-                                cached.element.image_data().map(|image| image.blob) != Some(id)
-                            });
-                            self.elements_dirty = true;
-                            self.elements_scene = None;
+                            self.element_scenes.invalidate_image(id);
                         }
                     }
-                    self.content_dirty = true;
+                    self.damage.content();
                 }
                 ResourceEvent::Failed { id, kind, message } => {
                     self.diagnostics.push(CanvasDiagnostic::resource(
@@ -775,20 +695,12 @@ impl Canvas {
                 }
             }
         }
-        match page.assets.bubble_mask {
-            Some(blob)
-                if self.bubble_index.as_ref().map(|(id, _)| *id) != Some(blob)
-                    && self.resources.contains(blob, ResourceKind::Bubble) =>
-            {
-                self.bubble_index = self.resources.bubble(blob).map(|index| (blob, index));
-            }
-            None => self.bubble_index = None,
-            Some(_) => {}
-        }
         Ok(())
     }
 
     fn build_scene(&mut self, now: Instant) -> Scene {
+        // Everything in page_scene uses page coordinates. One camera affine is
+        // applied at the end, keeping element, mask, and hit-test math aligned.
         let mut scene = Scene::new();
         let Some(page) = self.page.clone() else {
             return scene;
@@ -797,10 +709,15 @@ impl Canvas {
         self.draw_base(&mut page_scene, &page, now);
         if self.view.display.page.is_editable() {
             self.draw_masks(&mut page_scene);
-            self.ensure_elements_scene(&page);
-            if let Some(elements) = self.elements_scene.as_ref() {
-                page_scene.append(elements, None);
-            }
+            let elements = self.element_scenes.scene(ElementSceneContext {
+                page: &page,
+                resources: &mut self.resources,
+                text: &self.options.text,
+                transform: self.transform.as_ref(),
+                show_text: self.view.display.show_text,
+                diagnostics: &mut self.diagnostics,
+            });
+            page_scene.append(elements, None);
         }
         let page_rect = Rect::new(
             0.0,
@@ -885,77 +802,6 @@ impl Canvas {
         }
     }
 
-    fn ensure_elements_scene(&mut self, page: &Page) {
-        if !self.elements_dirty && self.elements_scene.is_some() {
-            return;
-        }
-        let bubble_mask = self.bubble_index.as_ref().map(|(blob, _)| *blob);
-        for element in &page.elements {
-            if !element.visible || element.opacity <= 0.0 {
-                continue;
-            }
-            if element.text().is_some() && !self.view.display.show_text {
-                continue;
-            }
-            let expected_bubble = element.text().map(|_| bubble_mask).unwrap_or(None);
-            let reusable = self.element_cache.get(&element.id).is_some_and(|cached| {
-                cached.element == *element && cached.bubble_mask == expected_bubble
-            });
-            if reusable {
-                continue;
-            }
-            let mut encoded = Scene::new();
-            match &element.kind {
-                ElementKind::Text(_) if self.view.display.show_text => {
-                    match self.scene_renderer.encode_text_element(
-                        &mut encoded,
-                        element,
-                        self.bubble_index.as_ref().map(|(_, index)| index.as_ref()),
-                        &self.options.text,
-                    ) {
-                        Ok(Some(_)) | Ok(None) => {}
-                        Err(error) => self.diagnostics.push(CanvasDiagnostic::element(
-                            page.id,
-                            element.id,
-                            error.to_string(),
-                        )),
-                    }
-                }
-                ElementKind::Image(image) => {
-                    let Some(data) = self.resources.color(image.blob) else {
-                        continue;
-                    };
-                    SceneRenderer::encode_image_element(&mut encoded, element, &data);
-                }
-                ElementKind::Text(_) | ElementKind::Region(_) => {}
-            }
-            self.element_cache.insert(
-                element.id,
-                CachedElement {
-                    element: element.clone(),
-                    bubble_mask: expected_bubble,
-                    scene: encoded,
-                },
-            );
-        }
-        self.element_cache
-            .retain(|id, _| page.element(*id).is_some());
-        let mut combined = Scene::new();
-        for element in &page.elements {
-            if !element.visible
-                || element.opacity <= 0.0
-                || (element.text().is_some() && !self.view.display.show_text)
-            {
-                continue;
-            }
-            if let Some(cached) = self.element_cache.get(&element.id) {
-                combined.append(&cached.scene, None);
-            }
-        }
-        self.elements_scene = Some(combined);
-        self.elements_dirty = false;
-    }
-
     fn update_transition(&mut self, now: Instant) {
         if self.page.is_none() {
             self.displayed_base = None;
@@ -977,7 +823,7 @@ impl Canvas {
         }
         let Some(from) = self.displayed_base else {
             self.displayed_base = Some(target);
-            self.content_dirty = true;
+            self.damage.content();
             return;
         };
         let duration = self
@@ -996,7 +842,7 @@ impl Canvas {
             self.displayed_base = Some(target);
             self.transition = None;
         }
-        self.content_dirty = true;
+        self.damage.content();
     }
 
     fn resolved_base(&mut self) -> BlobId {
@@ -1028,6 +874,8 @@ impl Canvas {
     }
 
     fn build_overlay_geometry(&self) -> OverlayGeometry {
+        // OverlayGeometry uses physical pixels because handles and cursor
+        // borders must remain readable at every camera zoom.
         let mut geometry = OverlayGeometry::default();
         let Some(page) = self.page.as_ref() else {
             return geometry;
@@ -1088,14 +936,27 @@ impl Canvas {
                 continue;
             };
             geometry.outline(screen_corners(frame, camera), 2.0, [80, 145, 255, 255]);
-            for (_, point) in handle_positions(frame, camera) {
-                geometry.solid_rect(point, HANDLE_SIZE, HANDLE_SIZE, [245, 248, 255, 255]);
-                geometry.solid_rect(
-                    point,
-                    HANDLE_SIZE - 3.0,
-                    HANDLE_SIZE - 3.0,
-                    [80, 145, 255, 255],
-                );
+            let positions = handle_positions(frame, camera);
+            let north = positions[1].1;
+            let rotate = positions[8].1;
+            geometry.line(north, rotate, 1.5, [80, 145, 255, 255]);
+            for (handle, point) in positions {
+                if handle == Handle::Rotate {
+                    geometry.circle_ring(point, HANDLE_VISUAL_SIZE * 0.5, 4.0, [80, 145, 255, 255]);
+                } else {
+                    geometry.solid_rect(
+                        point,
+                        HANDLE_VISUAL_SIZE,
+                        HANDLE_VISUAL_SIZE,
+                        [245, 248, 255, 255],
+                    );
+                    geometry.solid_rect(
+                        point,
+                        HANDLE_VISUAL_SIZE - 4.0,
+                        HANDLE_VISUAL_SIZE - 4.0,
+                        [80, 145, 255, 255],
+                    );
+                }
             }
         }
         if let Some(cursor) = self.overlays.brush_cursor {
@@ -1110,11 +971,10 @@ impl Canvas {
     }
 
     fn preview_frame(&self, element: &Element) -> Frame {
-        self.overlays
-            .element_previews
-            .iter()
-            .find(|preview| preview.element == element.id)
-            .map_or(element.frame, |preview| preview.frame)
+        self.transform
+            .as_ref()
+            .and_then(|transform| transform.preview(element.id))
+            .unwrap_or(element.frame)
     }
 
     fn element_frame(&self, id: ElementId) -> Option<Frame> {
@@ -1131,25 +991,38 @@ fn screen_corners(frame: Frame, camera: Camera) -> [PhysicalPoint; 4] {
     frame_corners(frame).map(|point| camera.page_to_screen(point))
 }
 
-fn handle_positions(frame: Frame, camera: Camera) -> [(Handle, PhysicalPoint); 8] {
+fn handle_positions(frame: Frame, camera: Camera) -> [(Handle, PhysicalPoint); 9] {
     let [north_west, north_east, south_east, south_west] = screen_corners(frame, camera);
     let midpoint = |a: PhysicalPoint, b: PhysicalPoint| {
         PhysicalPoint::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
     };
+    let north = midpoint(north_west, north_east);
+    let angle = f64::from(frame.angle_degrees).to_radians();
+    let rotate = PhysicalPoint::new(
+        north.x + angle.sin() * ROTATE_HANDLE_OFFSET,
+        north.y - angle.cos() * ROTATE_HANDLE_OFFSET,
+    );
     [
         (Handle::NorthWest, north_west),
-        (Handle::North, midpoint(north_west, north_east)),
+        (Handle::North, north),
         (Handle::NorthEast, north_east),
         (Handle::East, midpoint(north_east, south_east)),
         (Handle::SouthEast, south_east),
         (Handle::South, midpoint(south_east, south_west)),
         (Handle::SouthWest, south_west),
         (Handle::West, midpoint(south_west, north_west)),
+        (Handle::Rotate, rotate),
     ]
 }
 
-fn vello_color(color: [u8; 4]) -> VelloColor {
-    VelloColor::from_rgba8(color[0], color[1], color[2], color[3])
+fn handle_contains(handle: Handle, center: PhysicalPoint, point: PhysicalPoint) -> bool {
+    let dx = point.x - center.x;
+    let dy = point.y - center.y;
+    if handle == Handle::Rotate {
+        dx.hypot(dy) <= HANDLE_HIT_SIZE * 0.5
+    } else {
+        dx.abs() <= HANDLE_HIT_SIZE * 0.5 && dy.abs() <= HANDLE_HIT_SIZE * 0.5
+    }
 }
 
 fn valid_frame(frame: Frame) -> bool {
@@ -1165,135 +1038,49 @@ fn valid_frame(frame: Frame) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
-
-    use image::{DynamicImage, ImageFormat, RgbaImage};
-
-    fn rgba_png(size: (u32, u32), color: [u8; 4]) -> Vec<u8> {
-        let mut output = Cursor::new(Vec::new());
-        DynamicImage::ImageRgba8(RgbaImage::from_pixel(size.0, size.1, image::Rgba(color)))
-            .write_to(&mut output, ImageFormat::Png)
-            .unwrap();
-        output.into_inner()
-    }
 
     #[test]
-    fn handles_keep_a_constant_screen_size() {
+    fn rotation_handle_keeps_a_constant_screen_offset() {
         let frame = Frame::new(10.0, 20.0, 100.0, 50.0);
-        let camera = Camera::new(4.0, [12.0, 8.0]).unwrap();
-        let positions = handle_positions(frame, camera);
-        assert_eq!(positions[0].0, Handle::NorthWest);
-        assert_eq!(positions[4].0, Handle::SouthEast);
-        assert_eq!(HANDLE_SIZE, 8.0);
+        for zoom in [0.25, 1.0, 4.0] {
+            let camera = Camera::new(zoom, [12.0, 8.0]).unwrap();
+            let positions = handle_positions(frame, camera);
+            assert_eq!(positions[0].0, Handle::NorthWest);
+            assert_eq!(positions[4].0, Handle::SouthEast);
+            assert_eq!(positions[8].0, Handle::Rotate);
+            let north = positions[1].1;
+            let rotate = positions[8].1;
+            assert!((north.x - rotate.x).abs() < 1e-9);
+            assert!((north.y - rotate.y - ROTATE_HANDLE_OFFSET).abs() < 1e-9);
+        }
+        assert_eq!(HANDLE_VISUAL_SIZE, 16.0);
     }
 
     #[test]
-    fn renders_an_in_memory_scene_to_a_host_owned_device() {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let Some((device, queue)) = pollster::block_on(async {
-            let adapter = instance
-                .request_adapter(&wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::LowPower,
-                    force_fallback_adapter: false,
-                    compatible_surface: None,
-                })
-                .await
-                .ok()?;
-            adapter
-                .request_device(&wgpu::DeviceDescriptor::default())
-                .await
-                .ok()
-        }) else {
-            return;
-        };
+    fn handles_have_a_larger_forgiving_hit_target() {
+        let center = PhysicalPoint::new(100.0, 100.0);
+        let just_inside = HANDLE_HIT_SIZE * 0.5 - 0.01;
+        let just_outside = HANDLE_HIT_SIZE * 0.5 + 0.01;
 
-        let mut session = Session::memory().unwrap();
-        let mut commands = session.commands();
-        let page = commands
-            .add_page("page", rgba_png((16, 12), [21, 34, 55, 255]))
-            .unwrap();
-        commands
-            .set_asset(
-                page,
-                PageAsset::Clean,
-                Some(rgba_png((16, 12), [89, 144, 233, 255])),
-            )
-            .unwrap();
-        session.apply(commands).unwrap();
-
-        let (wake, woke) = std::sync::mpsc::channel();
-        let mut canvas = Canvas::new(
-            CanvasGpu {
-                device: Arc::new(device),
-                queue: Arc::new(queue),
-            },
-            Arc::new(move || {
-                let _ = wake.send(());
-            }),
-        )
-        .unwrap();
-        canvas.set_view(crate::ViewState {
-            size: PhysicalSize::new(64, 48),
-            camera: Camera::contain(PhysicalSize::new(64, 48), session.page(page).unwrap().size),
-            display: crate::DisplayState::default(),
-        });
-        canvas.show_page(&session, page).unwrap();
-        for _ in 0..2 {
-            woke.recv_timeout(Duration::from_secs(2)).unwrap();
-        }
-        let now = Instant::now();
-        let frame = canvas.render(now).unwrap();
-        assert_eq!(frame.size, PhysicalSize::new(64, 48));
-        assert!(frame.generation > 0);
-        let generation = frame.generation;
-        assert_eq!(
-            canvas.render(Instant::now()).unwrap().generation,
-            generation
-        );
-        canvas.set_view(crate::ViewState {
-            size: PhysicalSize::new(64, 48),
-            camera: Camera::contain(PhysicalSize::new(64, 48), session.page(page).unwrap().size),
-            display: crate::DisplayState {
-                page: PageView::EditableClean,
-                ..crate::DisplayState::default()
-            },
-        });
-        assert!(canvas.render(now).unwrap().needs_redraw);
-        assert!(
-            !canvas
-                .render(now + Duration::from_millis(181))
-                .unwrap()
-                .needs_redraw
-        );
-        let mut edit = session.edit();
-        let image = edit
-            .page(page)
-            .unwrap()
-            .add_image(
-                Frame::new(2.0, 2.0, 6.0, 4.0),
-                "stamp",
-                rgba_png((6, 4), [233, 121, 52, 255]),
-            )
-            .unwrap();
-        let changes = edit.commit().unwrap();
-        canvas.sync(&session, &changes).unwrap();
-        assert_eq!(
-            canvas.hit_test(canvas.page_to_screen(PagePoint::new(4.0, 3.0))),
-            Some(HitTarget::Element(image))
-        );
-        woke.recv_timeout(Duration::from_secs(2)).unwrap();
-        canvas.render(now + Duration::from_millis(182)).unwrap();
-        canvas.set_overlays(OverlayState {
-            guides: vec![Guide::Vertical(4.0)],
-            ..OverlayState::default()
-        });
-        assert!(canvas.render(Instant::now()).unwrap().generation > generation);
-        canvas.clear_page();
-        assert!(
-            canvas
-                .screen_to_page(PhysicalPoint::new(1.0, 1.0))
-                .is_none()
-        );
-        assert!(canvas.hit_test(PhysicalPoint::new(1.0, 1.0)).is_none());
+        assert!(handle_contains(
+            Handle::SouthEast,
+            center,
+            PhysicalPoint::new(center.x + just_inside, center.y + just_inside),
+        ));
+        assert!(!handle_contains(
+            Handle::SouthEast,
+            center,
+            PhysicalPoint::new(center.x + just_outside, center.y),
+        ));
+        assert!(handle_contains(
+            Handle::Rotate,
+            center,
+            PhysicalPoint::new(center.x, center.y + just_inside),
+        ));
+        assert!(!handle_contains(
+            Handle::Rotate,
+            center,
+            PhysicalPoint::new(center.x, center.y + just_outside),
+        ));
     }
 }

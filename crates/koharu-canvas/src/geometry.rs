@@ -3,6 +3,7 @@ use vello::kurbo::Affine;
 
 use crate::{Error, Result};
 
+/// Viewport dimensions after applying the host's device-pixel ratio.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PhysicalSize {
     pub width: u32,
@@ -23,6 +24,7 @@ impl PhysicalSize {
 
 pub type PixelSize = PhysicalSize;
 
+/// Pointer or overlay position in physical viewport pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PhysicalPoint {
     pub x: f64,
@@ -36,6 +38,7 @@ impl PhysicalPoint {
     }
 }
 
+/// Position in the page's persistent coordinate system.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PagePoint {
     pub x: f64,
@@ -95,6 +98,11 @@ impl PixelRect {
     }
 }
 
+/// Converts between page coordinates and physical viewport pixels.
+///
+/// The mapping is `screen = page * zoom + translation`. Keeping that one
+/// affine authoritative prevents rendering, hit testing, and gestures from
+/// disagreeing about device-pixel ratio or zoom.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Camera {
     zoom: f64,

@@ -19,7 +19,7 @@ use vello::{
 
 use crate::{
     TextAlign as RendererTextAlign,
-    bubble::{BubbleIndex, LayoutBox},
+    bubble::{LayoutBox, layout_box as bubble_layout_box},
     font::{Font, FontSystem},
     layout::{TextLayout, WritingMode},
     renderer::{DrawStyle, RasterOptions, RenderOptions, StrokeOptions, WgpuRenderer, draw_layout},
@@ -32,6 +32,17 @@ pub struct PageRenderOptions {
     pub document_font: Option<String>,
     pub target_language: Option<String>,
     pub raster: RasterOptions,
+}
+
+/// Opaque snapshot of the scene inputs used to encode one element.
+///
+/// Viewport caches compare this key without learning which related scene
+/// elements affect renderer layout. Keeping dependency discovery here ensures
+/// that rendering and cache invalidation follow the same rules.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElementRenderKey {
+    element: Element,
+    related_region: Option<Element>,
 }
 
 #[derive(Debug)]
@@ -103,19 +114,6 @@ impl Renderer {
     pub fn composite_text(
         &self,
         base: &DynamicImage,
-        bubble_mask: Option<&DynamicImage>,
-        page: &Page,
-        options: &PageRenderOptions,
-    ) -> Result<RenderedPage> {
-        let bubble_index = bubble_mask.map(|mask| BubbleIndex::new(mask.to_luma8()));
-        self.composite_text_with_bubbles(base, bubble_index.as_ref(), page, options)
-    }
-
-    /// Variant of [`Self::composite_text`] for callers that cache bubble-mask preprocessing.
-    pub fn composite_text_with_bubbles(
-        &self,
-        base: &DynamicImage,
-        bubbles: Option<&BubbleIndex>,
         page: &Page,
         options: &PageRenderOptions,
     ) -> Result<RenderedPage> {
@@ -134,7 +132,7 @@ impl Renderer {
         for element in &page.elements {
             let Some(rendered) = self
                 .scene
-                .encode_text_element(&mut scene, element, bubbles, options)?
+                .encode_text_element(&mut scene, page, element, options)?
             else {
                 continue;
             };
@@ -165,7 +163,6 @@ impl Renderer {
     pub fn composite_page(
         &self,
         base: &DynamicImage,
-        bubble_mask: Option<&DynamicImage>,
         page: &Page,
         mut resolve: impl FnMut(BlobId) -> Result<Arc<[u8]>>,
         options: &PageRenderOptions,
@@ -180,7 +177,6 @@ impl Renderer {
             );
         }
 
-        let bubbles = bubble_mask.map(|mask| BubbleIndex::new(mask.to_luma8()));
         let mut scene = Scene::new();
         let mut elements = Vec::with_capacity(page.elements.len());
         let mut has_content = false;
@@ -190,12 +186,10 @@ impl Renderer {
             }
             match &element.kind {
                 ElementKind::Text(_) => {
-                    if let Some(rendered) = self.scene.encode_text_element(
-                        &mut scene,
-                        element,
-                        bubbles.as_ref(),
-                        options,
-                    )? {
+                    if let Some(rendered) = self
+                        .scene
+                        .encode_text_element(&mut scene, page, element, options)?
+                    {
                         elements.push(rendered);
                         has_content = true;
                     }
@@ -337,11 +331,24 @@ impl SceneRenderer {
             .context("no usable fonts are installed")
     }
 
+    #[must_use]
+    pub fn element_render_key(&self, page: &Page, element: &Element) -> ElementRenderKey {
+        let related_region = element
+            .text()
+            .and_then(|text| text.bubble)
+            .and_then(|id| page.element(id))
+            .cloned();
+        ElementRenderKey {
+            element: element.clone(),
+            related_region,
+        }
+    }
+
     pub fn encode_text_element(
         &self,
         scene: &mut Scene,
+        page: &Page,
         element: &Element,
-        bubbles: Option<&BubbleIndex>,
         options: &PageRenderOptions,
     ) -> Result<Option<RenderedElement>> {
         let Some(block) = element.text() else {
@@ -367,9 +374,7 @@ impl SceneRenderer {
             height: element.frame.height,
         };
         let layout_box = if block.layout.fit == TextFit::Bubble {
-            bubbles
-                .and_then(|index| index.lookup(seed, writing_mode))
-                .unwrap_or(seed)
+            bubble_layout_box(page, element, writing_mode).unwrap_or(seed)
         } else {
             seed
         };
