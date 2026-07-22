@@ -393,7 +393,7 @@ impl<A: Application> Shell<A> {
             return Ok(());
         }
 
-        let mut attributes = WindowAttributes::default()
+        let mut _attributes = WindowAttributes::default()
             .with_title(&self.options.title)
             .with_inner_size(LogicalSize::new(self.options.width, self.options.height))
             .with_min_inner_size(LogicalSize::new(
@@ -407,13 +407,13 @@ impl<A: Application> Shell<A> {
         #[cfg(windows)]
         {
             use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows as _};
-            attributes = attributes
+            _attributes = _attributes
                 .with_clip_children(false)
                 .with_undecorated_shadow(true)
                 .with_corner_preference(CornerPreference::Round);
         }
 
-        let window = Arc::new(event_loop.create_window(attributes)?);
+        let window = Arc::new(event_loop.create_window(_attributes)?);
         let proxy = self.proxy.clone();
         let pending = Arc::clone(&self.work_event_pending);
         let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
