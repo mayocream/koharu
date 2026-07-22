@@ -101,7 +101,7 @@ pub(super) struct State {
     pub(super) options: LogOptions,
     module: Module,
     buffered: std::sync::Mutex<Option<(koharu_llama_sys::ggml_log_level, String)>>,
-    previous_level: std::sync::atomic::AtomicI32,
+    previous_level: std::sync::atomic::AtomicI64,
     is_buffering: std::sync::atomic::AtomicBool,
 }
 
@@ -172,7 +172,8 @@ impl State {
             let level = self
                 .previous_level
                 .load(std::sync::atomic::Ordering::Acquire)
-                as koharu_llama_sys::ggml_log_level;
+                .try_into()
+                .expect("stored log level no longer fits the native enum type");
             tracing::warn!(
                 inferred_level = level,
                 text = text,
@@ -206,7 +207,7 @@ impl State {
         self.is_buffering
             .store(true, std::sync::atomic::Ordering::Release);
         self.previous_level
-            .store(level, std::sync::atomic::Ordering::Release);
+            .store(i64::from(level), std::sync::atomic::Ordering::Release);
     }
 
     // Emit a normal unbuffered log message (not the CONT log level and the text ends with a newline).
@@ -230,7 +231,7 @@ impl State {
         }
 
         self.previous_level
-            .store(level, std::sync::atomic::Ordering::Release);
+            .store(i64::from(level), std::sync::atomic::Ordering::Release);
 
         let (text, newline) = text.split_at(text.len() - 1);
         debug_assert_eq!(newline, "\n");
@@ -264,7 +265,7 @@ impl State {
     ) {
         if level != koharu_llama_sys::GGML_LOG_LEVEL_CONT {
             self.previous_level
-                .store(level, std::sync::atomic::Ordering::Release);
+                .store(i64::from(level), std::sync::atomic::Ordering::Release);
         }
     }
 
@@ -274,7 +275,8 @@ impl State {
         let level = if level == koharu_llama_sys::GGML_LOG_LEVEL_CONT {
             self.previous_level
                 .load(std::sync::atomic::Ordering::Relaxed)
-                as koharu_llama_sys::ggml_log_level
+                .try_into()
+                .expect("stored log level no longer fits the native enum type")
         } else {
             level
         };

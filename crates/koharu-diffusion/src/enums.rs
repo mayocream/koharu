@@ -10,7 +10,7 @@ use crate::{Error, Result, ffi::NativeCall, sys};
 macro_rules! named_ffi_enum {
     (
         $(#[$meta:meta])*
-        pub enum $name:ident, $kind:literal, $name_fn:path, $parse_fn:path, $invalid:path;
+        pub enum $name:ident: $raw_ty:ty, $kind:literal, $name_fn:path, $parse_fn:path, $invalid:path;
         {
             $($variant:ident = $raw:path => $text:literal),+ $(,)?
         }
@@ -19,13 +19,15 @@ macro_rules! named_ffi_enum {
         #[repr(i32)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum $name {
-            $($variant = $raw),+
+            $($variant = $raw as i32),+
         }
 
         impl $name {
             #[must_use]
-            pub const fn as_raw(self) -> i32 {
-                self as i32
+            pub const fn as_raw(self) -> $raw_ty {
+                match self {
+                    $(Self::$variant => $raw),+
+                }
             }
 
             #[must_use]
@@ -61,13 +63,16 @@ macro_rules! named_ffi_enum {
             }
         }
 
-        impl TryFrom<i32> for $name {
+        impl TryFrom<$raw_ty> for $name {
             type Error = Error;
 
-            fn try_from(value: i32) -> Result<Self> {
+            fn try_from(value: $raw_ty) -> Result<Self> {
                 match value {
                     $($raw => Ok(Self::$variant),)+
-                    value => Err(Error::InvalidEnum { kind: $kind, value }),
+                    value => Err(Error::InvalidEnum {
+                        kind: $kind,
+                        value: i64::from(value),
+                    }),
                 }
             }
         }
@@ -97,7 +102,7 @@ macro_rules! named_ffi_enum {
 macro_rules! ffi_enum {
     (
         $(#[$meta:meta])*
-        pub enum $name:ident, $kind:literal {
+        pub enum $name:ident: $raw_ty:ty, $kind:literal {
             $($variant:ident = $raw:path => $text:literal),+ $(,)?
         }
     ) => {
@@ -105,13 +110,15 @@ macro_rules! ffi_enum {
         #[repr(i32)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum $name {
-            $($variant = $raw),+
+            $($variant = $raw as i32),+
         }
 
         impl $name {
             #[must_use]
-            pub const fn as_raw(self) -> i32 {
-                self as i32
+            pub const fn as_raw(self) -> $raw_ty {
+                match self {
+                    $(Self::$variant => $raw),+
+                }
             }
 
             #[must_use]
@@ -122,13 +129,16 @@ macro_rules! ffi_enum {
             }
         }
 
-        impl TryFrom<i32> for $name {
+        impl TryFrom<$raw_ty> for $name {
             type Error = Error;
 
-            fn try_from(value: i32) -> Result<Self> {
+            fn try_from(value: $raw_ty) -> Result<Self> {
                 match value {
                     $($raw => Ok(Self::$variant),)+
-                    value => Err(Error::InvalidEnum { kind: $kind, value }),
+                    value => Err(Error::InvalidEnum {
+                        kind: $kind,
+                        value: i64::from(value),
+                    }),
                 }
             }
         }
@@ -157,7 +167,7 @@ macro_rules! ffi_enum {
 
 named_ffi_enum! {
     /// Tensor type used for model weights and conversion output.
-    pub enum WeightType, "weight type", sys::sd_type_name, sys::str_to_sd_type, sys::SD_TYPE_COUNT;
+    pub enum WeightType: sys::sd_type_t, "weight type", sys::sd_type_name, sys::str_to_sd_type, sys::SD_TYPE_COUNT;
     {
         F32 = sys::SD_TYPE_F32 => "f32",
         F16 = sys::SD_TYPE_F16 => "f16",
@@ -205,7 +215,7 @@ impl Default for WeightType {
 
 named_ffi_enum! {
     /// Random-number generator implementation.
-    pub enum RngType, "RNG type", sys::sd_rng_type_name, sys::str_to_rng_type, sys::RNG_TYPE_COUNT;
+    pub enum RngType: sys::rng_type_t, "RNG type", sys::sd_rng_type_name, sys::str_to_rng_type, sys::RNG_TYPE_COUNT;
     {
         Standard = sys::STD_DEFAULT_RNG => "std_default",
         Cuda = sys::CUDA_RNG => "cuda",
@@ -216,7 +226,7 @@ named_ffi_enum! {
 
 named_ffi_enum! {
     /// Diffusion sampling method.
-    pub enum SampleMethod, "sample method", sys::sd_sample_method_name, sys::str_to_sample_method, sys::SAMPLE_METHOD_COUNT;
+    pub enum SampleMethod: sys::sample_method_t, "sample method", sys::sd_sample_method_name, sys::str_to_sample_method, sys::SAMPLE_METHOD_COUNT;
     {
         Euler = sys::EULER_SAMPLE_METHOD => "euler",
         EulerA = sys::EULER_A_SAMPLE_METHOD => "euler_a",
@@ -250,7 +260,7 @@ impl Default for SampleMethod {
 
 named_ffi_enum! {
     /// Noise schedule used by the sampler.
-    pub enum Scheduler, "scheduler", sys::sd_scheduler_name, sys::str_to_scheduler, sys::SCHEDULER_COUNT;
+    pub enum Scheduler: sys::scheduler_t, "scheduler", sys::sd_scheduler_name, sys::str_to_scheduler, sys::SCHEDULER_COUNT;
     {
         Discrete = sys::DISCRETE_SCHEDULER => "discrete",
         Karras = sys::KARRAS_SCHEDULER => "karras",
@@ -280,7 +290,7 @@ impl Default for Scheduler {
 
 named_ffi_enum! {
     /// Model prediction parameterization.
-    pub enum Prediction, "prediction", sys::sd_prediction_name, sys::str_to_prediction, sys::PREDICTION_COUNT;
+    pub enum Prediction: sys::prediction_t, "prediction", sys::sd_prediction_name, sys::str_to_prediction, sys::PREDICTION_COUNT;
     {
         Epsilon = sys::EPS_PRED => "eps",
         V = sys::V_PRED => "v",
@@ -301,7 +311,7 @@ impl Default for Prediction {
 
 named_ffi_enum! {
     /// Preview decoder used while sampling.
-    pub enum PreviewMode, "preview mode", sys::sd_preview_name, sys::str_to_preview, sys::PREVIEW_COUNT;
+    pub enum PreviewMode: sys::preview_t, "preview mode", sys::sd_preview_name, sys::str_to_preview, sys::PREVIEW_COUNT;
     {
         None = sys::PREVIEW_NONE => "none",
         Projection = sys::PREVIEW_PROJ => "proj",
@@ -318,7 +328,7 @@ impl Default for PreviewMode {
 
 named_ffi_enum! {
     /// When LoRA weights are applied.
-    pub enum LoraApplyMode, "LoRA apply mode", sys::sd_lora_apply_mode_name, sys::str_to_lora_apply_mode, sys::LORA_APPLY_MODE_COUNT;
+    pub enum LoraApplyMode: sys::lora_apply_mode_t, "LoRA apply mode", sys::sd_lora_apply_mode_name, sys::str_to_lora_apply_mode, sys::LORA_APPLY_MODE_COUNT;
     {
         Auto = sys::LORA_APPLY_AUTO => "auto",
         Immediately = sys::LORA_APPLY_IMMEDIATELY => "immediately",
@@ -334,7 +344,7 @@ impl Default for LoraApplyMode {
 
 named_ffi_enum! {
     /// Upscaling algorithm used for high-resolution refinement.
-    pub enum HiresUpscaler, "high-resolution upscaler", sys::sd_hires_upscaler_name, sys::str_to_sd_hires_upscaler, sys::SD_HIRES_UPSCALER_COUNT;
+    pub enum HiresUpscaler: sys::sd_hires_upscaler_t, "high-resolution upscaler", sys::sd_hires_upscaler_name, sys::str_to_sd_hires_upscaler, sys::SD_HIRES_UPSCALER_COUNT;
     {
         None = sys::SD_HIRES_UPSCALER_NONE => "None",
         Latent = sys::SD_HIRES_UPSCALER_LATENT => "Latent",
@@ -351,7 +361,7 @@ named_ffi_enum! {
 
 ffi_enum! {
     /// VAE tensor naming/layout format.
-    pub enum VaeFormat, "VAE format" {
+    pub enum VaeFormat: sys::sd_vae_format_t, "VAE format" {
         Auto = sys::SD_VAE_FORMAT_AUTO => "auto",
         Flux = sys::SD_VAE_FORMAT_FLUX => "flux",
         Sd3 = sys::SD_VAE_FORMAT_SD3 => "sd3",
@@ -367,7 +377,7 @@ impl Default for VaeFormat {
 
 ffi_enum! {
     /// Diffusion cache implementation.
-    pub enum CacheMode, "cache mode" {
+    pub enum CacheMode: sys::sd_cache_mode_t, "cache mode" {
         Disabled = sys::SD_CACHE_DISABLED => "disabled",
         EasyCache = sys::SD_CACHE_EASYCACHE => "easycache",
         UCache = sys::SD_CACHE_UCACHE => "ucache",
@@ -386,7 +396,7 @@ impl Default for CacheMode {
 
 ffi_enum! {
     /// Severity attached to a native log message.
-    pub enum LogLevel, "log level" {
+    pub enum LogLevel: sys::sd_log_level_t, "log level" {
         Debug = sys::SD_LOG_DEBUG => "debug",
         Info = sys::SD_LOG_INFO => "info",
         Warn = sys::SD_LOG_WARN => "warn",
@@ -396,7 +406,7 @@ ffi_enum! {
 
 ffi_enum! {
     /// Cancellation behavior for an active generation.
-    pub enum CancelMode, "cancel mode" {
+    pub enum CancelMode: sys::sd_cancel_mode_t, "cancel mode" {
         All = sys::SD_CANCEL_ALL => "all",
         NewLatents = sys::SD_CANCEL_NEW_LATENTS => "new_latents",
         Reset = sys::SD_CANCEL_RESET => "reset"
@@ -405,7 +415,8 @@ ffi_enum! {
 
 #[cfg(test)]
 mod tests {
-    use super::{SampleMethod, Scheduler, WeightType};
+    use super::{LogLevel, SampleMethod, Scheduler, VaeFormat, WeightType};
+    use crate::{Error, sys};
 
     #[test]
     fn enum_names_round_trip_without_loading_native_library() {
@@ -415,5 +426,21 @@ mod tests {
         ));
         assert_eq!(Scheduler::Flux2.to_string(), "flux2");
         assert!(matches!(WeightType::try_from(30), Ok(WeightType::Bf16)));
+    }
+
+    #[test]
+    fn enum_raw_values_use_the_native_binding_types() {
+        let weight_type: sys::sd_type_t = WeightType::Bf16.as_raw();
+        assert_eq!(weight_type, sys::SD_TYPE_BF16);
+        assert_eq!(VaeFormat::Auto.as_raw(), sys::SD_VAE_FORMAT_AUTO);
+
+        let invalid = sys::sd_log_level_t::MAX;
+        assert!(matches!(
+            LogLevel::try_from(invalid),
+            Err(Error::InvalidEnum {
+                kind: "log level",
+                value,
+            }) if value == i64::from(invalid)
+        ));
     }
 }

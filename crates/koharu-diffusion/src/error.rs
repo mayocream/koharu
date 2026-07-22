@@ -64,7 +64,7 @@ pub enum Error {
     #[error("an importance-matrix collection is already active")]
     ImatrixCollectionAlreadyActive,
     #[error("invalid {kind} value returned by stable-diffusion.cpp: {value}")]
-    InvalidEnum { kind: &'static str, value: i32 },
+    InvalidEnum { kind: &'static str, value: i64 },
     #[error("unknown {kind} name: {value}")]
     UnknownEnumName { kind: &'static str, value: String },
 }
