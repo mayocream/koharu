@@ -8,17 +8,14 @@ use async_trait::async_trait;
 use koharu_worker::{Emitter, Handler};
 
 use super::wire::{ModelEvent, ModelRequest, ModelResponse, WireCommands};
-use crate::{
-    Processor, ProcessorFactory, WorkerState, builtin::BuiltinFactory, plan::ConfiguredModel,
-    validate_processor,
-};
+use crate::{ConfiguredNode, Processor, ProcessorFactory, WorkerState, builtin::BuiltinFactory};
 
 struct ModelHandler {
     state: Option<ModelState>,
 }
 
 struct ModelState {
-    model: ConfiguredModel,
+    model: ConfiguredNode,
     device: koharu_ml::Device,
     processor: Box<dyn Processor>,
     root: PathBuf,
@@ -52,7 +49,6 @@ impl Handler for ModelHandler {
             let started = Instant::now();
             let processor =
                 relay_downloads(BuiltinFactory.create(&model, device.clone()), &events).await?;
-            validate_processor(&model, processor.as_ref())?;
             let load_micros = duration_micros(started.elapsed());
             self.state = Some(ModelState {
                 model,
@@ -78,8 +74,6 @@ impl Handler for ModelHandler {
             WireCommands::from_commands(commands, &output_root)
         })
         .await??;
-        debug_assert_eq!(state.model.inputs(), state.processor.inputs());
-        debug_assert_eq!(state.model.outputs(), state.processor.outputs());
         let load_micros = state.load_micros.take();
         Ok(ModelResponse {
             commands,

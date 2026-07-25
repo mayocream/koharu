@@ -19,7 +19,6 @@ pub(super) async fn run(
         path,
         scope,
         target,
-        force,
     } = request;
     let mut session =
         match Session::open(&path).with_context(|| format!("failed to open {}", path.display())) {
@@ -43,7 +42,6 @@ pub(super) async fn run(
         .run(&mut session)
         .scope(scope)
         .target(target)
-        .force(force)
         .cancellation(cancellation.clone())
         .events(events);
     let outcome = match run.execute().await {

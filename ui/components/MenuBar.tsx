@@ -18,7 +18,6 @@ import {
 import {
   koharuClient,
   useEditorStore,
-  type Force,
   type Phase,
   type Scope,
   type WindowAction,
@@ -77,12 +76,11 @@ export function MenuBar() {
   const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
   const native = connection === 'connected'
 
-  const run = (scope: Scope, phase?: Phase, force?: Force) =>
+  const run = (scope: Scope, phase?: Phase) =>
     koharuClient.fire({
       type: 'run_pipeline',
       scope,
       target: phase ? { target: 'phase', phase } : { target: 'all' },
-      force: force ?? (phase ? 'targets' : 'none'),
     })
 
   const updateDisplay = (next: typeof display) => {
@@ -228,29 +226,16 @@ export function MenuBar() {
               </MenubarItem>
               <MenubarItem
                 disabled={!project || pages.length === 0}
-                onSelect={() => run({ scope: 'project' }, undefined, 'all')}
+                onSelect={() => run({ scope: 'project' })}
               >
                 {t('native.menu.reprocessProject', { defaultValue: 'Rerun Entire Project' })}
               </MenubarItem>
               <MenubarSeparator />
-              {(
-                [
-                  'detection',
-                  'segmentation',
-                  'ocr',
-                  'translation',
-                  'typography',
-                  'inpainting',
-                ] as Phase[]
-              ).map((phase) => (
+              {(['detection', 'ocr', 'translation', 'typography', 'inpainting'] as Phase[]).map(
+                (phase) => (
                 <MenubarItem
                   key={phase}
-                  disabled={
-                    !project ||
-                    pages.length === 0 ||
-                    !settings ||
-                    (phase !== 'translation' && settings.pipeline[phase] === null)
-                  }
+                  disabled={!project || pages.length === 0 || !settings}
                   onSelect={() => run({ scope: 'project' }, phase)}
                 >
                   {t('native.menu.runPhase', {
@@ -258,7 +243,8 @@ export function MenuBar() {
                     defaultValue: 'Run {{phase}}',
                   })}
                 </MenubarItem>
-              ))}
+                ),
+              )}
             </MenubarContent>
           </MenubarMenu>
 

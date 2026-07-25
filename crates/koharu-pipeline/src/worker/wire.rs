@@ -10,14 +10,13 @@ use koharu_worker::{ArenaDescriptor, ArenaFile, MappedArena, SharedSlice};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BlobBytes, CancellationToken, Context, Scope, WorkerState,
+    BlobBytes, CancellationToken, ConfiguredNode, Context, Scope, WorkerState,
     context::{ContextOptions, TranslationOptions},
-    plan::ConfiguredModel,
 };
 
 #[derive(Deserialize, Serialize)]
 pub(super) struct ModelRequest {
-    pub(super) model: ConfiguredModel,
+    pub(super) model: ConfiguredNode,
     pub(super) device: koharu_ml::Device,
     pub(super) shared_root: PathBuf,
     pub(super) context: WireContext,

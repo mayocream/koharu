@@ -146,7 +146,7 @@
       "segmentation": "Refine the areas that should be cleaned.",
       "ocr": "Read the text inside each region.",
       "translation": "Convert source text to the target language.",
-      "typography": "Choose fonts and fit translated text.",
+      "typography": "Analyze the visual style of detected text.",
       "inpainting": "Rebuild the artwork behind removed text."
     },
     "jobs": {

@@ -6,48 +6,77 @@ use std::{
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat, Luma};
-use koharu_ml::lama::{InpaintRequest, LaMa};
+use koharu_ml::lama::{HDStrategy, InpaintRequest, LaMa};
 use koharu_scene::{PageAsset, PageId};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{Artifact, Context, Processor};
+use crate::{Context, Processor};
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
-pub struct LaMaConfig {}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum LaMaHDStrategy {
+    Original,
+    Resize,
+    #[default]
+    Crop,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default)]
+pub struct LaMaConfig {
+    pub hd_strategy: LaMaHDStrategy,
+    pub hd_strategy_crop_trigger_size: u32,
+    pub hd_strategy_crop_margin: u32,
+    pub hd_strategy_resize_limit: u32,
+    pub keep_unmasked_area: bool,
+}
+
+impl Default for LaMaConfig {
+    fn default() -> Self {
+        let request = InpaintRequest::default();
+        Self {
+            hd_strategy: LaMaHDStrategy::Crop,
+            hd_strategy_crop_trigger_size: request.hd_strategy_crop_trigger_size,
+            hd_strategy_crop_margin: request.hd_strategy_crop_margin,
+            hd_strategy_resize_limit: request.hd_strategy_resize_limit,
+            keep_unmasked_area: request.sd_keep_unmasked_area,
+        }
+    }
+}
+
+impl LaMaConfig {
+    fn request(&self) -> InpaintRequest {
+        InpaintRequest {
+            hd_strategy: match self.hd_strategy {
+                LaMaHDStrategy::Original => HDStrategy::Original,
+                LaMaHDStrategy::Resize => HDStrategy::Resize,
+                LaMaHDStrategy::Crop => HDStrategy::Crop,
+            },
+            hd_strategy_crop_trigger_size: self.hd_strategy_crop_trigger_size,
+            hd_strategy_crop_margin: self.hd_strategy_crop_margin,
+            hd_strategy_resize_limit: self.hd_strategy_resize_limit,
+            sd_keep_unmasked_area: self.keep_unmasked_area,
+        }
+    }
+}
 
 pub(super) struct LaMaProcessor {
     model: Arc<Mutex<LaMa>>,
+    request: InpaintRequest,
 }
 
 impl LaMaProcessor {
-    pub(super) async fn load(device: koharu_ml::Device, _config: &LaMaConfig) -> Result<Self> {
+    pub(super) async fn load(device: koharu_ml::Device, config: &LaMaConfig) -> Result<Self> {
         Ok(Self {
             model: Arc::new(Mutex::new(LaMa::load(device).await?)),
+            request: config.request(),
         })
     }
 }
 
 #[async_trait]
 impl Processor for LaMaProcessor {
-    fn name(&self) -> &'static str {
-        "LaMa"
-    }
-
-    fn inputs(&self) -> &'static [Artifact] {
-        &[
-            Artifact::SourceImage,
-            Artifact::TextMask,
-            Artifact::CooMask,
-            Artifact::BrushMask,
-        ]
-    }
-
-    fn outputs(&self) -> &'static [Artifact] {
-        &[Artifact::CleanImage]
-    }
-
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
         let inputs = context
             .pages()
@@ -92,6 +121,7 @@ impl Processor for LaMaProcessor {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let request = self.request.clone();
         let model = self.model.clone();
         let outputs = tokio::task::spawn_blocking(move || {
             let model = model
@@ -103,7 +133,7 @@ impl Processor for LaMaProcessor {
                     let image = DynamicImage::ImageRgb8(model.inference(
                         &input.image,
                         &input.mask,
-                        &InpaintRequest::default(),
+                        &request,
                     )?);
                     Ok((input.page, image))
                 })

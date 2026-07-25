@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat, Luma};
 use koharu_ml::flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions};
@@ -11,48 +11,61 @@ use koharu_scene::{PageAsset, PageId};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{Artifact, Context, Processor};
+use crate::{Context, Processor};
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
-pub struct Flux2KleinConfig {}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(default)]
+pub struct Flux2KleinConfig {
+    pub prompt: String,
+    pub padding_mask_crop: Option<u32>,
+    pub strength: f64,
+    #[specta(type = f64)]
+    pub num_inference_steps: usize,
+    #[specta(type = f64)]
+    pub seed: i64,
+}
 
-const PROMPT: &str = "Remove the text and reconstruct the background.";
+impl Default for Flux2KleinConfig {
+    fn default() -> Self {
+        let options = Flux2KleinInpaintOptions::default();
+        Self {
+            prompt: "Remove the text and reconstruct the background.".to_owned(),
+            padding_mask_crop: options.padding_mask_crop,
+            strength: options.strength,
+            num_inference_steps: options.num_inference_steps,
+            seed: options.seed,
+        }
+    }
+}
 
 pub(super) struct Flux2KleinProcessor {
     model: Arc<Mutex<Flux2KleinInpaint>>,
+    config: Flux2KleinConfig,
 }
 
 impl Flux2KleinProcessor {
-    pub(super) async fn load(
-        device: koharu_ml::Device,
-        _config: &Flux2KleinConfig,
-    ) -> Result<Self> {
+    pub(super) async fn load(device: koharu_ml::Device, config: &Flux2KleinConfig) -> Result<Self> {
+        ensure!(
+            !config.prompt.contains('\0'),
+            "FLUX.2 Klein prompt cannot contain an interior NUL byte"
+        );
+        ensure!(
+            config.strength.is_finite() && config.strength > 0.0 && config.strength <= 1.0,
+            "FLUX.2 Klein strength must be finite, greater than zero, and at most one"
+        );
+        ensure!(
+            config.num_inference_steps > 0,
+            "FLUX.2 Klein inference steps must be greater than zero"
+        );
         Ok(Self {
             model: Arc::new(Mutex::new(Flux2KleinInpaint::load(device).await?)),
+            config: config.clone(),
         })
     }
 }
 
 #[async_trait]
 impl Processor for Flux2KleinProcessor {
-    fn name(&self) -> &'static str {
-        "FLUX.2 Klein"
-    }
-
-    fn inputs(&self) -> &'static [Artifact] {
-        &[
-            Artifact::SourceImage,
-            Artifact::TextMask,
-            Artifact::CooMask,
-            Artifact::BrushMask,
-        ]
-    }
-
-    fn outputs(&self) -> &'static [Artifact] {
-        &[Artifact::CleanImage]
-    }
-
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
         let inputs = context
             .pages()
@@ -99,6 +112,7 @@ impl Processor for Flux2KleinProcessor {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let config = self.config.clone();
         let model = self.model.clone();
         let outputs = tokio::task::spawn_blocking(move || {
             let model = model
@@ -108,11 +122,16 @@ impl Processor for Flux2KleinProcessor {
                 .into_iter()
                 .map(|input| {
                     let image = model.inference(
-                        PROMPT,
+                        &config.prompt,
                         &input.image,
                         None,
                         &input.mask,
-                        &Flux2KleinInpaintOptions::default(),
+                        &Flux2KleinInpaintOptions {
+                            padding_mask_crop: config.padding_mask_crop,
+                            strength: config.strength,
+                            num_inference_steps: config.num_inference_steps,
+                            seed: config.seed,
+                        },
                     )?;
                     let image = if image.width() == input.width && image.height() == input.height {
                         image

@@ -11,10 +11,10 @@ use koharu_scene::{PageAsset, PageId};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{Artifact, Context, Processor};
+use crate::{Context, Processor};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct AotInpaintingConfig {
     pub max_side: u32,
 }
@@ -44,23 +44,6 @@ impl AotInpaintingProcessor {
 
 #[async_trait]
 impl Processor for AotInpaintingProcessor {
-    fn name(&self) -> &'static str {
-        "AotInpainting"
-    }
-
-    fn inputs(&self) -> &'static [Artifact] {
-        &[
-            Artifact::SourceImage,
-            Artifact::TextMask,
-            Artifact::CooMask,
-            Artifact::BrushMask,
-        ]
-    }
-
-    fn outputs(&self) -> &'static [Artifact] {
-        &[Artifact::CleanImage]
-    }
-
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
         let inputs = context
             .pages()

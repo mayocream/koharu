@@ -7,19 +7,14 @@ use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use koharu_config::Config;
 use koharu_pipeline::{Phase, Pipeline, PipelineConfig, PipelineEvent, WorkerState};
 use koharu_scene::Session;
-use koharu_translator::{OpenAiConfig, Providers, TranslationConfig};
+use koharu_translator::TranslationConfig;
 
 #[tokio::test]
+#[ignore = "downloads the Koharu Layout RF-DETR checkpoint"]
 async fn model_process_reports_events_and_reads_shared_inputs() {
-    let translation = TranslationConfig {
-        model: Providers::OpenAi(OpenAiConfig::default()),
-        ..TranslationConfig::default()
-    };
     let pipeline = Pipeline::with_worker_executable(
-        Config::memory(PipelineConfig {
-            processors: Vec::new(),
-        }),
-        Config::memory(translation),
+        Config::memory(PipelineConfig::default()),
+        Config::memory(TranslationConfig::default()),
         env!("CARGO_BIN_EXE_koharu"),
     );
     let mut session = Session::memory().unwrap();
@@ -41,14 +36,14 @@ async fn model_process_reports_events_and_reads_shared_inputs() {
 
     let report = pipeline
         .run(&mut session)
-        .phase(Phase::Translation)
+        .phase(Phase::Detection)
         .events(events)
         .execute()
         .await
         .unwrap();
 
     assert_eq!(report.processors, 1);
-    assert!(report.revisions.is_empty());
+    assert_eq!(report.revisions.len(), 1);
     assert_eq!(report.measurements.len(), 1);
     assert!(report.measurements[0].input_bytes > 0);
     assert_eq!(

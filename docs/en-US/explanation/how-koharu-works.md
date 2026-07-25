@@ -4,56 +4,44 @@ title: How Koharu Works
 
 # How Koharu Works
 
-Koharu is built around a staged page pipeline for manga translation. The editor presents that pipeline as a simple workflow, but the implementation keeps detection, segmentation, OCR, inpainting, translation, and rendering separate because each stage produces different data and fails in different ways.
+Koharu is built around a five-phase page-processing pipeline. Detection, OCR, translation, typography, and inpainting stay separate because each phase performs different work and fails in different ways. Rendering consumes the resulting scene data after the pipeline.
 
 ## The pipeline at a glance
 
 ```mermaid
 flowchart LR
-    A[Input manga page] --> B1[Panel, bubble, text and COO processors]
-    A --> B2[Pixel text-mask processor]
-    B1 --> B3[Semantic mask fusion]
-    B2 --> B3
-    B1 --> C[Role-routed OCR]
-    B3 --> D[Inpaint text and COO masks]
-    C --> E[LLM translation stage]
-    B1 --> F
+    A[Input manga page] --> B[Koharu Layout RF-DETR]
+    B --> C[OCR]
+    B --> D[Inpaint text, COO, and brush masks]
+    B --> T[Font detection]
+    C --> E[Translation]
+    T --> F
     D --> F[Render stage]
     E --> F
     F --> G[Localized page or PSD export]
 ```
 
-The editor still presents familiar phases:
+The pipeline has five phases:
 
 1. `Detection`
-2. `Segmentation`
-3. `OCR`
-4. `Translation`
-5. `Typography`
-6. `Inpainting`
+2. `OCR`
+3. `Translation`
+4. `Typography`
+5. `Inpainting`
 
-Rendering consumes those artifacts after the pipeline phases finish.
+Rendering consumes the scene after the pipeline phases finish.
 
-The important implementation detail is that a phase can contain several named processors:
-
-- `PPDocLayoutV3` finds ordinary text without relying on the fine-tuned YOLO text classes.
-- `KoharuYolo26s` finds panels, bubbles, text layout, and COO regions.
-- `MangaTextMask` produces a high-resolution per-pixel text candidate.
-- `ComicOnomatopoeia` detects, recognizes, and verifies COO independently.
-- `MaskFusion` splits the pixel candidate into ordinary-text and COO masks.
-- `FontDetector` estimates font and color hints for later rendering.
-
-That split lets Koharu use one model to reason about page structure and another to decide which exact pixels should be removed.
+`KoharuLayoutRFDetrSeg2XL` is the sole detection processor. A single inference finds panels, bubbles, ordinary text, and onomatopoeia while producing their pixel masks. OCR and inpainting each select one processor from their respective model families.
 
 ## What each stage produces
 
 | Phase | Main processors | Main output |
 | --- | --- | --- |
-| Detect | `PPDocLayoutV3`, `KoharuYolo26s`, `ComicOnomatopoeia` | linked panel, bubble, ordinary-text, and COO instances |
-| Segment | `MangaTextMask`, `KoharuYolo26s`, `MaskFusion` | separate ordinary-text, COO, and bubble masks |
-| OCR | `PaddleOCR-VL-1.6`, COO recognizer/verifier | source text routed by semantic role |
-| Inpaint | `LaMa` by default | page with ordinary text and COO removed |
-| LLM Generate | local GGUF LLM or remote provider | translated text |
+| Detect | `KoharuLayoutRFDetrSeg2XL` | linked panel, bubble, text, and onomatopoeia instances plus final masks |
+| OCR | `PaddleOCR-VL-1.6` | source text for detected text regions |
+| Translation | local GGUF LLM or remote provider | translated text |
+| Typography | `FontDetector` | detected text color and typography metadata |
+| Inpaint | `LaMa` by default | page cleaned with the available text, COO, and brush masks |
 | Render | Koharu renderer | final localized page or export |
 
 ## Why the phases are separate
@@ -65,22 +53,21 @@ Manga pages are much harder than ordinary document OCR:
 - text can overlap artwork, screentones, speed lines, and panel borders
 - reading order is part of the page structure, not just the raw pixels
 
-Because of that, a single model is usually not enough. Koharu first finds text blocks and bubble regions, then runs OCR on cropped regions, then uses a segmentation mask for cleanup, and only after that asks an LLM to translate the text.
+Koharu first finds text blocks and bubble regions together with their masks, then runs OCR on cropped regions, and uses the masks for cleanup before translation and rendering.
 
 ## The implementation shape
 
 In the source tree, the processing phases, execution driver, and built-in processors live in `koharu-pipeline`; runtime settings live in `koharu-config`.
 
-The runner does not treat phases as a fixed sequential list. Every processor declares typed input and output artifacts. Koharu derives and validates a DAG from those contracts, orders processors that write the same artifact, and runs ready nodes concurrently. A failed node blocks only descendants that require it; independent branches continue.
+The runner does not infer dependencies from phase order. It stores the five processors in a `petgraph` graph with four fixed edges: detection to OCR, typography, and inpainting, plus OCR to translation. OCR, typography, and inpainting can therefore run concurrently after detection. Processors read the immutable scene context directly and return scene commands; they do not declare input or output ports.
 
 Some implementation details matter:
 
 - regions retain their model confidence and links to their containing panel and bubble
-- ordinary OCR skips COO blocks; the COO recognizer and verifier own those blocks
 - OCR runs on cropped text regions, not on the full page
 - inpainting consumes the union of the ordinary-text, COO, and brush masks
 - when you choose a remote LLM provider, Koharu sends OCR text for translation, not the full page image
-- individual processors can be swapped in **Settings > Engines** without changing the rest of the pipeline
+- OCR and inpainting processors can be swapped in **Settings > Pipeline** without changing the graph
 
 ## Why the stack matters
 

@@ -306,11 +306,7 @@ impl App {
             AppCommand::Redo => {
                 return self.redo(desktop, base).map(CommandOutcome::Accepted);
             }
-            AppCommand::RunPipeline {
-                scope,
-                target,
-                force,
-            } => {
+            AppCommand::RunPipeline { scope, target } => {
                 self.require_base(base)?;
                 self.ensure_free_job(id)?;
                 self.ensure_job_kind_available(JobKind::Pipeline)?;
@@ -320,7 +316,6 @@ impl App {
                         path: self.project_path()?.to_owned(),
                         scope,
                         target,
-                        force,
                     },
                     desktop.handle(),
                 )?;

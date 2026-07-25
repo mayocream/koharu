@@ -57,7 +57,12 @@ const textElement: Element = {
 }
 
 const fontSettings: SettingsView = {
-  pipeline: { processors: [] },
+  pipeline: {
+    detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
+    ocr: { model: 'paddleocr-vl-1.6' },
+    typography: { model: 'font-detector', top_k: 3 },
+    inpainting: { model: 'lama' },
+  },
   translation: {
     model: { provider: 'local', model: 'lfm2.5-1.2b-instruct' },
     target_language: 'en-US',
@@ -235,31 +240,16 @@ describe('native editor components', () => {
           completed: 1,
           total: 4,
           phase: 'ocr',
-          model: 'manga_ocr',
+          model: 'manga-ocr',
         },
       },
       settingsOpen: true,
       settings: {
         pipeline: {
-          processors: [
-            { model: 'comic_text_detector' },
-            {
-              model: 'comic_layout_yolo26s',
-              confidence: 0.25,
-              text_regions: false,
-              text_masks: true,
-            },
-            {
-              model: 'comic_onomatopoeia',
-              detection_threshold: 0.5,
-              recognition_threshold: 0.5,
-              dedup_iou: 0.30000001192092896,
-            },
-            { model: 'speech_bubble_yolov8m', confidence: null, nms_iou: null },
-            { model: 'paddleocr_vl_1.6' },
-            { model: 'font_detector', top_k: 3 },
-            { model: 'lama' },
-          ],
+          detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
+          ocr: { model: 'paddleocr-vl-1.6' },
+          typography: { model: 'font-detector', top_k: 3 },
+          inpainting: { model: 'lama' },
         },
         translation: {
           model: {
@@ -304,8 +294,10 @@ describe('native editor components', () => {
     expect(
       screen.queryByText('Settings are unavailable while disconnected.'),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'Comic Layout YOLO26s' })).toBeChecked()
-    expect(screen.getByLabelText('Dedup IoU')).toHaveValue(0.3)
+    expect(screen.getAllByRole('combobox').length).toBeGreaterThanOrEqual(5)
+    expect(screen.queryByText('Segmentation')).not.toBeInTheDocument()
+    expect(screen.getByText(/^typography$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Top predictions')).toHaveValue(3)
     const credential = screen.getByLabelText('openai credential')
     expect(credential).toHaveAttribute('type', 'password')
     expect(credential).toHaveValue('secret-value')

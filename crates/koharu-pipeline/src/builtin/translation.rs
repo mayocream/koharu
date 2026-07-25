@@ -6,7 +6,7 @@ use koharu_translator::{
     TranslationRequest, Translator,
 };
 
-use crate::{Artifact, Context, Processor};
+use crate::{Context, Processor};
 
 pub(super) struct TranslationProcessor {
     config: Providers,
@@ -58,30 +58,6 @@ impl TranslationProcessor {
 
 #[async_trait]
 impl Processor for TranslationProcessor {
-    fn name(&self) -> &'static str {
-        match self.config {
-            Providers::Local(_) => "LocalTranslator",
-            Providers::OpenAi(_) => "OpenAI",
-            Providers::Gemini(_) => "Gemini",
-            Providers::Claude(_) => "Claude",
-            Providers::DeepSeek(_) => "DeepSeek",
-            Providers::OpenAiCompatible(_) => "OpenAI-compatible",
-            Providers::OpenRouter(_) => "OpenRouter",
-            Providers::LmStudio(_) => "LM Studio",
-            Providers::DeepL(_) => "DeepL",
-            Providers::GoogleCloudTranslation(_) => "Google Cloud Translation",
-            Providers::Caiyun(_) => "Caiyun",
-        }
-    }
-
-    fn inputs(&self) -> &'static [Artifact] {
-        &[Artifact::SourceText, Artifact::CooText]
-    }
-
-    fn outputs(&self) -> &'static [Artifact] {
-        &[Artifact::Translation]
-    }
-
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
         let targets = context
             .pages()

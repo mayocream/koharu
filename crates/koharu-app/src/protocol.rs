@@ -1,6 +1,6 @@
 use std::fmt;
 
-use koharu_pipeline::{Force, RunTarget, Scope};
+use koharu_pipeline::{RunTarget, Scope};
 use koharu_scene::{
     Element, ElementId, Frame, Page, PageAssets, PageId, ProjectId, Revision, Size, TextLayout,
     TextStyle,
@@ -161,7 +161,6 @@ pub enum UiCommand {
     RunPipeline {
         scope: Scope,
         target: RunTarget,
-        force: Force,
     },
     CancelJob {
         job: RequestId,
@@ -852,6 +851,9 @@ mod tests {
             value["settings"]["translation"]["credentials"]["openai"],
             "secret-value"
         );
-        assert!(value["settings"]["pipeline"]["processors"].is_array());
+        assert_eq!(
+            value["settings"]["pipeline"]["detection"]["model"],
+            "koharu-layout-rfdetr-seg-2xl"
+        );
     }
 }

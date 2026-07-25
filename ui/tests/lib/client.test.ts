@@ -103,24 +103,17 @@ describe('KoharuClient', () => {
     client.disconnect()
   })
 
-  it('accepts settings with a processor list', () => {
+  it('accepts settings with all required phase models', () => {
     useEditorStore.setState({ error: null, settings: null })
     const { bridge, client } = connected()
     bridge.emit({
       type: 'settings_changed',
       settings: {
         pipeline: {
-          processors: [
-            { model: 'comic_text_detector' },
-            {
-              model: 'speech_bubble_yolov8m',
-              confidence: null,
-              nms_iou: null,
-            },
-            { model: 'paddleocr_vl_1.6' },
-            { model: 'font_detector', top_k: 3 },
-            { model: 'lama' },
-          ],
+          detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
+          ocr: { model: 'paddleocr-vl-1.6' },
+          typography: { model: 'font-detector', top_k: 3 },
+          inpainting: { model: 'lama' },
         },
         translation: {
           model: { provider: 'local', model: 'lfm2.5-1.2b-instruct' },
@@ -160,7 +153,9 @@ describe('KoharuClient', () => {
     })
 
     expect(useEditorStore.getState().error).toBeNull()
-    expect(useEditorStore.getState().settings?.pipeline.processors).toHaveLength(5)
+    expect(useEditorStore.getState().settings?.pipeline.detection?.model).toBe(
+      'koharu-layout-rfdetr-seg-2xl',
+    )
     expect(useEditorStore.getState().settings?.translation.model.provider).toBe('local')
     client.disconnect()
   })

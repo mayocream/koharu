@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Artifact, CancellationToken, EventSink, ModelMeasurement, Phase, Pipeline, ProcessorId, Scope,
+    CancellationToken, EventSink, ModelMeasurement, Phase, Pipeline, ProcessorId, Scope,
     context::ContextOptions,
 };
 
@@ -24,25 +24,12 @@ pub enum RunTarget {
     Processors {
         processors: Vec<ProcessorId>,
     },
-    Artifacts {
-        artifacts: Vec<Artifact>,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum Force {
-    None,
-    #[default]
-    Targets,
-    All,
 }
 
 #[derive(Clone)]
 pub(crate) struct RunRequest {
     pub(crate) scope: Scope,
     pub(crate) target: RunTarget,
-    pub(crate) force: Force,
     pub(crate) context: ContextOptions,
 }
 
@@ -51,7 +38,6 @@ impl Default for RunRequest {
         Self {
             scope: Scope::Project,
             target: RunTarget::All,
-            force: Force::Targets,
             context: ContextOptions {
                 translation: Default::default(),
                 cancellation: CancellationToken::default(),
@@ -94,7 +80,6 @@ impl Run<'_, '_> {
     #[must_use]
     pub fn phase(mut self, phase: Phase) -> Self {
         self.request.target = RunTarget::Phase { phase };
-        self.request.force = Force::Targets;
         self
     }
 
@@ -103,28 +88,12 @@ impl Run<'_, '_> {
         self.request.target = RunTarget::Processors {
             processors: processors.into_iter().collect(),
         };
-        self.request.force = Force::Targets;
-        self
-    }
-
-    #[must_use]
-    pub fn artifacts(mut self, artifacts: impl IntoIterator<Item = Artifact>) -> Self {
-        self.request.target = RunTarget::Artifacts {
-            artifacts: artifacts.into_iter().collect(),
-        };
-        self.request.force = Force::Targets;
         self
     }
 
     #[must_use]
     pub fn target(mut self, target: RunTarget) -> Self {
         self.request.target = target;
-        self
-    }
-
-    #[must_use]
-    pub fn force(mut self, force: Force) -> Self {
-        self.request.force = force;
         self
     }
 
@@ -155,7 +124,6 @@ impl Run<'_, '_> {
 pub struct RunReport {
     pub revisions: Vec<Revision>,
     pub processors: usize,
-    pub skipped: usize,
     pub measurements: Vec<ModelMeasurement>,
 }
 

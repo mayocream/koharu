@@ -308,8 +308,9 @@ export function isUiEvent(value: unknown): value is UiEvent {
       const pipeline = settings.pipeline
       const translation = settings.translation
       return (
-        Array.isArray(pipeline.processors) &&
-        pipeline.processors.every(isModelConfig) &&
+        (['detection', 'ocr', 'typography', 'inpainting'] as const).every((phase) =>
+          isModelConfig(pipeline[phase]),
+        ) &&
         isProviderConfig(translation.model) &&
         typeof translation.target_language === 'string' &&
         (translation.instructions === null || typeof translation.instructions === 'string') &&

@@ -8,10 +8,10 @@ use koharu_scene::{Command, ElementChange, ElementId, PageId, TextRole, TextStyl
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{Artifact, Context, Processor};
+use crate::{Context, Processor};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct FontDetectorConfig {
     #[specta(type = f64)]
     pub top_k: usize,
@@ -42,27 +42,14 @@ impl FontDetectorProcessor {
 
 #[async_trait]
 impl Processor for FontDetectorProcessor {
-    fn name(&self) -> &'static str {
-        "FontDetector"
-    }
-
-    fn inputs(&self) -> &'static [Artifact] {
-        &[Artifact::SourceImage, Artifact::TextRegion]
-    }
-
-    fn outputs(&self) -> &'static [Artifact] {
-        &[Artifact::Typography]
-    }
-
     async fn run(&mut self, context: &Context) -> Result<koharu_scene::Commands> {
         let mut inputs = Vec::new();
         for page in context.pages() {
             let source = context.source(page.id)?;
             for (element, text) in page.texts() {
-                if text.role == TextRole::Onomatopoeia {
-                    continue;
-                }
-                if !context.includes_element(page.id, element.id, element.frame) {
+                if text.role == TextRole::Onomatopoeia
+                    || !context.includes_element(page.id, element.id, element.frame)
+                {
                     continue;
                 }
                 let x = (element.frame.x.floor().max(0.0) as u32).min(source.width());
@@ -105,11 +92,10 @@ impl Processor for FontDetectorProcessor {
                 .expect("captured page")
                 .text(input.element)
                 .expect("captured text");
-            let style = apply_prediction(text.style.clone(), prediction);
             commands.push(Command::EditElement {
                 page: input.page,
                 element: input.element,
-                edit: ElementChange::Style(style),
+                edit: ElementChange::Style(apply_prediction(text.style.clone(), prediction)),
             });
         }
         Ok(commands)

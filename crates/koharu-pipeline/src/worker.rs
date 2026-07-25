@@ -16,8 +16,8 @@ use tempfile::TempDir;
 
 use self::wire::{ModelEvent, ModelRequest, ModelResponse, SharedBlobs, WireContext};
 use crate::{
-    Artifact, Context, EventSink, ModelMeasurement, Phase, PipelineEvent, Processor,
-    ProcessorFactory, WorkerLifecycle, WorkerState, plan::ConfiguredModel,
+    ConfiguredNode, Context, EventSink, ModelMeasurement, Phase, PipelineEvent, Processor,
+    ProcessorFactory, WorkerLifecycle, WorkerState,
 };
 
 const WORKER_ARGUMENT: &str = "--worker";
@@ -41,7 +41,7 @@ impl WorkerFactory {
 impl ProcessorFactory for WorkerFactory {
     async fn create(
         &self,
-        model: &ConfiguredModel,
+        model: &ConfiguredNode,
         device: koharu_ml::Device,
     ) -> Result<Box<dyn Processor>> {
         let root = {
@@ -70,7 +70,7 @@ impl ProcessorFactory for WorkerFactory {
 }
 
 struct WorkerProcessor {
-    model: ConfiguredModel,
+    model: ConfiguredNode,
     device: koharu_ml::Device,
     root: Arc<TempDir>,
     executable: Option<PathBuf>,
@@ -79,18 +79,6 @@ struct WorkerProcessor {
 
 #[async_trait]
 impl Processor for WorkerProcessor {
-    fn name(&self) -> &'static str {
-        self.model.name()
-    }
-
-    fn inputs(&self) -> &'static [Artifact] {
-        self.model.inputs()
-    }
-
-    fn outputs(&self) -> &'static [Artifact] {
-        self.model.outputs()
-    }
-
     async fn shutdown(&mut self) {
         if let Some(client) = self.client.take() {
             client.shutdown().await;
@@ -211,12 +199,7 @@ struct WorkerEventRelay {
 }
 
 impl WorkerEventRelay {
-    fn new(
-        sink: Option<EventSink>,
-        phase: Phase,
-        model: &ConfiguredModel,
-        generation: u64,
-    ) -> Self {
+    fn new(sink: Option<EventSink>, phase: Phase, model: &ConfiguredNode, generation: u64) -> Self {
         Self {
             sink,
             phase,

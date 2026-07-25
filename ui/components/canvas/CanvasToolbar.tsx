@@ -47,7 +47,6 @@ export function CanvasToolbar() {
       type: 'run_pipeline',
       scope,
       target: { target: 'all' },
-      force: 'none',
     })
   }
 

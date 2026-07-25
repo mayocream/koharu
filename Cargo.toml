@@ -74,6 +74,7 @@ rayon = "1.12"
 rust-embed = { version = "8.12", features = ["interpolate-folder-path"] }
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+petgraph = "0.8"
 strum = { version = "0.28", features = ["derive"] }
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
 dirs = "6.0"

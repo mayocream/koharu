@@ -2,7 +2,7 @@
 
 import { Cpu, Eye, EyeOff, Keyboard, Monitor, Moon, Palette, Save, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -23,10 +23,14 @@ import { supportedLanguages } from '@/lib/i18n'
 import {
   koharuClient,
   useEditorStore,
+  type DetectionModel,
+  type InpaintingModel,
+  type LaMaHDStrategy,
+  type OcrModel,
   type PipelineConfig,
-  type ProcessorConfig,
   type ShortcutAction,
   type Phase,
+  type TypographyModel,
   type TargetLanguageView,
   type TranslationCredentialsView,
   type TranslationSettings,
@@ -40,77 +44,35 @@ const settingsTabs = [
 ] as const
 type SettingsTab = (typeof settingsTabs)[number]['id']
 
-type PipelineModel = ProcessorConfig
+type PipelineModel = DetectionModel | OcrModel | TypographyModel | InpaintingModel
+type ModelPhase = Exclude<Phase, 'translation'>
 type ModelName = PipelineModel['model'] | Providers['provider']
-const phases: Phase[] = [
-  'detection',
-  'segmentation',
-  'ocr',
-  'translation',
-  'typography',
-  'inpainting',
-]
-type PipelinePhase = Exclude<Phase, 'translation'>
+const phases: ModelPhase[] = ['detection', 'ocr', 'typography', 'inpainting']
 const modelOptions = {
-  detection: [
-    'pp_doclayout_v3',
-    'comic_text_detector',
-    'comic_layout_yolo26s',
-    'comic_onomatopoeia',
-  ],
-  segmentation: [
-    'manga_text_mask',
-    'speech_bubble_yolov8m',
-    'speech_bubble_yolo11n',
-    'mask_fusion',
-  ],
-  ocr: ['paddleocr_vl_1.6', 'manga_ocr', 'baberu_ocr'],
-  translation: [
-    'local',
-    'openai',
-    'gemini',
-    'claude',
-    'deepseek',
-    'openai_compatible',
-    'openrouter',
-    'lm_studio',
-    'deepl',
-    'google_cloud_translation',
-    'caiyun',
-  ],
-  typography: ['font_detector'],
-  inpainting: ['lama', 'aot_inpainting', 'flux2_klein', 'rorem_mixed'],
-} satisfies Record<Phase, ModelName[]>
-const processorOrder: PipelineModel['model'][] = [
-  'pp_doclayout_v3',
-  'comic_text_detector',
-  'comic_layout_yolo26s',
-  'manga_text_mask',
-  'speech_bubble_yolov8m',
-  'speech_bubble_yolo11n',
-  'comic_onomatopoeia',
-  'mask_fusion',
-  'paddleocr_vl_1.6',
-  'manga_ocr',
-  'baberu_ocr',
-  'font_detector',
-  'lama',
-  'aot_inpainting',
-  'flux2_klein',
-  'rorem_mixed',
+  detection: ['koharu-layout-rfdetr-seg-2xl'],
+  ocr: ['paddleocr-vl-1.6', 'manga-ocr', 'baberu-ocr'],
+  typography: ['font-detector'],
+  inpainting: ['lama', 'aot-inpainting', 'flux2-klein', 'rorem-mixed'],
+} satisfies Record<ModelPhase, PipelineModel['model'][]>
+const translationOptions: Providers['provider'][] = [
+  'local',
+  'openai',
+  'gemini',
+  'claude',
+  'deepseek',
+  'openai_compatible',
+  'openrouter',
+  'lm_studio',
+  'deepl',
+  'google_cloud_translation',
+  'caiyun',
 ]
 const modelLabels: Record<ModelName, string> = {
-  comic_text_detector: 'Comic Text Detector',
-  pp_doclayout_v3: 'PP-DocLayoutV3',
-  comic_layout_yolo26s: 'Comic Layout YOLO26s',
-  comic_onomatopoeia: 'COO Detector + OCR',
-  mask_fusion: 'Semantic Mask Fusion',
-  manga_text_mask: 'Manga Text Mask',
-  speech_bubble_yolov8m: 'Speech Bubble (YOLOv8m)',
-  speech_bubble_yolo11n: 'Speech Bubble (YOLO11n)',
-  'paddleocr_vl_1.6': 'PaddleOCR-VL 1.6',
-  manga_ocr: 'Manga OCR',
-  baberu_ocr: 'Baberu OCR',
+  'koharu-layout-rfdetr-seg-2xl': 'Koharu Layout RF-DETR Seg 2XL',
+  'paddleocr-vl-1.6': 'PaddleOCR-VL 1.6',
+  'manga-ocr': 'Manga OCR',
+  'baberu-ocr': 'Baberu OCR',
+  'font-detector': 'Font Detector',
   local: 'Local',
   openai: 'OpenAI',
   gemini: 'Gemini',
@@ -122,20 +84,19 @@ const modelLabels: Record<ModelName, string> = {
   deepl: 'DeepL',
   google_cloud_translation: 'Google Cloud Translation',
   caiyun: 'Caiyun',
-  font_detector: 'Font Detector',
   lama: 'LaMa',
-  aot_inpainting: 'AOT Inpainting',
-  flux2_klein: 'FLUX.2 Klein',
-  rorem_mixed: 'RORem Mixed',
+  'aot-inpainting': 'AOT Inpainting',
+  'flux2-klein': 'FLUX.2 Klein',
+  'rorem-mixed': 'RORem Mixed',
 }
 const phaseDescriptions: Record<Phase, string> = {
-  detection: 'Locate text on the page.',
-  segmentation: 'Refine the areas that should be cleaned.',
+  detection: 'Locate page regions and produce cleanup masks.',
   ocr: 'Read the text inside each region.',
   translation: 'Convert source text to the target language.',
-  typography: 'Choose fonts and fit translated text.',
+  typography: 'Analyze the visual style of detected text.',
   inpainting: 'Rebuild the artwork behind removed text.',
 }
+const translationDescription = phaseDescriptions.translation
 
 export function SettingsDialog() {
   const { t } = useTranslation()
@@ -218,24 +179,19 @@ export function SettingsDialog() {
                   >
                     {draft && translationDraft ? (
                       <div className='divide-y divide-border'>
-                        {phases.map((phase) =>
-                          phase === 'translation' ? (
-                            <TranslationEditor
-                              key={phase}
-                              config={translationDraft}
-                              localModels={settings?.local_translation_models ?? []}
-                              targetLanguages={settings?.target_languages ?? []}
-                              onChange={setTranslationDraft}
-                            />
-                          ) : (
-                            <PhaseEditor
-                              key={phase}
-                              phase={phase}
-                              config={draft}
-                              onChange={setDraft}
-                            />
-                          ),
-                        )}
+                        {phases.map((phase, index) => (
+                          <Fragment key={phase}>
+                            {index === 2 && (
+                              <TranslationEditor
+                                config={translationDraft}
+                                localModels={settings?.local_translation_models ?? []}
+                                targetLanguages={settings?.target_languages ?? []}
+                                onChange={setTranslationDraft}
+                              />
+                            )}
+                            <PhaseEditor phase={phase} config={draft} onChange={setDraft} />
+                          </Fragment>
+                        ))}
                       </div>
                     ) : (
                       <div className='rounded-xl border p-4 text-xs text-muted-foreground'>
@@ -345,7 +301,7 @@ function PhaseEditor({
   config,
   onChange,
 }: {
-  phase: PipelinePhase
+  phase: ModelPhase
   config: PipelineConfig
   onChange: (config: PipelineConfig) => void
 }) {
@@ -363,52 +319,35 @@ function PhaseEditor({
           {t(`native.phaseDescription.${phase}`, { defaultValue: phaseDescriptions[phase] })}
         </p>
       </div>
-      <div className='grid min-w-0 gap-3' aria-describedby={`pipeline-${phase}-description`}>
-        {modelOptions[phase].map((name) => {
-          const index = config.processors.findIndex((processor) => processor.model === name)
-          const model = index >= 0 ? config.processors[index] : null
-          return (
-            <div key={name} className='rounded-xl border border-border bg-background p-3 shadow-xs'>
-              <div className='flex items-center justify-between gap-3'>
-                <Label className='text-xs font-medium'>{modelLabels[name]}</Label>
-                <Switch
-                  checked={model !== null}
-                  aria-label={modelLabels[name]}
-                  onCheckedChange={(enabled) =>
-                    onChange(
-                      enabled
-                        ? {
-                            ...config,
-                            processors: insertPipelineModel(config.processors, name),
-                          }
-                        : {
-                            ...config,
-                            processors: config.processors.filter(
-                              (processor) => processor.model !== name,
-                            ),
-                          },
-                    )
-                  }
-                />
-              </div>
-              {model && hasPipelineModelOptions(model) && (
-                <div className='mt-2 border-t border-border pt-2'>
-                  <PipelineModelFields
-                    model={model}
-                    onChange={(next) =>
-                      onChange({
-                        ...config,
-                        processors: config.processors.map((processor, processorIndex) =>
-                          processorIndex === index ? next : processor,
-                        ),
-                      })
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          )
-        })}
+      <div
+        className='grid min-w-0 gap-3 rounded-xl border border-border bg-background p-3 shadow-xs'
+        aria-describedby={`pipeline-${phase}-description`}
+      >
+        <Select
+          value={config[phase].model}
+          onValueChange={(model) =>
+            onChange(setPhaseModel(config, phase, defaultPipelineModel(model as PipelineModel['model'])))
+          }
+        >
+          <SelectTrigger className='w-full bg-background'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {modelOptions[phase].map((model) => (
+              <SelectItem key={model} value={model}>
+                {modelLabels[model]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasPipelineModelOptions(config[phase]) && (
+          <div className='border-t border-border pt-2'>
+            <PipelineModelFields
+              model={config[phase]}
+              onChange={(model) => onChange(setPhaseModel(config, phase, model))}
+            />
+          </div>
+        )}
       </div>
     </article>
   )
@@ -445,7 +384,7 @@ function TranslationEditor({
           className='text-[11px] leading-snug text-muted-foreground'
         >
           {t('native.phaseDescription.translation', {
-            defaultValue: phaseDescriptions.translation,
+            defaultValue: translationDescription,
           })}
         </p>
       </div>
@@ -462,7 +401,7 @@ function TranslationEditor({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {modelOptions.translation.map((option) => (
+            {translationOptions.map((option) => (
               <SelectItem key={option} value={option}>
                 {modelLabels[option]}
               </SelectItem>
@@ -613,12 +552,9 @@ function normalizeTargetLanguage(value: string, languages: TargetLanguageView[])
 
 function hasPipelineModelOptions(model: PipelineModel): boolean {
   switch (model.model) {
-    case 'comic_text_detector':
-    case 'paddleocr_vl_1.6':
-    case 'manga_ocr':
-    case 'baberu_ocr':
-    case 'lama':
-    case 'flux2_klein':
+    case 'paddleocr-vl-1.6':
+    case 'manga-ocr':
+    case 'baberu-ocr':
       return false
     default:
       return true
@@ -634,136 +570,54 @@ function PipelineModelFields({
 }) {
   const { t } = useTranslation()
   switch (model.model) {
-    case 'comic_text_detector':
-    case 'paddleocr_vl_1.6':
-    case 'manga_ocr':
-    case 'baberu_ocr':
-    case 'lama':
-    case 'flux2_klein':
-      return null
-    case 'comic_layout_yolo26s':
+    case 'koharu-layout-rfdetr-seg-2xl':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
-          <NumberSetting
-            label={t('native.model.confidence', { defaultValue: 'Confidence' })}
-            value={model.confidence ?? 0.25}
+          <OptionalNumberSetting
+            label='Text threshold'
+            value={model.text_threshold ?? null}
             min={0}
             max={1}
             step={0.05}
-            onChange={(confidence) => onChange({ ...model, confidence })}
+            onChange={(text_threshold) => onChange({ ...model, text_threshold })}
           />
-          <BooleanSetting
-            label='Text regions'
-            value={model.text_regions ?? false}
-            onChange={(text_regions) => onChange({ ...model, text_regions })}
+          <OptionalNumberSetting
+            label='Onomatopoeia threshold'
+            value={model.onomatopoeia_threshold ?? null}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(onomatopoeia_threshold) =>
+              onChange({ ...model, onomatopoeia_threshold })
+            }
           />
-          <BooleanSetting
-            label='Instance text masks'
-            value={model.text_masks ?? true}
-            onChange={(text_masks) => onChange({ ...model, text_masks })}
+          <OptionalNumberSetting
+            label='Bubble threshold'
+            value={model.bubble_threshold ?? null}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(bubble_threshold) => onChange({ ...model, bubble_threshold })}
+          />
+          <OptionalNumberSetting
+            label='Panel threshold'
+            value={model.panel_threshold ?? null}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(panel_threshold) => onChange({ ...model, panel_threshold })}
           />
         </div>
       )
-    case 'comic_onomatopoeia':
-      return (
-        <div className='grid gap-2 sm:grid-cols-3'>
-          <NumberSetting
-            label='Detection confidence'
-            value={model.detection_threshold ?? 0.5}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(detection_threshold) => onChange({ ...model, detection_threshold })}
-          />
-          <NumberSetting
-            label='Recognition confidence'
-            value={model.recognition_threshold ?? 0.5}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(recognition_threshold) => onChange({ ...model, recognition_threshold })}
-          />
-          <NumberSetting
-            label='Dedup IoU'
-            value={model.dedup_iou ?? 0.3}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(dedup_iou) => onChange({ ...model, dedup_iou })}
-          />
-        </div>
-      )
-    case 'mask_fusion':
+    case 'paddleocr-vl-1.6':
+    case 'manga-ocr':
+    case 'baberu-ocr':
       return null
-    case 'pp_doclayout_v3':
+    case 'font-detector':
       return (
         <div className='max-w-48'>
           <NumberSetting
-            label={t('native.model.confidence', { defaultValue: 'Confidence' })}
-            value={model.confidence ?? 0.25}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(confidence) => onChange({ ...model, confidence })}
-          />
-        </div>
-      )
-    case 'manga_text_mask':
-      return (
-        <div className='grid gap-2 sm:grid-cols-2'>
-          <NumberSetting
-            label={t('native.model.threshold', { defaultValue: 'Threshold' })}
-            value={model.threshold ?? 0.5}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(threshold) => onChange({ ...model, threshold })}
-          />
-          <OptionalNumberSetting
-            label={t('native.model.maxSide', { defaultValue: 'Maximum side' })}
-            value={model.max_side ?? null}
-            min={1}
-            onChange={(max_side) => onChange({ ...model, max_side })}
-          />
-          <BooleanSetting
-            label={t('native.model.horizontalFlip', { defaultValue: 'Horizontal flip' })}
-            value={model.horizontal_flip ?? false}
-            onChange={(horizontal_flip) => onChange({ ...model, horizontal_flip })}
-          />
-          <BooleanSetting
-            label={t('native.model.verticalFlip', { defaultValue: 'Vertical flip' })}
-            value={model.vertical_flip ?? false}
-            onChange={(vertical_flip) => onChange({ ...model, vertical_flip })}
-          />
-        </div>
-      )
-    case 'speech_bubble_yolov8m':
-    case 'speech_bubble_yolo11n':
-      return (
-        <div className='grid gap-2 sm:grid-cols-2'>
-          <OptionalNumberSetting
-            label={t('native.model.confidence', { defaultValue: 'Confidence' })}
-            value={model.confidence ?? null}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(confidence) => onChange({ ...model, confidence })}
-          />
-          <OptionalNumberSetting
-            label={t('native.model.nmsIou', { defaultValue: 'NMS IoU' })}
-            value={model.nms_iou ?? null}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(nms_iou) => onChange({ ...model, nms_iou })}
-          />
-        </div>
-      )
-    case 'font_detector':
-      return (
-        <div className='max-w-48'>
-          <NumberSetting
-            label={t('native.model.topK', { defaultValue: 'Top K' })}
+            label={t('native.model.topK', { defaultValue: 'Top predictions' })}
             value={model.top_k ?? 3}
             min={1}
             step={1}
@@ -771,7 +625,7 @@ function PipelineModelFields({
           />
         </div>
       )
-    case 'aot_inpainting':
+    case 'aot-inpainting':
       return (
         <div className='max-w-48'>
           <NumberSetting
@@ -783,7 +637,100 @@ function PipelineModelFields({
           />
         </div>
       )
-    case 'rorem_mixed':
+    case 'lama':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <label className='grid gap-0.5 text-xs'>
+            <span>HD strategy</span>
+            <Select
+              value={model.hd_strategy ?? 'crop'}
+              onValueChange={(hd_strategy) =>
+                onChange({ ...model, hd_strategy: hd_strategy as LaMaHDStrategy })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='original'>Original</SelectItem>
+                <SelectItem value='resize'>Resize</SelectItem>
+                <SelectItem value='crop'>Crop</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+          <NumberSetting
+            label='Crop trigger size'
+            value={model.hd_strategy_crop_trigger_size ?? 800}
+            min={1}
+            step={1}
+            onChange={(hd_strategy_crop_trigger_size) =>
+              onChange({ ...model, hd_strategy_crop_trigger_size })
+            }
+          />
+          <NumberSetting
+            label='Crop margin'
+            value={model.hd_strategy_crop_margin ?? 128}
+            min={0}
+            step={1}
+            onChange={(hd_strategy_crop_margin) =>
+              onChange({ ...model, hd_strategy_crop_margin })
+            }
+          />
+          <NumberSetting
+            label='Resize limit'
+            value={model.hd_strategy_resize_limit ?? 1280}
+            min={1}
+            step={1}
+            onChange={(hd_strategy_resize_limit) =>
+              onChange({ ...model, hd_strategy_resize_limit })
+            }
+          />
+          <BooleanSetting
+            label='Keep unmasked area'
+            value={model.keep_unmasked_area ?? true}
+            onChange={(keep_unmasked_area) => onChange({ ...model, keep_unmasked_area })}
+          />
+        </div>
+      )
+    case 'flux2-klein':
+      return (
+        <div className='grid gap-2 sm:grid-cols-2'>
+          <TextSetting
+            label='Prompt'
+            value={model.prompt ?? 'Remove the text and reconstruct the background.'}
+            onChange={(prompt) => onChange({ ...model, prompt })}
+          />
+          <OptionalNumberSetting
+            label='Mask crop padding'
+            value={model.padding_mask_crop ?? null}
+            min={0}
+            step={1}
+            onChange={(padding_mask_crop) => onChange({ ...model, padding_mask_crop })}
+          />
+          <NumberSetting
+            label='Strength'
+            value={model.strength ?? 0.8}
+            min={0.01}
+            max={1}
+            step={0.01}
+            onChange={(strength) => onChange({ ...model, strength })}
+          />
+          <NumberSetting
+            label='Inference steps'
+            value={model.num_inference_steps ?? 4}
+            min={1}
+            step={1}
+            onChange={(num_inference_steps) => onChange({ ...model, num_inference_steps })}
+          />
+          <NumberSetting
+            label='Seed'
+            value={model.seed ?? -1}
+            step={1}
+            onChange={(seed) => onChange({ ...model, seed })}
+          />
+        </div>
+      )
+    case 'rorem-mixed':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
           <TextSetting
@@ -1162,62 +1109,62 @@ function BooleanSetting({
 
 function defaultPipelineModel(model: PipelineModel['model']): PipelineModel {
   switch (model) {
-    case 'comic_text_detector':
-      return { model }
-    case 'pp_doclayout_v3':
-      return { model, confidence: 0.25 }
-    case 'comic_layout_yolo26s':
+    case 'koharu-layout-rfdetr-seg-2xl':
       return {
         model,
-        confidence: 0.25,
-        text_regions: false,
-        text_masks: true,
+        text_threshold: null,
+        onomatopoeia_threshold: null,
+        bubble_threshold: null,
+        panel_threshold: null,
       }
-    case 'comic_onomatopoeia':
-      return {
-        model,
-        detection_threshold: 0.5,
-        recognition_threshold: 0.5,
-        dedup_iou: 0.3,
-      }
-    case 'mask_fusion':
+    case 'paddleocr-vl-1.6':
       return { model }
-    case 'manga_text_mask':
-      return { model, threshold: 0.5, max_side: null, horizontal_flip: false, vertical_flip: false }
-    case 'speech_bubble_yolov8m':
-    case 'speech_bubble_yolo11n':
-      return { model, confidence: null, nms_iou: null }
-    case 'paddleocr_vl_1.6':
+    case 'manga-ocr':
       return { model }
-    case 'manga_ocr':
+    case 'baberu-ocr':
       return { model }
-    case 'baberu_ocr':
-      return { model }
-    case 'font_detector':
+    case 'font-detector':
       return { model, top_k: 3 }
     case 'lama':
-      return { model }
-    case 'aot_inpainting':
+      return {
+        model,
+        hd_strategy: 'crop',
+        hd_strategy_crop_trigger_size: 800,
+        hd_strategy_crop_margin: 128,
+        hd_strategy_resize_limit: 1280,
+        keep_unmasked_area: true,
+      }
+    case 'aot-inpainting':
       return { model, max_side: 2048 }
-    case 'flux2_klein':
-      return { model }
-    case 'rorem_mixed':
+    case 'flux2-klein':
+      return {
+        model,
+        prompt: 'Remove the text and reconstruct the background.',
+        padding_mask_crop: null,
+        strength: 0.8,
+        num_inference_steps: 4,
+        seed: -1,
+      }
+    case 'rorem-mixed':
       return { model }
   }
 }
 
-function insertPipelineModel(
-  processors: PipelineModel[],
-  model: PipelineModel['model'],
-): PipelineModel[] {
-  const priority = processorOrder.indexOf(model)
-  const index = processors.findIndex(
-    (processor) => processorOrder.indexOf(processor.model) > priority,
-  )
-  const next = defaultPipelineModel(model)
-  return index < 0
-    ? [...processors, next]
-    : [...processors.slice(0, index), next, ...processors.slice(index)]
+function setPhaseModel(
+  config: PipelineConfig,
+  phase: ModelPhase,
+  model: PipelineModel,
+): PipelineConfig {
+  switch (phase) {
+    case 'detection':
+      return { ...config, detection: model as DetectionModel }
+    case 'ocr':
+      return { ...config, ocr: model as OcrModel }
+    case 'typography':
+      return { ...config, typography: model as TypographyModel }
+    case 'inpainting':
+      return { ...config, inpainting: model as InpaintingModel }
+  }
 }
 
 function defaultProvider(provider: Providers['provider']): Providers {

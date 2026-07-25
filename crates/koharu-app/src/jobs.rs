@@ -8,10 +8,9 @@ use crate::protocol::{ExportFormat, RequestId};
 use anyhow::{Result, anyhow};
 use koharu_config::Config;
 use koharu_desktop::DesktopHandle;
-use koharu_pipeline::{CancellationToken, Force, Pipeline, PipelineConfig, RunTarget, Scope};
+use koharu_pipeline::{CancellationToken, Pipeline, PipelineConfig, RunTarget, Scope};
 use koharu_renderer::Renderer;
 use koharu_scene::{PageId, Revision};
-use koharu_translator::TranslationConfig;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 pub enum NativeEvent {
@@ -53,7 +52,6 @@ pub struct PipelineRequest {
     pub path: PathBuf,
     pub scope: Scope,
     pub target: RunTarget,
-    pub force: Force,
 }
 
 pub struct ExportRequest {
@@ -91,7 +89,10 @@ pub struct Background {
 }
 
 impl Background {
-    pub fn new(config: Config<PipelineConfig>, translation: Config<TranslationConfig>) -> Self {
+    pub fn new(
+        config: Config<PipelineConfig>,
+        translation: Config<koharu_translator::TranslationConfig>,
+    ) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
         let worker = tokio::spawn(run_jobs(receiver, config, translation));
         Self {
@@ -185,7 +186,7 @@ impl Drop for Background {
 async fn run_jobs(
     mut receiver: mpsc::UnboundedReceiver<Job>,
     config: Config<PipelineConfig>,
-    translation: Config<TranslationConfig>,
+    translation: Config<koharu_translator::TranslationConfig>,
 ) {
     let mut renderer = None::<Renderer>;
     let pipeline = Pipeline::new(config, translation);
