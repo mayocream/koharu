@@ -9,7 +9,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, Module, ModuleT},
 };
 
@@ -23,6 +23,11 @@ pub(super) struct Model {
 impl Model {
     pub(super) fn new(device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let root = &vs.root() / "module";
         let backbone = Backbone::new(&(&root / "backbone"));
         let proposal = SegmentationHead::new(&(&root / "proposal" / "head"));
@@ -36,11 +41,16 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub(super) fn forward(&self, pixel_values: &Tensor) -> Tensor {
-        let features = self.backbone.forward(pixel_values);
+        let features = self.backbone.forward(&pixel_values.to_kind(self.vs.kind()));
         self.proposal.forward(&features)
     }
 }

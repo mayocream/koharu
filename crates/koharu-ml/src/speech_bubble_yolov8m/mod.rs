@@ -18,8 +18,8 @@ pub use self::{
 use self::model::Model;
 
 koharu_runtime::huggingface! {
-    CONFIG => "mayocream/speech-bubble-segmentation" => "config.json",
-    WEIGHTS => "mayocream/speech-bubble-segmentation" => "model.safetensors",
+    CONFIG => "mayocream/speech-bubble-segmentation" => "387bc1e93f3d24702bc8609798b6a13b37420edc" => "config.json",
+    WEIGHTS => "mayocream/speech-bubble-segmentation" => "387bc1e93f3d24702bc8609798b6a13b37420edc" => "model.safetensors",
 }
 
 #[derive(Debug)]

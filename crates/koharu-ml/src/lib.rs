@@ -19,6 +19,7 @@ pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
 pub mod flux2_klein;
 pub mod font_detector;
+pub mod koharu_layout_rfdetr_seg_2xl;
 pub mod lama;
 pub mod llm;
 pub mod manga_ocr;

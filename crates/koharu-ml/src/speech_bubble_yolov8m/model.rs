@@ -28,6 +28,11 @@ pub struct Model {
 impl Model {
     pub fn new(config: &YoloV8mSpeechBubbleConfig, device: Device) -> Result<Self> {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let model = YoloV8Seg::load(&(&vs.root() / "model"), config)?;
         vs.freeze();
         Ok(Self { vs, model })
@@ -35,11 +40,16 @@ impl Model {
 
     pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Output {
-        self.model.forward(pixel_values)
+        self.model.forward(&pixel_values.to_kind(self.vs.kind()))
     }
 }
 

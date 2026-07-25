@@ -16,12 +16,12 @@ use self::{
 };
 
 koharu_runtime::huggingface! {
-    CONFIG => "genshiai-daichi/baberu-ocr" => "config.json",
-    GENERATION_CONFIG => "genshiai-daichi/baberu-ocr" => "generation_config.json",
-    WEIGHTS => "genshiai-daichi/baberu-ocr" => "model.safetensors",
-    VOCABULARY => "genshiai-daichi/baberu-ocr" => "tokenizer/vocab.json",
-    VISION_CONFIG => "facebook/dinov2-base" => "config.json",
-    VISION_PROCESSOR => "facebook/dinov2-base" => "preprocessor_config.json",
+    CONFIG => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "config.json",
+    GENERATION_CONFIG => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "generation_config.json",
+    WEIGHTS => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "model.safetensors",
+    VOCABULARY => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "tokenizer/vocab.json",
+    VISION_CONFIG => "facebook/dinov2-base" => "f9e44c814b77203eaa57a6bdbbd535f21ede1415" => "config.json",
+    VISION_PROCESSOR => "facebook/dinov2-base" => "f9e44c814b77203eaa57a6bdbbd535f21ede1415" => "preprocessor_config.json",
 }
 
 #[derive(Debug)]

@@ -29,6 +29,11 @@ pub struct Model {
 impl Model {
     pub fn new(config: RTDetrV2Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let model = RTDetrV2ForObjectDetection::new(&vs.root(), &config);
         vs.freeze();
         Self { vs, model }
@@ -36,11 +41,16 @@ impl Model {
 
     pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> RTDetrV2ObjectDetectionOutput {
-        self.model.forward(pixel_values)
+        self.model.forward(&pixel_values.to_kind(self.vs.kind()))
     }
 }
 

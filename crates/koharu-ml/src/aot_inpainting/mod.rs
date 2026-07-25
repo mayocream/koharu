@@ -11,7 +11,7 @@ use koharu_torch::Device;
 use self::{model::Model, processor::Processor};
 
 koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/aot-inpainting" => "model.safetensors",
+    WEIGHTS => "mayocream/aot-inpainting" => "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" => "model.safetensors",
 }
 
 #[derive(Debug)]

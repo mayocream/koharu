@@ -11,7 +11,7 @@ pub use self::processor::{MangaTextMask, MangaTextMaskCleaningOptions};
 use self::{model::Model, processor::Processor};
 
 koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/manga-text-segmentation-2025" => "model.safetensors",
+    WEIGHTS => "mayocream/manga-text-segmentation-2025" => "efd866e3ac6595ea20722f35ae343c403056ba76" => "model.safetensors",
 }
 
 #[derive(Debug)]

@@ -10,6 +10,7 @@ static HUGGINGFACE_DIR: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("hug
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct HuggingFace {
     pub repo: String,
+    pub revision: String,
     pub filename: String,
 }
 
@@ -17,13 +18,18 @@ pub struct HuggingFace {
 impl Package for HuggingFace {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
         let repo = self.repo.replace('/', "--");
-        let path = HUGGINGFACE_DIR.join(&repo).join(&self.filename);
+        let revision = self.revision.replace('/', "--");
+        let path = HUGGINGFACE_DIR
+            .join(repo)
+            .join("revisions")
+            .join(revision)
+            .join(&self.filename);
         if path.exists() {
             return Ok(path);
         }
 
         let client = Client::new()?;
-        let url = huggingface_url(&self.repo, &self.filename);
+        let url = huggingface_url(&self.repo, &self.revision, &self.filename);
         let parent = path
             .parent()
             .ok_or_else(|| anyhow::anyhow!("invalid Hugging Face package path"))?;
@@ -36,10 +42,11 @@ impl Package for HuggingFace {
     }
 }
 
-/// Resolves a HuggingFace package given a repository and filename, returning the local path to the downloaded file.
-pub async fn resolve((repo, filename): (&str, &str)) -> anyhow::Result<PathBuf> {
+/// Resolves a Hugging Face package at an immutable revision.
+pub async fn resolve((repo, revision, filename): (&str, &str, &str)) -> anyhow::Result<PathBuf> {
     let package = HuggingFace {
         repo: repo.to_owned(),
+        revision: revision.to_owned(),
         filename: filename.to_owned(),
     };
     Package::resolve(&package).await
@@ -48,15 +55,16 @@ pub async fn resolve((repo, filename): (&str, &str)) -> anyhow::Result<PathBuf> 
 /// Macro to define HuggingFace packages in a concise manner.
 #[macro_export]
 macro_rules! huggingface {
-    ($($vis:vis $name:ident => $repo:expr => $filename:expr),+ $(,)?) => {
+    ($($vis:vis $name:ident => $repo:expr => $revision:expr => $filename:expr),+ $(,)?) => {
         $(
-            $vis const $name: (&'static str, &'static str) = ($repo, $filename);
+            $vis const $name: (&'static str, &'static str, &'static str) =
+                ($repo, $revision, $filename);
         )+
     };
-    ($($repo:expr => $filename:expr),* $(,)?) => {
+    ($($repo:expr => $revision:expr => $filename:expr),* $(,)?) => {
         [
             $(
-                ($repo, $filename)
+                ($repo, $revision, $filename)
             ),*
         ]
     };

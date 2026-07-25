@@ -13,7 +13,7 @@ pub use self::config::{HDStrategy, InpaintRequest};
 use self::{config::FFCResNetGeneratorConfig, model::Model, processor::InpaintModel};
 
 koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/lama-manga" => "lama-manga.safetensors",
+    WEIGHTS => "mayocream/lama-manga" => "f91c85b26913b3e83f9877867b4c336da3675238" => "lama-manga.safetensors",
 }
 
 #[derive(Debug)]

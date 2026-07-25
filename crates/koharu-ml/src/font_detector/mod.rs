@@ -16,8 +16,8 @@ pub use processor::{FontPrediction, NamedFontPrediction, TextDirection, TopFont}
 use self::{model::Model, processor::Processor};
 
 koharu_runtime::huggingface! {
-    WEIGHTS => "fffonion/yuzumarker-font-detection" => "yuzumarker-font-detection.safetensors",
-    LABELS => "fffonion/yuzumarker-font-detection" => "font-labels-ex.json",
+    WEIGHTS => "fffonion/yuzumarker-font-detection" => "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" => "yuzumarker-font-detection.safetensors",
+    LABELS => "fffonion/yuzumarker-font-detection" => "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" => "font-labels-ex.json",
 }
 
 #[derive(Debug)]

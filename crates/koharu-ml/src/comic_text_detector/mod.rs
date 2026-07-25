@@ -14,9 +14,9 @@ use self::{
 };
 
 koharu_runtime::huggingface! {
-    YOLO_WEIGHTS => "mayocream/comic-text-detector" => "yolo-v5.safetensors",
-    UNET_WEIGHTS => "mayocream/comic-text-detector" => "unet.safetensors",
-    DBNET_WEIGHTS => "mayocream/comic-text-detector" => "dbnet.safetensors",
+    YOLO_WEIGHTS => "mayocream/comic-text-detector" => "15ade029f4dabd502bc97af6051c8b9f2bec24d5" => "yolo-v5.safetensors",
+    UNET_WEIGHTS => "mayocream/comic-text-detector" => "15ade029f4dabd502bc97af6051c8b9f2bec24d5" => "unet.safetensors",
+    DBNET_WEIGHTS => "mayocream/comic-text-detector" => "15ade029f4dabd502bc97af6051c8b9f2bec24d5" => "dbnet.safetensors",
 }
 
 #[derive(Debug)]

@@ -108,3 +108,7 @@ harness = false
 [[bench]]
 name = "font_detector"
 harness = false
+
+[[bench]]
+name = "koharu_layout_rfdetr_seg_2xl"
+harness = false

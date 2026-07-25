@@ -22,9 +22,11 @@ pub struct Model {
 impl Model {
     pub fn new(config: &FFCResNetGeneratorConfig, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        if device.is_cuda() {
-            vs.set_kind(Kind::BFloat16);
-        }
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let generator = FFCResNetGenerator::new(&vs.root(), config);
         vs.freeze();
         Self { vs, generator }
@@ -32,15 +34,19 @@ impl Model {
 
     pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.set_kind(Kind::BFloat16);
-        }
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {
-        let inverse_mask = mask.ones_like() - mask;
-        let masked_image = image * &inverse_mask;
+        let image = image.to_kind(self.vs.kind());
+        let mask = mask.to_kind(self.vs.kind());
+        let inverse_mask = mask.ones_like() - &mask;
+        let masked_image = &image * &inverse_mask;
         let input = Tensor::cat(&[masked_image, mask.shallow_clone()], 1);
         let predicted = self.generator.forward(&input);
         predicted * mask + inverse_mask * image

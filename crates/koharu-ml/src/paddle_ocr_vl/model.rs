@@ -26,9 +26,11 @@ pub(super) struct Model {
 impl Model {
     pub(super) fn new(config: PaddleOCRVLConfig, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        if device.is_cuda() {
-            vs.set_kind(Kind::BFloat16);
-        }
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let root = vs.root();
 
         // Transformers renames the checkpoint's `visual`, `model`, and `mlp_AR`
@@ -57,9 +59,11 @@ impl Model {
 
     pub(super) fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if !self.vs.device().is_cuda() {
-            self.vs.float();
-        }
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
@@ -81,7 +85,8 @@ impl Model {
             .to_device(device);
         let mut inputs_embeds = self.language_model.embed_tokens(&ids);
 
-        let image_features = self.get_image_features(pixel_values, image_grid_thw);
+        let image_features =
+            self.get_image_features(&pixel_values.to_kind(self.vs.kind()), image_grid_thw);
         let image_mask = ids
             .eq(self.config.image_token_id)
             .unsqueeze(-1)

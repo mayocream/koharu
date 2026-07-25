@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, Module},
 };
 
@@ -24,6 +24,11 @@ pub(super) struct Model {
 impl Model {
     pub(super) fn new(device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let root = vs.root();
         let head = [
             GatedWSConvPadded::new(&(&root / "head" / 0), 4, 32, 3, 1, 1),
@@ -45,10 +50,17 @@ impl Model {
 
     pub(super) fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub(super) fn forward(&self, image: &Tensor, mask: &Tensor) -> Tensor {
+        let image = image.to_kind(self.vs.kind());
+        let mask = mask.to_kind(self.vs.kind());
         let x = Tensor::cat(&[mask, image], 1);
         let x = relu_nf(self.head[0].forward(&x));
         let x = relu_nf(self.head[1].forward(&x));

@@ -11,7 +11,7 @@ use imageproc::{
     distance_transform::Norm,
     morphology::{Mask, dilate, grayscale_dilate, grayscale_erode},
 };
-use koharu_torch::{Device, Kind, Tensor, autocast};
+use koharu_torch::{Device, Kind, Tensor};
 
 use super::model::Model;
 
@@ -42,14 +42,7 @@ impl Processor {
         max_side: Option<u32>,
     ) -> Result<MangaTextMask> {
         let (input, geometry) = self.preprocess(image, max_side)?;
-        let infer = |input: &Tensor| {
-            // The Python implementation uses CUDA AMP for every forward pass.
-            if self.device.is_cuda() {
-                autocast(true, || model.forward(input).sigmoid())
-            } else {
-                model.forward(input).sigmoid()
-            }
-        };
+        let infer = |input: &Tensor| model.forward(input).sigmoid();
 
         let mut probabilities = infer(&input);
         let mut steps = 1;

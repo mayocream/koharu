@@ -12,7 +12,7 @@ pub use self::processor::Detection;
 use self::{config::Config, model::Model, processor::Processor};
 
 koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/coo-comic-onomatopoeia-safetensors" => "mtsv3/model.safetensors",
+    WEIGHTS => "mayocream/coo-comic-onomatopoeia-safetensors" => "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" => "mtsv3/model.safetensors",
 }
 
 /// COO's reported-best MTSv3 comic onomatopoeia detector.

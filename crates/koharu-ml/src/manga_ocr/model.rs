@@ -41,6 +41,11 @@ impl Model {
         );
 
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let encoder = ViTModel::new(&(&vs.root() / "encoder"), &config.encoder);
         let decoder = BertLMHeadModel::new(&(&vs.root() / "decoder"), &config.decoder);
         vs.freeze();
@@ -63,6 +68,11 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
@@ -72,7 +82,7 @@ impl Model {
             size.len() == 4 && size[0] == 1,
             "Manga OCR expects one image"
         );
-        let encoder_hidden_states = self.encoder.forward(pixel_values);
+        let encoder_hidden_states = self.encoder.forward(&pixel_values.to_kind(self.vs.kind()));
         self.beam_search(&encoder_hidden_states)
     }
 
@@ -546,7 +556,8 @@ impl ViTAttention {
         let key = self.transpose_for_scores(&self.key.forward(hidden_states));
         let value = self.transpose_for_scores(&self.value.forward(hidden_states));
         let probabilities = (query.matmul(&key.transpose(-1, -2)) / (self.head_dim as f64).sqrt())
-            .softmax(-1, Kind::Float);
+            .softmax(-1, Kind::Float)
+            .to_kind(value.kind());
         let size = hidden_states.size();
         let context = probabilities
             .matmul(&value)
@@ -910,7 +921,8 @@ impl BertSelfAttention {
             }
         };
         let probabilities = (query.matmul(&key.transpose(-1, -2)) / (self.head_dim as f64).sqrt())
-            .softmax(-1, Kind::Float);
+            .softmax(-1, Kind::Float)
+            .to_kind(value.kind());
         let size = hidden_states.size();
         let context = probabilities
             .matmul(&value)

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Tensor,
+    Device, Kind, Tensor,
     nn::{self, ModuleT},
 };
 
@@ -22,6 +22,11 @@ pub(super) struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         // The published safetensors retain Lightning's `model` wrapper and
         // torch.compile's `_orig_mod` wrapper from the upstream checkpoint.
         let model = koharu_torch::vision::resnet::resnet50(
@@ -37,11 +42,18 @@ impl Model {
 
     pub fn load_weights(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Tensor {
-        let output = self.model.forward_t(pixel_values, false);
+        let output = self
+            .model
+            .forward_t(&pixel_values.to_kind(self.vs.kind()), false);
         // Upstream leaves classification logits untouched and applies sigmoid
         // only to the ten regression values.
         let classification = output.narrow(-1, 0, FONT_COUNT + 2);

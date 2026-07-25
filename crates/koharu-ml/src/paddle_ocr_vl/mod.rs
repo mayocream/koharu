@@ -18,10 +18,10 @@ pub use self::{
 use self::{model::Model, processor::Processor};
 
 koharu_runtime::huggingface! {
-    CONFIG => "PaddlePaddle/PaddleOCR-VL-1.6" => "config.json",
-    WEIGHTS => "PaddlePaddle/PaddleOCR-VL-1.6" => "model.safetensors",
-    PROCESSOR => "PaddlePaddle/PaddleOCR-VL-1.6" => "preprocessor_config.json",
-    TOKENIZER => "PaddlePaddle/PaddleOCR-VL-1.6" => "tokenizer.json",
+    CONFIG => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "config.json",
+    WEIGHTS => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "model.safetensors",
+    PROCESSOR => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "preprocessor_config.json",
+    TOKENIZER => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "tokenizer.json",
 }
 
 #[derive(Debug)]

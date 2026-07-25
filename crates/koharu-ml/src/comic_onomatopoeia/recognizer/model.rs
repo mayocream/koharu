@@ -30,6 +30,11 @@ pub(super) struct Model {
 impl Model {
     pub(super) fn new(config: &Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let root = &vs.root() / "module";
         let transformation = TpsSpatialTransformerNetwork::new(
             &(&root / "Transformation"),
@@ -38,6 +43,7 @@ impl Model {
             config.image_width,
             config.input_channels,
             device,
+            vs.kind(),
         );
         let feature_extraction = ResNet::new(
             &(&root / "FeatureExtraction" / "ConvNet"),
@@ -78,11 +84,16 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub(super) fn forward(&self, image: &Tensor) -> Tensor {
-        let image = self.transformation.forward(image);
+        let image = self.transformation.forward(&image.to_kind(self.vs.kind()));
         let visual_feature = self.feature_extraction.forward(&image);
         let visual_feature = if self.two_dimensional {
             let size = visual_feature.size();
@@ -120,6 +131,7 @@ impl TpsSpatialTransformerNetwork {
         image_width: i64,
         input_channels: i64,
         device: Device,
+        kind: Kind,
     ) -> Self {
         Self {
             localization_network: LocalizationNetwork::new(
@@ -127,7 +139,13 @@ impl TpsSpatialTransformerNetwork {
                 num_fiducial,
                 input_channels,
             ),
-            grid_generator: GridGenerator::new(num_fiducial, image_height, image_width, device),
+            grid_generator: GridGenerator::new(
+                num_fiducial,
+                image_height,
+                image_width,
+                device,
+                kind,
+            ),
             image_height,
             image_width,
         }
@@ -224,7 +242,13 @@ struct GridGenerator {
 }
 
 impl GridGenerator {
-    fn new(num_fiducial: i64, image_height: i64, image_width: i64, device: Device) -> Self {
+    fn new(
+        num_fiducial: i64,
+        image_height: i64,
+        image_width: i64,
+        device: Device,
+        kind: Kind,
+    ) -> Self {
         let half = num_fiducial / 2;
         let mut control_points = Vec::with_capacity((num_fiducial * 2) as usize);
         for y in [-1.0_f64, 1.0] {
@@ -274,7 +298,7 @@ impl GridGenerator {
         let inverse_delta_c = Tensor::from_slice(&delta_c)
             .view([delta_size, delta_size])
             .inverse()
-            .to_kind(Kind::Float)
+            .to_kind(kind)
             .to_device(device);
 
         let mut p_hat = Vec::with_capacity((image_height * image_width * delta_size) as usize);
@@ -293,7 +317,7 @@ impl GridGenerator {
         }
         let p_hat = Tensor::from_slice(&p_hat)
             .view([image_height * image_width, delta_size])
-            .to_kind(Kind::Float)
+            .to_kind(kind)
             .to_device(device);
         Self {
             inverse_delta_c,
@@ -719,7 +743,7 @@ impl AttentionCell {
         let energy = self
             .score
             .forward(&(batch_h_projection + previous_hidden_projection).tanh());
-        let alpha = energy.softmax(1, Kind::Float);
+        let alpha = energy.softmax(1, Kind::Float).to_kind(batch_h.kind());
         let context = alpha.permute([0, 2, 1]).bmm(batch_h).squeeze_dim(1);
         let input = Tensor::cat(&[context, char_embeddings.shallow_clone()], 1);
         input.lstm_cell(

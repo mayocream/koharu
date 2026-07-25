@@ -23,8 +23,8 @@ pub use self::{
 use self::model::Model;
 
 koharu_runtime::huggingface! {
-    CONFIG => "mayocream/comic-layout-yolo26s" => "config.json",
-    WEIGHTS => "mayocream/comic-layout-yolo26s" => "model.safetensors",
+    CONFIG => "mayocream/comic-layout-yolo26s" => "90f556d6973a8abdefacaace1e7eed4adbcd33a8" => "config.json",
+    WEIGHTS => "mayocream/comic-layout-yolo26s" => "90f556d6973a8abdefacaace1e7eed4adbcd33a8" => "model.safetensors",
 }
 
 #[derive(Debug)]

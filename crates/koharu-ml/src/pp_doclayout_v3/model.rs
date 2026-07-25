@@ -30,6 +30,11 @@ pub struct Model {
 impl Model {
     pub fn new(config: PPDocLayoutV3Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let model = PPDocLayoutV3Model::new(&(&vs.root() / "model"), &config);
         vs.freeze();
         Self { vs, model }
@@ -37,11 +42,16 @@ impl Model {
 
     pub fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub fn forward(&self, pixel_values: &Tensor) -> Output {
-        let outputs = self.model.forward(pixel_values);
+        let outputs = self.model.forward(&pixel_values.to_kind(self.vs.kind()));
         let pred_boxes = outputs.intermediate_reference_points.select(1, -1);
         let logits = outputs.intermediate_logits.select(1, -1);
         let order_logits = outputs.out_order_logits.select(1, -1);

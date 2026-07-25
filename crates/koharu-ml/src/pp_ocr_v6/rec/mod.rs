@@ -15,9 +15,9 @@ pub use self::{
 use self::model::Model;
 
 koharu_runtime::huggingface! {
-    CONFIG => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "config.json",
-    WEIGHTS => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "model.safetensors",
-    PROCESSOR => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "preprocessor_config.json",
+    CONFIG => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" => "config.json",
+    WEIGHTS => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" => "model.safetensors",
+    PROCESSOR => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" => "preprocessor_config.json",
 }
 
 #[derive(Debug)]

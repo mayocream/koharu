@@ -22,9 +22,9 @@ use self::{
 pub use self::processor::{Flux2KleinInpaintOptions, Flux2KleinOptions};
 
 koharu_runtime::huggingface! {
-    TRANSFORMER_WEIGHTS => "unsloth/FLUX.2-klein-4B-GGUF" => "flux-2-klein-4b-Q4_K_M.gguf",
-    VAE_WEIGHTS => "black-forest-labs/FLUX.2-small-decoder" => "full_encoder_small_decoder.safetensors",
-    TEXT_ENCODER_WEIGHTS => "unsloth/Qwen3-4B-GGUF" => "Qwen3-4B-Q4_K_M.gguf",
+    TRANSFORMER_WEIGHTS => "unsloth/FLUX.2-klein-4B-GGUF" => "0084d1df98e2e2137fe776d55170bc4792ec1d66" => "flux-2-klein-4b-Q4_K_M.gguf",
+    VAE_WEIGHTS => "black-forest-labs/FLUX.2-small-decoder" => "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a" => "full_encoder_small_decoder.safetensors",
+    TEXT_ENCODER_WEIGHTS => "unsloth/Qwen3-4B-GGUF" => "22c9fc8a8c7700b76a1789366280a6a5a1ad1120" => "Qwen3-4B-Q4_K_M.gguf",
 }
 
 #[derive(Debug)]

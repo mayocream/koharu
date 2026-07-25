@@ -24,6 +24,11 @@ pub(crate) struct Model {
 impl Model {
     pub(crate) fn new(config: &PPOCRV6MediumRecConfig, device: koharu_torch::Device) -> Self {
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let backbone = PPLCNetV4Backbone::new(
             &(&vs.root() / "model" / "backbone"),
             &config.backbone_config,
@@ -35,11 +40,16 @@ impl Model {
 
     pub(crate) fn load_safetensors(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         Ok(())
     }
 
     pub(crate) fn forward(&self, pixel_values: &Tensor) -> Tensor {
-        let feature_maps = self.backbone.forward(pixel_values);
+        let feature_maps = self.backbone.forward(&pixel_values.to_kind(self.vs.kind()));
         let hidden_states = feature_maps.last().expect("PP-LCNetV4 stage4 feature");
         let hidden_states =
             hidden_states.avg_pool2d([3, 2], [3, 2], [0, 0], false, true, None::<i64>);

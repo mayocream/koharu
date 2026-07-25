@@ -12,10 +12,10 @@ pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
 use self::{model::Model, processor::Tokenizer};
 
 koharu_runtime::huggingface! {
-    CONFIG => "mayocream/manga-ocr" => "config.json",
-    WEIGHTS => "mayocream/manga-ocr" => "model.safetensors",
-    PROCESSOR => "mayocream/manga-ocr" => "preprocessor_config.json",
-    VOCABULARY => "mayocream/manga-ocr" => "vocab.txt",
+    CONFIG => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "config.json",
+    WEIGHTS => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "model.safetensors",
+    PROCESSOR => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "preprocessor_config.json",
+    VOCABULARY => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "vocab.txt",
 }
 
 #[derive(Debug)]

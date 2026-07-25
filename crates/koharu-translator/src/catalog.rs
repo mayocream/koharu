@@ -27,6 +27,7 @@ pub struct LocalModelDescriptor {
     pub model: LocalModel,
     pub id: &'static str,
     pub repository: &'static str,
+    pub revision: &'static str,
     pub filename: &'static str,
     pub target_languages: SupportedLanguages,
 }
@@ -38,6 +39,7 @@ macro_rules! define_local_models {
         $variant:ident => {
             id: $id:literal,
             repository: $repository:literal,
+            revision: $revision:literal,
             filename: $filename:literal,
             languages: $languages:expr
         };
@@ -57,6 +59,7 @@ macro_rules! define_local_models {
                         model: self,
                         id: $id,
                         repository: $repository,
+                        revision: $revision,
                         filename: $filename,
                         target_languages: $languages,
                     },)+
@@ -72,6 +75,7 @@ define_local_models! {
     Lfm2_5_1_2bInstruct => {
         id: "lfm2.5-1.2b-instruct",
         repository: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+        revision: "047e06635fbe71469926b35ea414537245218200",
         filename: "LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
         languages: SupportedLanguages::Limited(&[
             Language::English,
@@ -88,6 +92,7 @@ define_local_models! {
     Ministral3_8bInstruct => {
         id: "ministral-3-8b-instruct",
         repository: "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+        revision: "0102285ad796bd99af90f58de616092e5630e970",
         filename: "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf",
         languages: SupportedLanguages::Limited(&[
             Language::English,
@@ -106,138 +111,161 @@ define_local_models! {
     Gemma4E2bIt => {
         id: "gemma4-e2b-it",
         repository: "unsloth/gemma-4-E2B-it-qat-GGUF",
+        revision: "66a399f68ddd113b06dff02fca9523e55465d11d",
         filename: "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4E4bIt => {
         id: "gemma4-e4b-it",
         repository: "unsloth/gemma-4-E4B-it-qat-GGUF",
+        revision: "8c5a9e4fd5482e2be20fe0bf013b4c262a8f4265",
         filename: "gemma-4-E4B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_12bIt => {
         id: "gemma4-12b-it",
         repository: "unsloth/gemma-4-12B-it-qat-GGUF",
+        revision: "980b060c40a8539ac159e0501a3e0f66a6365af3",
         filename: "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_26bA4bIt => {
         id: "gemma4-26b-a4b-it",
         repository: "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+        revision: "7b92b5b28818151e8669af2e45e88d6086f490dd",
         filename: "gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_31bIt => {
         id: "gemma4-31b-it",
         repository: "unsloth/gemma-4-31B-it-qat-GGUF",
+        revision: "43cc1aeb31adf47ec06a854507ce552cd9862e6f",
         filename: "gemma-4-31B-it-qat-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4E2bUncensored => {
         id: "gemma4-e2b-uncensored",
         repository: "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+        revision: "da8593c3e407afcd3e7da94ff2d69d77e2a28a48",
         filename: "Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4E4bUncensored => {
         id: "gemma4-e4b-uncensored",
         repository: "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+        revision: "45b6a334b4bcd1d7f37179df58b3b1d66a184e5d",
         filename: "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_12bUncensored => {
         id: "gemma4-12b-uncensored",
         repository: "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+        revision: "ae8045ac2bd216293ca49a3065da2c942dde4b68",
         filename: "Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_26bA4bUncensored => {
         id: "gemma4-26b-a4b-uncensored",
         repository: "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        revision: "f9093662a2e7ae0503f637088bc96f77a1a70c83",
         filename: "Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Gemma4_31bUncensored => {
         id: "gemma4-31b-uncensored",
         repository: "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        revision: "9654466e82d83f5ebfe1518a369bc5900873abb1",
         filename: "Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_0_8b => {
         id: "qwen3.5-0.8b",
         repository: "unsloth/Qwen3.5-0.8B-GGUF",
+        revision: "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
         filename: "Qwen3.5-0.8B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_2b => {
         id: "qwen3.5-2b",
         repository: "unsloth/Qwen3.5-2B-GGUF",
+        revision: "f6d5376be1edb4d416d56da11e5397a961aca8ae",
         filename: "Qwen3.5-2B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_4b => {
         id: "qwen3.5-4b",
         repository: "unsloth/Qwen3.5-4B-GGUF",
+        revision: "e87f176479d0855a907a41277aca2f8ee7a09523",
         filename: "Qwen3.5-4B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_9b => {
         id: "qwen3.5-9b",
         repository: "unsloth/Qwen3.5-9B-GGUF",
+        revision: "3885219b6810b007914f3a7950a8d1b469d598a5",
         filename: "Qwen3.5-9B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_27b => {
         id: "qwen3.5-27b",
         repository: "unsloth/Qwen3.5-27B-GGUF",
+        revision: "3221f178a6b842d04f1fb42f1c413534adcc0a6a",
         filename: "Qwen3.5-27B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_35bA3b => {
         id: "qwen3.5-35b-a3b",
         repository: "unsloth/Qwen3.5-35B-A3B-GGUF",
+        revision: "bc014a17be43adabd7066b7a86075ff935c6a4e2",
         filename: "Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_27b => {
         id: "qwen3.6-27b",
         repository: "unsloth/Qwen3.6-27B-GGUF",
+        revision: "82d411acf4a06cfb8d9b073a5211bf410bfc29bf",
         filename: "Qwen3.6-27B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_35bA3b => {
         id: "qwen3.6-35b-a3b",
         repository: "unsloth/Qwen3.6-35B-A3B-GGUF",
+        revision: "a483e9e6cbd595906af30beda3187c2663a1118c",
         filename: "Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_2bUncensored => {
         id: "qwen3.5-2b-uncensored",
         repository: "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+        revision: "2bcf35c1ebf62c837c12c1aa90b578ff4717e831",
         filename: "Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_4bUncensored => {
         id: "qwen3.5-4b-uncensored",
         repository: "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+        revision: "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
         filename: "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_5_9bUncensored => {
         id: "qwen3.5-9b-uncensored",
         repository: "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+        revision: "0a41c68809d375475f954be12ba7c40efa56c2a9",
         filename: "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_27bUncensored => {
         id: "qwen3.6-27b-uncensored",
         repository: "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced",
+        revision: "9a28c2fbd15f21fb8ed204074c6f58d5bc889941",
         filename: "Qwen3.6-27B-Uncensored-HauhauCS-Balanced-Q4_K_P.gguf",
         languages: SupportedLanguages::All
     };
     Qwen3_6_35bA3bUncensored => {
         id: "qwen3.6-35b-a3b-uncensored",
         repository: "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+        revision: "f12a584fecbeb5f20001130d8ecd66c9327ae685",
         filename: "Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf",
         languages: SupportedLanguages::All
     };
@@ -251,8 +279,12 @@ impl LocalModel {
 
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
         let descriptor = self.descriptor();
-        koharu_runtime::package::huggingface::resolve((descriptor.repository, descriptor.filename))
-            .await
+        koharu_runtime::package::huggingface::resolve((
+            descriptor.repository,
+            descriptor.revision,
+            descriptor.filename,
+        ))
+        .await
     }
 
     #[must_use]
@@ -554,6 +586,8 @@ mod tests {
         for (index, model) in local_models().iter().enumerate() {
             assert!(!model.id.is_empty());
             assert!(!model.repository.is_empty());
+            assert_eq!(model.revision.len(), 40);
+            assert!(model.revision.bytes().all(|byte| byte.is_ascii_hexdigit()));
             assert!(!model.filename.is_empty());
             assert!(
                 !local_models()[..index]

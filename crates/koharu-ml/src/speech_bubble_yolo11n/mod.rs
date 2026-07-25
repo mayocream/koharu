@@ -18,8 +18,8 @@ pub use self::{
 use self::model::Model;
 
 koharu_runtime::huggingface! {
-    CONFIG => "mayocream/manga109-segmentation-bubble" => "config.json",
-    WEIGHTS => "mayocream/manga109-segmentation-bubble" => "model.safetensors",
+    CONFIG => "mayocream/manga109-segmentation-bubble" => "4c9d7cbfa9905f7003677fa1130b48b93365a16a" => "config.json",
+    WEIGHTS => "mayocream/manga109-segmentation-bubble" => "4c9d7cbfa9905f7003677fa1130b48b93365a16a" => "model.safetensors",
 }
 
 #[derive(Debug)]

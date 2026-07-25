@@ -14,7 +14,7 @@ pub use self::processor::Recognition;
 use self::{config::Config, model::Model, processor::Processor};
 
 koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/coo-comic-onomatopoeia-safetensors" => "trba-rot-sar-hardroi-2d/model.safetensors",
+    WEIGHTS => "mayocream/coo-comic-onomatopoeia-safetensors" => "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" => "trba-rot-sar-hardroi-2d/model.safetensors",
 }
 
 /// COO's reported-best TRBA+2D comic onomatopoeia recognizer.
@@ -54,5 +54,26 @@ impl ComicOnomatopoeiaRecognizer {
             let logits = self.model.forward(&pixel_values);
             self.processor.postprocess(&logits)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use anyhow::Result;
+
+    use super::ComicOnomatopoeiaRecognizer;
+
+    #[tokio::test]
+    #[ignore = "downloads the checkpoint and requires the LibTorch CUDA runtime"]
+    async fn checkpoint_inference_smoke_test() -> Result<()> {
+        crate::init_torch().await?;
+        let model = ComicOnomatopoeiaRecognizer::load(crate::Device::cuda(0)).await?;
+        let image = image::open(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png"),
+        )?;
+        assert!(!model.inference(&image)?.text.is_empty());
+        Ok(())
     }
 }

@@ -31,14 +31,29 @@ pub struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut blk_det_vs = nn::VarStore::new(device);
+        blk_det_vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let blk_det = YoloV5::new(&blk_det_vs.root());
         blk_det_vs.freeze();
 
         let mut text_seg_vs = nn::VarStore::new(device);
+        text_seg_vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let text_seg = UnetHead::new(&text_seg_vs.root());
         text_seg_vs.freeze();
 
         let mut text_det_vs = nn::VarStore::new(device);
+        text_det_vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let text_det = DBHead::new(&text_det_vs.root());
         text_det_vs.freeze();
 
@@ -61,12 +76,14 @@ impl Model {
         self.blk_det_vs.load(yolo_path)?;
         self.text_seg_vs.load(unet_path)?;
         self.text_det_vs.load(dbnet_path)?;
-        // BallonsTranslator's default Torch path runs in float32 (`half=False`).
-        // The split safetensors are stored as float16, so restore the upstream
-        // runtime dtype after loading them.
-        self.blk_det_vs.set_kind(Kind::Float);
-        self.text_seg_vs.set_kind(Kind::Float);
-        self.text_det_vs.set_kind(Kind::Float);
+        let kind = if self.blk_det_vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        };
+        self.blk_det_vs.set_kind(kind);
+        self.text_seg_vs.set_kind(kind);
+        self.text_det_vs.set_kind(kind);
         Ok(())
     }
 
@@ -76,7 +93,8 @@ impl Model {
         // and head registered for checkpoint compatibility, but do not execute
         // that dead branch during inference.
         // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/textdetector/ctd/inference.py#L343-L348
-        let features = self.blk_det.forward(input);
+        let input = input.to_kind(self.blk_det_vs.kind());
+        let features = self.blk_det.forward(&input);
         let (mask, db_features) = self.text_seg.forward(
             &features[0],
             &features[1],

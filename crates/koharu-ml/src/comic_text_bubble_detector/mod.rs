@@ -23,9 +23,9 @@ use self::{
 };
 
 koharu_runtime::huggingface! {
-    CONFIG => "ogkalu/comic-text-and-bubble-detector" => "config.json",
-    PREPROCESSOR_CONFIG => "ogkalu/comic-text-and-bubble-detector" => "preprocessor_config.json",
-    WEIGHTS => "ogkalu/comic-text-and-bubble-detector" => "model.safetensors",
+    CONFIG => "ogkalu/comic-text-and-bubble-detector" => "16e8a622f91fabc6b5b65c96d32d1183f8843546" => "config.json",
+    PREPROCESSOR_CONFIG => "ogkalu/comic-text-and-bubble-detector" => "16e8a622f91fabc6b5b65c96d32d1183f8843546" => "preprocessor_config.json",
+    WEIGHTS => "ogkalu/comic-text-and-bubble-detector" => "16e8a622f91fabc6b5b65c96d32d1183f8843546" => "model.safetensors",
 }
 
 #[derive(Debug)]

@@ -17,9 +17,9 @@ pub use self::{
 use self::model::Model;
 
 koharu_runtime::huggingface! {
-    CONFIG => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "config.json",
-    WEIGHTS => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "model.safetensors",
-    PROCESSOR => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "preprocessor_config.json",
+    CONFIG => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "97d101e6db2642e162a1d05392d1b0231c91033e" => "config.json",
+    WEIGHTS => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "97d101e6db2642e162a1d05392d1b0231c91033e" => "model.safetensors",
+    PROCESSOR => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "97d101e6db2642e162a1d05392d1b0231c91033e" => "preprocessor_config.json",
 }
 
 #[derive(Debug)]

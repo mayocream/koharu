@@ -39,6 +39,11 @@ impl Model {
     ) -> Result<Self> {
         config.validate(vision_config)?;
         let mut vs = nn::VarStore::new(device);
+        vs.set_kind(if device.is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         let root = vs.root();
         let vision_encoder = Dinov2Model::new(&(&root / "vision_encoder"), vision_config);
         let projector = BaberuVisionProjector::new(&(&root / "projector"), config);
@@ -59,10 +64,11 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>, image_size: i64) -> Result<()> {
         self.vs.load(path)?;
-        // Canonical inference converts the complete checkpoint to BF16 on CUDA.
-        if self.vs.device().is_cuda() {
-            self.vs.set_kind(Kind::BFloat16);
-        }
+        self.vs.set_kind(if self.vs.device().is_cuda() {
+            Kind::BFloat16
+        } else {
+            Kind::Float
+        });
         self.model.set_kind(self.vs.kind());
         // The processor always emits one fixed 224x224 crop, so cache the exact
         // DINOv2 bicubic position interpolation instead of repeating it per crop.
@@ -87,7 +93,8 @@ impl Model {
             pixel_values.size()
         );
 
-        let vision_hidden_states = self.vision_encoder.forward(pixel_values);
+        let pixel_values = pixel_values.to_kind(self.vs.kind());
+        let vision_hidden_states = self.vision_encoder.forward(&pixel_values);
         let vision_embeds =
             self.projector
                 .forward(&vision_hidden_states.narrow(1, 1, self.vision_num_tokens));
