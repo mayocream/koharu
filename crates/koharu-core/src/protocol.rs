@@ -31,6 +31,9 @@ pub struct FontFaceInfo {
 pub struct MetaInfo {
     pub version: String,
     pub ml_device: String,
+    /// Workers a CPU-bound pipeline stage gets under auto sizing. Depends on
+    /// the host's core count, so only the server can report it.
+    pub cpu_workers: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +234,12 @@ pub struct PipelineConfigPatch {
     pub translator: Option<String>,
     pub inpainter: Option<String>,
     pub renderer: Option<String>,
+    /// Pages allowed in the pipeline at once. `0` = auto (one per step), `1` =
+    /// fully sequential.
+    pub max_inflight_pages: Option<usize>,
+    /// Cap on pages a stage folds into one model call. `0` = auto, `1` =
+    /// no batching.
+    pub max_batch_pages: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]

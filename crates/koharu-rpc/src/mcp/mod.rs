@@ -185,6 +185,7 @@ impl KoharuServer {
                 None => Scope::WholeProject,
             },
             steps: input.steps,
+            limits: Default::default(),
             options: PipelineRunOptions {
                 target_language: input.target_language,
                 system_prompt: input.system_prompt,

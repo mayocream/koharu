@@ -27,6 +27,7 @@ koharu-runtime = { workspace = true }
 koharu-secrets = { workspace = true }
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
+async-channel = { workspace = true }
 async-trait = { workspace = true }
 atomicwrites = { workspace = true }
 base64 = { workspace = true }
@@ -38,6 +39,7 @@ fs4 = { workspace = true }
 image = { workspace = true }
 inventory = { workspace = true }
 lru = { workspace = true }
+num_cpus = { workspace = true }
 parking_lot = { workspace = true }
 petgraph = { workspace = true }
 postcard = { workspace = true }

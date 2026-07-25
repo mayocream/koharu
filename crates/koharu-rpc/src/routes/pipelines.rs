@@ -10,7 +10,7 @@ use std::sync::atomic::AtomicBool;
 use axum::Json;
 use axum::extract::State;
 use koharu_app::pipeline::{
-    self, PipelineRunOptions, PipelineSpec, ProgressTick, Scope, WarningTick,
+    self, PipelineLimits, PipelineRunOptions, PipelineSpec, ProgressTick, Scope, WarningTick,
 };
 use koharu_core::{
     AppEvent, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent, NodeId, PageId,
@@ -75,12 +75,20 @@ async fn start_pipeline(
     for id in &req.steps {
         pipeline::Registry::find(id).map_err(|e| ApiError::bad_request(format!("{e:#}")))?;
     }
+    let limits = {
+        let cfg = app.config.load();
+        PipelineLimits {
+            max_inflight_pages: cfg.pipeline.max_inflight_pages,
+            max_batch_pages: cfg.pipeline.max_batch_pages,
+        }
+    };
     let spec = PipelineSpec {
         scope: match req.pages {
             Some(pages) => Scope::Pages(pages),
             None => Scope::WholeProject,
         },
         steps: req.steps,
+        limits,
         options: PipelineRunOptions {
             target_language: req.target_language,
             system_prompt: req.system_prompt,

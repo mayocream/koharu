@@ -4213,6 +4213,7 @@ version = "0.61.2"
 dependencies = [
  "anyhow",
  "arc-swap",
+ "async-channel",
  "async-trait",
  "atomicwrites",
  "base64 0.22.1",
@@ -4232,6 +4233,7 @@ dependencies = [
  "koharu-runtime",
  "koharu-secrets",
  "lru",
+ "num_cpus",
  "parking_lot",
  "petgraph",
  "postcard",

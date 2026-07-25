@@ -15,7 +15,7 @@ use koharu_core::{
 use koharu_llm::Language;
 
 use crate::pipeline::artifacts::Artifact;
-use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
+use crate::pipeline::engine::{ConcurrencyHint, Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::{
     find_image_node, find_mask_node, image_dimensions, load_source_image, text_nodes,
     upsert_image_blob,
@@ -26,6 +26,14 @@ pub struct Model;
 
 #[async_trait]
 impl Engine for Model {
+    /// Text shaping and rasterisation is pure CPU work on `&self`, and the
+    /// only shared mutable state is the font book — a short-lived mutex around
+    /// font lookup, not the raster loop. So pages scale across cores here,
+    /// unlike the GPU stages upstream.
+    fn max_workers(&self, hint: &ConcurrencyHint) -> usize {
+        hint.cpu_workers
+    }
+
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>> {
         // Find the target surface: prefer inpainted, fall back to source.
         let base = match find_image_node(ctx.scene, ctx.page, ImageRole::Inpainted) {

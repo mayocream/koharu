@@ -19,6 +19,7 @@ async fn get_meta(State(app): State<AppState>) -> ApiResult<Json<MetaInfo>> {
     Ok(Json(MetaInfo {
         version: app.version.to_string(),
         ml_device: device_label(&app),
+        cpu_workers: koharu_app::pipeline::auto_cpu_workers(),
     }))
 }
 

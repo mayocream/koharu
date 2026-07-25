@@ -47,7 +47,11 @@ pub struct PromptRenderer {
     eos_token: String,
 }
 
-pub const BLOCK_TAG_INSTRUCTIONS: &str = "The input uses numbered tags like [1], [2], etc. to mark each text block. Translate only the text after each tag. Keep every tag exactly unchanged, including numbers and order. Output the same tags followed by the translated text. Do not merge, split, or reorder blocks.";
+/// Deliberately format-agnostic: the same instruction covers the single-page
+/// `[N]` tags and the page-qualified `[bPAGE-BLOCK]` tags used when several
+/// pages share one request. "add, or omit" matters — a dropped or invented
+/// tag is what shifts translations onto the wrong bubble.
+pub const BLOCK_TAG_INSTRUCTIONS: &str = "The input marks each text block with a bracketed tag such as [1] or [b2-3]. Translate only the text after each tag. Reproduce every tag exactly as given, unchanged and in the same order. Output the same tags, each followed by the translated text. Do not merge, split, reorder, add, or omit blocks.";
 
 pub fn system_prompt(target_language: Language) -> String {
     format!(
@@ -133,8 +137,12 @@ mod tests {
     fn system_prompt_mentions_target_language_and_block_rules() {
         let prompt = system_prompt(Language::Korean);
         assert!(prompt.contains("natural Korean"));
-        assert!(prompt.contains("[1], [2]"));
+        // Both tag forms must be described: single-page `[N]` and the
+        // page-qualified `[bPAGE-BLOCK]` used for batched requests.
+        assert!(prompt.contains("[1]"));
+        assert!(prompt.contains("[b2-3]"));
         assert!(prompt.contains("Do not merge"));
+        assert!(prompt.contains("omit"));
     }
 
     #[test]

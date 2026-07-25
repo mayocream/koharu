@@ -653,6 +653,7 @@ export const getGetCurrentLlmResponseMock = (
 export const getGetMetaResponseMock = (
   overrideResponse: Partial<Extract<MetaInfo, object>> = {},
 ): MetaInfo => ({
+  cpuWorkers: faker.number.int({ min: 0 }),
   mlDevice: faker.string.alpha({ length: { min: 10, max: 20 } }),
   version: faker.string.alpha({ length: { min: 10, max: 20 } }),
   ...overrideResponse,
