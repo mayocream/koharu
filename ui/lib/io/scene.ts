@@ -231,11 +231,13 @@ export async function uploadKhrArchive(file: File): Promise<ProjectSummary> {
  */
 export async function exportProject(
   req: ExportProjectRequest,
+  signal?: AbortSignal,
 ): Promise<{ blob: Blob; filename?: string }> {
   const res = await fetch(getExportCurrentProjectUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
+    signal,
   })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
