@@ -14,6 +14,7 @@ import type {
 } from '@/lib/api/schemas'
 import { useDownloadsStore } from '@/lib/stores/downloadsStore'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { type ExportActivity, useExportStore } from '@/lib/stores/exportStore'
 import { type JobEntry, useJobsStore } from '@/lib/stores/jobsStore'
 
 type TranslateFunc = ReturnType<typeof useTranslation>['t']
@@ -207,12 +208,62 @@ function JobCard({ job, onCancel, t }: { job: JobEntry; onCancel: () => void; t:
   )
 }
 
+function ExportCard({
+  activity,
+  onCancel,
+  t,
+}: {
+  activity: ExportActivity
+  onCancel: () => void
+  t: TranslateFunc
+}) {
+  const { role, total, done, currentName } = activity
+  const percent = total > 0 ? clampProgress((done / total) * 100) : undefined
+  const title =
+    role === 'rendered' ? t('operations.exportingRendered') : t('operations.exportingInpainted')
+  const subtitle = [t('operations.fileProgress', { current: done, total }), currentName]
+    .filter(Boolean)
+    .join(' · ')
+
+  return (
+    <BubbleCard>
+      <div data-testid='export-card' className='flex items-start gap-3'>
+        <div className='mt-1 h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_0_6px_hsl(var(--primary)/0.16)]' />
+        <div className='min-w-0 flex-1'>
+          <div className='flex min-w-0 flex-col gap-1'>
+            <div className='text-sm font-semibold text-foreground'>{title}</div>
+            <div
+              className='block max-w-full truncate text-xs text-muted-foreground'
+              title={subtitle}
+            >
+              {subtitle}
+            </div>
+          </div>
+          <ProgressBar percent={percent} />
+          <div className='mt-3 flex justify-end'>
+            <Button
+              data-testid='export-cancel'
+              variant='outline'
+              size='sm'
+              onClick={onCancel}
+              className='text-xs font-semibold'
+            >
+              {t('operations.cancel')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </BubbleCard>
+  )
+}
+
 export function ActivityBubble() {
   const { t } = useTranslation()
   const jobs = useJobsStore((s) => s.jobs)
   const downloads = useDownloadsStore((s) => s.downloads)
   const uiError = useEditorUiStore((s) => s.error)
   const clearUiError = useEditorUiStore((s) => s.clearError)
+  const exportActivity = useExportStore((s) => s.active)
 
   const runningJobs = Object.values(jobs).filter(
     (j: JobSummary) => j.status === 'running',
@@ -223,11 +274,25 @@ export function ActivityBubble() {
   })
 
   const errorMessage = uiError?.message
-  if (!errorMessage && runningJobs.length === 0 && activeDownloads.length === 0) return null
+  if (
+    !errorMessage &&
+    !exportActivity &&
+    runningJobs.length === 0 &&
+    activeDownloads.length === 0
+  ) {
+    return null
+  }
 
   return (
     <div className='pointer-events-auto fixed right-6 bottom-6 z-100 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-3'>
       {errorMessage && <ErrorCard message={errorMessage} onDismiss={clearUiError} t={t} />}
+      {exportActivity && (
+        <ExportCard
+          activity={exportActivity}
+          onCancel={() => useExportStore.getState().requestCancel()}
+          t={t}
+        />
+      )}
       {runningJobs.map((job) => (
         <JobCard key={job.id} job={job} onCancel={() => void cancelOperation(job.id)} t={t} />
       ))}

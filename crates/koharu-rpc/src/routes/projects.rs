@@ -269,16 +269,22 @@ async fn export_current_project(
         .current_session()
         .ok_or_else(|| ApiError::bad_request("no project open"))?;
 
-    let s_for_compact = session.clone();
-    tokio::task::spawn_blocking(move || s_for_compact.compact())
-        .await
-        .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
-        .map_err(ApiError::internal)?;
-
     let project_name = session.scene.read().project.name.clone();
 
     match req.format {
         ExportFormat::Khr => {
+            // Only the `.khr` archive reads the project *directory*, so it is
+            // the only format that needs the scene flushed to disk first.
+            // Image/PSD exports read the in-memory scene plus blobs that the
+            // blob store already wrote eagerly — compacting there would mean a
+            // full-scene encode + atomic write on every request, which is
+            // ruinous now that folder exports issue one request per page.
+            let s_for_compact = session.clone();
+            tokio::task::spawn_blocking(move || s_for_compact.compact())
+                .await
+                .map_err(|e| ApiError::internal(anyhow::Error::new(e)))?
+                .map_err(ApiError::internal)?;
+
             let src = session.dir.clone();
             let bytes =
                 tokio::task::spawn_blocking(move || koharu_app::archive::export_khr_bytes(&src))

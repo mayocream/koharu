@@ -182,16 +182,20 @@ pub fn png_bytes_for_page(
     page_id: PageId,
     role: ImageRole,
 ) -> Result<Option<Vec<u8>>> {
-    let scene: Scene = session.scene_snapshot();
-    let page = scene
-        .pages
-        .get(&page_id)
-        .ok_or_else(|| anyhow::anyhow!("page {page_id} not found"))?;
-
-    let blob = page.nodes.values().find_map(|n| match &n.kind {
-        NodeKind::Image(img) if img.role == role => Some(img.blob.clone()),
-        _ => None,
-    });
+    // Read under the lock instead of cloning the whole scene: this is called
+    // once per page, and a snapshot clone would make an export O(pages²).
+    let blob = {
+        let scene = session.scene.read();
+        let page = scene
+            .pages
+            .get(&page_id)
+            .ok_or_else(|| anyhow::anyhow!("page {page_id} not found"))?;
+        page.nodes.values().find_map(|n| match &n.kind {
+            NodeKind::Image(img) if img.role == role => Some(img.blob.clone()),
+            _ => None,
+        })
+    };
+    // Guard dropped — the decode below must not hold the scene lock.
     let Some(blob_ref) = blob else {
         return Ok(None);
     };

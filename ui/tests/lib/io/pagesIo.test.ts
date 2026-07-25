@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import { queryClient } from '@/lib/queryClient'
@@ -15,18 +15,22 @@ vi.mock('@/lib/io/openFiles', () => ({
 }))
 vi.mock('@/lib/io/saveBlob', async () => {
   // Keep the real `filenameFromContentDisposition` so the export flow can
-  // read server-provided filenames from `Content-Disposition`. Only stub
-  // `saveBlob` itself, since it touches the filesystem / Tauri dialog.
+  // read server-provided filenames from `Content-Disposition`. Only stub the
+  // members that touch the filesystem / Tauri dialog.
   const actual = await vi.importActual<typeof import('@/lib/io/saveBlob')>('@/lib/io/saveBlob')
   return {
     ...actual,
     saveBlob: vi.fn().mockResolvedValue(true),
+    pickSaveDirectory: vi.fn().mockResolvedValue('/out'),
+    writeFileInDir: vi.fn().mockResolvedValue(undefined),
   }
 })
 
 import { openImageFiles, openImageFolder, openKhrFile } from '@/lib/io/openFiles'
 import { exportCurrentProjectAs, importKhrFile, importPages } from '@/lib/io/pagesIo'
-import { saveBlob } from '@/lib/io/saveBlob'
+import { pickSaveDirectory, saveBlob, writeFileInDir } from '@/lib/io/saveBlob'
+import { useEditorUiStore } from '@/lib/stores/editorUiStore'
+import { useExportStore } from '@/lib/stores/exportStore'
 
 const asMock = <T extends (...args: never) => unknown>(fn: T) =>
   fn as unknown as ReturnType<typeof vi.fn>
@@ -209,5 +213,188 @@ describe('exportCurrentProjectAs', () => {
     const [blob, filename] = asMock(saveBlob).mock.calls[0]
     expect(filename).toBe('page-001-abc.png')
     expect((blob as Blob).type).toBe('image/png')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Streaming folder export (desktop): folder first, then one page at a time.
+// ---------------------------------------------------------------------------
+
+/** Minimal page carrying an `Image { role }` node, as `findImageBlob` sees it. */
+function pageWith(roles: string[]) {
+  return {
+    id: 'x',
+    name: 'x',
+    width: 10,
+    height: 10,
+    nodes: Object.fromEntries(
+      roles.map((role, i) => [
+        `n${i}`,
+        { id: `n${i}`, visible: true, kind: { image: { role, blob: `blob-${role}` } } },
+      ]),
+    ),
+  }
+}
+
+function setScene(pages: Record<string, unknown>) {
+  queryClient.setQueryData(getGetSceneJsonQueryKey(), {
+    epoch: 0,
+    scene: { pages, project: {} as never },
+  })
+}
+
+describe('exportCurrentProjectAs — streaming folder export', () => {
+  // `isTauri()` sniffs this global; setting it takes the desktop branch
+  // without mocking the whole backend module.
+  beforeEach(() => {
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    asMock(pickSaveDirectory).mockResolvedValue('/out')
+    asMock(writeFileInDir).mockResolvedValue(undefined)
+    useExportStore.getState().finish()
+    useEditorUiStore.getState().clearError()
+  })
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
+  })
+
+  /** Record export POSTs and disk writes on one timeline, in call order. */
+  function trace() {
+    const events: string[] = []
+    server.use(
+      http.post('/api/v1/projects/current/export', async ({ request }) => {
+        const body = (await request.json()) as { pages?: string[] }
+        events.push(`post:${body.pages?.join(',')}`)
+        return HttpResponse.arrayBuffer(new Uint8Array([137, 80, 78, 71]).buffer, {
+          headers: { 'content-type': 'image/png' },
+        })
+      }),
+    )
+    asMock(writeFileInDir).mockImplementation(async (_dir: string, name: string) => {
+      events.push(`write:${name}`)
+    })
+    return events
+  }
+
+  it('opens the folder picker before requesting a single page', async () => {
+    setScene({ p1: pageWith(['rendered']), p2: pageWith(['rendered']) })
+    const events = trace()
+    asMock(pickSaveDirectory).mockImplementation(async () => {
+      events.push('picker')
+      return '/out'
+    })
+
+    await exportCurrentProjectAs('rendered')
+
+    // The regression: nothing was rendered or buffered before the user chose
+    // a destination.
+    expect(events[0]).toBe('picker')
+    expect(events).toEqual([
+      'picker',
+      'post:p1',
+      'write:page-001-p1.png',
+      'post:p2',
+      'write:page-002-p2.png',
+    ])
+  })
+
+  it('does no work at all when the picker is cancelled', async () => {
+    setScene({ p1: pageWith(['rendered']) })
+    const events = trace()
+    asMock(pickSaveDirectory).mockResolvedValue(null)
+
+    await exportCurrentProjectAs('rendered')
+
+    expect(events).toEqual([])
+    expect(saveBlob).not.toHaveBeenCalled()
+  })
+
+  it('skips pages without the layer but keeps their index in the filename', async () => {
+    setScene({
+      a: pageWith(['rendered']),
+      b: pageWith(['source']),
+      c: pageWith(['rendered']),
+    })
+    const events = trace()
+
+    await exportCurrentProjectAs('rendered')
+
+    // Matches the server's numbering, which enumerates every page and leaves
+    // a gap where a page lacks the layer.
+    expect(events).toEqual([
+      'post:a',
+      'write:page-001-a.png',
+      'post:c',
+      'write:page-003-c.png',
+    ])
+  })
+
+  it('honours the inpainted role and an explicit page subset', async () => {
+    setScene({
+      a: pageWith(['inpainted']),
+      b: pageWith(['inpainted']),
+      c: pageWith(['inpainted']),
+    })
+    const events = trace()
+
+    await exportCurrentProjectAs('inpainted', ['c', 'a'])
+
+    expect(events).toEqual([
+      'post:c',
+      'write:page-001-c.png',
+      'post:a',
+      'write:page-002-a.png',
+    ])
+  })
+
+  it('stops requesting pages once cancel is asked for', async () => {
+    setScene({ a: pageWith(['rendered']), b: pageWith(['rendered']), c: pageWith(['rendered']) })
+    const events = trace()
+    asMock(writeFileInDir).mockImplementation(async (_dir: string, name: string) => {
+      events.push(`write:${name}`)
+      useExportStore.getState().requestCancel()
+    })
+
+    await exportCurrentProjectAs('rendered')
+
+    expect(events).toEqual(['post:a', 'write:page-001-a.png'])
+    // The card is torn down and the flag reset for the next export.
+    expect(useExportStore.getState().active).toBeNull()
+    expect(useExportStore.getState().cancelRequested).toBe(false)
+  })
+
+  it('reports instead of exporting when no page has the layer', async () => {
+    setScene({ a: pageWith(['source']) })
+    const events = trace()
+
+    await exportCurrentProjectAs('rendered')
+
+    expect(events).toEqual([])
+    expect(pickSaveDirectory).not.toHaveBeenCalled()
+    expect(useEditorUiStore.getState().error?.message).toBeTruthy()
+  })
+
+  it('keeps going after a failed page and reports the failures', async () => {
+    setScene({ a: pageWith(['rendered']), b: pageWith(['rendered']) })
+    const events: string[] = []
+    server.use(
+      http.post('/api/v1/projects/current/export', async ({ request }) => {
+        const body = (await request.json()) as { pages?: string[] }
+        events.push(`post:${body.pages?.join(',')}`)
+        if (body.pages?.[0] === 'a') {
+          return HttpResponse.json({ message: 'boom' }, { status: 500 })
+        }
+        return HttpResponse.arrayBuffer(new Uint8Array([137, 80, 78, 71]).buffer, {
+          headers: { 'content-type': 'image/png' },
+        })
+      }),
+    )
+    asMock(writeFileInDir).mockImplementation(async (_dir: string, name: string) => {
+      events.push(`write:${name}`)
+    })
+
+    await exportCurrentProjectAs('rendered')
+
+    expect(events).toEqual(['post:a', 'post:b', 'write:page-002-b.png'])
+    expect(useEditorUiStore.getState().error?.message).toBeTruthy()
   })
 })
