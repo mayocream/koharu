@@ -222,6 +222,7 @@ async fn run() -> Result<()> {
     let spec = koharu_app::pipeline::PipelineSpec {
         scope: koharu_app::pipeline::Scope::Pages(vec![page_id]),
         steps,
+        limits: Default::default(),
         options: koharu_app::PipelineRunOptions {
             target_language: Some(cli.target_lang.clone()),
             system_prompt: cli.system_prompt.clone(),

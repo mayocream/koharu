@@ -79,6 +79,19 @@ pub struct PipelineConfig {
     pub translator: String,
     pub inpainter: String,
     pub renderer: String,
+    /// Maximum pages moving through the pipeline at once. `0` = auto (one per
+    /// stage, so every stage can stay busy).
+    ///
+    /// Set to `1` to restore fully sequential processing: one page finishes
+    /// every step before the next starts, and no stage ever batches. That is
+    /// the escape hatch if parallelism causes trouble.
+    pub max_inflight_pages: usize,
+    /// Upper bound on pages any single stage folds into one model call.
+    /// `0` = auto, `1` = disable batching but keep stage overlap.
+    ///
+    /// Batch size is the larger VRAM lever of the two, so try lowering this
+    /// before `max_inflight_pages`.
+    pub max_batch_pages: usize,
 }
 
 impl Default for PipelineConfig {
@@ -92,6 +105,8 @@ impl Default for PipelineConfig {
             translator: "llm".to_string(),
             inpainter: "lama-manga".to_string(),
             renderer: "koharu-renderer".to_string(),
+            max_inflight_pages: 0,
+            max_batch_pages: 0,
         }
     }
 }
@@ -235,6 +250,12 @@ pub fn apply_patch(config: &mut AppConfig, patch: koharu_core::ConfigPatch) {
         }
         if let Some(v) = p.renderer {
             config.pipeline.renderer = v;
+        }
+        if let Some(v) = p.max_inflight_pages {
+            config.pipeline.max_inflight_pages = v;
+        }
+        if let Some(v) = p.max_batch_pages {
+            config.pipeline.max_batch_pages = v;
         }
     }
     if let Some(providers) = patch.providers {
@@ -447,6 +468,60 @@ mod tests {
         assert_eq!(config.pipeline.detector, PipelineConfig::default().detector);
         assert_eq!(config.pipeline.renderer, PipelineConfig::default().renderer);
         assert_eq!(config.pipeline.ocr, PipelineConfig::default().ocr);
+    }
+
+    #[test]
+    fn apply_patch_sets_parallelism_limits_including_zero() {
+        let mut config = AppConfig::default();
+        config.pipeline.max_inflight_pages = 4;
+        config.pipeline.max_batch_pages = 2;
+
+        apply_patch(
+            &mut config,
+            ConfigPatch {
+                pipeline: Some(PipelineConfigPatch {
+                    max_inflight_pages: Some(1),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+
+        // Set field applied, unmentioned field untouched.
+        assert_eq!(config.pipeline.max_inflight_pages, 1);
+        assert_eq!(config.pipeline.max_batch_pages, 2);
+
+        // `0` is a real value (auto), not "leave alone" — the patch is sparse
+        // via `Option`, so the UI must be able to set auto back.
+        apply_patch(
+            &mut config,
+            ConfigPatch {
+                pipeline: Some(PipelineConfigPatch {
+                    max_inflight_pages: Some(0),
+                    max_batch_pages: Some(0),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(config.pipeline.max_inflight_pages, 0);
+        assert_eq!(config.pipeline.max_batch_pages, 0);
+    }
+
+    #[test]
+    fn parallelism_limits_survive_a_config_round_trip() {
+        let config: AppConfig = toml::from_str(
+            r#"
+                [pipeline]
+                max_inflight_pages = 2
+                max_batch_pages = 1
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config.pipeline.max_inflight_pages, 2);
+        assert_eq!(config.pipeline.max_batch_pages, 1);
     }
 
     #[test]

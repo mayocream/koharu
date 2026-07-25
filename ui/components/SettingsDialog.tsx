@@ -115,6 +115,8 @@ function appConfigToPatch(cfg: AppConfig): ConfigPatch {
       translator: cfg.pipeline.translator,
       inpainter: cfg.pipeline.inpainter,
       renderer: cfg.pipeline.renderer,
+      maxInflightPages: cfg.pipeline.max_inflight_pages ?? 0,
+      maxBatchPages: cfg.pipeline.max_batch_pages ?? 0,
     }
   }
   if (cfg.providers) {
@@ -174,10 +176,13 @@ export function SettingsDialog({
   const [httpConnectTimeoutDraft, setHttpConnectTimeoutDraft] = useState('')
   const [httpReadTimeoutDraft, setHttpReadTimeoutDraft] = useState('')
   const [httpMaxRetriesDraft, setHttpMaxRetriesDraft] = useState('')
+  const [maxInflightPagesDraft, setMaxInflightPagesDraft] = useState('')
+  const [maxBatchPagesDraft, setMaxBatchPagesDraft] = useState('')
   const [storageSettingsError, setStorageSettingsError] = useState<string | null>(null)
   const [isSavingStorageSettings, setIsSavingStorageSettings] = useState(false)
   const [engineCatalog, setEngineCatalog] = useState<GetEngineCatalog200 | null>(null)
   const [appVersion, setAppVersion] = useState<string>()
+  const [cpuWorkers, setCpuWorkers] = useState<number>()
   const updater = useUpdater()
 
   useEffect(() => {
@@ -204,6 +209,7 @@ export function SettingsDialog({
         const meta = await getMeta()
         if (cancelled) return
         setAppVersion(meta.version)
+        setCpuWorkers(meta.cpuWorkers)
       } catch {
         return
       }
@@ -227,6 +233,8 @@ export function SettingsDialog({
     )
     setHttpReadTimeoutDraft(String(appConfig.http?.read_timeout ?? DEFAULT_HTTP_READ_TIMEOUT))
     setHttpMaxRetriesDraft(String(appConfig.http?.max_retries ?? DEFAULT_HTTP_MAX_RETRIES))
+    setMaxInflightPagesDraft(String(appConfig.pipeline?.max_inflight_pages ?? 0))
+    setMaxBatchPagesDraft(String(appConfig.pipeline?.max_batch_pages ?? 0))
     setStorageSettingsError(null)
   }, [appConfig])
 
@@ -241,6 +249,43 @@ export function SettingsDialog({
     } catch {
       return null
     }
+  }
+
+  // What `max_inflight_pages = 0` resolves to: the driver allows one page per
+  // step, and a full run is every configured stage — the same list MenuBar
+  // sends when translating a project.
+  const autoInflightPages = useMemo(() => {
+    const p = appConfig?.pipeline
+    if (!p) return 0
+    return [
+      p.detector,
+      p.segmenter,
+      p.bubble_segmenter,
+      p.font_detector,
+      p.ocr,
+      p.translator,
+      p.inpainter,
+      p.renderer,
+    ].filter(Boolean).length
+  }, [appConfig])
+
+  /// Parse on blur, snapping an unusable entry back to what is stored rather
+  /// than persisting garbage. Unlike the storage settings these need no
+  /// restart, so they save as soon as the field is left.
+  const commitPipelineLimit = (field: 'max_inflight_pages' | 'max_batch_pages', raw: string) => {
+    if (!appConfig?.pipeline) return
+    const current = appConfig.pipeline[field] ?? 0
+    const parsed = Number.parseInt(raw.trim(), 10)
+    const next = Number.isInteger(parsed) && parsed >= 0 ? parsed : current
+
+    if (field === 'max_inflight_pages') setMaxInflightPagesDraft(String(next))
+    else setMaxBatchPagesDraft(String(next))
+
+    if (next === current) return
+    void persistConfig({
+      ...appConfig,
+      pipeline: { ...appConfig.pipeline, [field]: next },
+    })
   }
 
   const upsertProvider = (id: string, updater: (p: ProviderConfig) => ProviderConfig) => {
@@ -399,32 +444,48 @@ export function SettingsDialog({
               )}
               {tab === 'ai' && <CodexSettingsPane />}
               {tab === 'runtime' && (
-                <StoragePane
-                  dataPath={dataPathDraft}
-                  httpConnectTimeout={httpConnectTimeoutDraft}
-                  httpReadTimeout={httpReadTimeoutDraft}
-                  httpMaxRetries={httpMaxRetriesDraft}
-                  error={storageSettingsError}
-                  saving={isSavingStorageSettings}
-                  unchanged={storageSettingsUnchanged}
-                  onPathChange={(v) => {
-                    setDataPathDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onHttpConnectTimeoutChange={(v) => {
-                    setHttpConnectTimeoutDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onHttpReadTimeoutChange={(v) => {
-                    setHttpReadTimeoutDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onHttpMaxRetriesChange={(v) => {
-                    setHttpMaxRetriesDraft(v)
-                    setStorageSettingsError(null)
-                  }}
-                  onApply={() => void handleApplyStorageSettings()}
-                />
+                <div className='space-y-8'>
+                  <StoragePane
+                    dataPath={dataPathDraft}
+                    httpConnectTimeout={httpConnectTimeoutDraft}
+                    httpReadTimeout={httpReadTimeoutDraft}
+                    httpMaxRetries={httpMaxRetriesDraft}
+                    error={storageSettingsError}
+                    saving={isSavingStorageSettings}
+                    unchanged={storageSettingsUnchanged}
+                    onPathChange={(v) => {
+                      setDataPathDraft(v)
+                      setStorageSettingsError(null)
+                    }}
+                    onHttpConnectTimeoutChange={(v) => {
+                      setHttpConnectTimeoutDraft(v)
+                      setStorageSettingsError(null)
+                    }}
+                    onHttpReadTimeoutChange={(v) => {
+                      setHttpReadTimeoutDraft(v)
+                      setStorageSettingsError(null)
+                    }}
+                    onHttpMaxRetriesChange={(v) => {
+                      setHttpMaxRetriesDraft(v)
+                      setStorageSettingsError(null)
+                    }}
+                    onApply={() => void handleApplyStorageSettings()}
+                  />
+                  <ParallelPane
+                    maxInflightPages={maxInflightPagesDraft}
+                    maxBatchPages={maxBatchPagesDraft}
+                    autoInflightPages={autoInflightPages}
+                    cpuWorkers={cpuWorkers}
+                    onMaxInflightPagesChange={setMaxInflightPagesDraft}
+                    onMaxInflightPagesCommit={() =>
+                      commitPipelineLimit('max_inflight_pages', maxInflightPagesDraft)
+                    }
+                    onMaxBatchPagesChange={setMaxBatchPagesDraft}
+                    onMaxBatchPagesCommit={() =>
+                      commitPipelineLimit('max_batch_pages', maxBatchPagesDraft)
+                    }
+                  />
+                </div>
               )}
               {tab === 'keybinds' && <KeybindsPane />}
               {tab === 'about' && (
@@ -1260,6 +1321,87 @@ function StoragePane({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  )
+}
+
+// ── Parallel processing ───────────────────────────────────────────
+
+function ParallelPane({
+  maxInflightPages,
+  maxBatchPages,
+  autoInflightPages,
+  cpuWorkers,
+  onMaxInflightPagesChange,
+  onMaxInflightPagesCommit,
+  onMaxBatchPagesChange,
+  onMaxBatchPagesCommit,
+}: {
+  maxInflightPages: string
+  maxBatchPages: string
+  autoInflightPages: number
+  cpuWorkers: number | undefined
+  onMaxInflightPagesChange: (v: string) => void
+  onMaxInflightPagesCommit: () => void
+  onMaxBatchPagesChange: (v: string) => void
+  onMaxBatchPagesCommit: () => void
+}) {
+  const { t } = useTranslation()
+  // `0` is auto, so that is when the resolved value is worth showing.
+  const inflightIsAuto = maxInflightPages.trim() === '0'
+  const batchIsAuto = maxBatchPages.trim() === '0'
+
+  return (
+    <Section title={t('settings.parallel')} description={t('settings.parallelDescription')}>
+      <div className='grid gap-4 md:grid-cols-2'>
+        <div className='space-y-1.5'>
+          <Label className='text-xs'>{t('settings.maxInflightPages')}</Label>
+          <Input
+            type='number'
+            min='0'
+            step='1'
+            inputMode='numeric'
+            value={maxInflightPages}
+            onChange={(e) => onMaxInflightPagesChange(e.target.value)}
+            onBlur={onMaxInflightPagesCommit}
+          />
+          <p className='text-xs leading-relaxed text-muted-foreground'>
+            {t('settings.maxInflightPagesDescription')}
+          </p>
+          {inflightIsAuto && autoInflightPages > 0 && (
+            <p className='text-xs leading-relaxed text-foreground/70'>
+              {t('settings.maxInflightPagesAuto', { pages: autoInflightPages })}
+            </p>
+          )}
+        </div>
+
+        <div className='space-y-1.5'>
+          <Label className='text-xs'>{t('settings.maxBatchPages')}</Label>
+          <Input
+            type='number'
+            min='0'
+            step='1'
+            inputMode='numeric'
+            value={maxBatchPages}
+            onChange={(e) => onMaxBatchPagesChange(e.target.value)}
+            onBlur={onMaxBatchPagesCommit}
+          />
+          <p className='text-xs leading-relaxed text-muted-foreground'>
+            {t('settings.maxBatchPagesDescription')}
+          </p>
+          {batchIsAuto && (
+            <p className='text-xs leading-relaxed text-foreground/70'>
+              {t('settings.maxBatchPagesAuto')}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {cpuWorkers !== undefined && (
+        <p className='text-xs leading-relaxed text-muted-foreground'>
+          {t('settings.cpuWorkersInfo', { workers: cpuWorkers })}
+        </p>
+      )}
+    </Section>
   )
 }
 

@@ -89,6 +89,9 @@ tempfile = "3.24"
 once_cell = "1.21"
 libloading = "0.8.9"
 num_cpus = "1.17"
+# MPMC: lets every worker on a multi-worker pipeline stage pull from one
+# shared queue, so pages are work-stolen rather than round-robined.
+async-channel = "2.5"
 rustfft = "6.4"
 cudarc = { version = "0.19.4", features = [
     "cuda-version-from-build-system",

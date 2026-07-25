@@ -7,8 +7,16 @@ use async_trait::async_trait;
 use koharu_core::{NodeDataPatch, NodeId, NodePatch, Op, PageId, Scene, TextData, TextDataPatch};
 
 use crate::pipeline::artifacts::Artifact;
-use crate::pipeline::engine::{Engine, EngineCtx, EngineInfo};
+use crate::pipeline::engine::{ConcurrencyHint, Engine, EngineCtx, EngineInfo};
 use crate::pipeline::engines::support::text_nodes;
+
+/// Pages folded into one request when the translator supports it. Bounded
+/// because the whole group shares a context window — and because a rejected
+/// batch costs a full re-translation of every page in it.
+const MAX_BATCH_PAGES: usize = 4;
+
+/// Concurrent in-flight requests against a remote provider.
+const REMOTE_WORKERS: usize = 4;
 
 pub struct Model;
 
@@ -30,24 +38,102 @@ impl Engine for Model {
             )
             .await?;
 
-        let mut ops = Vec::with_capacity(targets.len());
-        for ((node_id, _), translation) in targets.into_iter().zip(translations) {
-            ops.push(Op::UpdateNode {
-                page: ctx.page,
-                id: node_id,
-                patch: NodePatch {
-                    data: Some(NodeDataPatch::Text(TextDataPatch {
-                        translation: Some(Some(translation)),
-                        ..Default::default()
-                    })),
-                    transform: None,
-                    visible: None,
-                },
-                prev: NodePatch::default(),
-            });
-        }
-        Ok(ops)
+        Ok(translation_ops(ctx.page, targets, translations))
     }
+
+    /// Remote providers are network-bound and stateless, so requests overlap.
+    /// A local llama.cpp context is `&mut` and single-use — fanning it out
+    /// would only queue on the state lock.
+    fn max_workers(&self, hint: &ConcurrencyHint) -> usize {
+        if hint.translator_is_remote {
+            REMOTE_WORKERS
+        } else {
+            1
+        }
+    }
+
+    /// Batching here is one combined *request*, not a tensor batch. It only
+    /// pays against a remote provider, where the win is collapsing N network
+    /// round-trips into one. A custom system prompt disables it: that prompt
+    /// documents the single-page `[N]` tags and can't be assumed to teach the
+    /// page-qualified form the response is validated against.
+    fn max_batch(&self, hint: &ConcurrencyHint) -> usize {
+        if hint.translator_is_remote && !hint.custom_system_prompt {
+            MAX_BATCH_PAGES.min(hint.max_batch_pages)
+        } else {
+            1
+        }
+    }
+
+    async fn run_batch(&self, ctxs: Vec<EngineCtx<'_>>) -> Vec<Result<Vec<Op>>> {
+        if ctxs.len() <= 1 {
+            let mut out = Vec::with_capacity(ctxs.len());
+            for ctx in ctxs {
+                out.push(self.run(ctx).await);
+            }
+            return out;
+        }
+
+        let per_page: Vec<Vec<(NodeId, String)>> =
+            ctxs.iter().map(collect_translation_targets).collect();
+        let sources: Vec<Vec<String>> = per_page
+            .iter()
+            .map(|targets| targets.iter().map(|(_, s)| s.clone()).collect())
+            .collect();
+
+        // Options are uniform across a run, so page 0's are representative.
+        let options = ctxs[0].options;
+        let translated = ctxs[0]
+            .llm
+            .translate_pages(
+                &sources,
+                options.target_language.as_deref(),
+                options.system_prompt.as_deref(),
+            )
+            .await;
+
+        match translated {
+            Ok(pages) => ctxs
+                .iter()
+                .zip(per_page)
+                .zip(pages)
+                .map(|((ctx, targets), translations)| {
+                    Ok(translation_ops(ctx.page, targets, translations))
+                })
+                .collect(),
+            // The whole request failed (network, no LLM loaded, …). Report it
+            // against every page in the batch rather than silently dropping
+            // pages the driver still expects an answer for.
+            Err(err) => ctxs
+                .iter()
+                .map(|_| Err(anyhow::anyhow!("{err:#}")))
+                .collect(),
+        }
+    }
+}
+
+fn translation_ops(
+    page: PageId,
+    targets: Vec<(NodeId, String)>,
+    translations: Vec<String>,
+) -> Vec<Op> {
+    let mut ops = Vec::with_capacity(targets.len());
+    for ((node_id, _), translation) in targets.into_iter().zip(translations) {
+        ops.push(Op::UpdateNode {
+            page,
+            id: node_id,
+            patch: NodePatch {
+                data: Some(NodeDataPatch::Text(TextDataPatch {
+                    translation: Some(Some(translation)),
+                    ..Default::default()
+                })),
+                transform: None,
+                visible: None,
+            },
+            prev: NodePatch::default(),
+        });
+    }
+    ops
 }
 
 fn collect_translation_targets(ctx: &EngineCtx<'_>) -> Vec<(NodeId, String)> {

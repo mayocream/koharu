@@ -69,11 +69,64 @@ pub struct PipelineRunOptions {
 // Engine trait
 // ---------------------------------------------------------------------------
 
+/// Runtime facts the driver hands each engine so it can size its own
+/// concurrency. Built once per pipeline run.
+#[derive(Debug, Clone, Copy)]
+pub struct ConcurrencyHint {
+    /// Suggested worker count for CPU-bound, lock-free stages.
+    pub cpu_workers: usize,
+    /// True when the loaded translator is a remote HTTP provider (network
+    /// bound, safe to fan out) rather than a local llama.cpp context
+    /// (single-context, `&mut self`, cannot be parallelized).
+    pub translator_is_remote: bool,
+    /// True when a user-supplied system prompt is in effect. Such a prompt
+    /// describes the single-page `[N]` block format and cannot be assumed to
+    /// teach the batched `[bP-N]` form, so cross-page translation batching
+    /// must be disabled.
+    pub custom_system_prompt: bool,
+    /// Hard cap on pages folded into one model call. 1 disables batching.
+    pub max_batch_pages: usize,
+}
+
 #[async_trait]
 pub trait Engine: Send + Sync + 'static {
     /// Run the engine on one page. Return the ops to apply.
     /// Empty `Vec` = nothing changed (still a success).
     async fn run(&self, ctx: EngineCtx<'_>) -> Result<Vec<Op>>;
+
+    /// How many pages this engine can safely process concurrently.
+    ///
+    /// Default 1. Only override when the engine holds no exclusive lock and
+    /// contends for a resource that actually parallelizes — CPU cores or the
+    /// network. Fanning out a stage that shares one GPU or one `&mut` model
+    /// buys nothing and multiplies peak memory.
+    fn max_workers(&self, _hint: &ConcurrencyHint) -> usize {
+        1
+    }
+
+    /// How many pages this engine can fold into a single model call.
+    ///
+    /// Default 1 (no batching). Override only where the underlying model
+    /// genuinely batches — a real tensor batch or a single combined request —
+    /// not where the "batch" API just loops internally.
+    fn max_batch(&self, _hint: &ConcurrencyHint) -> usize {
+        1
+    }
+
+    /// Run the engine over several pages at once.
+    ///
+    /// Returns **one result per input context, in the same order**, so a
+    /// failure is attributed to the page that caused it rather than failing
+    /// the whole group. The default implementation simply runs them in
+    /// sequence, so engines that don't override `max_batch` never see a
+    /// batch larger than 1 and need not implement this.
+    async fn run_batch(&self, ctxs: Vec<EngineCtx<'_>>) -> Vec<Result<Vec<Op>>> {
+        let mut out = Vec::with_capacity(ctxs.len());
+        for ctx in ctxs {
+            out.push(self.run(ctx).await);
+        }
+        out
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -100,12 +153,18 @@ inventory::collect!(EngineInfo);
 
 pub struct Registry {
     engines: RwLock<HashMap<&'static str, Arc<dyn Engine>>>,
+    /// One lock per engine id, held across the `load` await so that
+    /// concurrent misses for the same engine don't each allocate a copy of
+    /// the model (and its GPU memory). Only ever guards loading; lookups of
+    /// already-cached engines never touch it.
+    loading: tokio::sync::Mutex<HashMap<&'static str, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl Default for Registry {
     fn default() -> Self {
         Self {
             engines: RwLock::new(HashMap::new()),
+            loading: tokio::sync::Mutex::new(HashMap::new()),
         }
     }
 }
@@ -116,6 +175,11 @@ impl Registry {
     }
 
     /// Get or load an engine instance by id.
+    ///
+    /// Safe to call concurrently for the same id: only one caller performs the
+    /// load, the rest wait and observe the cached instance. Without this,
+    /// parallel pipeline stages hitting a cold engine would each load the
+    /// model and allocate its GPU memory, then discard all but one.
     pub async fn get(
         &self,
         id: &str,
@@ -126,6 +190,20 @@ impl Registry {
             return Ok(engine);
         }
         let info = Self::find(id)?;
+
+        // Take this engine's load lock. Scoped so the map lock isn't held
+        // across the load itself.
+        let load_lock = {
+            let mut loading = self.loading.lock().await;
+            loading.entry(info.id).or_default().clone()
+        };
+        let _guard = load_lock.lock().await;
+
+        // Re-check: another caller may have loaded it while we waited.
+        if let Some(engine) = self.engines.read().get(info.id).cloned() {
+            return Ok(engine);
+        }
+
         let loaded = async { (info.load)(runtime, cpu).await }
             .instrument(tracing::info_span!("engine_load", engine = id))
             .await?;

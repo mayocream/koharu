@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use koharu_core::{
     LlmCatalog, LlmCatalogModel, LlmLoadRequest, LlmProviderCatalog, LlmProviderCatalogStatus,
     LlmState, LlmStateStatus, LlmTarget, LlmTargetKind,
@@ -41,7 +41,9 @@ pub enum State {
     ReadyLocal(Llm),
     ReadyProvider {
         target: LlmTarget,
-        provider: Box<dyn AnyProvider>,
+        /// `Arc`, not `Box`, so `translate_texts` can clone it out and drop
+        /// the state lock *before* awaiting the provider's HTTP call.
+        provider: Arc<dyn AnyProvider>,
     },
     Failed {
         target: Option<LlmTarget>,
@@ -134,7 +136,10 @@ impl Model {
         target: LlmTarget,
         provider: Box<dyn AnyProvider>,
     ) -> Result<()> {
-        *self.state.write().await = State::ReadyProvider { target, provider };
+        *self.state.write().await = State::ReadyProvider {
+            target,
+            provider: Arc::from(provider),
+        };
         self.emit_state().await;
         Ok(())
     }
@@ -197,6 +202,58 @@ impl Model {
         let _ = self.state_tx.send(self.snapshot().await);
     }
 
+    /// Run one generation against whichever backend is loaded.
+    ///
+    /// Remote providers are stateless, so the provider handle is cloned out
+    /// under a *read* lock and the lock is released before the HTTP call is
+    /// awaited — otherwise every translation in the process serializes on the
+    /// state lock, and `snapshot()` / `ready()` block for the whole request.
+    /// Only the local llama.cpp path takes the write lock, which it genuinely
+    /// needs: `Llm::generate` is `&mut self` and a context is single-use.
+    async fn generate_raw(
+        &self,
+        body: &str,
+        target_language: Language,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<String> {
+        enum Route {
+            Remote(Arc<dyn AnyProvider>, String),
+            Local,
+        }
+
+        let route = {
+            let guard = self.state.read().await;
+            match &*guard {
+                State::ReadyProvider { target, provider } => {
+                    Route::Remote(provider.clone(), target.model_id.clone())
+                }
+                State::ReadyLocal(_) => Route::Local,
+                State::Loading { .. } => bail!("LLM is still loading"),
+                State::Failed { error, .. } => bail!("LLM failed to load: {error}"),
+                State::Empty => bail!("no LLM loaded"),
+            }
+        };
+
+        match route {
+            Route::Remote(provider, model_id) => {
+                provider
+                    .translate(body, target_language, &model_id, custom_system_prompt)
+                    .await
+            }
+            Route::Local => {
+                let mut guard = self.state.write().await;
+                match &mut *guard {
+                    State::ReadyLocal(llm) => {
+                        let opts = llm.id().default_generate_options();
+                        llm.generate(body, &opts, target_language, custom_system_prompt)
+                    }
+                    // Raced with offload/reload between the read and write lock.
+                    _ => bail!("no local LLM loaded"),
+                }
+            }
+        }
+    }
+
     /// Translate a batch of source strings. Each source becomes a tagged
     /// `[N]...` block; the response is parsed back into per-block
     /// translations. Output length matches input length (possibly with empty
@@ -215,26 +272,9 @@ impl Model {
             .unwrap_or(Language::English);
         let body = format_sources(sources);
 
-        let mut guard = self.state.write().await;
-        let translation = match &mut *guard {
-            State::ReadyLocal(llm) => {
-                let opts = llm.id().default_generate_options();
-                llm.generate(&body, &opts, target_language, custom_system_prompt)
-            }
-            State::ReadyProvider { target, provider } => {
-                provider
-                    .translate(
-                        &body,
-                        target_language,
-                        &target.model_id,
-                        custom_system_prompt,
-                    )
-                    .await
-            }
-            State::Loading { .. } => Err(anyhow::anyhow!("LLM is still loading")),
-            State::Failed { error, .. } => Err(anyhow::anyhow!("LLM failed to load: {error}")),
-            State::Empty => Err(anyhow::anyhow!("no LLM loaded")),
-        }?;
+        let translation = self
+            .generate_raw(&body, target_language, custom_system_prompt)
+            .await?;
 
         let translation = strip_thinking_block(&translation);
         let out = match parse_tagged_blocks(translation, sources.len())? {
@@ -245,6 +285,90 @@ impl Model {
             .into_iter()
             .map(|s| strip_wrapping_quotes(s.trim()))
             .collect())
+    }
+
+    /// Translate several pages in a single request, tagging every block with
+    /// its page (`[bPAGE-BLOCK]`) so the response can be validated.
+    ///
+    /// Returns one `Vec<String>` per input page, each the same length as that
+    /// page's sources. If the response fails validation the pages are retried
+    /// individually — slower, but it never lands a translation on the wrong
+    /// bubble.
+    ///
+    /// Falls back to the per-page path (and the untouched `[N]` wire format)
+    /// when there is nothing to gain or too much to risk: a single page, or a
+    /// user-supplied system prompt that describes the old tag scheme.
+    pub async fn translate_pages(
+        &self,
+        pages: &[Vec<String>],
+        target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<Vec<Vec<String>>> {
+        let has_custom_prompt = custom_system_prompt.is_some_and(|p| !p.trim().is_empty());
+        if pages.len() <= 1 || has_custom_prompt {
+            return self
+                .translate_each(pages, target_language, custom_system_prompt)
+                .await;
+        }
+
+        let page_lens: Vec<usize> = pages.iter().map(|p| p.len()).collect();
+        if page_lens.iter().all(|&n| n == 0) {
+            return Ok(pages.iter().map(|_| Vec::new()).collect());
+        }
+
+        let language = target_language
+            .and_then(Language::parse)
+            .unwrap_or(Language::English);
+        let refs: Vec<&[String]> = pages.iter().map(|p| p.as_slice()).collect();
+        let body = format_sources_batched(&refs);
+
+        let parsed = match self
+            .generate_raw(&body, language, custom_system_prompt)
+            .await
+        {
+            Ok(translation) => {
+                let translation = strip_thinking_block(&translation);
+                parse_batched_blocks(translation, &page_lens)
+            }
+            Err(err) => Err(err),
+        };
+
+        match parsed {
+            Ok(blocks) => Ok(blocks
+                .into_iter()
+                .map(|page| {
+                    page.into_iter()
+                        .map(|s| strip_wrapping_quotes(s.trim()))
+                        .collect()
+                })
+                .collect()),
+            Err(err) => {
+                tracing::warn!(
+                    pages = pages.len(),
+                    "batched translation rejected, retrying per page: {err:#}"
+                );
+                self.translate_each(pages, target_language, custom_system_prompt)
+                    .await
+            }
+        }
+    }
+
+    /// Translate each page as its own request, preserving per-page failure
+    /// isolation: one page erroring doesn't lose the others' translations.
+    async fn translate_each(
+        &self,
+        pages: &[Vec<String>],
+        target_language: Option<&str>,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<Vec<Vec<String>>> {
+        let mut out = Vec::with_capacity(pages.len());
+        for sources in pages {
+            out.push(
+                self.translate_texts(sources, target_language, custom_system_prompt)
+                    .await?,
+            );
+        }
+        Ok(out)
     }
 }
 
@@ -436,6 +560,13 @@ pub fn provider_config_from_settings(
 // Tag formatting + response parsing
 // ---------------------------------------------------------------------------
 
+/// A parsed block tag, both indices 0-based.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BlockTag {
+    page: usize,
+    block: usize,
+}
+
 fn format_sources(sources: &[String]) -> String {
     sources
         .iter()
@@ -445,21 +576,65 @@ fn format_sources(sources: &[String]) -> String {
         .join("\n")
 }
 
-fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
-    let bytes = text.as_bytes();
-    if bytes.first()? != &b'[' {
+/// Tag each block with its page as well as its index, so a response that
+/// drops or repeats a tag can be *detected* rather than silently shifting
+/// every later translation onto the wrong bubble — and, past a page boundary,
+/// onto the wrong page.
+fn format_sources_batched(pages: &[&[String]]) -> String {
+    let mut lines = Vec::new();
+    for (page_idx, sources) in pages.iter().enumerate() {
+        for (block_idx, text) in sources.iter().enumerate() {
+            lines.push(format!("[b{}-{}]{}", page_idx + 1, block_idx + 1, text));
+        }
+    }
+    lines.join("\n")
+}
+
+/// Parse a leading block tag, accepting both the single-page `[N]` form
+/// (implicitly page 1) and the batched `[bPAGE-BLOCK]` form. Returns the byte
+/// length of the tag and the indices it names.
+///
+/// Accepting both is deliberate: a model that ignores the batched instruction
+/// and replies with flat `[N]` still parses, and is then caught by
+/// [`parse_batched_blocks`]'s validation rather than being mis-assigned.
+fn parse_block_tag(text: &str) -> Option<(usize, BlockTag)> {
+    if !text.starts_with('[') {
         return None;
     }
     let end = text[1..].find(']')?;
-    let num_str = &text[1..1 + end];
-    let id_1based: usize = num_str.parse().ok()?;
-    if id_1based == 0 {
+    let body = &text[1..1 + end];
+    let len = 1 + end + 1;
+
+    if let Some(rest) = body.strip_prefix(['b', 'B']) {
+        let (page, block) = rest.split_once('-')?;
+        let page: usize = page.parse().ok()?;
+        let block: usize = block.parse().ok()?;
+        if page == 0 || block == 0 {
+            return None;
+        }
+        return Some((
+            len,
+            BlockTag {
+                page: page - 1,
+                block: block - 1,
+            },
+        ));
+    }
+
+    let block: usize = body.parse().ok()?;
+    if block == 0 {
         return None;
     }
-    Some((1 + end + 1, id_1based - 1))
+    Some((
+        len,
+        BlockTag {
+            page: 0,
+            block: block - 1,
+        },
+    ))
 }
 
-fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
+fn find_next_tag(text: &str) -> Option<(usize, usize, BlockTag)> {
     let mut line_start = 0;
     while line_start <= text.len() {
         let line = &text[line_start..];
@@ -469,8 +644,8 @@ fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
             .take_while(|&&byte| matches!(byte, b' ' | b'\t'))
             .count();
         let offset = line_start + indent;
-        if let Some((len, id)) = parse_block_tag(&text[offset..]) {
-            return Some((offset, len, id));
+        if let Some((len, tag)) = parse_block_tag(&text[offset..]) {
+            return Some((offset, len, tag));
         }
         let Some(next_newline) = line.find('\n') else {
             break;
@@ -480,26 +655,91 @@ fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
     None
 }
 
-fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> Result<Option<Vec<String>>> {
-    if find_next_tag(translation).is_none() {
-        return Ok(None);
-    }
-    let mut blocks = vec![String::new(); expected_blocks];
+/// Split a response into `(tag, content)` pairs in the order they appear.
+fn scan_blocks(translation: &str) -> Vec<(BlockTag, String)> {
+    let mut found = Vec::new();
     let mut cursor = translation;
-    let mut found_any = false;
-    while let Some((offset, len, id)) = find_next_tag(cursor) {
-        found_any = true;
+    while let Some((offset, len, tag)) = find_next_tag(cursor) {
         cursor = &cursor[offset + len..];
         let content_end = find_next_tag(cursor)
             .map(|(next_offset, _, _)| next_offset)
             .unwrap_or(cursor.len());
-        let content = cursor[..content_end].trim().to_string();
-        if id < expected_blocks {
-            blocks[id] = content;
-        }
+        found.push((tag, cursor[..content_end].trim().to_string()));
         cursor = &cursor[content_end..];
     }
-    Ok(found_any.then_some(blocks))
+    found
+}
+
+fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> Result<Option<Vec<String>>> {
+    let found = scan_blocks(translation);
+    if found.is_empty() {
+        return Ok(None);
+    }
+    let mut blocks = vec![String::new(); expected_blocks];
+    for (tag, content) in found {
+        if tag.page == 0 && tag.block < expected_blocks {
+            blocks[tag.block] = content;
+        }
+    }
+    Ok(Some(blocks))
+}
+
+/// Parse a batched response into per-page blocks.
+///
+/// Strict on purpose: every expected `(page, block)` must appear exactly once
+/// and no unknown id may appear. `parse_tagged_blocks` can afford to be lenient
+/// because a missing block just leaves one bubble empty; here a single dropped
+/// tag would shift text across a page boundary, which is invisible to the user
+/// and corrupts a page that looked fine. Callers retry rejected batches
+/// page-by-page, trading a little speed for correctness.
+fn parse_batched_blocks(translation: &str, page_lens: &[usize]) -> Result<Vec<Vec<String>>> {
+    let found = scan_blocks(translation);
+    if found.is_empty() {
+        bail!("response contained no tagged blocks");
+    }
+
+    let mut slots: Vec<Vec<Option<String>>> =
+        page_lens.iter().map(|&len| vec![None; len]).collect();
+
+    for (tag, content) in found {
+        let page = slots
+            .get_mut(tag.page)
+            .ok_or_else(|| anyhow::anyhow!("response referenced unknown page {}", tag.page + 1))?;
+        let slot = page.get_mut(tag.block).ok_or_else(|| {
+            anyhow::anyhow!(
+                "response referenced unknown block {} on page {}",
+                tag.block + 1,
+                tag.page + 1
+            )
+        })?;
+        if slot.is_some() {
+            bail!(
+                "response repeated block [b{}-{}]",
+                tag.page + 1,
+                tag.block + 1
+            );
+        }
+        *slot = Some(content);
+    }
+
+    slots
+        .into_iter()
+        .enumerate()
+        .map(|(page_idx, page)| {
+            page.into_iter()
+                .enumerate()
+                .map(|(block_idx, slot)| {
+                    slot.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "response missing block [b{}-{}]",
+                            page_idx + 1,
+                            block_idx + 1
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .collect()
 }
 
 fn split_legacy_lines(translation: &str, expected_blocks: usize) -> Vec<String> {
@@ -535,4 +775,137 @@ fn strip_wrapping_quotes(text: &str) -> String {
         }
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pages(spec: &[&[&str]]) -> Vec<Vec<String>> {
+        spec.iter()
+            .map(|p| p.iter().map(|s| s.to_string()).collect())
+            .collect()
+    }
+
+    // --- wire format ------------------------------------------------------
+
+    #[test]
+    fn single_page_wire_format_is_unchanged() {
+        let sources = vec!["one".to_string(), "two".to_string()];
+        assert_eq!(format_sources(&sources), "[1]one\n[2]two");
+    }
+
+    #[test]
+    fn batched_format_qualifies_every_tag_with_its_page() {
+        let owned = pages(&[&["a", "b"], &["c"]]);
+        let refs: Vec<&[String]> = owned.iter().map(|p| p.as_slice()).collect();
+        assert_eq!(format_sources_batched(&refs), "[b1-1]a\n[b1-2]b\n[b2-1]c");
+    }
+
+    #[test]
+    fn batched_round_trip() {
+        let owned = pages(&[&["a", "b"], &["c"]]);
+        let refs: Vec<&[String]> = owned.iter().map(|p| p.as_slice()).collect();
+        let echoed = format_sources_batched(&refs);
+        let parsed = parse_batched_blocks(&echoed, &[2, 1]).expect("round trip");
+        assert_eq!(parsed, vec![vec!["a", "b"], vec!["c"]]);
+    }
+
+    // --- tag parsing ------------------------------------------------------
+
+    #[test]
+    fn parses_both_tag_forms() {
+        assert_eq!(
+            parse_block_tag("[3]hi").map(|(_, t)| t),
+            Some(BlockTag { page: 0, block: 2 })
+        );
+        assert_eq!(
+            parse_block_tag("[b2-3]hi").map(|(_, t)| t),
+            Some(BlockTag { page: 1, block: 2 })
+        );
+        // Zero indices and malformed bodies are not tags.
+        assert!(parse_block_tag("[0]x").is_none());
+        assert!(parse_block_tag("[b0-1]x").is_none());
+        assert!(parse_block_tag("[b1-0]x").is_none());
+        assert!(parse_block_tag("[b1]x").is_none());
+        assert!(parse_block_tag("[bx-y]x").is_none());
+        assert!(parse_block_tag("no tag").is_none());
+    }
+
+    // --- validation: each of these must be REJECTED, not mis-assigned -----
+
+    #[test]
+    fn rejects_missing_block() {
+        let err = parse_batched_blocks("[b1-1]a\n[b2-1]c", &[2, 1]).unwrap_err();
+        assert!(err.to_string().contains("missing"), "{err}");
+    }
+
+    #[test]
+    fn rejects_duplicated_block() {
+        let err = parse_batched_blocks("[b1-1]a\n[b1-1]again\n[b2-1]c", &[1, 1]).unwrap_err();
+        assert!(err.to_string().contains("repeated"), "{err}");
+    }
+
+    #[test]
+    fn rejects_unknown_page() {
+        let err = parse_batched_blocks("[b1-1]a\n[b9-1]ghost", &[1, 1]).unwrap_err();
+        assert!(err.to_string().contains("unknown page"), "{err}");
+    }
+
+    #[test]
+    fn rejects_unknown_block() {
+        let err = parse_batched_blocks("[b1-1]a\n[b1-7]ghost\n[b2-1]c", &[1, 1]).unwrap_err();
+        assert!(err.to_string().contains("unknown block"), "{err}");
+    }
+
+    #[test]
+    fn rejects_flat_tags_when_batching() {
+        // A model that ignores the batched format and replies with `[1] [2]`
+        // would otherwise pile every block onto page 1.
+        let err = parse_batched_blocks("[1]a\n[2]b", &[1, 1]).unwrap_err();
+        assert!(err.to_string().contains("unknown block"), "{err}");
+    }
+
+    #[test]
+    fn rejects_response_with_no_tags() {
+        let err = parse_batched_blocks("just prose", &[1, 1]).unwrap_err();
+        assert!(err.to_string().contains("no tagged blocks"), "{err}");
+    }
+
+    // --- ordering + content ----------------------------------------------
+
+    #[test]
+    fn accepts_tags_returned_out_of_order() {
+        // Order on the wire doesn't matter; the tag says where each block goes.
+        let parsed = parse_batched_blocks("[b2-1]c\n[b1-2]b\n[b1-1]a", &[2, 1]).unwrap();
+        assert_eq!(parsed, vec![vec!["a", "b"], vec!["c"]]);
+    }
+
+    #[test]
+    fn handles_pages_with_differing_and_zero_block_counts() {
+        let parsed =
+            parse_batched_blocks("[b1-1]a\n[b1-2]b\n[b1-3]c\n[b3-1]d", &[3, 0, 1]).unwrap();
+        assert_eq!(parsed, vec![vec!["a", "b", "c"], vec![], vec!["d"]]);
+    }
+
+    #[test]
+    fn keeps_multiline_block_content() {
+        let parsed = parse_batched_blocks("[b1-1]line one\nline two\n[b2-1]c", &[1, 1]).unwrap();
+        assert_eq!(parsed, vec![vec!["line one\nline two"], vec!["c"]]);
+    }
+
+    // --- single-page path is untouched ------------------------------------
+
+    #[test]
+    fn single_page_parse_stays_lenient() {
+        // Unlike the batched parser, a missing block here just leaves that
+        // bubble empty rather than failing the page.
+        let parsed = parse_tagged_blocks("[1]a\n[3]c", 3).unwrap().unwrap();
+        assert_eq!(parsed, vec!["a", "", "c"]);
+    }
+
+    #[test]
+    fn single_page_parse_reports_untagged_response() {
+        assert!(parse_tagged_blocks("no tags here", 2).unwrap().is_none());
+    }
 }
