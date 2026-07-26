@@ -170,6 +170,61 @@ describe('RenderControlsPanel Font Assignment', () => {
     expect(input).toHaveAttribute('placeholder', 'auto')
   })
 
+  it('typing a font size with no selection applies the size to all text boxes', async () => {
+    renderWithQuery(<RenderControlsPanel />)
+
+    // No selection — global scope
+    const input = (await screen.findByTestId('render-font-size')) as HTMLInputElement
+    expect(input).not.toBeDisabled()
+
+    await userEvent.clear(input)
+    await userEvent.type(input, '24')
+
+    await waitFor(() => expect(sceneActions.applyOp).toHaveBeenCalled())
+    const op = (sceneActions.applyOp as any).mock.calls.at(-1)[0]
+    expect(op).toHaveProperty('batch')
+    expect(op.batch.ops).toHaveLength(2)
+    for (const sub of op.batch.ops) {
+      expect(sub.updateNode.patch.data.text.style.fontSize).toBe(24)
+    }
+  })
+
+  it('clearing the font size with no selection resets all boxes to auto', async () => {
+    server.use(
+      http.get('/api/v1/scene.json', () =>
+        HttpResponse.json(
+          sceneWithTextNodes([
+            {
+              id: 't1',
+              kind: { text: { style: { fontFamilies: ['Arial'], fontSize: 20 } } },
+            },
+            {
+              id: 't2',
+              kind: { text: { style: { fontFamilies: ['Arial'], fontSize: 20 } } },
+            },
+          ]),
+        ),
+      ),
+    )
+
+    renderWithQuery(<RenderControlsPanel />)
+
+    const input = (await screen.findByTestId('render-font-size')) as HTMLInputElement
+    // Type a value first so the buffer has content to clear.
+    await userEvent.type(input, '30')
+    await userEvent.clear(input)
+
+    await waitFor(() => {
+      const calls = (sceneActions.applyOp as any).mock.calls
+      expect(calls.length).toBeGreaterThan(0)
+      const op = calls.at(-1)[0]
+      expect(op).toHaveProperty('batch')
+      for (const sub of op.batch.ops) {
+        expect(sub.updateNode.patch.data.text.style.fontSize).toBeNull()
+      }
+    })
+  })
+
   it('opening the font color picker commits effective black as an explicit color', async () => {
     server.use(
       http.get('/api/v1/scene.json', () =>
