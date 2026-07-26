@@ -148,6 +148,14 @@ export function RenderControlsPanel() {
 
   const sectionRef = useRef<HTMLDivElement>(null)
   const [sectionWidth, setSectionWidth] = useState<number>(0)
+  // Buffers font-size input in global scope (no selection) so multi-digit
+  // values can be typed before committing — the controlled `value` would
+  // otherwise reset to '' on each keystroke because `currentFontSize` stays
+  // undefined when nothing is selected.
+  const [globalFontSizeInput, setGlobalFontSizeInput] = useState('')
+  useEffect(() => {
+    setGlobalFontSizeInput('')
+  }, [selectedNode?.id, page?.id])
 
   useEffect(() => {
     if (!sectionRef.current) return
@@ -565,10 +573,20 @@ export function RenderControlsPanel() {
             variant='ghost'
             size='icon-sm'
             className='size-6 shrink-0 rounded-r-none border-r'
-            disabled={!selectedNode}
+            disabled={!hasNodes}
             onClick={() => {
-              const next = Math.max(6, Math.round((currentFontSize ?? 16) - 1))
-              applyStyleToSelected({ fontSize: next })
+              const base = selectedNode
+                ? (currentFontSize ?? 16)
+                : globalFontSizeInput !== ''
+                  ? Number.parseInt(globalFontSizeInput, 10)
+                  : 16
+              const next = Math.max(6, Math.round((Number.isFinite(base) ? base : 16) - 1))
+              if (selectedNode) {
+                applyStyleToSelected({ fontSize: next })
+              } else {
+                setGlobalFontSizeInput(String(next))
+                applyStyleToAll({ fontSize: next })
+              }
             }}
           >
             <MinusIcon className='size-3' />
@@ -581,16 +599,37 @@ export function RenderControlsPanel() {
             inputMode='numeric'
             className='h-6 min-w-0 flex-1 [appearance:textfield] rounded-none border-0 px-0.5 text-center text-xs shadow-none focus-visible:ring-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
             data-testid='render-font-size'
-            disabled={!selectedNode}
-            value={currentFontSize !== undefined ? Math.round(currentFontSize) : ''}
+            disabled={!hasNodes}
+            value={
+              selectedNode
+                ? currentFontSize !== undefined
+                  ? Math.round(currentFontSize)
+                  : ''
+                : globalFontSizeInput
+            }
             placeholder='auto'
             onChange={(event) => {
-              if (event.target.value === '') {
-                applyStyleToSelected({ fontSize: null })
+              const raw = event.target.value
+              if (selectedNode) {
+                if (raw === '') {
+                  applyStyleToSelected({ fontSize: null })
+                  return
+                }
+                const parsed = Number.parseInt(raw, 10)
+                if (!Number.isFinite(parsed) || parsed < 1) return
+                applyStyleToSelected({ fontSize: Math.min(300, parsed) })
+                return
               }
-              const parsed = Number.parseInt(event.target.value, 10)
+              // Global scope: buffer locally so multi-digit values survive
+              // re-renders, then commit to every text box.
+              setGlobalFontSizeInput(raw)
+              if (raw === '') {
+                applyStyleToAll({ fontSize: null })
+                return
+              }
+              const parsed = Number.parseInt(raw, 10)
               if (!Number.isFinite(parsed) || parsed < 1) return
-              applyStyleToSelected({ fontSize: Math.min(300, parsed) })
+              applyStyleToAll({ fontSize: Math.min(300, parsed) })
             }}
           />
           <Button
@@ -598,10 +637,20 @@ export function RenderControlsPanel() {
             variant='ghost'
             size='icon-sm'
             className='size-6 shrink-0 rounded-l-none border-l'
-            disabled={!selectedNode}
+            disabled={!hasNodes}
             onClick={() => {
-              const next = Math.min(300, Math.round((currentFontSize ?? 16) + 1))
-              applyStyleToSelected({ fontSize: next })
+              const base = selectedNode
+                ? (currentFontSize ?? 16)
+                : globalFontSizeInput !== ''
+                  ? Number.parseInt(globalFontSizeInput, 10)
+                  : 16
+              const next = Math.min(300, Math.round((Number.isFinite(base) ? base : 16) + 1))
+              if (selectedNode) {
+                applyStyleToSelected({ fontSize: next })
+              } else {
+                setGlobalFontSizeInput(String(next))
+                applyStyleToAll({ fontSize: next })
+              }
             }}
           >
             <PlusIcon className='size-3' />
