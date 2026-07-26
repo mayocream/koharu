@@ -89,6 +89,23 @@ Referências oficiais:
 - [Autenticação do OpenRouter](https://openrouter.ai/docs/api/reference/authentication)
 - [Modelos do OpenRouter](https://openrouter.ai/models)
 
+## AI Router
+
+Use o AI Router como um gateway de API hospedado e independente compatível com OpenAI.
+
+1. Crie uma conta e uma API key no [AI Router em português](https://ai-router.dev/pt/).
+2. No Koharu, abra **Settings > API Keys** e expanda `OpenAI Compatible`.
+3. Defina `Base URL` como `https://api.ai-router.dev/v1`.
+4. Cole sua API key do AI Router em `API Key` e salve.
+5. Aguarde o status dot do provedor ficar verde.
+6. Escolha um dos modelos descobertos no seletor de LLM do Koharu.
+
+Detalhes importantes:
+
+- o AI Router é um serviço independente e não é operado pela OpenAI
+- o Koharu descobre os modelos disponíveis com um `GET /v1/models` autenticado; a lista reflete a resposta da API para sua conta
+- as solicitações de tradução usam autenticação bearer padrão e o endpoint `POST /v1/chat/completions` no formato OpenAI
+
 ## Outros endpoints compatíveis
 
 Para outras APIs self-hosted ou roteadas, use o mesmo checklist:

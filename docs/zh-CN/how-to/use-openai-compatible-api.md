@@ -89,6 +89,23 @@ OpenRouter 是一个托管的多模型 OpenAI 兼容 API。
 - [OpenRouter 鉴权](https://openrouter.ai/docs/api/reference/authentication)
 - [OpenRouter 模型列表](https://openrouter.ai/models)
 
+## AI Router
+
+AI Router 是一个独立运营的托管式 OpenAI 兼容 API 网关。
+
+1. 在 [AI Router 中文站](https://ai-router.dev/cn/) 注册并创建 API key。
+2. 在 Koharu 中打开 **Settings > API Keys**，展开 `OpenAI Compatible`。
+3. 将 `Base URL` 设为 `https://api.ai-router.dev/v1`。
+4. 把 AI Router API key 粘贴到 `API Key` 并保存。
+5. 等待该提供方的状态指示点变绿。
+6. 在 Koharu 的 LLM 选择器中选择一个已发现的模型。
+
+重要细节：
+
+- AI Router 是独立服务，并非由 OpenAI 运营
+- Koharu 通过带鉴权的 `GET /v1/models` 发现可用模型；列表以当前账号收到的 API 响应为准
+- 翻译请求使用标准 Bearer 鉴权和 OpenAI 风格的 `POST /v1/chat/completions` 路径
+
 ## 其他兼容端点
 
 对于其他自托管或路由型 API，可以使用同样的检查表：

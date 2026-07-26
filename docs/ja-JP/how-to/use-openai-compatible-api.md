@@ -89,6 +89,23 @@ curl http://127.0.0.1:1234/v1/models
 - [OpenRouter authentication](https://openrouter.ai/docs/api/reference/authentication)
 - [OpenRouter models](https://openrouter.ai/models)
 
+## AI Router
+
+AI Router は、独立運営のホスト型 OpenAI 互換 API ゲートウェイです。
+
+1. [AI Router 日本語サイト](https://ai-router.dev/ja/) でアカウントを作成し、API キーを発行します。
+2. Koharu で **Settings > API Keys** を開き、`OpenAI Compatible` を展開します。
+3. `Base URL` に `https://api.ai-router.dev/v1` を設定します。
+4. AI Router の API キーを `API Key` に貼り付けて保存します。
+5. プロバイダのステータスドットが緑になるまで待ちます。
+6. Koharu の LLM ピッカーから、検出されたモデルを選びます。
+
+重要な点:
+
+- AI Router は独立したサービスであり、OpenAI が運営するサービスではありません
+- Koharu は認証付きの `GET /v1/models` で利用可能なモデルを検出します。表示される一覧は、利用中のアカウントに対する API レスポンスに基づきます
+- 翻訳リクエストには標準の bearer 認証と OpenAI 形式の `POST /v1/chat/completions` パスを使います
+
 ## その他の互換エンドポイント
 
 他のセルフホスト API やルーティング型 API を使う場合も、確認項目は同じです。
