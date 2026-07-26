@@ -229,7 +229,6 @@ mod tests {
                 [detection]
                 model = "koharu-layout-rfdetr-seg-2xl"
                 text_threshold = 0.25
-                onomatopoeia_threshold = 0.35
                 bubble_threshold = 0.45
                 panel_threshold = 0.55
 
@@ -248,7 +247,6 @@ mod tests {
             config.detection,
             DetectionModel::KoharuLayoutRFDetrSeg2XL(config)
                 if config.text_threshold == Some(0.25)
-                    && config.onomatopoeia_threshold == Some(0.35)
                     && config.bubble_threshold == Some(0.45)
                     && config.panel_threshold == Some(0.55)
         ));

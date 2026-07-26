@@ -582,16 +582,6 @@ function PipelineModelFields({
             onChange={(text_threshold) => onChange({ ...model, text_threshold })}
           />
           <OptionalNumberSetting
-            label='Onomatopoeia threshold'
-            value={model.onomatopoeia_threshold ?? null}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(onomatopoeia_threshold) =>
-              onChange({ ...model, onomatopoeia_threshold })
-            }
-          />
-          <OptionalNumberSetting
             label='Bubble threshold'
             value={model.bubble_threshold ?? null}
             min={0}
@@ -1113,7 +1103,6 @@ function defaultPipelineModel(model: PipelineModel['model']): PipelineModel {
       return {
         model,
         text_threshold: null,
-        onomatopoeia_threshold: null,
         bubble_threshold: null,
         panel_threshold: null,
       }

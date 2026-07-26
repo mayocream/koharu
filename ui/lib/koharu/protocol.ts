@@ -186,7 +186,6 @@ export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; comple
 
 export type KoharuLayoutRFDetrSeg2XLConfig = {
 	text_threshold?: number | null,
-	onomatopoeia_threshold?: number | null,
 	bubble_threshold?: number | null,
 	panel_threshold?: number | null,
 };

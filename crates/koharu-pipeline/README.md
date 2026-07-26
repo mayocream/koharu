@@ -96,7 +96,6 @@ pub fn new(
 model = "koharu-layout-rfdetr-seg-2xl"
 # Optional per-class overrides; omitted values use the checkpoint recommendations.
 text_threshold = 0.25
-onomatopoeia_threshold = 0.35
 
 [pipeline.ocr]
 model = "paddleocr-vl-1.6"
@@ -148,9 +147,9 @@ scene commands. The planner does not model those values as input or output
 ports.
 
 `KoharuLayoutRFDetrSeg2XL` replaces the former collection of layout, text,
-speech-bubble, onomatopoeia, and mask-fusion processors. Its single inference
-produces all detection regions and final masks. The following processors are
-not part of this design:
+speech-bubble, and mask-fusion processors. Its pipeline adapter ignores the
+model's onomatopoeia class. The following processors are not part of this
+design:
 
 - `comic_layout_yolo26s`
 - `comic_onomatopoeia`
@@ -308,11 +307,36 @@ src/
   events.rs       progress events
   worker/         process protocol and worker lifecycle
   builtin/        thin model/translator adapters
+  bin/            headless full-pipeline and renderer CLI
 ```
 
 `lib.rs` should not contain model match trees. `plan.rs` should not load models
 or inspect scene commands. `builtin` adapters should not know how target
 selection works.
+
+## Headless CLI
+
+`src/bin/run.rs` imports one image into an in-memory scene, runs the
+complete detection, OCR, translation, typography, and inpainting graph, then
+uses `koharu-renderer` to composite translated text over the clean page.
+
+```console
+cargo run -p koharu-pipeline --bin run -- --input input.png \
+  --output translated.png \
+  --detection koharu-layout-rfdetr-seg-2xl \
+  --ocr manga-ocr \
+  --font-family "Noto Sans" \
+  --font-family "Noto Sans JP" \
+  --inpainting flux2-klein \
+  --target-language en-US
+```
+
+The CLI only selects model implementations; every processor uses its default
+configuration. Font detection remains unconditional. Repeat `--font-family` to
+set the renderer's ordered font fallback list for translated text. `--llm`
+always supplies the local translation model and defaults to the catalog's Gemma
+4 12B instruct model, `gemma4-12b-it`. The executable also handles the
+pipeline's hidden worker mode, so model nodes retain normal process isolation.
 
 ## Invariants
 

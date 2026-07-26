@@ -3837,10 +3837,13 @@ version = "0.62.0-alpha.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "clap",
  "futures",
  "image 0.25.10",
+ "imageproc",
  "koharu-config",
  "koharu-ml",
+ "koharu-renderer",
  "koharu-runtime",
  "koharu-scene",
  "koharu-translator",

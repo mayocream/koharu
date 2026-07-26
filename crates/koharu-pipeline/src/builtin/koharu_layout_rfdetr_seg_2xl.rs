@@ -9,7 +9,12 @@ use std::{
 
 use anyhow::{Result, anyhow, bail, ensure};
 use async_trait::async_trait;
-use image::{DynamicImage, GrayImage, ImageFormat};
+use image::{DynamicImage, GrayImage, ImageFormat, Luma};
+use imageproc::{
+    distance_transform::Norm,
+    morphology::dilate,
+    region_labelling::{Connectivity, connected_components},
+};
 use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
     KoharuLayoutDetection, KoharuLayoutDetections, KoharuLayoutRFDetrSeg2XL, KoharuLayoutThresholds,
 };
@@ -23,12 +28,13 @@ use specta::Type;
 use crate::{Context, Processor};
 
 const MODEL_ID: &str = "mayocream/koharu-layout-rfdetr-seg-2xl-1152";
+const TEXT_MASK_REFERENCE_LONG_SIDE: u32 = 1024;
+const TEXT_MASK_DILATION_RADIUS: u32 = 6;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default)]
 pub struct KoharuLayoutRFDetrSeg2XLConfig {
     pub text_threshold: Option<f32>,
-    pub onomatopoeia_threshold: Option<f32>,
     pub bubble_threshold: Option<f32>,
     pub panel_threshold: Option<f32>,
 }
@@ -45,7 +51,6 @@ impl KoharuLayoutRFDetrSeg2XLProcessor {
     ) -> Result<Self> {
         for (class, threshold) in [
             ("text", config.text_threshold),
-            ("onomatopoeia", config.onomatopoeia_threshold),
             ("bubble", config.bubble_threshold),
             ("panel", config.panel_threshold),
         ] {
@@ -60,9 +65,6 @@ impl KoharuLayoutRFDetrSeg2XLProcessor {
         let mut thresholds = model.recommended_thresholds();
         if let Some(threshold) = config.text_threshold {
             thresholds.text = threshold;
-        }
-        if let Some(threshold) = config.onomatopoeia_threshold {
-            thresholds.onomatopoeia = threshold;
         }
         if let Some(threshold) = config.bubble_threshold {
             thresholds.bubble = threshold;
@@ -173,15 +175,11 @@ impl Processor for KoharuLayoutRFDetrSeg2XLProcessor {
                     analysis.panels.iter().map(|region| region.frame),
                 )
                 .and_then(|index| panel_ids.get(index).copied());
-                let bubble = (text.role != TextRole::Onomatopoeia)
-                    .then(|| {
-                        best_container(
-                            element.frame,
-                            analysis.bubbles.iter().map(|region| region.frame),
-                        )
-                    })
-                    .flatten()
-                    .and_then(|index| bubble_ids.get(index).copied());
+                let bubble = best_container(
+                    element.frame,
+                    analysis.bubbles.iter().map(|region| region.frame),
+                )
+                .and_then(|index| bubble_ids.get(index).copied());
                 let mut metadata = TextAnalysis::from(text);
                 metadata.panel = panel;
                 metadata.bubble = bubble;
@@ -202,19 +200,15 @@ impl Processor for KoharuLayoutRFDetrSeg2XLProcessor {
                     analysis.panels.iter().map(|region| region.frame),
                 )
                 .and_then(|index| panel_ids.get(index).copied());
-                let bubble = (text.role != TextRole::Onomatopoeia)
-                    .then(|| {
-                        best_container(
-                            text.frame,
-                            analysis.bubbles.iter().map(|region| region.frame),
-                        )
-                    })
-                    .flatten()
-                    .and_then(|index| bubble_ids.get(index).copied());
-                let role = if bubble.is_some() && text.role == TextRole::FreeText {
+                let bubble = best_container(
+                    text.frame,
+                    analysis.bubbles.iter().map(|region| region.frame),
+                )
+                .and_then(|index| bubble_ids.get(index).copied());
+                let role = if bubble.is_some() {
                     TextRole::Dialogue
                 } else {
-                    text.role
+                    TextRole::FreeText
                 };
                 let block = TextBlock {
                     role,
@@ -240,7 +234,6 @@ impl Processor for KoharuLayoutRFDetrSeg2XLProcessor {
 
             for (asset, mask) in [
                 (PageAsset::TextMask, analysis.text_mask),
-                (PageAsset::CooMask, analysis.coo_mask),
                 (PageAsset::BubbleMask, analysis.bubble_mask),
             ] {
                 let mask = patch_mask(context, input.page, asset, input.area, mask)?;
@@ -306,7 +299,6 @@ struct Analysis {
     bubbles: Vec<DetectedBubble>,
     texts: Vec<DetectedText>,
     text_mask: GrayImage,
-    coo_mask: GrayImage,
     bubble_mask: GrayImage,
 }
 
@@ -325,7 +317,6 @@ struct DetectedBubble {
 
 struct DetectedText {
     frame: Frame,
-    role: TextRole,
     score: f32,
     order: u32,
 }
@@ -374,34 +365,68 @@ fn analyze(output: KoharuLayoutDetections, area: PixelArea) -> Analysis {
     }
 
     let mut text_mask = GrayImage::new(output.image_width, output.image_height);
-    let mut coo_mask = GrayImage::new(output.image_width, output.image_height);
     let mut texts = Vec::new();
-    for detection in &output.detections {
-        let (role, mask) = match detection.label.as_str() {
-            "text" => (TextRole::FreeText, &mut text_mask),
-            "onomatopoeia" => (TextRole::Onomatopoeia, &mut coo_mask),
-            _ => continue,
-        };
-        paint_instance(mask, detection, u8::MAX);
+    for detection in output
+        .detections
+        .iter()
+        .filter(|detection| detection.label == "text")
+    {
+        paint_instance(&mut text_mask, detection, u8::MAX);
         texts.push(DetectedText {
             frame: offset_frame(detection.bbox, area),
-            role,
             score: detection.score,
             order: 0,
         });
     }
+    let mut texts = merge_duplicate_texts(texts);
     texts.sort_by(|left, right| manga_position(frame_box(left.frame), frame_box(right.frame)));
     for (order, text) in texts.iter_mut().enumerate() {
         text.order = order as u32;
     }
+    postprocess_text_mask(&mut text_mask);
 
     Analysis {
         panels,
         bubbles,
         texts,
         text_mask,
-        coo_mask,
         bubble_mask,
+    }
+}
+
+// Dilate by 6 px at a 1024 px long side, then fill background components that
+// do not touch the image border.
+fn postprocess_text_mask(mask: &mut GrayImage) {
+    if mask.width() == 0 || mask.height() == 0 {
+        return;
+    }
+    let radius = text_mask_dilation_radius(mask.width(), mask.height());
+    *mask = dilate(mask, Norm::L2, radius);
+    fill_holes(mask);
+}
+
+fn text_mask_dilation_radius(width: u32, height: u32) -> u8 {
+    (f64::from(TEXT_MASK_DILATION_RADIUS) * f64::from(width.max(height))
+        / f64::from(TEXT_MASK_REFERENCE_LONG_SIDE))
+    .round_ties_even()
+    .clamp(1.0, f64::from(u8::MAX)) as u8
+}
+
+fn fill_holes(mask: &mut GrayImage) {
+    let components = connected_components(mask, Connectivity::Eight, Luma([u8::MAX]));
+    let mut exterior = HashSet::new();
+    for x in 0..mask.width() {
+        exterior.insert(components.get_pixel(x, 0)[0]);
+        exterior.insert(components.get_pixel(x, mask.height() - 1)[0]);
+    }
+    for y in 0..mask.height() {
+        exterior.insert(components.get_pixel(0, y)[0]);
+        exterior.insert(components.get_pixel(mask.width() - 1, y)[0]);
+    }
+    for (pixel, component) in mask.pixels_mut().zip(components.pixels()) {
+        if pixel[0] == 0 && !exterior.contains(&component[0]) {
+            pixel[0] = u8::MAX;
+        }
     }
 }
 
@@ -540,6 +565,53 @@ fn box_area(value: [f32; 4]) -> f32 {
     (value[2] - value[0]).max(0.0) * (value[3] - value[1]).max(0.0)
 }
 
+fn merge_duplicate_texts(mut texts: Vec<DetectedText>) -> Vec<DetectedText> {
+    texts.sort_by(|left, right| right.score.total_cmp(&left.score));
+    let mut merged: Vec<DetectedText> = Vec::with_capacity(texts.len());
+
+    for mut text in texts {
+        let mut index = 0;
+        while index < merged.len() {
+            if duplicate_text_frames(text.frame, merged[index].frame) {
+                let duplicate = merged.swap_remove(index);
+                text.frame = union_frame(text.frame, duplicate.frame);
+                text.score = text.score.max(duplicate.score);
+                index = 0;
+            } else {
+                index += 1;
+            }
+        }
+        merged.push(text);
+    }
+
+    merged
+}
+
+fn duplicate_text_frames(left: Frame, right: Frame) -> bool {
+    let left = frame_box(left);
+    let right = frame_box(right);
+    let intersection = intersection_area(left, right);
+    if intersection == 0.0 {
+        return false;
+    }
+
+    let left_area = box_area(left);
+    let right_area = box_area(right);
+    let iou = intersection / (left_area + right_area - intersection).max(1.0);
+    let smaller_coverage = intersection / left_area.min(right_area).max(1.0);
+    iou >= 0.45 || smaller_coverage >= 0.90
+}
+
+fn union_frame(left: Frame, right: Frame) -> Frame {
+    let left = frame_box(left);
+    let right = frame_box(right);
+    let x1 = left[0].min(right[0]);
+    let y1 = left[1].min(right[1]);
+    let x2 = left[2].max(right[2]);
+    let y2 = left[3].max(right[3]);
+    Frame::new(x1, y1, x2 - x1, y2 - y1)
+}
+
 fn encode(mask: GrayImage) -> Result<Arc<[u8]>> {
     let mut bytes = Cursor::new(Vec::new());
     DynamicImage::ImageLuma8(mask).write_to(&mut bytes, ImageFormat::Png)?;
@@ -554,7 +626,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_every_layout_class_to_its_scene_artifact() {
+    fn maps_supported_layout_classes_to_scene_artifacts() {
         let detection = |label: &str, bbox: [f32; 4], pixel: usize| {
             let mut pixels = vec![0; 12];
             pixels[pixel] = u8::MAX;
@@ -579,7 +651,6 @@ mod tests {
                     detection("panel", [0.0, 0.0, 4.0, 3.0], 0),
                     detection("bubble", [1.0, 0.0, 3.0, 2.0], 1),
                     detection("text", [1.0, 1.0, 2.0, 2.0], 5),
-                    detection("onomatopoeia", [2.0, 1.0, 3.0, 2.0], 6),
                 ],
             },
             PixelArea {
@@ -594,21 +665,77 @@ mod tests {
         assert_eq!(analysis.panels[0].frame, Frame::new(10.0, 20.0, 4.0, 3.0));
         assert_eq!(analysis.bubbles.len(), 1);
         assert_eq!(analysis.bubbles[0].mask_id, 1);
-        assert_eq!(analysis.texts.len(), 2);
-        assert!(
-            analysis
-                .texts
-                .iter()
-                .any(|text| text.role == TextRole::FreeText)
-        );
-        assert!(
-            analysis
-                .texts
-                .iter()
-                .any(|text| text.role == TextRole::Onomatopoeia)
-        );
+        assert_eq!(analysis.texts.len(), 1);
         assert_eq!(analysis.bubble_mask.get_pixel(1, 0), &Luma([1]));
         assert_eq!(analysis.text_mask.get_pixel(1, 1), &Luma([u8::MAX]));
-        assert_eq!(analysis.coo_mask.get_pixel(2, 1), &Luma([u8::MAX]));
+        assert_eq!(analysis.text_mask.get_pixel(2, 1), &Luma([u8::MAX]));
+    }
+
+    #[test]
+    fn text_mask_dilation_scales_from_the_reference_long_side() {
+        assert_eq!(text_mask_dilation_radius(128, 64), 1);
+        assert_eq!(text_mask_dilation_radius(1024, 512), 6);
+        assert_eq!(text_mask_dilation_radius(4096, 2048), 24);
+    }
+
+    #[test]
+    fn text_mask_postprocessing_dilates_and_fills_enclosed_background() {
+        let mut mask = GrayImage::new(11, 11);
+        for offset in 2..=8 {
+            mask.put_pixel(offset, 2, Luma([u8::MAX]));
+            mask.put_pixel(offset, 8, Luma([u8::MAX]));
+            mask.put_pixel(2, offset, Luma([u8::MAX]));
+            mask.put_pixel(8, offset, Luma([u8::MAX]));
+        }
+
+        postprocess_text_mask(&mut mask);
+
+        assert_eq!(mask.get_pixel(1, 2), &Luma([u8::MAX]));
+        assert_eq!(mask.get_pixel(5, 5), &Luma([u8::MAX]));
+        assert_eq!(mask.get_pixel(0, 0), &Luma([0]));
+    }
+
+    #[test]
+    fn merges_nested_text_detections_without_losing_coverage() {
+        let texts = vec![
+            DetectedText {
+                frame: Frame::new(112.0, 231.0, 30.1, 140.2),
+                score: 0.7656,
+                order: 0,
+            },
+            DetectedText {
+                frame: Frame::new(112.0, 225.7, 57.2, 147.7),
+                score: 0.3867,
+                order: 0,
+            },
+        ];
+
+        let merged = merge_duplicate_texts(texts);
+
+        assert_eq!(merged.len(), 1);
+        let frame = merged[0].frame;
+        assert!((frame.x - 112.0).abs() < 0.001);
+        assert!((frame.y - 225.7).abs() < 0.001);
+        assert!((frame.width - 57.2).abs() < 0.001);
+        assert!((frame.height - 147.7).abs() < 0.001);
+        assert_eq!(merged[0].score, 0.7656);
+    }
+
+    #[test]
+    fn keeps_non_overlapping_text_detections_separate() {
+        let texts = vec![
+            DetectedText {
+                frame: Frame::new(10.0, 20.0, 30.0, 40.0),
+                score: 0.8,
+                order: 0,
+            },
+            DetectedText {
+                frame: Frame::new(45.0, 20.0, 30.0, 40.0),
+                score: 0.7,
+                order: 0,
+            },
+        ];
+
+        assert_eq!(merge_duplicate_texts(texts).len(), 2);
     }
 }
