@@ -86,7 +86,7 @@ jobs:
             ["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas",
             "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev",
             "cusolver", "cusolver_dev", "cusparse", "cusparse_dev", "nvrtc",
-            "nvrtc_dev", "nvjitlink", "nvjitlink_dev",
+            "nvrtc_dev", "nvjitlink",
             "visual_studio_integration"]
 
       - name: Install cuDNN 9.20
