@@ -10,13 +10,11 @@ on:
   push:
     branches: ['main']
     paths:
-      - '.github/libtorch/**'
       - '.github/workflows/libtorch.yml'
       - 'crates/koharu-torch-sys/libtch/**'
   pull_request:
     branches: ['main']
     paths:
-      - '.github/libtorch/**'
       - '.github/workflows/libtorch.yml'
       - 'crates/koharu-torch-sys/libtch/**'
 
@@ -112,16 +110,12 @@ jobs:
             --recurse-submodules --shallow-submodules --jobs 4 \
             https://github.com/pytorch/pytorch upstream/pytorch
 
-      - name: Make the NVRTC shim static
-        if: matrix.backend == 'cuda'
-        run: git -C upstream/pytorch apply "$GITHUB_WORKSPACE/.github/libtorch/pytorch-static.patch"
-
       - name: Install PyTorch build requirements
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r upstream/pytorch/requirements.txt 'cmake<4'
 
-      - name: Build static LibTorch
+      - name: Build shared LibTorch
         working-directory: upstream/pytorch
         run: |
           backend_env=()
@@ -149,7 +143,7 @@ jobs:
           env \
             BLAS=Eigen \
             BUILD_BINARY=OFF \
-            BUILD_SHARED_LIBS=OFF \
+            BUILD_SHARED_LIBS=ON \
             BUILD_TEST=OFF \
             CMAKE_BUILD_TYPE=Release \
             CMAKE_GENERATOR=Ninja \
@@ -199,10 +193,11 @@ jobs:
         run: |
           cmake --build build/libtorch-shim --config Release \
             --parallel 4
-          cmake --install build/libtorch-shim --prefix package
+          cmake --install build/libtorch-shim --prefix package/libtorch/lib
 
       - name: Package Koharu Torch
         run: |
+          cp -R upstream/pytorch/torch/. package/libtorch/
           cp upstream/pytorch/LICENSE package/pytorch-LICENSE
           cp upstream/pytorch/NOTICE package/pytorch-NOTICE
           tar -C package -czf \
@@ -234,10 +229,10 @@ jobs:
       - name: Publish Koharu Torch release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: libtorch-${{ env.PYTORCH_REF }}-static
+          tag_name: libtorch-${{ env.PYTORCH_REF }}-shared
           target_commitish: ${{ github.sha }}
-          name: LibTorch ${{ env.PYTORCH_REF }} static
-          body: Koharu Torch shims with static CUDA and Metal LibTorch builds.
+          name: LibTorch ${{ env.PYTORCH_REF }} shared
+          body: Koharu Torch shims with shared CUDA and Metal LibTorch builds.
           make_latest: 'false'
           fail_on_unmatched_files: true
           files: release/*.tar.gz
