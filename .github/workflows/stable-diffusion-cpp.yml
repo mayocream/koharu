@@ -124,7 +124,7 @@ jobs:
             platform_args+=(
               "-DCMAKE_C_COMPILER=cl.exe"
               "-DCMAKE_CXX_COMPILER=cl.exe"
-              "-DCMAKE_CXX_FLAGS=/bigobj"
+              "-DCMAKE_CXX_FLAGS=-bigobj"
             )
           fi
 
