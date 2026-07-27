@@ -37,21 +37,6 @@ pub enum Libtorch {
     )]
     Cpu,
     #[strum(
-        serialize = "cu126",
-        props(
-            windows_dylibs = "libiomp5md.dll,libiompstubs5md.dll,zlibwapi.dll,uv.dll,c10.dll,c10_cuda.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_cuda.dll,shm.dll,torch.dll",
-            linux_dylibs = "libgomp.so.1,libc10.so,libc10_cuda.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_nvshmem.so,libtorch_cuda.so,libtorch_cuda_linalg.so,libtorch.so"
-        )
-    )]
-    Cuda126,
-    #[strum(
-        serialize = "cu129",
-        props(
-            linux_dylibs = "libgomp.so.1,libc10.so,libc10_cuda.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_nvshmem.so,libtorch_cuda.so,libtorch_cuda_linalg.so,libtorch.so"
-        )
-    )]
-    Cuda129,
-    #[strum(
         serialize = "cu130",
         props(
             windows_dylibs = "libiomp5md.dll,libiompstubs5md.dll,zlibwapi.dll,uv.dll,c10.dll,c10_cuda.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_cuda.dll,shm.dll,torch.dll",
@@ -59,13 +44,6 @@ pub enum Libtorch {
         )
     )]
     Cuda130,
-    #[strum(
-        serialize = "rocm7.2",
-        props(
-            linux_dylibs = "libnuma.so,libtinfo.so,libelf.so,libdw.so,libdrm.so,libdrm_amdgpu.so,librocm-core.so,libamd_comgr.so,libhsa-runtime64.so,libhsa-amd-aqlprofile64.so,librocm_smi64.so,librocprofiler-register.so,librocprofiler-sdk.so,libroctracer64.so,libroctx64.so,libamdhip64.so,libaotriton_v2.so,libaotriton_v2.so.0.11.2,libMIOpen.so,libhipblas.so,libhipblaslt.so,libhipfft.so,libhiprand.so,libhiprtc.so,libhipsolver.so,libhipsparse.so,libhipsparselt.so,libmagma.so,librccl.so,librocblas.so,librocfft.so,librocrand.so,librocroller.so,librocsolver.so,librocsparse.so,libgomp.so,libc10.so,libc10_hip.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_rocshmem.so,libtorch_hip.so,libtorch.so"
-        )
-    )]
-    Rocm72,
     #[strum(
         serialize = "rocm7.14",
         props(
@@ -77,34 +55,42 @@ pub enum Libtorch {
 
 impl Libtorch {
     pub fn for_current_target() -> Result<Self> {
-        if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            if cuda_available() {
-                match driver_version() {
-                    Ok(version) if version >= 13000 => Ok(Self::Cuda130),
-                    Ok(version) if version >= 12060 => Ok(Self::Cuda126),
-                    _ => Ok(Self::Cpu),
-                }
-            } else if rocm_available() {
-                Ok(Self::Rocm714)
-            } else {
-                Ok(Self::Cpu)
-            }
-        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            if cuda_available() {
-                match driver_version() {
-                    Ok(version) if version >= 13000 => Ok(Self::Cuda130),
-                    Ok(version) if version >= 12090 => Ok(Self::Cuda129),
-                    Ok(version) if version >= 12060 => Ok(Self::Cuda126),
-                    _ => Ok(Self::Cpu),
-                }
-            } else {
-                Ok(Self::Cpu)
-            }
-        } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            Ok(Self::Cpu)
-        } else {
+        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            return Ok(Self::Cpu);
+        }
+        if !cfg!(any(
+            all(target_os = "windows", target_arch = "x86_64"),
+            all(target_os = "linux", target_arch = "x86_64")
+        )) {
             bail!("unsupported target for LibTorch")
         }
+
+        if cuda_available() {
+            return match driver_version() {
+                Ok(version) if version >= 13000 => Ok(Self::Cuda130),
+                Ok(version) => {
+                    tracing::warn!(
+                        driver_version = version,
+                        minimum_driver_version = 13000,
+                        "CUDA driver does not support CUDA 13.0; falling back to CPU LibTorch"
+                    );
+                    Ok(Self::Cpu)
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        "failed to determine CUDA driver version; falling back to CPU LibTorch"
+                    );
+                    Ok(Self::Cpu)
+                }
+            };
+        }
+        if cfg!(target_os = "windows") && rocm_available() {
+            return Ok(Self::Rocm714);
+        }
+
+        tracing::warn!("no supported GPU backend is available; falling back to CPU LibTorch");
+        Ok(Self::Cpu)
     }
 
     pub fn dylibs(self) -> Result<impl Iterator<Item = &'static str>> {
@@ -146,7 +132,7 @@ impl Libtorch {
             }
             Ok(urls)
         } else if cfg!(all(target_os = "windows", target_arch = "x86_64"))
-            && matches!(self, Self::Cpu | Self::Cuda126 | Self::Cuda130)
+            && matches!(self, Self::Cpu | Self::Cuda130)
         {
             Ok(vec![format!(
                 "https://download.pytorch.org/whl/{device}/torch-{VERSION}%2B{device}-cp312-cp312-win_amd64.whl"
@@ -238,65 +224,31 @@ impl PreloadablePackage for Libtorch {
     async fn preload(&self) -> anyhow::Result<()> {
         let dylibs = self.dylibs()?.collect::<Vec<_>>();
 
-        let cuda = match self {
-            Self::Cuda126 => &[
-                Cuda::Runtime126,
-                Cuda::Nvjitlink126,
-                Cuda::Nvrtc126,
-                Cuda::Cublas126,
-                Cuda::Cufft126,
-                Cuda::Curand126,
-                Cuda::Cusparse126,
-                Cuda::Cusolver126,
-                Cuda::Cudnn910,
-                Cuda::Cupti126,
-            ][..],
-            Self::Cuda129 => &[
-                Cuda::Runtime12,
-                Cuda::Nvjitlink129,
-                Cuda::Nvrtc129,
-                Cuda::Cublas12,
-                Cuda::Cufft12,
-                Cuda::Curand12,
-                Cuda::Cusparse129,
-                Cuda::Cusolver129,
-                Cuda::Cudnn920Cu12,
-                Cuda::Cupti129,
-            ][..],
-            Self::Cuda130 => &[
-                Cuda::Runtime130,
-                Cuda::Nvjitlink130,
-                Cuda::Nvrtc130,
-                Cuda::Cublas130,
-                Cuda::Cufft130,
-                Cuda::Curand130,
-                Cuda::Cusparse130,
-                Cuda::Cusolver130,
-                Cuda::Cudnn920,
-                Cuda::Cupti130,
-            ][..],
-            _ => &[],
-        };
-
-        for cuda in cuda {
-            cuda.preload().await?;
-        }
-
-        #[cfg(target_os = "linux")]
-        let cuda = match self {
-            Self::Cuda126 => &[Cuda::Cusparselt126, Cuda::Nccl126, Cuda::Nvshmem126][..],
-            Self::Cuda129 => &[Cuda::Cusparselt129, Cuda::Nccl129, Cuda::Nvshmem129][..],
-            Self::Cuda130 => &[Cuda::Cusparselt130, Cuda::Nccl130, Cuda::Nvshmem130][..],
-            _ => &[],
-        };
-
-        #[cfg(target_os = "linux")]
-        for cuda in cuda {
-            cuda.preload().await?;
-        }
-
-        if *self == Self::Rocm714 {
-            Rocm::for_current_target()?.preload().await?;
+        match self {
+            Self::Cuda130 => {
+                for cuda in [
+                    Cuda::Runtime130,
+                    Cuda::Nvjitlink130,
+                    Cuda::Nvrtc130,
+                    Cuda::Cublas130,
+                    Cuda::Cufft130,
+                    Cuda::Curand130,
+                    Cuda::Cusparse130,
+                    Cuda::Cusolver130,
+                    Cuda::Cudnn920,
+                    Cuda::Cupti130,
+                    #[cfg(target_os = "linux")]
+                    Cuda::Cusparselt130,
+                    #[cfg(target_os = "linux")]
+                    Cuda::Nccl130,
+                    #[cfg(target_os = "linux")]
+                    Cuda::Nvshmem130,
+                ] {
+                    cuda.preload().await?;
+                }
+            }
+            Self::Rocm714 => Rocm::for_current_target()?.preload().await?,
+            Self::Cpu => {}
         }
 
         let lib_dir = self.resolve().await?.join("libtorch").join("lib");

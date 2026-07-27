@@ -29,7 +29,7 @@ pub enum LlamaCpp {
         asset = "llama-cuda-windows-2022.tar.gz",
         dylibs = "llama.dll,mtmd.dll"
     ))]
-    WindowsX64Cuda130,
+    WindowsX64Cuda,
     #[strum(props(
         asset = "llama-vulkan-windows-2022.tar.gz",
         dylibs = "llama.dll,mtmd.dll"
@@ -50,13 +50,32 @@ pub enum LlamaCpp {
 impl LlamaCpp {
     pub fn for_current_target() -> anyhow::Result<Self> {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            if cuda_available() && matches!(driver_version(), Ok(version) if version >= 13000) {
-                Ok(Self::WindowsX64Cuda130)
+            if cuda_available() {
+                match driver_version() {
+                    Ok(version) if version >= 13000 => return Ok(Self::WindowsX64Cuda),
+                    Ok(version) if vulkan_available() => {
+                        tracing::warn!(
+                            driver_version = version,
+                            minimum_driver_version = 13000,
+                            "CUDA driver does not support CUDA 13.0; falling back to Vulkan llama.cpp"
+                        );
+                        return Ok(Self::WindowsX64Vulkan);
+                    }
+                    Err(error) if vulkan_available() => {
+                        tracing::warn!(
+                            %error,
+                            "failed to determine CUDA driver version; falling back to Vulkan llama.cpp"
+                        );
+                        return Ok(Self::WindowsX64Vulkan);
+                    }
+                    Ok(_) | Err(_) => {}
+                }
             } else if vulkan_available() {
-                Ok(Self::WindowsX64Vulkan)
-            } else {
-                bail!("llama.cpp requires CUDA 13 or Vulkan on Windows x86_64")
+                tracing::warn!("CUDA is unavailable; falling back to Vulkan llama.cpp");
+                return Ok(Self::WindowsX64Vulkan);
             }
+
+            bail!("llama.cpp requires CUDA 13 or Vulkan on Windows x86_64")
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             if vulkan_available() {
                 Ok(Self::LinuxX64Vulkan)
@@ -125,7 +144,7 @@ impl Package for LlamaCpp {
 #[async_trait::async_trait]
 impl PreloadablePackage for LlamaCpp {
     async fn preload(&self) -> anyhow::Result<()> {
-        if matches!(self, Self::WindowsX64Cuda130) {
+        if matches!(self, Self::WindowsX64Cuda) {
             Cuda::Runtime130.preload().await?;
             Cuda::Cublas130.preload().await?;
         }
