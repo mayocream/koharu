@@ -104,6 +104,9 @@ jobs:
 
       - name: Clone PyTorch
         run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            git config --global core.longpaths true
+          fi
           mkdir -p upstream
           git clone --depth 1 --branch "$PYTORCH_REF" \
             --recurse-submodules --shallow-submodules --jobs 4 \
