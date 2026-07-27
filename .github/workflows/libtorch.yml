@@ -106,7 +106,7 @@ jobs:
         run: |
           mkdir -p upstream
           git clone --depth 1 --branch "$PYTORCH_REF" \
-            --recurse-submodules --shallow-submodules \
+            --recurse-submodules --shallow-submodules --jobs 4 \
             https://github.com/pytorch/pytorch upstream/pytorch
 
       - name: Make the NVRTC shim static
