@@ -62,7 +62,7 @@ Por causa disso, um único modelo geralmente não é suficiente. O Koharu primei
 
 ## A forma da implementação
 
-Na árvore de código-fonte, o registro de engines e a execução da pipeline ficam em `koharu-app/src/engine.rs`, enquanto a seleção padrão de engine fica em `koharu-app/src/config.rs`.
+Na árvore de código-fonte, os estágios, o driver de execução e os processadores integrados ficam em `koharu-pipeline`; as configurações de runtime ficam em `koharu-config`.
 
 Alguns detalhes de implementação importam:
 
@@ -94,5 +94,3 @@ Se você configurar um provedor LLM remoto, o Koharu envia apenas o texto do OCR
 ## Quer a versão técnica aprofundada?
 
 Veja [Mergulho Técnico Profundo](technical-deep-dive.md) para tipos de modelos, comportamento do mask de segmentation, AOT inpainting e referências dos modelos upstream. Veja [Renderização de Texto e Layout Vertical CJK](text-rendering-and-vertical-cjk-layout.md) para detalhes internos do renderer, comportamento do modo de escrita vertical e limites atuais de layout.
-
-

@@ -48,6 +48,8 @@ title: 設定リファレンス
 - `Gemini`
 - `Claude`
 - `DeepSeek`
+- `OpenRouter`
+- `LM Studio`
 - `DeepL`
 - `Google Cloud Translation`
 - `Caiyun`

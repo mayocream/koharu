@@ -48,9 +48,6 @@ tmp/
 playwright-report/
 test-results/
 
-# Misc
-AGENTS.md
-
 # Zensical
 site/
 

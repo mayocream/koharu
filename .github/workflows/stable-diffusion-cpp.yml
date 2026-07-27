@@ -1,0 +1,203 @@
+name: stable-diffusion.cpp
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: stable-diffusion.cpp branch or tag to build
+        required: true
+        default: master-769-cc73429
+  push:
+    branches: ['main']
+    paths:
+      - '.github/workflows/stable-diffusion-cpp.yml'
+  pull_request:
+    branches: ['main']
+    paths:
+      - '.github/workflows/stable-diffusion-cpp.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REF: ${{ github.event.inputs.ref || 'master-769-cc73429' }}
+
+jobs:
+  build:
+    name: ${{ matrix.backend }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cuda
+            os: windows-2022
+          - backend: vulkan
+            os: ubuntu-24.04
+          - backend: vulkan
+            os: windows-2022
+          - backend: metal
+            os: macos-latest
+
+    runs-on: ${{ matrix.os }}
+    env:
+      BACKEND: ${{ matrix.backend }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache CUDA compilation
+        if: matrix.backend == 'cuda'
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
+          variant: sccache
+          max-size: 2G
+
+      - name: Clone stable-diffusion.cpp
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$REF" \
+            https://github.com/leejet/stable-diffusion.cpp upstream/stable-diffusion.cpp
+          git -C upstream/stable-diffusion.cpp submodule update --init --depth 1 \
+            ggml thirdparty/libwebp thirdparty/libwebm
+          commit=$(git -C upstream/stable-diffusion.cpp rev-parse HEAD)
+          printf 'stable-diffusion.cpp commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install CUDA 12.8
+        if: matrix.backend == 'cuda'
+        uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: '12.8.1'
+          method: network
+          sub-packages: >-
+            ["nvcc", "cudart", "cublas", "cublas_dev", "thrust",
+            "visual_studio_integration"]
+
+      - name: Enable MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        if: runner.os == 'Windows'
+        run: choco install ninja --no-progress -y
+
+      - name: Install Vulkan build dependencies on Linux
+        if: matrix.backend == 'vulkan' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            glslc \
+            libvulkan-dev \
+            ninja-build \
+            spirv-headers
+
+      - name: Install Vulkan SDK on Windows
+        if: matrix.backend == 'vulkan' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          version=1.4.328.1
+          installer="$(cygpath -u "$RUNNER_TEMP")/VulkanSDK-Installer.exe"
+          curl.exe -o "$installer" -L \
+            "https://sdk.lunarg.com/sdk/download/$version/windows/vulkansdk-windows-X64-$version.exe"
+          "$installer" --accept-licenses --default-answer --confirm-command install
+          printf 'VULKAN_SDK=C:\\VulkanSDK\\%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'C:\\VulkanSDK\\%s\\bin\n' "$version" >> "$GITHUB_PATH"
+
+      - name: Configure
+        shell: bash
+        run: |
+          generator=()
+          backend_args=()
+          platform_args=()
+
+          if [[ "$RUNNER_OS" == Windows || "$RUNNER_OS" == Linux ]]; then
+            generator=(-G Ninja)
+          fi
+
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            platform_args+=(
+              "-DCMAKE_C_COMPILER=cl.exe"
+              "-DCMAKE_CXX_COMPILER=cl.exe"
+              "-DCMAKE_CXX_FLAGS=-bigobj"
+            )
+          fi
+
+          case "$BACKEND" in
+            cuda)
+              backend_args+=(
+                "-DSD_CUDA=ON"
+                "-DCMAKE_CUDA_ARCHITECTURES=80-real"
+              )
+              ;;
+            vulkan)
+              backend_args+=("-DSD_VULKAN=ON")
+              ;;
+            metal)
+              backend_args+=(
+                "-DSD_METAL=ON"
+                "-DCMAKE_OSX_ARCHITECTURES=arm64"
+              )
+              ;;
+          esac
+
+          cmake -S upstream/stable-diffusion.cpp -B build "${generator[@]}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSD_BUILD_SHARED_LIBS=ON \
+            -DSD_BUILD_SHARED_GGML_LIB=OFF \
+            -DSD_BUILD_EXAMPLES=OFF \
+            -DGGML_BACKEND_DL=OFF \
+            -DGGML_CPU_ALL_VARIANTS=OFF \
+            -DGGML_NATIVE=OFF \
+            "${platform_args[@]}" \
+            "${backend_args[@]}"
+
+      - name: Build stable-diffusion
+        shell: bash
+        run: cmake --build build --target stable-diffusion --config Release --parallel 4
+
+      - name: Package stable-diffusion
+        shell: bash
+        run: |
+          mkdir package
+          cp build/bin/*stable-diffusion.* package/
+          tar -C package -czf \
+            "stable-diffusion-$BACKEND-${{ matrix.os }}.tar.gz" .
+
+      - name: Upload stable-diffusion
+        uses: actions/upload-artifact@v7
+        with:
+          name: stable-diffusion-${{ matrix.backend }}-${{ matrix.os }}
+          path: stable-diffusion-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download stable-diffusion builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: stable-diffusion-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish stable-diffusion release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: stable-diffusion.cpp-${{ env.REF }}
+          target_commitish: ${{ github.sha }}
+          name: stable-diffusion.cpp ${{ env.REF }}
+          body: Koharu runtime dependency.
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          files: release/*.tar.gz

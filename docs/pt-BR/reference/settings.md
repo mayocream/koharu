@@ -48,6 +48,8 @@ A aba `API Keys` cobre atualmente estes provedores embutidos:
 - `Gemini`
 - `Claude`
 - `DeepSeek`
+- `OpenRouter`
+- `LM Studio`
 - `DeepL`
 - `Google Cloud Translation`
 - `Caiyun`

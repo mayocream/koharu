@@ -1,8 +1,8 @@
 name: Labeler
 
+# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -4,52 +4,47 @@ title: How Koharu Works
 
 # How Koharu Works
 
-Koharu is built around a staged page pipeline for manga translation. The editor presents that pipeline as a simple workflow, but the implementation keeps detection, segmentation, OCR, inpainting, translation, and rendering separate because each stage produces different data and fails in different ways.
+Koharu is built around a five-phase page-processing pipeline. Detection, OCR, translation, typography, and inpainting stay separate because each phase performs different work and fails in different ways. Rendering consumes the resulting scene data after the pipeline.
 
 ## The pipeline at a glance
 
 ```mermaid
 flowchart LR
-    A[Input manga page] --> B[Detect stage]
-    B --> B1[Text blocks and bubble regions]
-    B --> B2[Segmentation mask]
-    B --> B3[Font hints]
-    B1 --> C[OCR stage]
-    B2 --> D[Inpaint stage]
-    C --> E[LLM translation stage]
-    B3 --> F
+    A[Input manga page] --> B[Koharu Layout RF-DETR]
+    B --> C[OCR]
+    B --> D[Inpaint text, COO, and brush masks]
+    B --> T[Font detection]
+    C --> E[Translation]
+    T --> F
     D --> F[Render stage]
     E --> F
     F --> G[Localized page or PSD export]
 ```
 
-At the public pipeline level, Koharu runs:
+The pipeline has five phases:
 
-1. `Detect`
+1. `Detection`
 2. `OCR`
-3. `Inpaint`
-4. `LLM Generate`
-5. `Render`
+3. `Translation`
+4. `Typography`
+5. `Inpainting`
 
-The important implementation detail is that `Detect` is already a multi-model stage:
+Rendering consumes the scene after the pipeline phases finish.
 
-- `comic-text-bubble-detector` finds text blocks and speech bubble regions.
-- `comic-text-detector-seg` produces a per-pixel text probability map that becomes the cleanup mask.
-- `YuzuMarker.FontDetection` estimates font and color hints for later rendering.
-
-That split lets Koharu use one model to reason about page structure and another to decide which exact pixels should be removed.
+`KoharuLayoutRFDetrSeg2XL` is the sole detection processor. A single inference finds panels, bubbles, ordinary text, and onomatopoeia while producing their pixel masks. OCR and inpainting each select one processor from their respective model families.
 
 ## What each stage produces
 
-| Stage | Main models | Main output |
+| Phase | Main processors | Main output |
 | --- | --- | --- |
-| Detect | `comic-text-bubble-detector`, `comic-text-detector-seg`, `YuzuMarker.FontDetection` | text blocks, bubble regions, segmentation mask, font hints |
-| OCR | `PaddleOCR-VL-1.5` | recognized source text for each block |
-| Inpaint | `aot-inpainting` | page with original text removed |
-| LLM Generate | local GGUF LLM or remote provider | translated text |
+| Detect | `KoharuLayoutRFDetrSeg2XL` | linked panel, bubble, text, and onomatopoeia instances plus final masks |
+| OCR | `PaddleOCR-VL-1.6` | source text for detected text regions |
+| Translation | local GGUF LLM or remote provider | translated text |
+| Typography | `FontDetector` | detected text color and typography metadata |
+| Inpaint | `LaMa` by default | page cleaned with the available text, COO, and brush masks |
 | Render | Koharu renderer | final localized page or export |
 
-## Why the stages are separate
+## Why the phases are separate
 
 Manga pages are much harder than ordinary document OCR:
 
@@ -58,26 +53,27 @@ Manga pages are much harder than ordinary document OCR:
 - text can overlap artwork, screentones, speed lines, and panel borders
 - reading order is part of the page structure, not just the raw pixels
 
-Because of that, a single model is usually not enough. Koharu first finds text blocks and bubble regions, then runs OCR on cropped regions, then uses a segmentation mask for cleanup, and only after that asks an LLM to translate the text.
+Koharu first finds text blocks and bubble regions together with their masks, then runs OCR on cropped regions, and uses the masks for cleanup before translation and rendering.
 
 ## The implementation shape
 
-In the source tree, the engine registry and pipeline execution live in `koharu-app/src/engine.rs`, while default engine selection lives in `koharu-app/src/config.rs`.
+In the source tree, the processing phases, execution driver, and built-in processors live in `koharu-pipeline`; runtime settings live in `koharu-config`.
+
+The runner does not infer dependencies from phase order. It stores the five processors in a `petgraph` graph with four fixed edges: detection to OCR, typography, and inpainting, plus OCR to translation. OCR, typography, and inpainting can therefore run concurrently after detection. Processors read the immutable scene context directly and return scene commands; they do not declare input or output ports.
 
 Some implementation details matter:
 
-- the default detect engine is `comic-text-bubble-detector`, which writes `TextBlock` values and bubble regions in one pass
-- `comic-text-detector-seg` runs after text blocks exist and stores the final cleanup mask as `doc.segment`
+- regions retain their model confidence and links to their containing panel and bubble
 - OCR runs on cropped text regions, not on the full page
-- inpainting consumes the current segmentation mask, not just a rectangular box
+- inpainting consumes the union of the ordinary-text, COO, and brush masks
 - when you choose a remote LLM provider, Koharu sends OCR text for translation, not the full page image
-- individual stages can be swapped in **Settings > Engines** without changing the rest of the pipeline
+- OCR and inpainting processors can be swapped in **Settings > Pipeline** without changing the graph
 
 ## Why the stack matters
 
 Koharu uses:
 
-- [candle](https://github.com/huggingface/candle) for high-performance inference
+- [LibTorch](https://pytorch.org/cppdocs/) through Koharu's Torch bindings for vision inference
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) for local LLM inference
 - [Tauri](https://github.com/tauri-apps/tauri) for the desktop app shell
 - Rust across the stack for performance and memory safety

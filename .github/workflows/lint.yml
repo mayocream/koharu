@@ -1,9 +1,8 @@
 name: Lint
 
+# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  push:
-    branches: ['main']
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

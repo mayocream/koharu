@@ -1,22 +1,25 @@
 'use client'
 
-import * as Sentry from '@sentry/nextjs'
-import NextError from 'next/error'
-import { useEffect } from 'react'
-
-export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
-  useEffect(() => {
-    Sentry.captureException(error)
-  }, [error])
-
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
   return (
     <html lang='en'>
-      <body>
-        {/* `NextError` is the default Next.js error page component. Its type
-        definition requires a `statusCode` prop. However, since the App Router
-        does not expose status codes for errors, we simply pass 0 to render a
-        generic error message. */}
-        <NextError statusCode={0} />
+      <body className='grid min-h-screen place-items-center bg-background text-foreground'>
+        <main className='max-w-lg rounded-lg border bg-card p-6 text-center shadow-lg'>
+          <h1 className='text-lg font-semibold'>Koharu could not continue</h1>
+          <p className='mt-2 text-sm text-muted-foreground'>{error.message}</p>
+          <button
+            className='mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground'
+            onClick={reset}
+          >
+            Try again
+          </button>
+        </main>
       </body>
     </html>
   )

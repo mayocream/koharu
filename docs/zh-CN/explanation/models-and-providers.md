@@ -55,29 +55,18 @@ Koharu 通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 支持本地 GG
 
 在实践中，这些本地模型通常是量化后的 decoder-only transformer。GGUF 是文件格式，`llama.cpp` 是推理运行时。
 
-### 面向英文输出的翻译型内置本地模型
-
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf)：Q5_K_M GGUF，更适合追求翻译质量
-- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF)：更小的多语言 instruction 模型，适合低内存机器或更快的迭代
-- [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) 和 [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF)：更大的翻译取向模型，适合有更多 VRAM / RAM 的环境
-
-### 面向中文输出的翻译型内置本地模型
-
-- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7)：在 8 GB 级别显卡上兼顾质量与速度
-- [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX)：更轻、更快，适合中端显卡或偏 CPU 的环境
-
-### 面向更广泛语言覆盖的翻译型内置本地模型
-
-- [hunyuan-mt-7b](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF)：一款多语言模型，对硬件要求适中
-
 ### 其他内置本地模型家族
 
 本地模型选择器里还包含一些并非专门为翻译调校的通用家族：
 
-- Gemma 4 instruct：`gemma4-e2b-it`、`gemma4-e4b-it`、`gemma4-26b-a4b-it`、`gemma4-31b-it`
-- Gemma 4 uncensored：`gemma4-e2b-uncensored`、`gemma4-e4b-uncensored`
+默认本地翻译模型是 `gemma4-12b-it`。
+
+- LFM2.5 Instruct：`lfm2.5-1.2b-instruct`
+- Ministral 3 Instruct：`ministral-3-8b-instruct`
+- Gemma 4 instruct（Unsloth 基于 QAT 的 Dynamic GGUF）：`gemma4-e2b-it`、`gemma4-e4b-it`、`gemma4-12b-it`、`gemma4-26b-a4b-it`、`gemma4-31b-it`
+- Gemma 4 uncensored（有可用版本时使用 HauhauCS QAT）：`gemma4-e2b-uncensored`、`gemma4-e4b-uncensored`、`gemma4-12b-uncensored`、`gemma4-26b-a4b-uncensored`、`gemma4-31b-uncensored`
 - Qwen 3.5：`qwen3.5-0.8b`、`qwen3.5-2b`、`qwen3.5-4b`、`qwen3.5-9b`、`qwen3.5-27b`、`qwen3.5-35b-a3b`
-- Qwen 3.5 uncensored：`qwen3.5-2b-uncensored`、`qwen3.5-4b-uncensored`、`qwen3.5-9b-uncensored`、`qwen3.5-27b-uncensored`、`qwen3.5-35b-a3b-uncensored`
+- Qwen 3.5 uncensored：`qwen3.5-2b-uncensored`、`qwen3.5-4b-uncensored`、`qwen3.5-9b-uncensored`
 - Qwen 3.6：`qwen3.6-27b`、`qwen3.6-35b-a3b`
 - Qwen 3.6 uncensored：`qwen3.6-27b-uncensored`、`qwen3.6-35b-a3b-uncensored`
 
@@ -87,7 +76,7 @@ Koharu 也可以通过远程或自托管 API 翻译，而不下载本地模型�
 
 支持的提供商家族包括：
 
-- LLM 驱动：`OpenAI`、`Gemini`、`Claude`、`DeepSeek`，以及任何暴露 `/v1/models` 与 `/v1/chat/completions` 的 `OpenAI 兼容` 端点（LM Studio、OpenRouter、vLLM 等）
+- LLM 驱动：`OpenAI`、`Gemini`、`Claude`、`DeepSeek`、`OpenRouter`、`LM Studio`，以及任何暴露 `/v1/models` 与 `/v1/chat/completions` 的 `OpenAI 兼容` 端点（vLLM、llama-server 等）
 - 机器翻译：`DeepL`、`Google Cloud Translation`、`Caiyun`
 
 机器翻译提供商是纯翻译服务，而不是聊天模型。它们接受源文本和目标语言并返回译文，没有 system prompt，也没有模型选择器。
@@ -96,11 +85,15 @@ Koharu 也可以通过远程或自托管 API 翻译，而不下载本地模型�
 
 LLM 驱动提供商的内置目录包括：
 
-- OpenAI：GPT-5.5、GPT-5.4、GPT-5.x、GPT-4.1、o 系列、GPT-4o，以及旧版 GPT chat 模型
-- Gemini：Gemini 3.1、Gemini 3、Gemini 2.5、Gemini 2.0 文本输出模型，以及通过 Gemini API 托管的 Gemma 4
-- Claude：当前可用的 Claude Opus、Sonnet、Haiku 4.x 模型，以及在上游退役日期前仍可用的已弃用 Claude 4 快照
-- DeepSeek：DeepSeek V4 Flash、DeepSeek V4 Pro，以及 `deepseek-chat` / `deepseek-reasoner` 兼容别名
+- OpenAI：GPT-5.6 Sol、Terra 和 Luna，GPT-5.5、GPT-5.4、早期 GPT-5 模型、GPT-4.1、o3 和 GPT-4o mini
+- Gemini：Gemini 3.5 Flash、Gemini 3.1 Pro 和 Flash-Lite、Gemini 3 Flash，以及 Gemini 2.5 文本输出模型
+- Claude：Claude Fable 5、Opus 4.8、Sonnet 5、Haiku 4.5，以及部分早期 Claude 4 模型
+- DeepSeek：DeepSeek V4 Flash 和 DeepSeek V4 Pro
+- OpenRouter：从 OpenRouter 动态发现文本输出模型
+- LM Studio：通过原生 v1 REST API 动态发现本地 LLM
 - OpenAI 兼容 API：模型列表会从你配置的端点动态发现
+
+聊天提供商设置还包括温度、最大输出令牌数，以及默认关闭的模型感知思考开关。
 
 ### 机器翻译提供商
 

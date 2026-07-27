@@ -12,7 +12,7 @@ title: ハウツーガイド
 - [ランタイムとモデルのダウンロード](runtime-and-model-downloads.md): Koharu が何をダウンロードするか、どこにキャッシュするか、バグ報告前にどう接続確認するか
 - [GUI / Headless / MCP モードを使う](run-gui-headless-and-mcp.md): ローカルでの起動パターンと実行時フラグ
 - [MCP クライアントを設定する](configure-mcp-clients.md): Antigravity、Claude Desktop、Claude Code を Koharu のローカル MCP エンドポイントに接続する
-- [OpenAI 互換 API を使う](use-openai-compatible-api.md): LM Studio、OpenRouter、その他 OpenAI 形式の chat-completions エンドポイントを接続する
+- [OpenAI 互換 API を使う](use-openai-compatible-api.md): 専用の LM Studio／OpenRouter プロバイダを設定するか、その他の OpenAI 互換エンドポイントを接続する
 - [Codex 画像生成を使う](use-codex-image-generation.md): Codex で image-to-image のページ全体再描画を行う
 - [ページを書き出し、プロジェクトを管理する](export-and-manage-projects.md): レンダリング済み画像、PSD 引き渡し、ページセット管理
 - [ソースからビルドする](build-from-source.md): Bun、Tauri、プラットフォーム機能を使ったローカルビルド手順

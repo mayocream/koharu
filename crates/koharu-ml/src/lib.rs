@@ -1,46 +1,125 @@
-mod hf_hub;
+use anyhow::Context;
+use koharu_llama::llama_backend::LlamaBackend;
+use koharu_runtime::{
+    device::{cuda::cuda_available, rocm::rocm_available, vulkan::vulkan_available},
+    package::{
+        Package, PreloadablePackage, libtorch::Libtorch, llama_cpp::LlamaCpp,
+        stable_diffusion_cpp::StableDiffusionCpp,
+    },
+};
+use tokio::sync::OnceCell;
 
-pub mod anime_text;
+mod device;
+
 pub mod aot_inpainting;
+pub mod baberu_ocr;
+pub mod comic_layout_yolo26s;
+pub mod comic_onomatopoeia;
 pub mod comic_text_bubble_detector;
 pub mod comic_text_detector;
 pub mod flux2_klein;
 pub mod font_detector;
-pub mod inpainting;
+pub mod koharu_layout_rfdetr_seg_2xl;
 pub mod lama;
-pub mod loading;
+pub mod llm;
 pub mod manga_ocr;
-pub mod manga_text_segmentation_2025;
-pub mod mit48px_ocr;
-mod ops;
-pub mod paddleocr_vl;
+pub mod manga_text_mask;
+pub mod paddle_ocr_vl;
 pub mod pp_doclayout_v3;
-pub mod probability_map;
-pub mod speech_bubble_segmentation;
-pub mod types;
+pub mod pp_ocr_v6;
+pub mod rorem_mixed;
+pub mod speech_bubble_yolo11n;
+pub mod speech_bubble_yolov8m;
 
-pub use types::{FontPrediction, NamedFontPrediction, Quad, TextDirection, TextRegion, TopFont};
+pub use device::{Backend, Device, DeviceConversionError, DeviceType};
+pub use koharu_diffusion as diffusion;
+pub use koharu_llama as llama;
+pub use koharu_torch as torch;
 
-use anyhow::Result;
-use candle_core::utils::{cuda_is_available, metal_is_available};
+static LLAMA_BACKEND: OnceCell<LlamaBackend> = OnceCell::const_new();
+static DIFFUSION_RUNTIME: OnceCell<()> = OnceCell::const_new();
+static TORCH_RUNTIME: OnceCell<()> = OnceCell::const_new();
 
-pub use candle_core::Device;
+/// Initializes the process-wide llama.cpp runtime and backend.
+pub async fn init_llama() -> anyhow::Result<()> {
+    LLAMA_BACKEND
+        .get_or_try_init(|| async {
+            let llama_cpp = LlamaCpp::for_current_target();
+            llama_cpp
+                .preload()
+                .await
+                .context("failed to initialize llama.cpp runtime")?;
+            koharu_llama::send_logs_to_tracing(koharu_llama::LogOptions::default());
+            let package_dir = llama_cpp
+                .resolve()
+                .await
+                .context("failed to resolve llama.cpp runtime")?;
+            LlamaBackend::load_all_backends_from_path(package_dir)
+                .context("failed to load llama.cpp backends")?;
+            let backend = LlamaBackend::init().context("failed to initialize llama.cpp backend")?;
+            Ok::<LlamaBackend, anyhow::Error>(backend)
+        })
+        .await?;
+    Ok(())
+}
 
-static GPU_SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+/// Initializes stable-diffusion.cpp and its shared GGML backend support.
+pub async fn init_diffusion() -> anyhow::Result<()> {
+    DIFFUSION_RUNTIME
+        .get_or_try_init(|| async {
+            let sd_cpp = StableDiffusionCpp::for_current_target()?;
+            sd_cpp
+                .preload()
+                .await
+                .context("failed to initialize stable-diffusion.cpp runtime")?;
+            koharu_diffusion::send_logs_to_tracing()
+                .context("failed to redirect stable-diffusion.cpp logs")?;
+            let package_dir = sd_cpp
+                .resolve()
+                .await
+                .context("failed to resolve stable-diffusion.cpp runtime")?;
+            koharu_diffusion::load_all_backends_from_path(package_dir)
+                .context("failed to load stable-diffusion.cpp backends")?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await?;
+    Ok(())
+}
 
-pub fn device(cpu: bool) -> Result<Device> {
+/// Initializes the process-wide LibTorch runtime.
+pub async fn init_torch() -> anyhow::Result<()> {
+    TORCH_RUNTIME
+        .get_or_try_init(|| async {
+            Libtorch::for_current_target()?
+                .preload()
+                .await
+                .context("failed to initialize LibTorch runtime")?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await?;
+    Ok(())
+}
+
+/// Returns the initialized process-wide llama.cpp backend.
+#[must_use]
+pub fn llama_backend() -> Option<&'static LlamaBackend> {
+    LLAMA_BACKEND.get()
+}
+
+/// Selects the universal device used by the Torch models in this crate.
+pub fn device(cpu: bool) -> Device {
     if cpu {
-        Ok(Device::Cpu)
-    } else if cuda_is_available()
-        && *GPU_SUPPORTED.get_or_init(koharu_runtime::check_cuda_driver_support)
-    {
-        Ok(Device::new_cuda(0)?)
-    } else if metal_is_available() {
-        Ok(Device::new_metal(0)?)
+        Device::cpu()
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Device::metal(0)
+    } else if cuda_available() {
+        Device::cuda(0)
+    } else if rocm_available() {
+        Device::rocm(0)
+    } else if vulkan_available() {
+        Device::vulkan(0)
     } else {
-        tracing::warn!(
-            "No GPU support detected; falling back to CPU. For better performance, ensure you have a compatible NVIDIA GPU with the latest drivers, or a recent Apple device with Metal support."
-        );
-        Ok(Device::Cpu)
+        tracing::warn!("GPU is not available, falling back to CPU");
+        Device::cpu()
     }
 }

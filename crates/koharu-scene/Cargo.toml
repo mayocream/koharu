@@ -1,0 +1,42 @@
+[package]
+name = "koharu-scene"
+version.workspace = true
+edition.workspace = true
+description = "Persisted scene-graph engine for Koharu."
+license.workspace = true
+authors.workspace = true
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+
+[dependencies]
+blake3 = { workspace = true }
+# Scene storage only inspects decoder metadata; it does not need image's
+# default Rayon support or AVIF encoder.
+image = { version = "0.25", default-features = false, features = [
+    "bmp",
+    "dds",
+    "exr",
+    "ff",
+    "gif",
+    "hdr",
+    "ico",
+    "jpeg",
+    "png",
+    "pnm",
+    "qoi",
+    "tga",
+    "tiff",
+    "webp",
+] }
+revision = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+specta = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

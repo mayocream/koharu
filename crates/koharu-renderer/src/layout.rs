@@ -1,22 +1,20 @@
+//! Unicode-aware text shaping, line breaking, and layout.
+
 use std::{collections::HashMap, ops::Range};
 use unicode_bidi::BidiInfo;
 
 use anyhow::Result;
 use harfrust::{Feature, Tag};
 use hypher::Lang;
-use skrifa::{
-    MetadataProvider,
-    instance::{LocationRef, Size},
+use skrifa::{MetadataProvider, instance::Size};
+
+use crate::{
+    font::{Font, font_key},
+    script::shaping_direction_for_text,
+    segment::{LineBreakSuffix, LineBreaker, hyphenation_lang_from_tag},
+    shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper, shape_script_runs},
+    types::TextAlign,
 };
-
-use crate::font::{Font, font_key};
-use crate::shape::shape_script_runs;
-use crate::text::script::shaping_direction_for_text;
-use crate::types::TextAlign;
-
-pub use crate::segment::{LineBreakOpportunity, LineBreaker, LineSegment};
-pub use crate::segment::{LineBreakSuffix, hyphenation_lang_from_tag};
-pub use crate::shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
 
 const HYPHENATION_MIN_WORD_LEN: usize = 8;
 const LINE_BREAK_HYPHEN_PENALTY: f32 = 2_000.0;
@@ -30,12 +28,14 @@ pub enum WritingMode {
     Horizontal,
     /// Vertical text, right-to-left columns (traditional CJK).
     VerticalRl,
+    /// Vertical text, left-to-right columns.
+    VerticalLr,
 }
 
 impl WritingMode {
     /// Returns true if the writing mode is vertical.
-    pub fn is_vertical(&self) -> bool {
-        matches!(self, WritingMode::VerticalRl)
+    pub const fn is_vertical(self) -> bool {
+        matches!(self, WritingMode::VerticalRl | WritingMode::VerticalLr)
     }
 }
 
@@ -103,73 +103,134 @@ pub struct TextLayout<'a> {
     font: &'a Font,
     fallback_fonts: &'a [Font],
     font_size: Option<f32>,
+    min_font_size: Option<f32>,
+    max_font_size: Option<f32>,
     max_width: Option<f32>,
     max_height: Option<f32>,
     alignment: Option<TextAlign>,
+    line_height: Option<f32>,
+    min_line_height: Option<f32>,
+    letter_spacing: f32,
+    word_spacing: f32,
 }
 
 impl<'a> TextLayout<'a> {
-    pub fn new(font: &'a Font, font_size: Option<f32>) -> Self {
+    #[must_use]
+    pub fn new(font: &'a Font) -> Self {
         Self {
             writing_mode: WritingMode::Horizontal,
             center_vertical_punctuation: true,
             hyphenation_lang: Some(Lang::English),
             font,
             fallback_fonts: &[],
-            font_size,
+            font_size: None,
+            min_font_size: None,
+            max_font_size: None,
             max_width: None,
             max_height: None,
             alignment: None,
+            line_height: None,
+            min_line_height: None,
+            letter_spacing: 0.0,
+            word_spacing: 0.0,
         }
     }
 
+    #[must_use]
     pub fn with_font_size(mut self, size: f32) -> Self {
         self.font_size = Some(size);
+        self.min_font_size = None;
+        self.max_font_size = None;
         self
     }
 
+    /// Automatically fit the text to its bounds without growing beyond `size`.
+    #[must_use]
+    pub fn with_max_font_size(mut self, size: f32) -> Self {
+        self.font_size = None;
+        self.max_font_size = Some(size);
+        self
+    }
+
+    /// Prevent automatically fitted text from becoming unreadably small.
+    #[must_use]
+    pub fn with_min_font_size(mut self, size: f32) -> Self {
+        self.font_size = None;
+        self.min_font_size = Some(size);
+        self
+    }
+
+    #[must_use]
     pub fn with_writing_mode(mut self, mode: WritingMode) -> Self {
         self.writing_mode = mode;
         self
     }
 
+    #[must_use]
     pub fn with_center_vertical_punctuation(mut self, enabled: bool) -> Self {
         self.center_vertical_punctuation = enabled;
         self
     }
 
+    #[must_use]
     pub fn with_hyphenation_language(mut self, lang: Lang) -> Self {
         self.hyphenation_lang = Some(lang);
         self
     }
 
+    #[must_use]
     pub fn with_hyphenation_language_tag(mut self, tag: &str) -> Self {
         self.hyphenation_lang = hyphenation_lang_from_tag(tag);
         self
     }
 
+    #[must_use]
     pub fn without_hyphenation(mut self) -> Self {
         self.hyphenation_lang = None;
         self
     }
 
+    #[must_use]
     pub fn with_fallback_fonts(mut self, fonts: &'a [Font]) -> Self {
         self.fallback_fonts = fonts;
         self
     }
 
+    #[must_use]
     pub fn with_max_width(mut self, width: f32) -> Self {
         self.max_width = Some(width);
         self
     }
 
+    #[must_use]
     pub fn with_max_height(mut self, height: f32) -> Self {
         self.max_height = Some(height);
         self
     }
 
+    #[must_use]
     pub fn with_alignment(mut self, alignment: TextAlign) -> Self {
         self.alignment = Some(alignment);
+        self
+    }
+
+    #[must_use]
+    pub fn with_line_height(mut self, ratio: f32) -> Self {
+        self.line_height = Some(ratio);
+        self
+    }
+
+    /// Allow auto-fit to tighten leading only when the readable size floor still overflows.
+    #[must_use]
+    pub fn with_min_line_height(mut self, ratio: f32) -> Self {
+        self.min_line_height = Some(ratio);
+        self
+    }
+
+    #[must_use]
+    pub fn with_spacing(mut self, letter: f32, word: f32) -> Self {
+        self.letter_spacing = letter;
+        self.word_spacing = word;
         self
     }
 
@@ -185,36 +246,82 @@ impl<'a> TextLayout<'a> {
         let _s = tracing::info_span!("auto_size").entered();
         let max_height = self.max_height.unwrap_or(f32::INFINITY);
         let max_width = self.max_width.unwrap_or(f32::INFINITY);
+        let maximum = self.max_font_size.unwrap_or(300.0).max(0.5);
+        let minimum = self
+            .min_font_size
+            .unwrap_or(maximum.min(1.0))
+            .max(0.5)
+            .min(maximum);
+        let fits = |layout: &LayoutRun<'_>| {
+            layout.width <= max_width + f32::EPSILON && layout.height <= max_height + f32::EPSILON
+        };
 
-        let mut low = 6;
-        let mut high = 300;
-        let mut best: Option<LayoutRun<'a>> = None;
+        let maximum_layout = self.run_with_size(text, maximum)?;
+        if fits(&maximum_layout) {
+            return Ok(maximum_layout);
+        }
+
+        let mut best = self.run_with_size(text, minimum)?;
+        if !fits(&best) {
+            let Some(preferred_line_height) = self.line_height else {
+                return Ok(best);
+            };
+            let minimum_line_height = self
+                .min_line_height
+                .unwrap_or(preferred_line_height)
+                .max(0.1)
+                .min(preferred_line_height);
+            if minimum_line_height >= preferred_line_height {
+                return Ok(best);
+            }
+
+            let mut compact = self.clone();
+            compact.line_height = Some(minimum_line_height);
+            best = compact.run_with_size(text, minimum)?;
+            if !fits(&best) {
+                return Ok(best);
+            }
+
+            let mut low = minimum_line_height;
+            let mut high = preferred_line_height;
+            let mut iterations = 0u32;
+            while high - low > 0.001 && iterations < 12 {
+                iterations += 1;
+                let ratio = (low + high) * 0.5;
+                compact.line_height = Some(ratio);
+                let layout = compact.run_with_size(text, minimum)?;
+                if fits(&layout) {
+                    best = layout;
+                    low = ratio;
+                } else {
+                    high = ratio;
+                }
+            }
+            tracing::info!(
+                iterations,
+                font_size = best.font_size,
+                line_height = low,
+                "auto_size tightened leading"
+            );
+            return Ok(best);
+        }
+
+        let mut low = minimum;
+        let mut high = maximum;
         let mut iterations = 0u32;
-
-        while low <= high {
+        while high - low > 0.01 && iterations < 16 {
             iterations += 1;
-            let mid = (low + high) / 2;
-            let size = mid as f32;
+            let size = (low + high) * 0.5;
             let layout = self.run_with_size(text, size)?;
-            if layout.width <= max_width && layout.height <= max_height {
-                best = Some(layout);
-                low = mid + 1;
+            if fits(&layout) {
+                best = layout;
+                low = size;
             } else {
-                high = mid - 1;
+                high = size;
             }
         }
-
-        // If no size fits within constraints, fall back to the smallest size.
-        // This ensures we always render something even if the box is very small.
-        if best.is_none() {
-            best = Some(self.run_with_size(text, 6.0)?);
-        }
-        tracing::info!(
-            iterations,
-            font_size = best.as_ref().map(|b| b.font_size as u32).unwrap_or(0),
-            "auto_size done"
-        );
-        Ok(best.unwrap())
+        tracing::info!(iterations, font_size = best.font_size, "auto_size done");
+        Ok(best)
     }
 
     fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
@@ -226,25 +333,20 @@ impl<'a> TextLayout<'a> {
         {
             line_breaker = line_breaker.with_hyphenation(lang, HYPHENATION_MIN_WORD_LEN);
         }
-        let normalized_punctuation;
-        let text = if self.writing_mode.is_vertical() {
-            normalized_punctuation = normalize_vertical_emphasis_punctuation(text);
-            normalized_punctuation.as_str()
-        } else {
-            text
-        };
-
         // Use real font metrics for consistent line sizing across modes.
-        let font_ref = self.font.skrifa()?;
-        let metrics = font_ref.metrics(Size::new(font_size), LocationRef::default());
+        let font_ref = self.font.skrifa_ref()?;
+        let metrics = font_ref.metrics(Size::new(font_size), self.font.location());
         let ascent = metrics.ascent;
         let descent = -metrics.descent;
-        let line_height = (ascent + descent + metrics.leading).max(font_size);
+        let line_height = self.line_height.map_or_else(
+            || (ascent + descent + metrics.leading).max(font_size),
+            |ratio| font_size * ratio,
+        );
 
         let bidi_info = BidiInfo::new(text, None);
 
         let (direction, script) = shaping_direction_for_text(text, self.writing_mode);
-        let opts = ShapingOptions {
+        let options = ShapingOptions {
             direction,
             script,
             font_size,
@@ -274,8 +376,8 @@ impl<'a> TextLayout<'a> {
                                   level: unicode_bidi::Level,
                                   cluster: usize|
          -> Result<ShapedBreakSuffix<'a>> {
-            let mut suffix_opts = opts.clone();
-            suffix_opts.direction = if level.is_rtl() {
+            let mut suffix_options = options.clone();
+            suffix_options.direction = if level.is_rtl() {
                 harfrust::Direction::RightToLeft
             } else {
                 harfrust::Direction::LeftToRight
@@ -283,7 +385,8 @@ impl<'a> TextLayout<'a> {
 
             let mut runs = Vec::new();
             let mut advance = 0.0f32;
-            for mut shaped in shape_script_runs(&shaper, suffix.as_str(), &fonts, &suffix_opts)? {
+            for mut shaped in shape_script_runs(&shaper, suffix.as_str(), &fonts, &suffix_options)?
+            {
                 for glyph in &mut shaped.glyphs {
                     glyph.cluster += cluster as u32;
                 }
@@ -321,8 +424,8 @@ impl<'a> TextLayout<'a> {
                     }
 
                     let run_text = &text[run_start..run_end];
-                    let mut run_opts = opts.clone();
-                    run_opts.direction = if self.writing_mode.is_vertical() {
+                    let mut run_options = options.clone();
+                    run_options.direction = if self.writing_mode.is_vertical() {
                         harfrust::Direction::TopToBottom
                     } else if level.is_rtl() {
                         harfrust::Direction::RightToLeft
@@ -330,8 +433,9 @@ impl<'a> TextLayout<'a> {
                         harfrust::Direction::LeftToRight
                     };
 
-                    let script_runs = shape_script_runs(&shaper, run_text, &fonts, &run_opts)?;
+                    let script_runs = shape_script_runs(&shaper, run_text, &fonts, &run_options)?;
                     for mut shaped in script_runs {
+                        self.apply_spacing(run_text, &mut shaped);
                         if self.writing_mode.is_vertical() && self.center_vertical_punctuation {
                             self.center_vertical_fullwidth_punctuation(
                                 font_size,
@@ -405,30 +509,27 @@ impl<'a> TextLayout<'a> {
         // Baselines depend only on line index and metrics. For vertical text we compute absolute X
         // positions within the layout bounds (0..width) so the renderer can draw from the left.
         let line_count = lines.len();
-        let effective_alignment = self.alignment.unwrap_or(if max_extent_finite {
-            // Default to Center for established horizontal or vertical scripts
-            // to match the visual style of speech bubbles.
-            TextAlign::Center
-        } else {
-            TextAlign::Left
-        });
+        let effective_alignment = self.alignment.unwrap_or(TextAlign::Left);
 
         for (i, line) in lines.iter_mut().enumerate() {
-            line.baseline = if self.writing_mode.is_vertical() {
-                // Vertical-rl: first column is on the right, subsequent columns shift left.
-                // Place the baseline at the center of each column. This avoids depending on
-                // ascent/descent for X extents (which are Y metrics) and prevents right-edge clipping.
-                let x = (line_count.saturating_sub(1) as f32 - i as f32) * line_height
-                    + line_height * 0.5;
-                (x, ascent)
-            } else {
-                (0.0, ascent + i as f32 * line_height)
+            line.baseline = match self.writing_mode {
+                WritingMode::VerticalRl => (
+                    (line_count.saturating_sub(1) as f32 - i as f32) * line_height
+                        + line_height * 0.5,
+                    ascent,
+                ),
+                WritingMode::VerticalLr => (i as f32 * line_height + line_height * 0.5, ascent),
+                WritingMode::Horizontal => (0.0, ascent + i as f32 * line_height),
             };
+        }
+
+        if effective_alignment == TextAlign::Justify && !self.writing_mode.is_vertical() {
+            justify_lines(text, &mut lines, max_extent);
         }
 
         // Compute a tight ink bounding box using per-glyph bounds from the font tables (via skrifa),
         // then translate baselines so the top-left ink origin is (0, 0). This avoids clipping without
-        // having to measure Skia paths in the renderer.
+        // having to measure glyph outlines in the renderer.
         let (mut width, mut height) = (0.0, 0.0);
         if let Some((mut min_x, mut min_y, mut max_x, mut max_y)) =
             self.ink_bounds(font_size, &lines)
@@ -465,7 +566,7 @@ impl<'a> TextLayout<'a> {
                         let offset = match effective_alignment {
                             TextAlign::Center => remaining * 0.5,
                             TextAlign::Right => remaining,
-                            TextAlign::Left => 0.0,
+                            TextAlign::Left | TextAlign::Justify => 0.0,
                         };
                         if offset > 0.0 {
                             for line in &mut lines {
@@ -490,24 +591,10 @@ impl<'a> TextLayout<'a> {
             }
             height = (max_y - min_y).max(0.0);
 
-            // Center vertically if requested and we have a container height.
-            if !self.writing_mode.is_vertical()
-                && effective_alignment == TextAlign::Center
-                && let Some(max_h) = self.max_height.filter(|&h| h.is_finite() && h > 0.0)
-            {
-                let offset = (max_h - height).max(0.0) * 0.5;
-                if offset > 0.0 {
-                    for line in &mut lines {
-                        line.baseline.1 += offset;
-                    }
-                    height = height.max(max_h);
-                }
-            }
-
             // Apply horizontal alignment for horizontal writing mode (per-line alignment).
             if !self.writing_mode.is_vertical()
                 && max_extent_finite
-                && effective_alignment != TextAlign::Left
+                && !matches!(effective_alignment, TextAlign::Left | TextAlign::Justify)
             {
                 // Anchor to the run width. If Center, this is a tight width.
                 // If Right, this is the container width.
@@ -518,6 +605,7 @@ impl<'a> TextLayout<'a> {
                         TextAlign::Left => 0.0,
                         TextAlign::Center => remaining * 0.5,
                         TextAlign::Right => remaining,
+                        TextAlign::Justify => 0.0,
                     };
                     if offset > 0.0 {
                         line.baseline.0 += offset;
@@ -696,14 +784,13 @@ impl<'a> TextLayout<'a> {
                 let glyph_metrics = match metrics_cache.entry(key) {
                     std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
                     std::collections::hash_map::Entry::Vacant(entry) => {
-                        let Ok(font_ref) = g.font.skrifa() else {
+                        let Ok(font_ref) = g.font.skrifa_ref() else {
                             x += g.x_advance;
                             y -= g.y_advance;
                             continue;
                         };
-                        entry.insert(
-                            font_ref.glyph_metrics(Size::new(font_size), LocationRef::default()),
-                        )
+                        entry
+                            .insert(font_ref.glyph_metrics(Size::new(font_size), g.font.location()))
                     }
                 };
 
@@ -711,14 +798,20 @@ impl<'a> TextLayout<'a> {
                 if let Some(b) = glyph_metrics.bounds(gid) {
                     let x0 = x + g.x_offset + b.x_min;
                     let x1 = x + g.x_offset + b.x_max;
+                    let synthetic_pad = g.font.synthetic_skew().map_or(0.0, |_| font_size * 0.25)
+                        + if g.font.synthetic_bold() {
+                            font_size * 0.05
+                        } else {
+                            0.0
+                        };
 
                     // `b` is in a Y-up font coordinate system. Our layout coordinates are Y-down
-                    // (matching the Skia canvas), so we flip by subtracting.
+                    // while screen-space Y grows downward, so we flip by subtracting.
                     let y0 = (y - g.y_offset) - b.y_max;
                     let y1 = (y - g.y_offset) - b.y_min;
 
-                    min_x = min_x.min(x0).min(x1);
-                    max_x = max_x.max(x0).max(x1);
+                    min_x = min_x.min(x0 - synthetic_pad).min(x1 - synthetic_pad);
+                    max_x = max_x.max(x0 + synthetic_pad).max(x1 + synthetic_pad);
                     min_y = min_y.min(y0).min(y1);
                     max_y = max_y.max(y0).max(y1);
                 }
@@ -759,12 +852,11 @@ impl<'a> TextLayout<'a> {
             let glyph_metrics = match metrics_cache.entry(key) {
                 std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
                 std::collections::hash_map::Entry::Vacant(entry) => {
-                    let Ok(font_ref) = glyph.font.skrifa() else {
+                    let Ok(font_ref) = glyph.font.skrifa_ref() else {
                         continue;
                     };
-                    entry.insert(
-                        font_ref.glyph_metrics(Size::new(font_size), LocationRef::default()),
-                    )
+                    entry
+                        .insert(font_ref.glyph_metrics(Size::new(font_size), glyph.font.location()))
                 }
             };
 
@@ -774,6 +866,68 @@ impl<'a> TextLayout<'a> {
             };
             glyph.x_offset = centered_x_offset(bounds.x_min, bounds.x_max);
         }
+    }
+
+    fn apply_spacing(&self, text: &str, shaped: &mut ShapedRun<'a>) {
+        if self.letter_spacing == 0.0 && self.word_spacing == 0.0 {
+            return;
+        }
+        for glyph in &mut shaped.glyphs {
+            let character = text
+                .get(glyph.cluster as usize..)
+                .and_then(|tail| tail.chars().next());
+            let extra = self.letter_spacing
+                + character
+                    .filter(|character| character.is_whitespace())
+                    .map_or(0.0, |_| self.word_spacing);
+            if self.writing_mode.is_vertical() {
+                glyph.y_advance = extend_advance(glyph.y_advance, extra);
+            } else {
+                glyph.x_advance = extend_advance(glyph.x_advance, extra);
+            }
+        }
+        shaped.x_advance = shaped.glyphs.iter().map(|glyph| glyph.x_advance).sum();
+        shaped.y_advance = shaped.glyphs.iter().map(|glyph| glyph.y_advance).sum();
+    }
+}
+
+fn extend_advance(advance: f32, extra: f32) -> f32 {
+    if advance < 0.0 {
+        advance - extra
+    } else {
+        advance + extra
+    }
+}
+
+fn justify_lines(text: &str, lines: &mut [LayoutLine<'_>], max_width: f32) {
+    if !max_width.is_finite() || max_width <= 0.0 {
+        return;
+    }
+    let last = lines.len().saturating_sub(1);
+    for (index, line) in lines.iter_mut().enumerate() {
+        if index == last
+            || text
+                .get(line.range.end..)
+                .is_some_and(|tail| tail.starts_with('\n'))
+        {
+            continue;
+        }
+        let is_space = |glyph: &PositionedGlyph<'_>| {
+            text.get(glyph.cluster as usize..)
+                .and_then(|tail| tail.chars().next())
+                .is_some_and(char::is_whitespace)
+        };
+        let spaces = line.glyphs.iter().filter(|glyph| is_space(glyph)).count();
+        if spaces == 0 || line.advance >= max_width {
+            continue;
+        }
+        let extra = (max_width - line.advance) / spaces as f32;
+        for glyph in &mut line.glyphs {
+            if is_space(glyph) {
+                glyph.x_advance = extend_advance(glyph.x_advance, extra);
+            }
+        }
+        line.advance = max_width;
     }
 }
 
@@ -849,75 +1003,6 @@ fn centered_x_offset(x_min: f32, x_max: f32) -> f32 {
     -((x_min + x_max) * 0.5)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EmphasisMark {
-    Bang,
-    Question,
-}
-
-fn emphasis_mark_kind(ch: char) -> Option<EmphasisMark> {
-    match ch {
-        '!' | '！' => Some(EmphasisMark::Bang),
-        '?' | '？' => Some(EmphasisMark::Question),
-        _ => None,
-    }
-}
-
-fn emphasis_pair_symbol(left: EmphasisMark, right: EmphasisMark) -> char {
-    match (left, right) {
-        (EmphasisMark::Bang, EmphasisMark::Bang) => '‼',
-        (EmphasisMark::Question, EmphasisMark::Question) => '⁇',
-        (EmphasisMark::Bang, EmphasisMark::Question) => '⁉',
-        (EmphasisMark::Question, EmphasisMark::Bang) => '⁈',
-    }
-}
-
-fn normalize_vertical_emphasis_punctuation(text: &str) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    let mut out = String::with_capacity(text.len());
-    let mut i = 0usize;
-
-    while i < chars.len() {
-        let Some(kind) = emphasis_mark_kind(chars[i]) else {
-            out.push(chars[i]);
-            i += 1;
-            continue;
-        };
-
-        if i + 1 >= chars.len() {
-            out.push(chars[i]);
-            i += 1;
-            continue;
-        }
-
-        let Some(next_kind) = emphasis_mark_kind(chars[i + 1]) else {
-            out.push(chars[i]);
-            i += 1;
-            continue;
-        };
-
-        if kind == next_kind {
-            out.push(emphasis_pair_symbol(kind, next_kind));
-            i += 2;
-            continue;
-        }
-
-        if i + 2 < chars.len()
-            && let Some(lookahead_kind) = emphasis_mark_kind(chars[i + 2])
-            && next_kind == lookahead_kind
-        {
-            out.push(chars[i]);
-            i += 1;
-            continue;
-        }
-
-        out.push(emphasis_pair_symbol(kind, next_kind));
-        i += 2;
-    }
-
-    out
-}
-
 fn is_fullwidth_punctuation(ch: char) -> bool {
     matches!(
         ch,
@@ -973,14 +1058,11 @@ fn reorder_visual(levels: &[unicode_bidi::Level]) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::{Font, FontBook};
-    use skrifa::{
-        MetadataProvider,
-        instance::{LocationRef, Size},
-    };
+    use crate::font::{Font, FontSystem};
+    use skrifa::{MetadataProvider, instance::Size};
 
     fn any_system_font() -> Font {
-        let mut book = FontBook::new();
+        let mut fonts = FontSystem::new();
 
         // Prefer fonts that are commonly available depending on OS/environment.
         // This is only used to construct a `TextLayout` for calling `compute_bounds`.
@@ -995,35 +1077,13 @@ mod tests {
         ];
 
         for name in preferred {
-            if let Some(post_script_name) = book
-                .all_families()
-                .into_iter()
-                .find(|face| {
-                    face.post_script_name == name
-                        || face
-                            .families
-                            .iter()
-                            .any(|(family, _)| family.as_str() == name)
-                })
-                .map(|face| face.post_script_name)
-                .filter(|post_script_name| !post_script_name.is_empty())
-                && let Ok(font) = book.query(&post_script_name)
-            {
+            if let Ok(font) = fonts.query_family(name) {
                 return font;
             }
         }
-
-        if let Some(face) = book
-            .all_families()
-            .into_iter()
-            .find(|face| !face.post_script_name.is_empty())
-        {
-            return book
-                .query(&face.post_script_name)
-                .expect("failed to load first system font");
-        }
-
-        panic!("no system font available for tests");
+        fonts
+            .first_font()
+            .expect("no system font available for tests")
     }
 
     fn assert_approx_eq(actual: f32, expected: f32) {
@@ -1038,6 +1098,87 @@ mod tests {
             (actual - expected).abs() <= eps,
             "expected {expected}, got {actual}"
         );
+    }
+
+    #[test]
+    fn capped_auto_size_shrinks_text_to_fit_the_available_height() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let preferred_size = 24.0;
+        let fixed = TextLayout::new(&font)
+            .with_font_size(preferred_size)
+            .with_max_width(1_000.0)
+            .run("First\nSecond\nThird")?;
+        let max_height = fixed.height * 0.65;
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(preferred_size)
+            .with_max_width(1_000.0)
+            .with_max_height(max_height)
+            .run("First\nSecond\nThird")?;
+
+        assert!(fitted.font_size < preferred_size);
+        assert!(fitted.width <= 1_000.0);
+        assert!(fitted.height <= max_height + 0.01);
+        Ok(())
+    }
+
+    #[test]
+    fn capped_auto_size_does_not_enlarge_text_that_already_fits() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let preferred_size = 18.0;
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(preferred_size)
+            .with_max_width(1_000.0)
+            .with_max_height(1_000.0)
+            .run("Fits")?;
+
+        assert_eq!(fitted.font_size, preferred_size);
+        Ok(())
+    }
+
+    #[test]
+    fn capped_auto_size_respects_the_readable_floor() -> anyhow::Result<()> {
+        let font = any_system_font();
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(16.0)
+            .with_min_font_size(8.0)
+            .with_max_width(12.0)
+            .with_max_height(12.0)
+            .run("This translation cannot fit")?;
+
+        assert_eq!(fitted.font_size, 8.0);
+        Ok(())
+    }
+
+    #[test]
+    fn capped_auto_size_prefers_default_leading_before_tightening() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "First\nSecond\nThird\nFourth";
+        let loose = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_line_height(1.2)
+            .run(text)?;
+        let tight = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_line_height(1.0)
+            .run(text)?;
+        let max_height = (loose.height + tight.height) * 0.5;
+
+        let fitted = TextLayout::new(&font)
+            .with_max_font_size(16.0)
+            .with_min_font_size(16.0)
+            .with_line_height(1.2)
+            .with_min_line_height(1.0)
+            .with_max_width(1_000.0)
+            .with_max_height(max_height)
+            .run(text)?;
+
+        assert_eq!(fitted.font_size, 16.0);
+        assert!(fitted.height <= max_height + 0.01);
+        assert!(fitted.height > tight.height);
+        Ok(())
     }
 
     #[test]
@@ -1057,15 +1198,16 @@ mod tests {
     fn layout_baselines_horizontal_follow_font_metrics() -> anyhow::Result<()> {
         let font = any_system_font();
         let font_size = 16.0;
-        let layout = TextLayout::new(&font, Some(font_size))
+        let layout = TextLayout::new(&font)
+            .with_font_size(font_size)
             .with_writing_mode(WritingMode::Horizontal)
             .run("A\nB\nC")?;
 
         assert!(layout.lines.len() >= 2);
 
         let metrics = font
-            .skrifa()?
-            .metrics(Size::new(font_size), LocationRef::default());
+            .skrifa_ref()?
+            .metrics(Size::new(font_size), font.location());
         let ascent = metrics.ascent;
         let descent = -metrics.descent;
         let line_height = (ascent + descent + metrics.leading).max(font_size);
@@ -1086,7 +1228,8 @@ mod tests {
     fn mandatory_newlines_are_not_shaped_as_glyphs() -> anyhow::Result<()> {
         let font = any_system_font();
         let text = "A\nB\nC";
-        let layout = TextLayout::new(&font, Some(16.0))
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
             .with_writing_mode(WritingMode::Horizontal)
             .run(text)?;
 
@@ -1103,15 +1246,16 @@ mod tests {
     fn layout_baselines_vertical_follow_font_metrics() -> anyhow::Result<()> {
         let font = any_system_font();
         let font_size = 16.0;
-        let layout = TextLayout::new(&font, Some(font_size))
+        let layout = TextLayout::new(&font)
+            .with_font_size(font_size)
             .with_writing_mode(WritingMode::VerticalRl)
             .run("A\nB\nC")?;
 
         assert!(layout.lines.len() >= 2);
 
         let metrics = font
-            .skrifa()?
-            .metrics(Size::new(font_size), LocationRef::default());
+            .skrifa_ref()?
+            .metrics(Size::new(font_size), font.location());
         let ascent = metrics.ascent;
         let descent = -metrics.descent;
         let line_height = (ascent + descent + metrics.leading).max(font_size);
@@ -1129,10 +1273,46 @@ mod tests {
     }
 
     #[test]
+    fn vertical_lr_columns_flow_left_to_right() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_writing_mode(WritingMode::VerticalLr)
+            .run("A\nB\nC")?;
+
+        assert_eq!(layout.lines.len(), 3);
+        assert!(
+            layout
+                .lines
+                .windows(2)
+                .all(|pair| { pair[0].baseline.0 < pair[1].baseline.0 })
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn vertical_layout_preserves_original_source_offsets() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "！！A";
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_writing_mode(WritingMode::VerticalRl)
+            .run(text)?;
+
+        assert_eq!(layout.lines[0].range, 0..text.len());
+        assert!(layout.lines[0].glyphs.iter().all(|glyph| {
+            let cluster = glyph.cluster as usize;
+            cluster <= text.len() && text.is_char_boundary(cluster)
+        }));
+        Ok(())
+    }
+
+    #[test]
     fn vertical_layout_horizontal_alignment_works() -> anyhow::Result<()> {
         let font = any_system_font();
         let max_width = 100.0;
-        let layout = TextLayout::new(&font, Some(16.0))
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
             .with_writing_mode(WritingMode::VerticalRl)
             .with_max_width(max_width)
             .with_alignment(TextAlign::Center)
@@ -1150,7 +1330,8 @@ mod tests {
     fn vertical_layout_left_alignment_expands_width() -> anyhow::Result<()> {
         let font = any_system_font();
         let max_width = 100.0;
-        let layout = TextLayout::new(&font, Some(16.0))
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
             .with_writing_mode(WritingMode::VerticalRl)
             .with_max_width(max_width)
             .with_alignment(TextAlign::Left)
@@ -1171,7 +1352,8 @@ mod tests {
         // line's centre (and the sprite centre).
         let font = any_system_font();
         let max_width = 400.0;
-        let layout = TextLayout::new(&font, Some(20.0))
+        let layout = TextLayout::new(&font)
+            .with_font_size(20.0)
             .with_max_width(max_width)
             .with_alignment(TextAlign::Center)
             .run("HELLOWORLD\nHI")?;
@@ -1194,10 +1376,11 @@ mod tests {
         let font = any_system_font();
         let text = "antidisestablishmentarianism";
         let font_size = 24.0;
-        let unwrapped = TextLayout::new(&font, Some(font_size)).run(text)?;
+        let unwrapped = TextLayout::new(&font).with_font_size(font_size).run(text)?;
         let max_width = (unwrapped.lines[0].advance * 0.45).max(font_size * 4.0);
 
-        let layout = TextLayout::new(&font, Some(font_size))
+        let layout = TextLayout::new(&font)
+            .with_font_size(font_size)
             .with_max_width(max_width)
             .run(text)?;
 
@@ -1232,8 +1415,9 @@ mod tests {
         let font = any_system_font();
         let text = "\u{5357}\u{4eac}\u{5e02}\u{957f}\u{6c5f}\u{5927}\u{6865}";
         let font_size = 24.0;
-        let unwrapped = TextLayout::new(&font, Some(font_size)).run(text)?;
-        let layout = TextLayout::new(&font, Some(font_size))
+        let unwrapped = TextLayout::new(&font).with_font_size(font_size).run(text)?;
+        let layout = TextLayout::new(&font)
+            .with_font_size(font_size)
             .with_max_width(unwrapped.lines[0].advance * 0.5)
             .run(text)?;
 
@@ -1261,7 +1445,7 @@ mod tests {
     #[test]
     fn vertical_punctuation_centering_enabled_by_default() {
         let font = any_system_font();
-        let layout = TextLayout::new(&font, Some(16.0));
+        let layout = TextLayout::new(&font).with_font_size(16.0);
         assert!(layout.center_vertical_punctuation);
     }
 
@@ -1272,21 +1456,6 @@ mod tests {
     }
 
     #[test]
-    fn normalize_vertical_emphasis_punctuation_collapses_pairs() {
-        assert_eq!(normalize_vertical_emphasis_punctuation("！！"), "‼");
-        assert_eq!(normalize_vertical_emphasis_punctuation("!!"), "‼");
-        assert_eq!(normalize_vertical_emphasis_punctuation("!!?"), "‼?");
-        assert_eq!(normalize_vertical_emphasis_punctuation("?!!"), "?‼");
-        assert_eq!(normalize_vertical_emphasis_punctuation("!?!"), "⁉!");
-        assert_eq!(normalize_vertical_emphasis_punctuation("！？"), "⁉");
-        assert_eq!(normalize_vertical_emphasis_punctuation("？！"), "⁈");
-        assert_eq!(
-            normalize_vertical_emphasis_punctuation("Hello!?!"),
-            "Hello⁉!"
-        );
-    }
-
-    #[test]
     fn horizontal_center_alignment_with_overflow_is_aligned_relative_to_widest()
     -> anyhow::Result<()> {
         let font = any_system_font();
@@ -1294,7 +1463,8 @@ mod tests {
         let max_width = 20.0;
         // A very long word that is guaranteed to overflow 20px in any font.
         let text = "LONGWORDTHATWILLOVERFLOW,\nHI";
-        let layout = TextLayout::new(&font, Some(20.0))
+        let layout = TextLayout::new(&font)
+            .with_font_size(20.0)
             .with_max_width(max_width)
             .with_alignment(TextAlign::Center)
             .run(text)?;

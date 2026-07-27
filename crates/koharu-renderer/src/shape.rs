@@ -1,12 +1,14 @@
+//! HarfRust shaping and grapheme-safe font fallback.
+
 use anyhow::Result;
-use harfrust::{Direction, Feature, Script, ShapeOptions, ShaperData, Tag, UnicodeBuffer};
+use harfrust::{Direction, Feature, Script, ShapeOptions, UnicodeBuffer};
 use icu_properties::{CodePointMapData, props::Script as IcuScript};
+use icu_segmenter::GraphemeClusterSegmenter;
 use skrifa::raw::TableProvider;
 
 use crate::font::Font;
 
-/// A glyph with positioning information.
-/// clone of harfrust::PositionedGlyph with glyph_id and cluster
+/// A glyph positioned for layout while retaining its source font and text cluster.
 #[derive(Debug, Clone)]
 pub struct PositionedGlyph<'a> {
     /// The glyph ID as per the font's glyph set.
@@ -47,12 +49,11 @@ pub struct ShapingOptions<'a> {
 }
 
 /// Text shaper using HarfRust.
-///
-/// TODO: add shaper plan cache
 #[derive(Debug, Clone, Default)]
 pub struct TextShaper;
 
 impl TextShaper {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -64,7 +65,7 @@ impl TextShaper {
         font: &'a Font,
         options: &ShapingOptions,
     ) -> Result<ShapedRun<'a>> {
-        let font_ref = font.harfrust()?;
+        let font_ref = font.harfrust_ref()?;
 
         let mut buffer = UnicodeBuffer::new();
         buffer.push_str(text);
@@ -74,8 +75,11 @@ impl TextShaper {
             buffer.set_script(script);
         }
 
-        let shaper_data = ShaperData::new(&font_ref);
-        let shaper = shaper_data.shaper(&font_ref).build();
+        let shaper = font
+            .shaper_data()
+            .shaper(&font_ref)
+            .instance(Some(font.shaper_instance()))
+            .build();
         let output = shaper.shape(
             buffer,
             ShapeOptions::new()
@@ -87,7 +91,7 @@ impl TextShaper {
         let glyph_infos = output.glyph_infos();
 
         // Scale factor to convert font units to pixels
-        let upem = font.skrifa()?.head()?.units_per_em() as f32;
+        let upem = font.skrifa_ref()?.head()?.units_per_em() as f32;
         let scale = options.font_size / upem;
 
         let mut positioned_glyphs = Vec::with_capacity(glyph_infos.len());
@@ -155,73 +159,85 @@ pub(crate) fn shape_script_runs<'a>(
 
         let script_run_text = &text[start..end];
 
-        // Identify priority font for each character in the script run.
-        // We use a small optimization to check the primary font and recently used font first.
-        let mut char_fonts = Vec::with_capacity(script_run_text.len());
-        let mut last_idx = 0;
-        for (_, ch) in script_run_text.char_indices() {
-            let idx = if fonts[0].has_glyph(ch) {
-                0
-            } else if last_idx != 0 && fonts[last_idx].has_glyph(ch) {
-                last_idx
-            } else {
-                fonts.iter().position(|f| f.has_glyph(ch)).unwrap_or(0)
-            };
-            last_idx = idx;
-            char_fonts.push(idx);
+        let mut run_opts = options.clone();
+        run_opts.script = crate::script::harfrust_script(script);
+
+        if let Some(font) = fonts
+            .iter()
+            .copied()
+            .find(|font| font.covers(script_run_text))
+        {
+            push_font_run(shaper, script_run_text, font, &run_opts, start, &mut runs)?;
+            continue;
         }
 
-        // Group characters into runs using the pre-calculated font indices.
-        let mut font_item_iter = script_run_text.char_indices().enumerate().peekable();
-        while let Some((i, (start_in_script, ch))) = font_item_iter.next() {
-            let font_idx = char_fonts[i];
-            let mut end_in_script = start_in_script + ch.len_utf8();
-
-            while let Some(&(next_i, (next_start, next_ch))) = font_item_iter.peek() {
-                if char_fonts[next_i] == font_idx {
-                    font_item_iter.next();
-                    end_in_script = next_start + next_ch.len_utf8();
-                } else {
-                    break;
-                }
+        // If no single face covers the script run, preserve extended grapheme
+        // clusters. This keeps combining marks, variation selectors, and emoji
+        // ZWJ sequences together instead of falling back per Unicode scalar.
+        let boundaries = GraphemeClusterSegmenter::new()
+            .segment_str(script_run_text)
+            .collect::<Vec<_>>();
+        let mut group_start = 0;
+        let mut group_font = 0;
+        for pair in boundaries.windows(2) {
+            let cluster = &script_run_text[pair[0]..pair[1]];
+            let font = fonts
+                .iter()
+                .position(|font| font.covers(cluster))
+                .unwrap_or(0);
+            if pair[0] == 0 {
+                group_font = font;
+                continue;
             }
-
-            let font_run_text = &script_run_text[start_in_script..end_in_script];
-            let absolute_start = start + start_in_script;
-            let chosen_font = fonts[font_idx];
-
-            let mut run_opts = options.clone();
-            // Apply the detected script to this specific run.
-            run_opts.script = match script {
-                IcuScript::Arabic => Script::from_iso15924_tag(Tag::new(b"Arab")),
-                IcuScript::Hebrew => Script::from_iso15924_tag(Tag::new(b"Hebr")),
-                IcuScript::Syriac => Script::from_iso15924_tag(Tag::new(b"Syrc")),
-                IcuScript::Thaana => Script::from_iso15924_tag(Tag::new(b"Thaa")),
-                IcuScript::Nko => Script::from_iso15924_tag(Tag::new(b"Nkoo")),
-                IcuScript::Adlam => Script::from_iso15924_tag(Tag::new(b"Adlm")),
-                IcuScript::Thai => Script::from_iso15924_tag(Tag::new(b"Thai")),
-                IcuScript::Han | IcuScript::Hiragana | IcuScript::Katakana => {
-                    Script::from_iso15924_tag(Tag::new(b"Hani"))
-                }
-                _ => None,
-            };
-
-            let mut shaped = shaper.shape(font_run_text, chosen_font, &run_opts)?;
-            for glyph in &mut shaped.glyphs {
-                glyph.cluster += absolute_start as u32;
+            if font != group_font {
+                push_font_run(
+                    shaper,
+                    &script_run_text[group_start..pair[0]],
+                    fonts[group_font],
+                    &run_opts,
+                    start + group_start,
+                    &mut runs,
+                )?;
+                group_start = pair[0];
+                group_font = font;
             }
-
-            runs.push(shaped);
         }
+        push_font_run(
+            shaper,
+            &script_run_text[group_start..],
+            fonts[group_font],
+            &run_opts,
+            start + group_start,
+            &mut runs,
+        )?;
     }
 
     Ok(runs)
 }
 
+fn push_font_run<'a>(
+    shaper: &TextShaper,
+    text: &str,
+    font: &'a Font,
+    options: &ShapingOptions<'_>,
+    text_offset: usize,
+    runs: &mut Vec<ShapedRun<'a>>,
+) -> Result<()> {
+    if text.is_empty() {
+        return Ok(());
+    }
+    let mut shaped = shaper.shape(text, font, options)?;
+    for glyph in &mut shaped.glyphs {
+        glyph.cluster += text_offset as u32;
+    }
+    runs.push(shaped);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::FontBook;
+    use crate::font::FontSystem;
 
     const PRIMARY_FAMILIES: &[&str] = &[
         "Arial",
@@ -256,28 +272,16 @@ mod tests {
         '\u{26A0}',
     ];
 
-    fn query_font(book: &mut FontBook, name: &str) -> Option<Font> {
-        let post_script_name = book
-            .all_families()
-            .into_iter()
-            .find(|face| {
-                face.post_script_name == name
-                    || face
-                        .families
-                        .iter()
-                        .any(|(family, _)| family.as_str() == name)
-            })
-            .map(|face| face.post_script_name)
-            .filter(|post_script_name| !post_script_name.is_empty())?;
-        book.query(&post_script_name).ok()
+    fn query_font(fonts: &mut FontSystem, name: &str) -> Option<Font> {
+        fonts.query_family(name).ok()
     }
 
     #[test]
     fn shape_segment_uses_fallback_font() -> Result<()> {
-        let mut book = FontBook::new();
+        let mut fonts = FontSystem::new();
         let primary = PRIMARY_FAMILIES
             .iter()
-            .find_map(|name| query_font(&mut book, name))
+            .find_map(|name| query_font(&mut fonts, name))
             .expect("no primary font available for fallback test");
 
         let mut chosen = None;
@@ -286,8 +290,9 @@ mod tests {
                 continue;
             }
             if let Some(fallback) = FALLBACK_FAMILIES.iter().find_map(|name| {
-                let font = query_font(&mut book, name)?;
-                font.has_glyph(*ch).then_some(font)
+                let font = query_font(&mut fonts, name)?;
+                (font.post_script_name() != primary.post_script_name() && font.has_glyph(*ch))
+                    .then_some(font)
             }) {
                 chosen = Some((fallback, *ch));
                 break;
@@ -298,40 +303,44 @@ mod tests {
 
         let text = format!("A{}!", symbol);
         let shaper = TextShaper::new();
-        let opts = ShapingOptions {
+        let options = ShapingOptions {
             direction: harfrust::Direction::LeftToRight,
             script: None,
             font_size: 16.0,
             features: &[],
         };
-        let runs = shape_script_runs(&shaper, &text, &[&primary, &fallback], &opts)?;
+        let runs = shape_script_runs(&shaper, &text, &[&primary, &fallback], &options)?;
 
-        // The mixed run should have been split into 3 segments: [A], [symbol], [!]
-        assert!(
-            runs.len() >= 2,
-            "expected at least 2 runs for mixed text, got {}",
-            runs.len()
-        );
         let glyph_count: usize = runs.iter().map(|r| r.glyphs.len()).sum();
         assert!(glyph_count >= 3);
+        assert!(
+            runs.iter()
+                .flat_map(|run| &run.glyphs)
+                .all(|glyph| glyph.glyph_id != 0)
+        );
+        assert!(
+            runs.iter()
+                .flat_map(|run| &run.glyphs)
+                .any(|glyph| std::ptr::eq(glyph.font, &fallback))
+        );
 
         Ok(())
     }
 
     #[test]
     fn shape_arabic_with_fallback_preserves_context() -> Result<()> {
-        let mut book = FontBook::new();
+        let mut fonts = FontSystem::new();
         let primary = PRIMARY_FAMILIES
             .iter()
-            .find_map(|name| query_font(&mut book, name))
+            .find_map(|name| query_font(&mut fonts, name))
             .expect("no primary font available");
         let fallback = FALLBACK_FAMILIES
             .iter()
-            .find_map(|name| query_font(&mut book, name))
+            .find_map(|name| query_font(&mut fonts, name))
             .expect("no fallback font available");
 
         let shaper = TextShaper::new();
-        let opts = ShapingOptions {
+        let options = ShapingOptions {
             direction: harfrust::Direction::RightToLeft,
             script: Some(harfrust::Script::from_iso15924_tag(harfrust::Tag::new(b"Arab")).unwrap()),
             font_size: 16.0,
@@ -339,8 +348,8 @@ mod tests {
         };
 
         // "مرحبا" (Marhaba)
-        let text = "مرحبا";
-        let shaped = shape_script_runs(&shaper, text, &[&primary, &fallback], &opts)?;
+        let text = "\u{0645}\u{0631}\u{062d}\u{0628}\u{0627}";
+        let shaped = shape_script_runs(&shaper, text, &[&primary, &fallback], &options)?;
 
         assert!(!shaped.is_empty());
         // Verify it used a consistent font for the whole run to ensure joining.
@@ -357,14 +366,14 @@ mod tests {
 
     #[test]
     fn shape_rtl_multi_run_preserves_visual_order() -> Result<()> {
-        let mut book = FontBook::new();
+        let mut fonts = FontSystem::new();
         let font = PRIMARY_FAMILIES
             .iter()
-            .find_map(|name| query_font(&mut book, name))
+            .find_map(|name| query_font(&mut fonts, name))
             .expect("no font available");
 
         let shaper = TextShaper::new();
-        let opts = ShapingOptions {
+        let options = ShapingOptions {
             direction: harfrust::Direction::RightToLeft,
             script: Some(harfrust::Script::from_iso15924_tag(harfrust::Tag::new(b"Arab")).unwrap()),
             font_size: 16.0,
@@ -372,8 +381,8 @@ mod tests {
         };
 
         // Mixed script: Arabic + Hebrew (will be detected as separate script runs).
-        let text = "مرحبا שלום";
-        let shaped = shape_script_runs(&shaper, text, &[&font], &opts)?;
+        let text = "\u{0645}\u{0631}\u{062d}\u{0628}\u{0627} \u{05e9}\u{05dc}\u{05d5}\u{05dd}";
+        let shaped = shape_script_runs(&shaper, text, &[&font], &options)?;
 
         // Now returns separate script runs in logical order.
         assert!(shaped.len() >= 2); // Arabic+space, Hebrew (or maybe space separate)

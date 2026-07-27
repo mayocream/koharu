@@ -4,9 +4,9 @@ title: Usar APIs Compatíveis com OpenAI
 
 # Usar APIs Compatíveis com OpenAI
 
-O Koharu pode traduzir através de APIs que seguem o formato Chat Completions da OpenAI. Isso inclui servidores locais como o LM Studio e routers hospedados como o OpenRouter.
+O Koharu pode traduzir através de APIs que seguem o formato Chat Completions da OpenAI, incluindo servidores locais como vLLM e llama-server.
 
-Esta página cobre o provedor `OpenAI Compatible` atual do Koharu. Ele é separado dos provedores embutidos OpenAI, Gemini, Claude, DeepSeek, DeepL, Google Cloud Translation e Caiyun, cada um dos quais tem sua própria entrada de configuração dedicada.
+Esta página cobre o provedor `OpenAI Compatible` atual do Koharu. Ele é separado dos provedores embutidos OpenAI, Gemini, Claude, DeepSeek, OpenRouter, LM Studio, DeepL, Google Cloud Translation e Caiyun, cada um dos quais tem sua própria entrada de configuração dedicada.
 
 ## O que o Koharu espera de um endpoint compatível
 
@@ -36,7 +36,7 @@ A UI atual expõe:
 - `Base URL` — obrigatório; aponta para a raiz da API (ex.: `http://127.0.0.1:1234/v1`)
 - `API Key` — opcional; só é enviada quando preenchida
 
-Existe uma única configuração de provedor `OpenAI Compatible`. Para alternar entre, digamos, um servidor LM Studio e o OpenRouter, você muda a base URL (e, opcionalmente, a API key) dessa entrada única; o seletor de LLM então redescobre a lista de modelos do novo endpoint.
+Existe uma única configuração de provedor `OpenAI Compatible`. Para alternar entre servidores compatíveis, mude a base URL e a API key opcional. O OpenRouter e o LM Studio usam entradas de provedor dedicadas.
 
 O status dot reflete o estado da descoberta:
 
@@ -46,36 +46,34 @@ O status dot reflete o estado da descoberta:
 
 ## LM Studio
 
-Use o LM Studio quando quiser um servidor local de modelo na mesma máquina.
+O LM Studio tem um provedor dedicado que usa sua API REST v1 nativa em vez do caminho genérico compatível com OpenAI.
 
 1. Inicie o servidor local do LM Studio.
-2. No Koharu, abra **Settings > API Keys** e expanda `OpenAI Compatible`.
-3. Defina `Base URL` como `http://127.0.0.1:1234/v1`.
-4. Deixe `API Key` vazio, a menos que você tenha posto autenticação na frente do LM Studio.
-5. Aguarde o status dot do provedor ficar verde.
-6. Abra o seletor de LLM do Koharu e selecione a entrada de modelo baseada no LM Studio que corresponde ao modelo carregado no LM Studio.
+2. No Koharu, selecione `LM Studio` como provedor de tradução.
+3. Defina `Base URL` como `http://localhost:1234`. Não acrescente `/api/v1`.
+4. Deixe a credencial vazia, a menos que você tenha ativado a autenticação por token da API do LM Studio.
+5. Selecione o modelo carregado no LM Studio.
 
-A documentação oficial do LM Studio usa o mesmo caminho base compatível com OpenAI na porta `1234`. Você também pode listar modelos manualmente:
+O Koharu descobre LLMs por `GET /api/v1/models` e traduz por `POST /api/v1/chat`. O toggle Thinking corresponde à configuração nativa `reasoning` do LM Studio e fica desativado por padrão. Você também pode listar modelos manualmente:
 
 ```bash
-curl http://127.0.0.1:1234/v1/models
+curl http://localhost:1234/api/v1/models
 ```
 
 Referências oficiais:
 
-- [Documentação de compatibilidade com OpenAI do LM Studio](https://lmstudio.ai/docs/developer/openai-compat)
-- [Endpoint list models do LM Studio](https://lmstudio.ai/docs/developer/openai-compat/models)
+- [API REST nativa do LM Studio](https://lmstudio.ai/docs/developer/rest)
+- [Endpoint de chat nativo do LM Studio](https://lmstudio.ai/docs/developer/rest/chat)
+- [Endpoint nativo de listagem de modelos do LM Studio](https://lmstudio.ai/docs/developer/rest/list)
 
 ## OpenRouter
 
-Use o OpenRouter para uma API multi-modelo hospedada compatível com OpenAI.
+O OpenRouter agora tem uma entrada de provedor dedicada e não requer a base URL do provedor compatível genérico.
 
 1. Crie uma API key no OpenRouter.
-2. No Koharu, abra **Settings > API Keys** e expanda `OpenAI Compatible`.
-3. Defina `Base URL` como `https://openrouter.ai/api/v1`.
-4. Cole sua API key do OpenRouter em `API Key` e salve.
-5. Aguarde o status dot do provedor ficar verde.
-6. Escolha o modelo baseado em OpenRouter que você quer no seletor de LLM do Koharu.
+2. No Koharu, selecione `OpenRouter` como provedor de tradução.
+3. Salve sua API key do OpenRouter no campo de credencial.
+4. Escolha um ID de modelo do OpenRouter com o prefixo da organização.
 
 Detalhes importantes:
 
@@ -102,9 +100,9 @@ Se o servidor implementar apenas a API mais recente `Responses` ou algum schema 
 
 ## Alternando entre endpoints
 
-Como existe um único provedor `OpenAI Compatible`, apenas uma base URL é configurada por vez. Para alternar entre o LM Studio em casa e o OpenRouter na rua, atualize a base URL (e a chave, se houver) ao trocar de contexto.
+Como existe um único provedor `OpenAI Compatible`, apenas uma base URL personalizada é configurada por vez. O OpenRouter e o LM Studio permanecem configurados separadamente em seus provedores dedicados.
 
-Se você quer regularmente tanto um servidor compatível com OpenAI *quanto* um dos provedores de primeira classe do Koharu (`OpenAI`, `Claude`, `Gemini`, `DeepSeek`), configure cada um separadamente — eles coexistem no seletor de LLM e você pode alternar com um clique.
+Se você quer regularmente tanto um servidor compatível com OpenAI *quanto* um dos provedores de primeira classe do Koharu (`OpenAI`, `Claude`, `Gemini`, `DeepSeek`, `OpenRouter`, `LM Studio`), configure cada um separadamente — eles coexistem no seletor de LLM e você pode alternar com um clique.
 
 ## Erros comuns
 

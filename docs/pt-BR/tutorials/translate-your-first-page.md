@@ -60,7 +60,7 @@ Escolha entre:
 - um modelo GGUF local se você quiser que tudo permaneça na sua máquina
 - um provedor remoto se quiser evitar o download de modelos locais ou inferência local pesada
 
-O Koharu pode usar OpenAI, Gemini, Claude, DeepSeek e endpoints compatíveis com OpenAI, como LM Studio ou OpenRouter.
+O Koharu pode usar OpenAI, Gemini, Claude, DeepSeek, OpenRouter, LM Studio e outros endpoints compatíveis com OpenAI.
 
 Se você quiser configurar o LM Studio, o OpenRouter ou outro endpoint no estilo OpenAI, siga [Use APIs compatíveis com OpenAI](../how-to/use-openai-compatible-api.md).
 

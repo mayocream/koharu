@@ -5,56 +5,38 @@ edition.workspace = true
 description.workspace = true
 license.workspace = true
 authors.workspace = true
-readme.workspace = true
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
-
-[[bin]]
-name = "pipeline"
-path = "bin/pipeline.rs"
+include = ["src/**", "README.md"]
 
 [dependencies]
-clap = { workspace = true }
-tracing-subscriber = { workspace = true }
-koharu-core = { workspace = true }
-koharu-ai = { workspace = true }
-koharu-ml = { workspace = true }
-koharu-renderer = { workspace = true }
-koharu-llm = { workspace = true }
-koharu-runtime = { workspace = true }
-koharu-secrets = { workspace = true }
 anyhow = { workspace = true }
-arc-swap = { workspace = true }
-async-trait = { workspace = true }
-atomicwrites = { workspace = true }
-base64 = { workspace = true }
-blake3 = { workspace = true }
-camino = { workspace = true }
-chrono = { workspace = true }
-dashmap = { workspace = true }
-fs4 = { workspace = true }
+dirs = { workspace = true }
 image = { workspace = true }
-inventory = { workspace = true }
-lru = { workspace = true }
-parking_lot = { workspace = true }
-petgraph = { workspace = true }
-postcard = { workspace = true }
-reqwest-middleware = { workspace = true }
-secrecy = { workspace = true }
+koharu-canvas = { workspace = true }
+koharu-config = { workspace = true }
+koharu-desktop = { workspace = true }
+koharu-pipeline = { workspace = true }
+koharu-psd = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-secrets = { workspace = true }
+koharu-translator = { workspace = true }
+rayon = { workspace = true }
+rfd = { workspace = true }
+rust-embed = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-strum = { workspace = true }
-tempfile = { workspace = true }
+specta = { workspace = true }
+specta-serde = { workspace = true }
+specta-typescript = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 tracing = { workspace = true }
-utoipa = { workspace = true }
+url = { workspace = true }
 uuid = { workspace = true }
-walkdir = { workspace = true }
-zip = { workspace = true }
-
-[features]
-cuda = ["koharu-ml/cuda"]
-metal = ["koharu-ml/metal"]
+webp = { workspace = true }

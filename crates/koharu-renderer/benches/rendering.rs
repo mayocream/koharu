@@ -1,33 +1,19 @@
-#![allow(unused)]
-
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use koharu_renderer::{
-    font::FontBook,
-    layout::{TextLayout, WritingMode},
-    renderer::{RenderOptions, TinySkiaRenderer},
-};
+use koharu_renderer::{FontSystem, RenderOptions, TextLayout, WgpuRenderer, WritingMode};
 
 const FONT_SIZE: f32 = 24.0;
 const SAMPLE_TEXT: &str = "The quick brown fox jumps over the lazy dog.";
 
 fn rendering_benchmark(c: &mut Criterion) {
-    let mut fontbook = FontBook::new();
-    let renderer = TinySkiaRenderer::new().expect("Failed to create renderer");
-    let post_script_name = fontbook
-        .all_families()
-        .into_iter()
-        .find(|face| !face.post_script_name.is_empty())
-        .map(|face| face.post_script_name)
-        .expect("Failed to find font");
-    let font = fontbook
-        .query(&post_script_name)
-        .expect("Failed to find font");
-    let _ = font.fontdue().expect("Failed to load font");
-    let layout = TextLayout::new(&font, Some(FONT_SIZE))
+    let mut fonts = FontSystem::new();
+    let renderer = WgpuRenderer::new().expect("failed to create renderer");
+    let font = fonts.first_font().expect("failed to find font");
+    let layout = TextLayout::new(&font)
+        .with_font_size(FONT_SIZE)
         .run(SAMPLE_TEXT)
-        .expect("Failed to create layout");
+        .expect("failed to create layout");
     let options = RenderOptions {
         font_size: FONT_SIZE,
         ..Default::default()
@@ -35,9 +21,10 @@ fn rendering_benchmark(c: &mut Criterion) {
 
     c.bench_function("layout", |b| {
         b.iter(|| {
-            let layout = TextLayout::new(&font, Some(FONT_SIZE))
+            let layout = TextLayout::new(&font)
+                .with_font_size(FONT_SIZE)
                 .run(black_box(SAMPLE_TEXT))
-                .expect("Failed to create layout");
+                .expect("failed to create layout");
             black_box(layout);
         })
     });
@@ -46,7 +33,7 @@ fn rendering_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let image = renderer
                 .render(&layout, WritingMode::Horizontal, &options)
-                .expect("Failed to render");
+                .expect("failed to render");
             black_box(image);
         })
     });

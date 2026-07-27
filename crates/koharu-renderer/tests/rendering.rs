@@ -1,11 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use koharu_renderer::{
-    font::{Font, FontBook},
-    layout::{TextLayout, WritingMode},
-    renderer::{RenderOptions, TinySkiaRenderer},
-};
+use koharu_renderer::{Font, FontSystem, RenderOptions, TextLayout, WgpuRenderer, WritingMode};
 use once_cell::sync::OnceCell;
 use unicode_bidi::BidiInfo;
 
@@ -21,41 +17,22 @@ fn output_dir() -> PathBuf {
 }
 
 fn font(family_name: &str) -> Result<Font> {
-    let mut book = FontBook::new();
-    let post_script_name = book
-        .all_families()
-        .into_iter()
-        .find(|face| {
-            face.post_script_name == family_name
-                || face
-                    .families
-                    .iter()
-                    .any(|(family, _)| family.as_str() == family_name)
-        })
-        .map(|face| face.post_script_name)
-        .filter(|post_script_name| !post_script_name.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("font not found: {family_name}"))?;
-    let font = book.query(&post_script_name)?;
-    // preload fontdue font
-    let _ = font.fontdue()?;
-
-    Ok(font)
+    FontSystem::new().query_family(family_name)
 }
 
-fn tiny_skia_renderer() -> Result<&'static TinySkiaRenderer> {
-    static INSTANCE: OnceCell<TinySkiaRenderer> = OnceCell::new();
-    let renderer = INSTANCE.get_or_try_init(TinySkiaRenderer::new)?;
+fn wgpu_renderer() -> Result<&'static WgpuRenderer> {
+    static INSTANCE: OnceCell<WgpuRenderer> = OnceCell::new();
+    let renderer = INSTANCE.get_or_try_init(WgpuRenderer::new)?;
     Ok(renderer)
 }
 
-fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
+fn non_background_y_bounds(image: &image::RgbaImage, background: [u8; 4]) -> Option<(u32, u32)> {
     let mut min_y = u32::MAX;
     let mut max_y = 0u32;
     let mut any = false;
 
-    for (x, y, p) in img.enumerate_pixels() {
-        let _ = x;
-        if p.0 != bg {
+    for (_, y, pixel) in image.enumerate_pixels() {
+        if pixel.0 != background {
             any = true;
             min_y = min_y.min(y);
             max_y = max_y.max(y);
@@ -66,14 +43,15 @@ fn non_bg_y_bounds(img: &image::RgbaImage, bg: [u8; 4]) -> Option<(u32, u32)> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and writes a visual fixture"]
 fn render_horizontal() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, Some(24.0))
+    let lines = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -90,15 +68,16 @@ fn render_horizontal() -> Result<()> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and writes a visual fixture"]
 fn render_vertical() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, Some(24.0))
+    let lines = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_writing_mode(WritingMode::VerticalRl)
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
         &RenderOptions {
@@ -115,19 +94,20 @@ fn render_vertical() -> Result<()> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and platform fonts"]
 fn vertical_flows_top_to_bottom() -> Result<()> {
     let font = font("Yu Gothic")?;
 
     // Repeated CJK characters so vertical advances are obvious and stable.
     let text = "\u{65E5}\u{672C}\u{8A9E}".repeat(40);
-    let layout = TextLayout::new(&font, Some(24.0))
+    let layout = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_writing_mode(WritingMode::VerticalRl)
         // Keep it in a single column so we can reason about Y extents.
         .with_max_height(10_000.0)
         .run(&text)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::VerticalRl,
         &RenderOptions {
@@ -138,8 +118,8 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
         },
     )?;
 
-    let (min_y, max_y) =
-        non_bg_y_bounds(&img, [255, 255, 255, 255]).expect("expected non-background pixels");
+    let (min_y, max_y) = non_background_y_bounds(&img, [255, 255, 255, 255])
+        .expect("expected non-background pixels");
 
     // If vertical pen advances are applied with the wrong sign, almost all ink ends up near the
     // top edge with a large empty region below. With correct top-to-bottom flow, ink should span
@@ -158,14 +138,15 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and writes a visual fixture"]
 fn render_horizontal_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
-    let lines = TextLayout::new(&font, Some(24.0))
+    let lines = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -182,15 +163,16 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and writes a visual fixture"]
 fn render_vertical_simplified_chinese() -> Result<()> {
     let font = font("Microsoft YaHei")?;
-    let lines = TextLayout::new(&font, Some(24.0))
+    let lines = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_writing_mode(WritingMode::VerticalRl)
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
         &RenderOptions {
@@ -207,14 +189,15 @@ fn render_vertical_simplified_chinese() -> Result<()> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and writes a visual fixture"]
 fn render_rgba_text() -> Result<()> {
     let font = font("Yu Gothic")?;
-    let lines = TextLayout::new(&font, Some(24.0))
+    let lines = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -232,16 +215,17 @@ fn render_rgba_text() -> Result<()> {
 }
 
 #[test]
-#[ignore]
+#[ignore = "requires a GPU and platform fallback fonts"]
 fn render_with_fallback_fonts() -> Result<()> {
     let primary_font = font("Yu Gothic")?;
     let fallback_fonts = vec![font("Segoe UI Symbol")?, font("Segoe UI Emoji")?];
 
-    let lines = TextLayout::new(&primary_font, Some(24.0))
+    let lines = TextLayout::new(&primary_font)
+        .with_font_size(24.0)
         .with_fallback_fonts(&fallback_fonts)
         .run("Here is a smiley: 😊 and a star: ★ and a heart: ♥")?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -257,11 +241,11 @@ fn render_with_fallback_fonts() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_arabic_layout_order() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn arabic_layout_order() -> Result<()> {
     let font = font("Segoe UI")?;
     let text = "مرحبا"; // Marhaba (Hello)
-    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    let layout = TextLayout::new(&font).with_font_size(24.0).run(text)?;
     let line = &layout.lines[0];
 
     let bidi_info = BidiInfo::new(text, None);
@@ -290,11 +274,11 @@ fn test_arabic_layout_order() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_mixed_bidi_render() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn mixed_bidi_render() -> Result<()> {
     let font = font("Arial")?;
     let text = "Hello مرحبا Hello";
-    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    let layout = TextLayout::new(&font).with_font_size(24.0).run(text)?;
 
     let bidi_info = BidiInfo::new(text, None);
     println!("Paragraphs: {}", bidi_info.paragraphs.len());
@@ -317,7 +301,7 @@ fn test_mixed_bidi_render() -> Result<()> {
             .collect::<Vec<_>>()
     );
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -332,12 +316,13 @@ fn test_mixed_bidi_render() -> Result<()> {
     Ok(())
 }
 #[test]
-#[ignore]
-fn test_rtl_multiline() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn rtl_multiline() -> Result<()> {
     let font = font("Arial")?;
     // A long text that will wrap.
     let text = "هذا نص طويل باللغة العربية سيتم لفه عبر عدة أسطر للتأكد من أن تخطيط الحروف والاتجاهات يعمل بشكل صحيح في جميع الأسطر. Hello World! وهذا جزء آخر.";
-    let layout = TextLayout::new(&font, Some(24.0))
+    let layout = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(400.0)
         .run(text)?;
 
@@ -351,7 +336,7 @@ fn test_rtl_multiline() -> Result<()> {
         );
     }
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -367,18 +352,19 @@ fn test_rtl_multiline() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_rtl_alignment() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn rtl_alignment() -> Result<()> {
     let font = font("Arial")?;
     let text = "مرحبا بالعالم"; // Hello World in Arabic
 
     // Test Left Alignment
-    let layout_left = TextLayout::new(&font, Some(24.0))
+    let layout_left = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(500.0)
         .with_alignment(koharu_renderer::TextAlign::Left)
         .run(text)?;
 
-    let img_left = tiny_skia_renderer()?.render(
+    let img_left = wgpu_renderer()?.render(
         &layout_left,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -391,12 +377,13 @@ fn test_rtl_alignment() -> Result<()> {
     img_left.save(output_dir().join("rtl_align_left.png"))?;
 
     // Test Right Alignment
-    let layout_right = TextLayout::new(&font, Some(24.0))
+    let layout_right = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(500.0)
         .with_alignment(koharu_renderer::TextAlign::Right)
         .run(text)?;
 
-    let img_right = tiny_skia_renderer()?.render(
+    let img_right = wgpu_renderer()?.render(
         &layout_right,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -412,14 +399,14 @@ fn test_rtl_alignment() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_rtl_punctuation_numbers() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn rtl_punctuation_numbers() -> Result<()> {
     let font = font("Arial")?;
     // Text with numbers and trailing punctuation.
     // In LTR, it's: "Arabic 123!"
     // In RTL, "123" stays LTR, but "!" might move to the left side of the word.
     let text = "هذا اختبار 123!";
-    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    let layout = TextLayout::new(&font).with_font_size(24.0).run(text)?;
 
     println!(
         "Clusters: {:?}",
@@ -430,7 +417,7 @@ fn test_rtl_punctuation_numbers() -> Result<()> {
             .collect::<Vec<_>>()
     );
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -446,14 +433,14 @@ fn test_rtl_punctuation_numbers() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_rtl_mixed_complex() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn rtl_mixed_complex() -> Result<()> {
     let font = font("Arial")?;
     // Mixed text with LTR and RTL sequences.
     let text = "The word for 'Apple' is تفاحة in Arabic.";
-    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    let layout = TextLayout::new(&font).with_font_size(24.0).run(text)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -469,16 +456,17 @@ fn test_rtl_mixed_complex() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_rtl_user_reported_string() -> Result<()> {
+#[ignore = "requires a GPU and platform fonts"]
+fn rtl_user_reported_string() -> Result<()> {
     let font = font("Arial")?;
     // The problematic string from the user.
     let text = "هل من المقبول حقاً ارتداء ملابس كهذه، إنها مجرد خيط؟";
-    let layout = TextLayout::new(&font, Some(24.0))
+    let layout = TextLayout::new(&font)
+        .with_font_size(24.0)
         .with_max_width(200.0) // Narrow width to force multiline
         .run(text)?;
 
-    let img = tiny_skia_renderer()?.render(
+    let img = wgpu_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
         &RenderOptions {
@@ -494,11 +482,11 @@ fn test_rtl_user_reported_string() -> Result<()> {
 }
 
 #[test]
-#[ignore]
-fn test_complex_reordering_and_glyph_count() -> Result<()> {
+#[ignore = "requires platform fonts"]
+fn complex_reordering_and_glyph_count() -> Result<()> {
     let font = font("Arial")?;
     let text = "A مرحبا 😊";
-    let layout = TextLayout::new(&font, Some(24.0)).run(text)?;
+    let layout = TextLayout::new(&font).with_font_size(24.0).run(text)?;
     let line = &layout.lines[0];
 
     // Check that we have valid layout (at least one glyph per word run).

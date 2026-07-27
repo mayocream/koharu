@@ -12,7 +12,7 @@ title: 操作指南
 - [运行时与模型下载](runtime-and-model-downloads.md)：说明 Koharu 会下载什么、缓存到哪里，以及在报 bug 前如何先做连接自检
 - [以 GUI、Headless 与 MCP 模式运行](run-gui-headless-and-mcp.md)：本地运行模式与运行时参数
 - [配置 MCP 客户端](configure-mcp-clients.md)：把 Antigravity、Claude Desktop 或 Claude Code 接到本地 MCP 端点
-- [使用 OpenAI 兼容 API](use-openai-compatible-api.md)：连接 LM Studio、OpenRouter 与其他 OpenAI 风格的接口
+- [使用 OpenAI 兼容 API](use-openai-compatible-api.md)：配置专用的 LM Studio、OpenRouter 提供方，或连接其他 OpenAI 兼容端点
 - [使用 Codex 图像生成](use-codex-image-generation.md)：使用 Codex 进行端到端 image-to-image 页面重绘
 - [导出页面与管理项目](export-and-manage-projects.md)：渲染图、PSD 交接与页面集管理
 - [从源码构建](build-from-source.md)：使用 Bun、Tauri 与平台特性的本地构建流程

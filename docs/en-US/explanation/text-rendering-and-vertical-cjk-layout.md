@@ -40,7 +40,7 @@ Vertical manga text makes the problem harder again:
 
 ## What Koharu actually does
 
-At the implementation level, the renderer lives in the `koharu-renderer` crate, and the main orchestration happens in `koharu-app/src/renderer.rs`, `src/layout.rs`, `src/shape.rs`, `src/segment.rs`, and `src/renderer.rs`.
+At the implementation level, the renderer lives in `koharu-renderer`; composition, layout, shaping, segmentation, and WGPU rasterization are implemented in its corresponding source modules.
 
 The pipeline for one translated `TextBlock` is roughly:
 

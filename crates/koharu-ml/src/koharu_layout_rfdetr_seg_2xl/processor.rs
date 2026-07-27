@@ -1,0 +1,285 @@
+//! RF-DETR 1.7.0 image preprocessing and instance segmentation postprocessing.
+//!
+//! https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/detr.py#L1177-L1430
+//! https://github.com/roboflow/rf-detr/blob/e77de6698d69d09cd9abf2597e2e9a576169a119/src/rfdetr/models/postprocess.py
+
+use anyhow::{Result, ensure};
+use image::DynamicImage;
+use koharu_torch::{Device, IndexOp, Kind, Tensor};
+use serde::Serialize;
+
+use super::{
+    config::{KoharuLayoutRFDetrSeg2XLConfig, KoharuLayoutThresholds},
+    model::Output,
+};
+
+#[derive(Debug, Clone)]
+pub struct KoharuLayoutRFDetrImageProcessor {
+    resolution: i64,
+    num_select: i64,
+    class_names: Vec<String>,
+    recommended_thresholds: KoharuLayoutThresholds,
+}
+
+impl KoharuLayoutRFDetrImageProcessor {
+    pub fn new(config: &KoharuLayoutRFDetrSeg2XLConfig) -> Result<Self> {
+        ensure!(config.resolution > 0, "RF-DETR resolution must be positive");
+        ensure!(
+            config.resolution % 24 == 0,
+            "RF-DETR resolution must be divisible by patch_size * num_windows"
+        );
+        ensure!(config.num_select > 0, "RF-DETR num_select must be positive");
+        Ok(Self {
+            resolution: config.resolution,
+            num_select: config.num_select,
+            class_names: config.class_names(),
+            recommended_thresholds: config.recommended_thresholds,
+        })
+    }
+
+    pub(super) fn recommended_thresholds(&self) -> KoharuLayoutThresholds {
+        self.recommended_thresholds
+    }
+
+    pub(super) fn preprocess(&self, image: &DynamicImage, device: Device) -> Result<Tensor> {
+        ensure!(
+            image.width() > 0 && image.height() > 0,
+            "cannot segment an empty image"
+        );
+        let image = image.to_rgb8();
+        let mut pixel_values = Tensor::from_slice(image.as_raw())
+            .view([1, i64::from(image.height()), i64::from(image.width()), 3])
+            .permute([0, 3, 1, 2])
+            .to_device(device)
+            .to_kind(Kind::Float)
+            / 255.0;
+        if image.width() != self.resolution as u32 || image.height() != self.resolution as u32 {
+            // torchvision.transforms.functional.resize defaults to antialiased bilinear
+            // interpolation for tensor inputs in RF-DETR 1.7.0.
+            pixel_values = pixel_values.internal_upsample_bilinear2d_aa(
+                [self.resolution, self.resolution],
+                false,
+                None,
+                None,
+            );
+        }
+        let mean = Tensor::from_slice(&[0.485f32, 0.456, 0.406])
+            .view([1, 3, 1, 1])
+            .to_device(device);
+        let std = Tensor::from_slice(&[0.229f32, 0.224, 0.225])
+            .view([1, 3, 1, 1])
+            .to_device(device);
+        Ok((pixel_values - mean) / std)
+    }
+
+    pub(super) fn postprocess(
+        &self,
+        output: &Output,
+        image_width: u32,
+        image_height: u32,
+        thresholds: KoharuLayoutThresholds,
+    ) -> Result<KoharuLayoutDetections> {
+        validate_thresholds(thresholds)?;
+
+        let logits_size = output.pred_logits.size();
+        ensure!(
+            logits_size == [1, 300, 5],
+            "unexpected RF-DETR logits shape {logits_size:?}"
+        );
+        ensure!(
+            output.pred_boxes.size() == [1, 300, 4],
+            "unexpected RF-DETR box shape {:?}",
+            output.pred_boxes.size()
+        );
+        ensure!(
+            output.pred_masks.size() == [1, 300, 288, 288],
+            "unexpected RF-DETR mask shape {:?}",
+            output.pred_masks.size()
+        );
+
+        // PostProcess ranks every query/class pair, including the checkpoint's
+        // fifth background logit slot, before applying the caller threshold.
+        let (scores, indexes) =
+            output
+                .pred_logits
+                .sigmoid()
+                .view([1, -1])
+                .topk(self.num_select, 1, true, true);
+        let scores = scores.i(0);
+        let indexes = indexes.i(0);
+        let query_indexes = indexes.floor_divide_scalar(5);
+        let labels = indexes.remainder(5);
+        let thresholds = Tensor::from_slice(&thresholds.with_background())
+            .to_device(scores.device())
+            .index_select(0, &labels);
+        let keep = scores.gt_tensor(&thresholds);
+        let selected = keep.nonzero().view([-1]);
+
+        if selected.size()[0] == 0 {
+            return Ok(KoharuLayoutDetections {
+                image_width,
+                image_height,
+                detections: Vec::new(),
+            });
+        }
+
+        let scores = scores.index_select(0, &selected);
+        let labels = labels.index_select(0, &selected);
+        let query_indexes = query_indexes.index_select(0, &selected);
+        let boxes = output.pred_boxes.i(0).index_select(0, &query_indexes);
+        let center = boxes.i((.., 0..2));
+        let half_size = boxes.i((.., 2..4)) / 2.0;
+        let boxes = Tensor::cat(&[&center - &half_size, &center + &half_size], 1)
+            * Tensor::from_slice(&[
+                image_width as f32,
+                image_height as f32,
+                image_width as f32,
+                image_height as f32,
+            ])
+            .to_device(output.pred_boxes.device());
+
+        // Gathering before interpolation is output-equivalent to upstream and
+        // avoids allocating resized masks for candidates rejected by threshold.
+        let masks = output
+            .pred_masks
+            .i(0)
+            .index_select(0, &query_indexes)
+            .unsqueeze(1)
+            .upsample_bilinear2d(
+                [i64::from(image_height), i64::from(image_width)],
+                false,
+                None,
+                None,
+            )
+            .gt(0.0)
+            .to_kind(Kind::Uint8)
+            * 255;
+
+        let scores = tensor_to_vec_f32(&scores)?;
+        let labels = tensor_to_vec_i64(&labels)?;
+        let boxes = tensor_to_vec_f32(&boxes)?;
+        let masks = masks.to_device(Device::Cpu).contiguous();
+        let mask_size = image_width as usize * image_height as usize;
+        let mask_values = tensor_to_vec_u8(&masks)?;
+
+        let mut detections = Vec::with_capacity(scores.len());
+        for index in 0..scores.len() {
+            let label_id = labels[index] as usize;
+            let pixels = mask_values[index * mask_size..(index + 1) * mask_size].to_vec();
+            let area = pixels.iter().map(|&value| u32::from(value != 0)).sum();
+            detections.push(KoharuLayoutDetection {
+                label_id,
+                label: self
+                    .class_names
+                    .get(label_id)
+                    .cloned()
+                    .unwrap_or_else(|| "__background__".to_owned()),
+                score: scores[index],
+                bbox: boxes[index * 4..index * 4 + 4].try_into().unwrap(),
+                area,
+                mask: KoharuLayoutMask {
+                    width: image_width,
+                    height: image_height,
+                    pixels,
+                },
+            });
+        }
+
+        Ok(KoharuLayoutDetections {
+            image_width,
+            image_height,
+            detections,
+        })
+    }
+}
+
+fn validate_thresholds(thresholds: KoharuLayoutThresholds) -> Result<()> {
+    for (class, threshold) in [
+        ("text", thresholds.text),
+        ("onomatopoeia", thresholds.onomatopoeia),
+        ("bubble", thresholds.bubble),
+        ("panel", thresholds.panel),
+    ] {
+        ensure!(
+            (0.0..=1.0).contains(&threshold),
+            "{class} confidence threshold must be between 0 and 1"
+        );
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct KoharuLayoutDetections {
+    pub image_width: u32,
+    pub image_height: u32,
+    pub detections: Vec<KoharuLayoutDetection>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct KoharuLayoutDetection {
+    pub label_id: usize,
+    pub label: String,
+    pub score: f32,
+    pub bbox: [f32; 4],
+    pub area: u32,
+    #[serde(skip_serializing)]
+    pub mask: KoharuLayoutMask,
+}
+
+#[derive(Debug, Clone)]
+pub struct KoharuLayoutMask {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u8>,
+}
+
+fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {
+    let tensor = tensor
+        .to_device(Device::Cpu)
+        .to_kind(Kind::Float)
+        .contiguous();
+    let length = tensor.numel();
+    let mut values = vec![0.0; length];
+    tensor.f_copy_data(&mut values, length)?;
+    Ok(values)
+}
+
+fn tensor_to_vec_i64(tensor: &Tensor) -> Result<Vec<i64>> {
+    let tensor = tensor
+        .to_device(Device::Cpu)
+        .to_kind(Kind::Int64)
+        .contiguous();
+    let length = tensor.numel();
+    let mut values = vec![0; length];
+    tensor.f_copy_data(&mut values, length)?;
+    Ok(values)
+}
+
+fn tensor_to_vec_u8(tensor: &Tensor) -> Result<Vec<u8>> {
+    let tensor = tensor
+        .to_device(Device::Cpu)
+        .to_kind(Kind::Uint8)
+        .contiguous();
+    let length = tensor.numel();
+    let mut values = vec![0; length];
+    tensor.f_copy_data(&mut values, length)?;
+    Ok(values)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{KoharuLayoutThresholds, validate_thresholds};
+
+    #[test]
+    fn class_thresholds_must_be_probabilities() {
+        let thresholds = KoharuLayoutThresholds {
+            text: 0.25,
+            onomatopoeia: 1.1,
+            bubble: 0.5,
+            panel: 0.5,
+        };
+
+        let error = validate_thresholds(thresholds).unwrap_err();
+        assert!(error.to_string().contains("onomatopoeia"));
+    }
+}

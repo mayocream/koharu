@@ -1,0 +1,180 @@
+name: llama.cpp
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: llama.cpp branch or tag to build
+        required: true
+        default: b9982
+  push:
+    branches: ['main']
+    paths:
+      - '.github/llama.cpp/**'
+      - '.github/workflows/llama-cpp.yml'
+  pull_request:
+    branches: ['main']
+    paths:
+      - '.github/llama.cpp/**'
+      - '.github/workflows/llama-cpp.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REF: ${{ github.event.inputs.ref || 'b9982' }}
+
+jobs:
+  build:
+    name: ${{ matrix.backend }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cuda
+            os: windows-2022
+          - backend: vulkan
+            os: ubuntu-24.04
+          - backend: vulkan
+            os: windows-2022
+          - backend: metal
+            os: macos-latest
+
+    runs-on: ${{ matrix.os }}
+    env:
+      BACKEND: ${{ matrix.backend }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache CUDA compilation
+        if: matrix.backend == 'cuda'
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
+          variant: sccache
+          max-size: 2G
+
+      - name: Clone llama.cpp
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$REF" \
+            https://github.com/ggml-org/llama.cpp upstream/llama.cpp
+          commit=$(git -C upstream/llama.cpp rev-parse HEAD)
+          printf 'llama.cpp commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install CUDA 13.0
+        if: matrix.backend == 'cuda'
+        uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: '13.0.0'
+          method: network
+          sub-packages: >-
+            ["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas",
+            "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev",
+            "nvrtc", "nvrtc_dev"]
+
+      - name: Enable MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        if: runner.os == 'Windows'
+        run: choco install ninja --no-progress -y
+
+      - name: Install Vulkan build dependencies on Linux
+        if: matrix.backend == 'vulkan' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            glslc \
+            libvulkan-dev \
+            ninja-build \
+            spirv-headers
+
+      - name: Install Vulkan SDK on Windows
+        if: matrix.backend == 'vulkan' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          version=1.4.313.2
+          installer="$(cygpath -u "$RUNNER_TEMP")/VulkanSDK-Installer.exe"
+          curl.exe -o "$installer" -L \
+            "https://sdk.lunarg.com/sdk/download/$version/windows/vulkansdk-windows-X64-$version.exe"
+          "$installer" --accept-licenses --default-answer --confirm-command install
+          printf 'VULKAN_SDK=C:\\VulkanSDK\\%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'C:\\VulkanSDK\\%s\\bin\n' "$version" >> "$GITHUB_PATH"
+
+      - name: Configure
+        shell: bash
+        run: |
+          generator=()
+          backend_args=()
+
+          case "$BACKEND" in
+            cuda)
+              generator=(-G Ninja)
+              backend_args+=("-DCMAKE_CUDA_ARCHITECTURES=80-real")
+              ;;
+            vulkan)
+              generator=(-G Ninja)
+              ;;
+            metal)
+              backend_args+=("-DCMAKE_OSX_ARCHITECTURES=arm64")
+              ;;
+          esac
+
+          cmake -S .github/llama.cpp -B build "${generator[@]}" \
+            -DLLAMA_CPP_SOURCE_DIR="$PWD/upstream/llama.cpp" \
+            -DKOHARU_LLAMA_BACKEND="$BACKEND" \
+            -DCMAKE_BUILD_TYPE=Release \
+            "${backend_args[@]}"
+
+      - name: Build llama
+        shell: bash
+        run: cmake --build build --target llama --config Release --parallel 4
+
+      - name: Package llama
+        shell: bash
+        run: |
+          mkdir package
+          cp build/bin/*llama.* package/
+          tar -C package -czf "llama-$BACKEND-${{ matrix.os }}.tar.gz" .
+
+      - name: Upload llama
+        uses: actions/upload-artifact@v7
+        with:
+          name: llama-${{ matrix.backend }}-${{ matrix.os }}
+          path: llama-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download llama builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: llama-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish llama release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: llama.cpp-${{ env.REF }}
+          target_commitish: ${{ github.sha }}
+          name: llama.cpp ${{ env.REF }}
+          body: Koharu runtime dependency.
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          files: release/*.tar.gz

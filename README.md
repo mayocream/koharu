@@ -20,8 +20,6 @@
 
 Koharu introduces a local-first workflow for manga translation, utilizing the power of ML to automate the process. It combines the capabilities of object detection, OCR, inpainting, and LLMs to create a seamless translation experience.
 
-Under the hood, Koharu uses [candle](https://github.com/huggingface/candle) and [llama.cpp](https://github.com/ggml-org/llama.cpp) for high-performance inference, with [Tauri](https://github.com/tauri-apps/tauri) for the desktop app. All components are written in Rust, ensuring safety and speed.
-
 > [!NOTE]
 > Koharu runs its vision models and LLMs **locally** on your machine to keep your data private and secure.
 
@@ -128,29 +126,15 @@ It supports vertical CJK layout, right-to-left scripts, font fallback, vertical 
 
 ## GPU Acceleration
 
-Koharu supports CUDA, experimental ZLUDA, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
+Koharu supports CUDA, experimental ROCm / HIP, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
 
 ### CUDA
 
-On Windows and Linux, Koharu ships with CUDA support so it can use NVIDIA GPUs for the full local pipeline.
+Koharu supports NVIDIA GPUs on Windows and Linux through CUDA. This is the primary accelerated path and is recommended for most users.
 
-Koharu bundles CUDA Toolkit 13.0. The required DLLs are extracted to the application data directory on first run.
+### ROCm / HIP
 
-> [!NOTE]
-> Make sure you have current NVIDIA drivers installed. You can update them through [NVIDIA App](https://www.nvidia.com/en-us/software/nvidia-app/).
-
-#### Supported NVIDIA GPUs
-
-Koharu supports NVIDIA GPUs with compute capability 8.0 or higher.
-
-For GPU compatibility references, see [CUDA GPU Compute Capability](https://developer.nvidia.com/cuda-gpus).
-
-### ZLUDA (experimental)
-
-Koharu supports experimental ZLUDA acceleration on Windows for AMD GPUs.
-ZLUDA is a CUDA compatibility layer that lets some CUDA workloads run on AMD GPUs.
-
-To use it, install the [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html).
+Koharu supports AMD GPUs on both Windows and Linux through ROCm and HIP. This path is currently experimental and may require additional setup.
 
 ### Metal
 
@@ -160,7 +144,7 @@ Koharu supports Metal on Apple Silicon Macs. No extra runtime setup is required 
 
 Koharu also supports Vulkan on Windows and Linux. This backend is currently used primarily for OCR and local LLM inference.
 
-Detection and inpainting still depend on CUDA, ZLUDA, or Metal, so Vulkan is useful but not a full replacement for the main accelerated path. AMD and Intel GPUs can still benefit from it.
+Detection and inpainting still depend on CUDA, ROCm / HIP, or Metal, so Vulkan is useful but not a full replacement for the main accelerated path. AMD and Intel GPUs can still benefit from it.
 
 ### CPU Fallback
 
@@ -199,6 +183,7 @@ These models recognize source text after detection.
 
 - [PaddleOCR-VL-1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6) for multilingual OCR
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr) for OCR
+- [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr) for Japanese speech-bubble OCR
 - [MIT 48px OCR](https://huggingface.co/mayocream/mit48px-ocr) for OCR
 
 #### Inpainting
@@ -229,7 +214,11 @@ Koharu supports both local and remote LLM backends. Local models run through [ll
 
 These are broad instruct models that work well when you want one local model for many translation tasks.
 
-- Gemma 4 instruct: [gemma4-e2b-it](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF), [gemma4-e4b-it](https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF), [gemma4-12b-it](https://huggingface.co/unsloth/gemma-4-12b-it-GGUF), [gemma4-26b-a4b-it](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF), [gemma4-31b-it](https://huggingface.co/unsloth/gemma-4-31B-it-GGUF)
+The default local translator is `gemma4-12b-it`.
+
+- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a compact multilingual model for CPUs and low-memory GPUs
+- [ministral-3-8b-instruct](https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512-GGUF): Mistral's balanced multilingual model with native JSON output
+- Gemma 4 instruct (Unsloth QAT-derived Dynamic GGUFs): [gemma4-e2b-it](https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF), [gemma4-e4b-it](https://huggingface.co/unsloth/gemma-4-E4B-it-qat-GGUF), [gemma4-12b-it](https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF), [gemma4-26b-a4b-it](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF), [gemma4-31b-it](https://huggingface.co/unsloth/gemma-4-31B-it-qat-GGUF)
 - Qwen 3.5: [qwen3.5-0.8b](https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF), [qwen3.5-2b](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF), [qwen3.5-4b](https://huggingface.co/unsloth/Qwen3.5-4B-GGUF), [qwen3.5-9b](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF), [qwen3.5-27b](https://huggingface.co/unsloth/Qwen3.5-27B-GGUF), [qwen3.5-35b-a3b](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF)
 - Qwen 3.6: [qwen3.6-27b](https://huggingface.co/unsloth/Qwen3.6-27B-GGUF), [qwen3.6-35b-a3b](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF)
 
@@ -237,36 +226,17 @@ These are broad instruct models that work well when you want one local model for
 
 These variants relax the safety tuning applied to the corresponding base instruct models.
 
-- Gemma 4 uncensored: [gemma4-e2b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive), [gemma4-e4b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive)
-- Qwen 3.5 uncensored: [qwen3.5-2b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive), [qwen3.5-4b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive), [qwen3.5-9b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive), [qwen3.5-27b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive), [qwen3.5-35b-a3b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive)
+- Gemma 4 uncensored (HauhauCS QAT when available): [gemma4-e2b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive), [gemma4-e4b-uncensored](https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive), [gemma4-12b-uncensored](https://huggingface.co/HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced), [gemma4-26b-a4b-uncensored](https://huggingface.co/HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP), [gemma4-31b-uncensored](https://huggingface.co/HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP)
+- Qwen 3.5 uncensored: [qwen3.5-2b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive), [qwen3.5-4b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive), [qwen3.5-9b-uncensored](https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive)
 - Qwen 3.6 uncensored: [qwen3.6-27b-uncensored](https://huggingface.co/HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced), [qwen3.6-35b-a3b-uncensored](https://huggingface.co/HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive)
-
-#### Fine-Tuned Translation Models
-
-These models are more specialized for translation quality, language coverage, or lower-resource setups.
-
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): a Q5_K_M GGUF, best when translation quality matters more than speed or memory use
-- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): a smaller multilingual instruct model that is easier to run on CPUs or low-memory GPUs
-- [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) and [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): larger translation-oriented options when you have more VRAM or RAM available
-- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): a smaller IQ4_XS GGUF, a good balance of quality and speed on 8 GB GPUs
-- [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): lighter and faster, useful on mid-range GPUs or CPU-only setups
-- [hunyuan-mt-7b](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): a Q4_K_M GGUF with broad multilingual translation coverage
 
 LLMs are downloaded on demand when you activate a model. For constrained memory environments, start with a smaller model. When VRAM or RAM permits, 7B and 8B class models generally provide better translation quality.
 
 #### Cloud Providers
 
-Koharu supports hosted APIs from [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), and [DeepSeek](https://platform.deepseek.com/) instead of a local GGUF model.
+Koharu supports hosted APIs from [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/) instead of a local GGUF model.
 
-Built-in cloud catalogs include current text-output models for OpenAI, Gemini, Claude, and DeepSeek, including GPT-5.5/5.4/5.x, Gemini 3.1/3/2.5/2.0, Claude Opus/Sonnet/Haiku 4.x, DeepSeek V4, and compatibility aliases such as `deepseek-chat` and `deepseek-reasoner`.
-
-#### Codex Image-to-Image Generation
-
-Koharu can use Codex for end-to-end image-to-image generation. This workflow sends the current source page image plus a user prompt to Codex, then stores the generated image as a rendered page result.
-
-This feature requires a ChatGPT account with Codex access. Two-factor authentication must be enabled on the account before device-code login can complete successfully.
-
-Codex image generation is useful when you want the model to translate visible text, remove the original lettering, and redraw the page in one pass. Because the image request is processed by the ChatGPT Codex backend, failures can include upstream OpenAI request IDs and may need to be retried.
+Built-in cloud catalogs include current text-output models for OpenAI, Gemini, Claude, and DeepSeek, including GPT-5.6/5.5/5.4, Gemini 3.5/3.1/3/2.5, Claude Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5, and DeepSeek V4. OpenRouter models are discovered dynamically from its API.
 
 #### Machine Translation Providers
 
@@ -274,9 +244,9 @@ For pure machine-translation use cases, Koharu also supports [DeepL](https://www
 
 #### OpenAI-Compatible Providers
 
-Koharu supports OpenAI-compatible endpoints such as LM Studio, OpenRouter, and other self-hosted or third-party APIs that expose `/v1/models` and `/v1/chat/completions`.
+Koharu supports LM Studio through its native `/api/v1/chat` and `/api/v1/models` API. Other self-hosted or third-party servers can use the generic OpenAI-compatible provider when they expose `/v1/models` and `/v1/chat/completions`. OpenRouter also has a dedicated provider entry.
 
-Cloud providers can be configured with API keys. OpenAI-compatible providers also need a custom base URL. API keys are stored securely in your system keychain instead of plain text config files. API keys are optional for local servers such as LM Studio, but are usually required for hosted services such as OpenRouter.
+Cloud providers can be configured with API keys. OpenAI-compatible providers also need a custom base URL. API keys are stored securely in your system keychain instead of plain text config files. LM Studio API tokens are optional; OpenRouter requires its own API key.
 
 Use a remote provider to avoid local model downloads, reduce VRAM or RAM requirements, or integrate with an existing hosted or self-hosted endpoint. Keep in mind that the OCR text selected for translation is sent to the provider you configured.
 
@@ -348,12 +318,8 @@ To build Koharu from source, follow the steps below.
 
 - [Rust](https://www.rust-lang.org/tools/install) 1.95 or later (Rust 2024 edition)
 - [Bun](https://bun.sh/) 1.0 or later
-
-Optional dependencies for GPU acceleration builds:
-
-- [LLVM](https://llvm.org/) 15 or later (for GPU acceleration builds)
-- [CUDA Toolkit](https://developer.nvidia.com/cuda-13-0-0-download-archive) 13.0 (for CUDA and ZLUDA support on Windows)
-- [AMD HIP SDK](https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html) (for ZLUDA support on Windows)
+- [LLVM](https://llvm.org/) 15 or later
+- [ninja](https://ninja-build.org/) 1.11 or later
 
 ### Install dependencies
 
@@ -366,6 +332,9 @@ bun install
 ```bash
 bun dev
 ```
+
+This starts the Next.js development server and the native application together.
+Nodemon rebuilds and restarts the Rust process when workspace sources change.
 
 ### Build
 

@@ -1,9 +1,8 @@
-use koharu_secrets::SecretStore;
+use koharu_secrets::{ExposeSecret, SecretString};
 
 use super::error::{CodexError, Result};
 use super::tokens::CodexTokens;
 
-pub const DEFAULT_SECRET_SERVICE: &str = "koharu";
 pub const DEFAULT_TOKEN_SECRET_KEY: &str = "codex_oauth_tokens";
 
 const SECRET_CHUNK_UTF16_UNITS: usize = 1000;
@@ -18,22 +17,18 @@ const TOKEN_FIELDS: [TokenField; 6] = [
 
 #[derive(Debug, Clone)]
 pub struct TokenStore {
-    secrets: SecretStore,
     key: String,
 }
 
 impl Default for TokenStore {
     fn default() -> Self {
-        Self::new(DEFAULT_SECRET_SERVICE, DEFAULT_TOKEN_SECRET_KEY)
+        Self::new(DEFAULT_TOKEN_SECRET_KEY)
     }
 }
 
 impl TokenStore {
-    pub fn new(service: impl Into<String>, key: impl Into<String>) -> Self {
-        Self {
-            secrets: SecretStore::new(service),
-            key: key.into(),
-        }
+    pub fn new(key: impl Into<String>) -> Self {
+        Self { key: key.into() }
     }
 
     pub fn load(&self) -> Result<Option<CodexTokens>> {
@@ -41,14 +36,10 @@ impl TokenStore {
             return Ok(Some(tokens));
         }
 
-        let Some(raw) = self
-            .secrets
-            .get(&self.key)
-            .map_err(CodexError::SecretStore)?
-        else {
+        let Some(raw) = koharu_secrets::get(&self.key).map_err(CodexError::SecretStore)? else {
             return Ok(None);
         };
-        Ok(Some(serde_json::from_str(&raw)?))
+        Ok(Some(serde_json::from_str(raw.expose_secret())?))
     }
 
     pub fn store(&self, tokens: &CodexTokens) -> Result<()> {
@@ -61,15 +52,11 @@ impl TokenStore {
         self.set_field(TokenField::ExpiresIn, expires_in.as_deref())?;
         self.set_field(TokenField::Scope, tokens.scope.as_deref())?;
 
-        self.secrets
-            .delete(&self.key)
-            .map_err(CodexError::SecretStore)
+        koharu_secrets::delete(&self.key).map_err(CodexError::SecretStore)
     }
 
     pub fn delete(&self) -> Result<()> {
-        self.secrets
-            .delete(&self.key)
-            .map_err(CodexError::SecretStore)?;
+        koharu_secrets::delete(&self.key).map_err(CodexError::SecretStore)?;
         for field in TOKEN_FIELDS {
             self.delete_field(field)?;
         }
@@ -100,31 +87,32 @@ impl TokenStore {
 
     fn get_field(&self, field: TokenField) -> Result<Option<String>> {
         let chunks_key = self.field_chunks_key(field);
-        let Some(chunk_count) = self
-            .secrets
-            .get(&chunks_key)
-            .map_err(CodexError::SecretStore)?
+        let Some(chunk_count) =
+            koharu_secrets::get(&chunks_key).map_err(CodexError::SecretStore)?
         else {
             return Ok(None);
         };
         let field_name = field.name();
-        let chunk_count = chunk_count.parse::<usize>().map_err(|err| {
-            CodexError::InvalidStoredToken(format!("{field_name} chunk count is invalid: {err}"))
-        })?;
+        let chunk_count = chunk_count
+            .expose_secret()
+            .parse::<usize>()
+            .map_err(|err| {
+                CodexError::InvalidStoredToken(format!(
+                    "{field_name} chunk count is invalid: {err}"
+                ))
+            })?;
 
         let mut value = String::new();
         for index in 0..chunk_count {
             let chunk_key = self.field_chunk_key(field, index);
-            let chunk = self
-                .secrets
-                .get(&chunk_key)
+            let chunk = koharu_secrets::get(&chunk_key)
                 .map_err(CodexError::SecretStore)?
                 .ok_or_else(|| {
                     CodexError::InvalidStoredToken(format!(
                         "{field_name} is missing chunk {index} of {chunk_count}"
                     ))
                 })?;
-            value.push_str(&chunk);
+            value.push_str(chunk.expose_secret());
         }
 
         Ok(Some(value))
@@ -140,33 +128,25 @@ impl TokenStore {
         let chunks = split_secret_chunks(value);
         for (index, chunk) in chunks.iter().enumerate() {
             let chunk_key = self.field_chunk_key(field, index);
-            self.secrets
-                .set(&chunk_key, chunk)
-                .map_err(CodexError::SecretStore)?;
+            let chunk = SecretString::from((*chunk).to_owned());
+            koharu_secrets::set(&chunk_key, &chunk).map_err(CodexError::SecretStore)?;
         }
         let chunks_key = self.field_chunks_key(field);
-        self.secrets
-            .set(&chunks_key, &chunks.len().to_string())
-            .map_err(CodexError::SecretStore)
+        let chunk_count = SecretString::from(chunks.len().to_string());
+        koharu_secrets::set(&chunks_key, &chunk_count).map_err(CodexError::SecretStore)
     }
 
     fn delete_field(&self, field: TokenField) -> Result<()> {
         let chunks_key = self.field_chunks_key(field);
-        let chunk_count = self
-            .secrets
-            .get(&chunks_key)
+        let chunk_count = koharu_secrets::get(&chunks_key)
             .map_err(CodexError::SecretStore)?
-            .and_then(|value| value.parse::<usize>().ok())
+            .and_then(|value| value.expose_secret().parse::<usize>().ok())
             .unwrap_or_default();
 
-        self.secrets
-            .delete(&chunks_key)
-            .map_err(CodexError::SecretStore)?;
+        koharu_secrets::delete(&chunks_key).map_err(CodexError::SecretStore)?;
         for index in 0..chunk_count {
             let chunk_key = self.field_chunk_key(field, index);
-            self.secrets
-                .delete(&chunk_key)
-                .map_err(CodexError::SecretStore)?;
+            koharu_secrets::delete(&chunk_key).map_err(CodexError::SecretStore)?;
         }
         Ok(())
     }
