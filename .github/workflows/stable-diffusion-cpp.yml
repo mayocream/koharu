@@ -35,6 +35,8 @@ jobs:
         include:
           - backend: cuda
             os: windows-2022
+          - backend: hip
+            os: windows-2022
           - backend: vulkan
             os: ubuntu-24.04
           - backend: vulkan
@@ -49,8 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache CUDA compilation
-        if: matrix.backend == 'cuda'
+      - name: Cache compilation
         uses: ggml-org/ccache-action@v1.2.21
         with:
           key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
@@ -76,6 +77,30 @@ jobs:
           sub-packages: >-
             ["nvcc", "cudart", "cublas", "cublas_dev", "thrust",
             "visual_studio_integration"]
+
+      - name: Set up Python for ROCm
+        if: matrix.backend == 'hip'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install ROCm 7.14
+        if: matrix.backend == 'hip'
+        shell: pwsh
+        run: |
+          python -m pip install `
+            --index-url https://repo.amd.com/rocm/whl-multi-arch/ `
+            "rocm[libraries,devel]==7.14.0"
+          rocm-sdk init
+
+          $rocmRoot = (rocm-sdk path --root).Trim()
+          "ROCM_PATH=$rocmRoot" >> $env:GITHUB_ENV
+          "HIP_PATH=$rocmRoot" >> $env:GITHUB_ENV
+          "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
+          "HIP_DEVICE_LIB_PATH=$rocmRoot\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
+          "LLVM_PATH=$rocmRoot\lib\llvm" >> $env:GITHUB_ENV
+          "$rocmRoot\bin" >> $env:GITHUB_PATH
+          "$rocmRoot\lib\llvm\bin" >> $env:GITHUB_PATH
 
       - name: Enable MSVC
         if: runner.os == 'Windows'
@@ -120,7 +145,7 @@ jobs:
             generator=(-G Ninja)
           fi
 
-          if [[ "$RUNNER_OS" == Windows ]]; then
+          if [[ "$RUNNER_OS" == Windows && "$BACKEND" != hip ]]; then
             platform_args+=(
               "-DCMAKE_C_COMPILER=cl.exe"
               "-DCMAKE_CXX_COMPILER=cl.exe"
@@ -133,6 +158,15 @@ jobs:
               backend_args+=(
                 "-DSD_CUDA=ON"
                 "-DCMAKE_CUDA_ARCHITECTURES=75-real;80-real;86-real;89-real;90-real;100-real;120"
+              )
+              ;;
+            hip)
+              backend_args+=(
+                "-DSD_HIPBLAS=ON"
+                "-DCMAKE_C_COMPILER=clang.exe"
+                "-DCMAKE_CXX_COMPILER=clang++.exe"
+                "-DGPU_TARGETS=gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
+                "-DAMDGPU_TARGETS=gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
               )
               ;;
             vulkan)
