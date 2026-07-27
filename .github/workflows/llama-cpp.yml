@@ -131,19 +131,20 @@ jobs:
 
           cmake -S .github/llama.cpp -B build "${generator[@]}" \
             -DLLAMA_CPP_SOURCE_DIR="$PWD/upstream/llama.cpp" \
-            -DKOHARU_LLAMA_BACKEND="$BACKEND" \
+            -DLLAMA_BACKEND="$BACKEND" \
             -DCMAKE_BUILD_TYPE=Release \
             "${backend_args[@]}"
 
-      - name: Build llama
+      - name: Build llama and MTMD
         shell: bash
-        run: cmake --build build --target llama --config Release --parallel 4
+        run: cmake --build build --target llama mtmd --config Release --parallel 4
 
-      - name: Package llama
+      - name: Package llama and MTMD
         shell: bash
         run: |
           mkdir package
           cp build/bin/*llama.* package/
+          cp build/bin/*mtmd.* package/
           tar -C package -czf "llama-$BACKEND-${{ matrix.os }}.tar.gz" .
 
       - name: Upload llama
@@ -155,7 +156,7 @@ jobs:
           retention-days: 3
 
   release:
-    if: github.event_name != 'pull_request'
+    #if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     permissions:
