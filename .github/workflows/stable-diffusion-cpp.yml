@@ -68,15 +68,15 @@ jobs:
           commit=$(git -C upstream/stable-diffusion.cpp rev-parse HEAD)
           printf 'stable-diffusion.cpp commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Install CUDA 12.8
+      - name: Install CUDA 13.0
         if: matrix.backend == 'cuda'
-        uses: Jimver/cuda-toolkit@v0.2.22
+        uses: Jimver/cuda-toolkit@master
         with:
-          cuda: '12.8.1'
+          cuda: '13.0.0'
           method: network
           sub-packages: >-
-            ["nvcc", "cudart", "cublas", "cublas_dev", "thrust",
-            "visual_studio_integration"]
+            ["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas",
+            "cublas_dev"]
 
       - name: Set up Python for ROCm
         if: matrix.backend == 'hip'

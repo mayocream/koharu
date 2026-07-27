@@ -76,8 +76,7 @@ jobs:
           method: network
           sub-packages: >-
             ["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas",
-            "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev",
-            "nvrtc", "nvrtc_dev"]
+            "cublas_dev"]
 
       - name: Set up Python for ROCm
         if: matrix.backend == 'hip'
