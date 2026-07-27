@@ -86,21 +86,21 @@ jobs:
 
       - name: Install ROCm 7.14
         if: matrix.backend == 'hip'
-        shell: pwsh
+        shell: bash
         run: |
-          python -m pip install `
-            --index-url https://repo.amd.com/rocm/whl-multi-arch/ `
+          python -m pip install \
+            --index-url https://repo.amd.com/rocm/whl-multi-arch/ \
             "rocm[libraries,devel]==7.14.0"
           rocm-sdk init
 
-          $rocmRoot = (rocm-sdk path --root).Trim()
-          "ROCM_PATH=$rocmRoot" >> $env:GITHUB_ENV
-          "HIP_PATH=$rocmRoot" >> $env:GITHUB_ENV
-          "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
-          "HIP_DEVICE_LIB_PATH=$rocmRoot\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
-          "LLVM_PATH=$rocmRoot\lib\llvm" >> $env:GITHUB_ENV
-          "$rocmRoot\bin" >> $env:GITHUB_PATH
-          "$rocmRoot\lib\llvm\bin" >> $env:GITHUB_PATH
+          rocm_root=$(cygpath -w "$(rocm-sdk path --root)")
+          printf 'ROCM_PATH=%s\n' "$rocm_root" >> "$GITHUB_ENV"
+          printf 'HIP_PATH=%s\n' "$rocm_root" >> "$GITHUB_ENV"
+          printf 'HIP_PLATFORM=amd\n' >> "$GITHUB_ENV"
+          printf 'HIP_DEVICE_LIB_PATH=%s\\lib\\llvm\\amdgcn\\bitcode\n' "$rocm_root" >> "$GITHUB_ENV"
+          printf 'LLVM_PATH=%s\\lib\\llvm\n' "$rocm_root" >> "$GITHUB_ENV"
+          printf '%s\\bin\n' "$rocm_root" >> "$GITHUB_PATH"
+          printf '%s\\lib\\llvm\\bin\n' "$rocm_root" >> "$GITHUB_PATH"
 
       - name: Enable MSVC
         if: runner.os == 'Windows'
