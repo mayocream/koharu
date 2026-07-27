@@ -10,10 +10,11 @@ use strum::EnumProperty;
 use crate::{
     device::{
         cuda::{cuda_available, driver_version},
+        rocm::rocm_available,
         vulkan::vulkan_available,
     },
     download::{archive::extract, client::Client, github::github_release},
-    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload},
+    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload, rocm::Rocm},
 };
 
 // https://github.com/mayocream/koharu/releases/tag/stable-diffusion.cpp-master-769-cc73429
@@ -31,6 +32,11 @@ pub enum StableDiffusionCpp {
         dylib = "stable-diffusion.dll"
     ))]
     WindowsX64Cuda,
+    #[strum(props(
+        asset = "stable-diffusion-hip-windows-2022.tar.gz",
+        dylib = "stable-diffusion.dll"
+    ))]
+    WindowsX64Hip,
     #[strum(props(
         asset = "stable-diffusion-vulkan-windows-2022.tar.gz",
         dylib = "stable-diffusion.dll"
@@ -71,12 +77,13 @@ impl StableDiffusionCpp {
                     }
                     Ok(_) | Err(_) => {}
                 }
+            } else if rocm_available() {
+                return Ok(Self::WindowsX64Hip);
             } else if vulkan_available() {
-                tracing::warn!("CUDA is unavailable; falling back to Vulkan stable-diffusion.cpp");
                 return Ok(Self::WindowsX64Vulkan);
             }
 
-            bail!("stable-diffusion.cpp requires CUDA 13 or Vulkan on Windows x86_64")
+            bail!("stable-diffusion.cpp requires CUDA 13, HIP, or Vulkan on Windows x86_64")
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             if vulkan_available() {
                 Ok(Self::LinuxX64Vulkan)
@@ -139,9 +146,13 @@ impl Package for StableDiffusionCpp {
 #[async_trait::async_trait]
 impl PreloadablePackage for StableDiffusionCpp {
     async fn preload(&self) -> anyhow::Result<()> {
-        if matches!(self, Self::WindowsX64Cuda) {
-            Cuda::Runtime130.preload().await?;
-            Cuda::Cublas130.preload().await?;
+        match self {
+            Self::WindowsX64Cuda => {
+                Cuda::Runtime130.preload().await?;
+                Cuda::Cublas130.preload().await?;
+            }
+            Self::WindowsX64Hip => Rocm::for_current_target()?.preload().await?,
+            _ => {}
         }
 
         let directory = self.resolve().await?;

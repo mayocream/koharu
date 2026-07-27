@@ -10,10 +10,11 @@ use strum::EnumProperty;
 use crate::{
     device::{
         cuda::{cuda_available, driver_version},
+        rocm::rocm_available,
         vulkan::vulkan_available,
     },
     download::{archive::extract, client::Client, github::github_release},
-    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload},
+    package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload, rocm::Rocm},
 };
 
 // https://github.com/mayocream/koharu/releases/tag/llama.cpp-b9982
@@ -30,6 +31,8 @@ pub enum LlamaCpp {
         dylibs = "llama.dll,mtmd.dll"
     ))]
     WindowsX64Cuda,
+    #[strum(props(asset = "llama-hip-windows-2022.tar.gz", dylibs = "llama.dll,mtmd.dll"))]
+    WindowsX64Hip,
     #[strum(props(
         asset = "llama-vulkan-windows-2022.tar.gz",
         dylibs = "llama.dll,mtmd.dll"
@@ -70,12 +73,13 @@ impl LlamaCpp {
                     }
                     Ok(_) | Err(_) => {}
                 }
+            } else if rocm_available() {
+                return Ok(Self::WindowsX64Hip);
             } else if vulkan_available() {
-                tracing::warn!("CUDA is unavailable; falling back to Vulkan llama.cpp");
                 return Ok(Self::WindowsX64Vulkan);
             }
 
-            bail!("llama.cpp requires CUDA 13 or Vulkan on Windows x86_64")
+            bail!("llama.cpp requires CUDA 13, HIP, or Vulkan on Windows x86_64")
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             if vulkan_available() {
                 Ok(Self::LinuxX64Vulkan)
@@ -144,9 +148,13 @@ impl Package for LlamaCpp {
 #[async_trait::async_trait]
 impl PreloadablePackage for LlamaCpp {
     async fn preload(&self) -> anyhow::Result<()> {
-        if matches!(self, Self::WindowsX64Cuda) {
-            Cuda::Runtime130.preload().await?;
-            Cuda::Cublas130.preload().await?;
+        match self {
+            Self::WindowsX64Cuda => {
+                Cuda::Runtime130.preload().await?;
+                Cuda::Cublas130.preload().await?;
+            }
+            Self::WindowsX64Hip => Rocm::for_current_target()?.preload().await?,
+            _ => {}
         }
 
         let directory = self.resolve().await?;
