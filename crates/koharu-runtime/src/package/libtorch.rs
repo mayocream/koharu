@@ -17,11 +17,12 @@ use crate::{
         Package, PreloadablePackage, STORE_DIR,
         cuda::Cuda,
         loading::preload,
-        rocm::{ROCM_VERSION, Rocm},
+        rocm::{ROCM_VERSION, ROCM_WHEEL_INDEX, Rocm},
     },
 };
 
 const VERSION: &str = "2.12.1";
+const ROCM_TORCH_VERSION: &str = "2.12.0";
 static LIBTORCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("libtorch").join(VERSION));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumProperty)]
@@ -66,12 +67,12 @@ pub enum Libtorch {
     )]
     Rocm72,
     #[strum(
-        serialize = "rocm-nightly",
+        serialize = "rocm7.14",
         props(
             windows_dylibs = "libomp140.x86_64.dll,uv.dll,dl.dll,liblzma.dll,c10.dll,c10_hip.dll,aotriton_v2.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_hip.dll,shm.dll,torch.dll"
         )
     )]
-    RocmNightly,
+    Rocm714,
 }
 
 impl Libtorch {
@@ -84,7 +85,7 @@ impl Libtorch {
                     _ => Ok(Self::Cpu),
                 }
             } else if rocm_available() {
-                Ok(Self::RocmNightly)
+                Ok(Self::Rocm714)
             } else {
                 Ok(Self::Cpu)
             }
@@ -127,21 +128,20 @@ impl Libtorch {
         let device = self.to_string();
         // Only native Torch files are extracted, so the wheel's Python ABI is irrelevant.
 
-        if cfg!(all(target_os = "windows", target_arch = "x86_64")) && self == Self::RocmNightly {
+        if cfg!(all(target_os = "windows", target_arch = "x86_64")) && self == Self::Rocm714 {
             let rocm = rocm.context("ROCm LibTorch requires a ROCm target")?;
-            // AMD's 2.12 Windows ROCm nightly is published as 2.12.0, not 2.12.1.
-            // https://github.com/ROCm/TheRock/blob/296cc8b3d037c1be1fdb9e5e6d4776822c7e050c/RELEASES.md#installing-multi-arch-pytorch-python-packages
+            // https://rocm.docs.amd.com/projects/ai-ecosystem/en/latest/frameworks/pytorch/install.html
             let mut urls = vec![
                 format!(
-                    "https://rocm.nightlies.amd.com/whl-multi-arch/torch-2.12.0%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
+                    "{ROCM_WHEEL_INDEX}/torch-{ROCM_TORCH_VERSION}%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
                 ),
                 format!(
-                    "https://rocm.nightlies.amd.com/whl-multi-arch/amd_torch_device_{rocm}-2.12.0%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
+                    "{ROCM_WHEEL_INDEX}/amd_torch_device_{rocm}-{ROCM_TORCH_VERSION}%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
                 ),
             ];
             if let Some(family) = rocm.torch_family() {
                 urls.push(format!(
-                    "https://rocm.nightlies.amd.com/whl-multi-arch/amd_torch_device_{family}-2.12.0%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
+                    "{ROCM_WHEEL_INDEX}/amd_torch_device_{family}-{ROCM_TORCH_VERSION}%2Brocm{ROCM_VERSION}-cp312-cp312-win_amd64.whl"
                 ));
             }
             Ok(urls)
@@ -169,13 +169,13 @@ impl Libtorch {
 impl Package for Libtorch {
     async fn resolve(&self) -> Result<PathBuf> {
         let (path, rocm) = match *self {
-            Self::RocmNightly => {
+            Self::Rocm714 => {
                 let rocm = Rocm::for_current_target()?;
                 rocm.resolve().await?;
                 (
                     STORE_DIR
                         .join("libtorch")
-                        .join(format!("2.12.0+rocm{ROCM_VERSION}"))
+                        .join(format!("{ROCM_TORCH_VERSION}+rocm{ROCM_VERSION}"))
                         .join(format!("rocm-{rocm}")),
                     Some(rocm),
                 )
@@ -295,7 +295,7 @@ impl PreloadablePackage for Libtorch {
             cuda.preload().await?;
         }
 
-        if *self == Self::RocmNightly {
+        if *self == Self::Rocm714 {
             Rocm::for_current_target()?.preload().await?;
         }
 

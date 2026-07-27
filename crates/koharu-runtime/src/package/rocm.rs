@@ -1,11 +1,10 @@
 use std::{
-    fs::{File, create_dir_all, remove_dir_all, rename},
+    fs::{create_dir_all, remove_dir_all, rename},
     path::PathBuf,
     sync::LazyLock,
 };
 
 use anyhow::{Context, Result, bail};
-use tar::Archive;
 
 use crate::{
     device::rocm::gfx_target,
@@ -15,9 +14,9 @@ use crate::{
 
 static ROCM_DIR: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("rocm").join(ROCM_VERSION));
 
-// https://github.com/ROCm/TheRock/blob/296cc8b3d037c1be1fdb9e5e6d4776822c7e050c/RELEASES.md#installing-multi-arch-rocm-python-packages
-pub const ROCM_VERSION: &str = "7.15.0a20260713";
-const ROCM_WHEEL_INDEX: &str = "https://rocm.nightlies.amd.com/whl-multi-arch";
+// https://rocm.docs.amd.com/en/docs-7.14.0/install/rocm.html
+pub const ROCM_VERSION: &str = "7.14.0";
+pub(crate) const ROCM_WHEEL_INDEX: &str = "https://repo.amd.com/rocm/whl-multi-arch";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString, strum::Display)]
 pub enum Rocm {
@@ -61,10 +60,6 @@ pub enum Rocm {
     Gfx1200,
     #[strum(serialize = "gfx1201")]
     Gfx1201,
-    #[strum(serialize = "gfx900")]
-    Gfx900,
-    #[strum(serialize = "gfx906")]
-    Gfx906,
     #[strum(serialize = "gfx908")]
     Gfx908,
     #[strum(serialize = "gfx90a")]
@@ -76,13 +71,19 @@ impl Rocm {
         let target = gfx_target()?;
         target
             .parse()
-            .with_context(|| format!("PyTorch ROCm nightly does not support {target}"))
+            .with_context(|| format!("PyTorch ROCm {ROCM_VERSION} does not support {target}"))
     }
 
     pub fn torch_family(self) -> Option<&'static str> {
         match self {
-            Self::Gfx1100 | Self::Gfx1101 | Self::Gfx1102 | Self::Gfx1103 => Some("gfx110x"),
-            Self::Gfx1150 | Self::Gfx1151 | Self::Gfx1152 | Self::Gfx1153 => Some("gfx115x"),
+            Self::Gfx1100
+            | Self::Gfx1101
+            | Self::Gfx1102
+            | Self::Gfx1103
+            | Self::Gfx1150
+            | Self::Gfx1151
+            | Self::Gfx1152
+            | Self::Gfx1153 => Some("gfx11"),
             Self::Gfx1200 | Self::Gfx1201 => Some("gfx12-0"),
             _ => None,
         }
@@ -103,20 +104,18 @@ impl Package for Rocm {
             bail!("TheRock ROCm packages are only configured for Windows x86_64");
         }
 
-        let path = ROCM_DIR.join(self.to_string()).join("_rocm_sdk_devel");
-        if path.join("bin/amdhip64_7.dll").exists()
-            && path.join("lib/cmake/hip/hip-config.cmake").exists()
-            && path.join("lib/llvm/bin/amdclang-cl.exe").exists()
-            && path.join(format!(".kpack/blas_lib_{self}.kpack")).exists()
+        let path = ROCM_DIR.join(self.to_string());
+        if path.join("_rocm_sdk_core/bin/amdhip64_7.dll").exists()
+            && path.join("_rocm_sdk_libraries/bin/MIOpen.dll").exists()
+            && path
+                .join("_rocm_sdk_libraries/.kpack")
+                .join(format!("blas_lib_{self}.kpack"))
+                .exists()
         {
             return Ok(path);
         }
 
-        let installation = path
-            .parent()
-            .context("invalid ROCm package path")?
-            .to_path_buf();
-        let parent = installation.parent().context("invalid ROCm package path")?;
+        let parent = path.parent().context("invalid ROCm package path")?;
         create_dir_all(parent)?;
         let temporary = tempfile::tempdir_in(parent)?;
 
@@ -139,23 +138,16 @@ impl Package for Rocm {
                 ),
                 "_rocm_sdk_libraries/**/*",
             ),
-            (
-                format!("{ROCM_WHEEL_INDEX}/rocm_sdk_devel-{ROCM_VERSION}-py3-none-win_amd64.whl"),
-                "rocm_sdk_devel/_devel.tar",
-            ),
         ] {
             let file = tempfile::Builder::new().suffix(".zip").tempfile()?;
             let archive = client.download(&url, file.path().to_path_buf()).await?;
             extract(archive, temporary.path().to_path_buf(), &[glob])?;
         }
 
-        let archive = File::open(temporary.path().join("rocm_sdk_devel/_devel.tar"))?;
-        Archive::new(archive).unpack(temporary.path())?;
-
-        if installation.exists() {
-            remove_dir_all(&installation)?;
+        if path.exists() {
+            remove_dir_all(&path)?;
         }
-        rename(temporary.path(), &installation)?;
+        rename(temporary.path(), &path)?;
         Ok(path)
     }
 }
@@ -163,14 +155,21 @@ impl Package for Rocm {
 #[async_trait::async_trait]
 impl PreloadablePackage for Rocm {
     async fn preload(&self) -> Result<()> {
-        let bin = self.resolve().await?.join("bin");
+        let rocm = self.resolve().await?;
+        let core = rocm.join("_rocm_sdk_core/bin");
         for dylib in [
             "amd_comgr.dll",
             "rocm_kpack.dll",
             "rocm-openblas.dll",
             "amdhip64_7.dll",
-            "hiprtc-builtins0715.dll",
-            "hiprtc0715.dll",
+            "hiprtc-builtins0714.dll",
+            "hiprtc0714.dll",
+        ] {
+            preload(core.join(dylib))?;
+        }
+
+        let libraries = rocm.join("_rocm_sdk_libraries/bin");
+        for dylib in [
             "rocrand.dll",
             "hiprand.dll",
             "rocblas.dll",
@@ -184,7 +183,7 @@ impl PreloadablePackage for Rocm {
             "hipsparse.dll",
             "MIOpen.dll",
         ] {
-            preload(bin.join(dylib))?;
+            preload(libraries.join(dylib))?;
         }
         Ok(())
     }
@@ -196,8 +195,8 @@ mod tests {
 
     #[test]
     fn maps_torch_family_packages() {
-        assert_eq!(Rocm::Gfx1100.torch_family(), Some("gfx110x"));
-        assert_eq!(Rocm::Gfx1153.torch_family(), Some("gfx115x"));
+        assert_eq!(Rocm::Gfx1100.torch_family(), Some("gfx11"));
+        assert_eq!(Rocm::Gfx1153.torch_family(), Some("gfx11"));
         assert_eq!(Rocm::Gfx1201.torch_family(), Some("gfx12-0"));
         assert_eq!(Rocm::Gfx1036.torch_family(), None);
     }
@@ -206,5 +205,6 @@ mod tests {
     fn parses_supported_gfx_targets() {
         assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
         assert!("gfx1250".parse::<Rocm>().is_err());
+        assert!("gfx906".parse::<Rocm>().is_err());
     }
 }
