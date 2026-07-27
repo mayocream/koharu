@@ -1,4 +1,4 @@
-name: llama.cpp single-library builds
+name: llama.cpp
 
 on:
   workflow_dispatch:
@@ -30,37 +30,23 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.backend }} / ${{ matrix.platform }}
+    name: ${{ matrix.backend }} / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - backend: CUDA
-            platform: Windows x64
+          - backend: cuda
             os: windows-2022
-            build_dir: build/llama-cuda
-            library: llama.dll
-            artifact_name: llama-cuda-windows-x64
-            artifact_path: build/llama-cuda/bin/llama.dll
-          - backend: VULKAN
-            platform: Linux x64
+          - backend: vulkan
             os: ubuntu-24.04
-            build_dir: build/llama-vulkan
-            library: libllama.so
-            artifact_name: llama-vulkan-linux-x64
-            artifact_path: build/llama-vulkan/bin/libllama.so
-          - backend: METAL
-            platform: macOS arm64
+          - backend: vulkan
+            os: windows-2022
+          - backend: metal
             os: macos-latest
-            build_dir: build/llama-metal
-            library: libllama.dylib
-            artifact_name: llama-metal-macos-arm64
-            artifact_path: build/llama-metal/bin/libllama.dylib
 
     runs-on: ${{ matrix.os }}
     env:
       BACKEND: ${{ matrix.backend }}
-      BUILD_DIR: ${{ matrix.build_dir }}
 
     steps:
       - uses: actions/checkout@v7
@@ -74,7 +60,7 @@ jobs:
           printf 'llama.cpp commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install CUDA 13.0
-        if: matrix.backend == 'CUDA'
+        if: matrix.backend == 'cuda'
         uses: Jimver/cuda-toolkit@master
         with:
           cuda: '13.0.0'
@@ -85,15 +71,15 @@ jobs:
             "nvrtc", "nvrtc_dev"]
 
       - name: Enable MSVC
-        if: matrix.backend == 'CUDA'
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Ninja
-        if: matrix.backend == 'CUDA'
+        if: runner.os == 'Windows'
         run: choco install ninja --no-progress -y
 
-      - name: Install Vulkan build dependencies
-        if: matrix.backend == 'VULKAN'
+      - name: Install Vulkan build dependencies on Linux
+        if: matrix.backend == 'vulkan' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -104,6 +90,18 @@ jobs:
             ninja-build \
             spirv-headers
 
+      - name: Install Vulkan SDK on Windows
+        if: matrix.backend == 'vulkan' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          version=1.4.313.2
+          installer="$(cygpath -u "$RUNNER_TEMP")/VulkanSDK-Installer.exe"
+          curl.exe -o "$installer" -L \
+            "https://sdk.lunarg.com/sdk/download/$version/windows/vulkansdk-windows-X64-$version.exe"
+          "$installer" --accept-licenses --default-answer --confirm-command install
+          printf 'VULKAN_SDK=C:\\VulkanSDK\\%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'C:\\VulkanSDK\\%s\\bin\n' "$version" >> "$GITHUB_PATH"
+
       - name: Configure
         shell: bash
         run: |
@@ -111,32 +109,32 @@ jobs:
           backend_args=()
 
           case "$BACKEND" in
-            CUDA)
+            cuda)
               generator=(-G Ninja)
               backend_args+=("-DCMAKE_CUDA_ARCHITECTURES=80-real")
               ;;
-            VULKAN)
+            vulkan)
               generator=(-G Ninja)
               ;;
-            METAL)
+            metal)
               backend_args+=("-DCMAKE_OSX_ARCHITECTURES=arm64")
               ;;
           esac
 
-          cmake -S .github/llama.cpp -B "$BUILD_DIR" "${generator[@]}" \
+          cmake -S .github/llama.cpp -B build "${generator[@]}" \
             -DLLAMA_CPP_SOURCE_DIR="$PWD/upstream/llama.cpp" \
             -DKOHARU_LLAMA_BACKEND="$BACKEND" \
             -DCMAKE_BUILD_TYPE=Release \
             "${backend_args[@]}"
 
-      - name: Build ${{ matrix.library }}
+      - name: Build llama
         shell: bash
-        run: cmake --build "$BUILD_DIR" --target llama --config Release --parallel 4
+        run: cmake --build build --target llama --config Release --parallel 4
 
-      - name: Upload ${{ matrix.library }}
+      - name: Upload llama
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: llama-${{ matrix.backend }}-${{ matrix.os }}
+          path: build/bin/*llama.*
           if-no-files-found: error
           retention-days: 3
