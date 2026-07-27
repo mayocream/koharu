@@ -119,7 +119,7 @@ jobs:
           case "$BACKEND" in
             cuda)
               generator=(-G Ninja)
-              backend_args+=("-DCMAKE_CUDA_ARCHITECTURES=80-real")
+              backend_args+=("-DCMAKE_CUDA_ARCHITECTURES=75-real;80-real;86-real;89-real;90-real;100-real;120")
               ;;
             vulkan)
               generator=(-G Ninja)
@@ -156,7 +156,7 @@ jobs:
           retention-days: 3
 
   release:
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     permissions:

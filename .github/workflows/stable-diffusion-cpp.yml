@@ -132,7 +132,7 @@ jobs:
             cuda)
               backend_args+=(
                 "-DSD_CUDA=ON"
-                "-DCMAKE_CUDA_ARCHITECTURES=80-real"
+                "-DCMAKE_CUDA_ARCHITECTURES=75-real;80-real;86-real;89-real;90-real;100-real;120"
               )
               ;;
             vulkan)
@@ -178,7 +178,7 @@ jobs:
           retention-days: 3
 
   release:
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     permissions:
