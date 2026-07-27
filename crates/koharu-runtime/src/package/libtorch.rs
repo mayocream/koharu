@@ -125,6 +125,7 @@ impl Libtorch {
 
     fn url(self, rocm: Option<Rocm>) -> Result<Vec<String>> {
         let device = self.to_string();
+        // Only native Torch files are extracted, so the wheel's Python ABI is irrelevant.
 
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) && self == Self::RocmNightly {
             let rocm = rocm.context("ROCm LibTorch requires a ROCm target")?;
@@ -148,18 +149,18 @@ impl Libtorch {
             && matches!(self, Self::Cpu | Self::Cuda126 | Self::Cuda130)
         {
             Ok(vec![format!(
-                "https://download.pytorch.org/libtorch/{device}/libtorch-win-shared-with-deps-{VERSION}%2B{device}.zip"
+                "https://download.pytorch.org/whl/{device}/torch-{VERSION}%2B{device}-cp312-cp312-win_amd64.whl"
             )])
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             Ok(vec![format!(
-                "https://download.pytorch.org/libtorch/{device}/libtorch-shared-with-deps-{VERSION}%2B{device}.zip"
+                "https://download.pytorch.org/whl/{device}/torch-{VERSION}%2B{device}-cp312-cp312-manylinux_2_28_x86_64.whl"
             )])
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) && self == Self::Cpu {
             Ok(vec![format!(
-                "https://download.pytorch.org/libtorch/cpu/libtorch-macos-arm64-{VERSION}.zip"
+                "https://download.pytorch.org/whl/cpu/torch-{VERSION}-cp312-cp312-macosx_14_0_arm64.whl"
             )])
         } else {
-            bail!("unsupported target for libtorch archive")
+            bail!("unsupported target for PyTorch wheel")
         }
     }
 }
@@ -200,29 +201,29 @@ impl Package for Libtorch {
         let temporary = tempfile::tempdir_in(parent)?;
         let client = Client::new()?;
 
-        let globs = if rocm.is_some() {
-            &["torch/.kpack/**/*", "torch/lib/**/*"][..]
+        let mut globs = self
+            .dylibs()?
+            .map(|dylib| format!("torch/lib/{dylib}"))
+            .collect::<Vec<_>>();
+        if rocm.is_some() {
+            globs.push("torch/.kpack/**/*".to_owned());
         } else if *self == Self::Cpu {
-            &[
-                "libtorch/include/**/*",
-                "libtorch/lib/**/*",
-                "libtorch/share/cmake/**/*",
-            ][..]
-        } else {
-            &["libtorch/lib/**/*"][..]
-        };
+            globs.extend([
+                "torch/include/**/*".to_owned(),
+                "torch/share/cmake/**/*".to_owned(),
+            ]);
+        }
+        let globs = globs.iter().map(String::as_str).collect::<Vec<_>>();
         for url in self.url(rocm)? {
             let file = tempfile::Builder::new().suffix(".zip").tempfile()?;
             let archive = client.download(&url, file.path().to_path_buf()).await?;
-            extract(archive, temporary.path().to_path_buf(), globs)?;
+            extract(archive, temporary.path().to_path_buf(), &globs)?;
         }
 
-        if rocm.is_some() {
-            rename(
-                temporary.path().join("torch"),
-                temporary.path().join("libtorch"),
-            )?;
-        }
+        rename(
+            temporary.path().join("torch"),
+            temporary.path().join("libtorch"),
+        )?;
 
         if path.exists() {
             remove_dir_all(&path)?;
