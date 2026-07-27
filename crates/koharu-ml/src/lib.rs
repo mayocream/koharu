@@ -44,7 +44,7 @@ static TORCH_RUNTIME: OnceCell<()> = OnceCell::const_new();
 pub async fn init_llama() -> anyhow::Result<()> {
     LLAMA_BACKEND
         .get_or_try_init(|| async {
-            let llama_cpp = LlamaCpp::for_current_target();
+            let llama_cpp = LlamaCpp::for_current_target()?;
             llama_cpp
                 .preload()
                 .await
