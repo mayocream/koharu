@@ -139,10 +139,42 @@ jobs:
         shell: bash
         run: cmake --build build --target llama --config Release --parallel 4
 
+      - name: Package llama
+        shell: bash
+        run: |
+          mkdir package
+          cp build/bin/*llama.* package/
+          tar -C package -czf "llama-$BACKEND-${{ matrix.os }}.tar.gz" .
+
       - name: Upload llama
         uses: actions/upload-artifact@v7
         with:
           name: llama-${{ matrix.backend }}-${{ matrix.os }}
-          path: build/bin/*llama.*
+          path: llama-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
           if-no-files-found: error
           retention-days: 3
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download llama builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: llama-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish llama release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: llama.cpp-${{ env.REF }}
+          target_commitish: ${{ github.sha }}
+          name: llama.cpp ${{ env.REF }}
+          body: Koharu runtime dependency.
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          files: release/*.tar.gz

@@ -161,10 +161,43 @@ jobs:
         shell: bash
         run: cmake --build build --target stable-diffusion --config Release --parallel 4
 
+      - name: Package stable-diffusion
+        shell: bash
+        run: |
+          mkdir package
+          cp build/bin/*stable-diffusion.* package/
+          tar -C package -czf \
+            "stable-diffusion-$BACKEND-${{ matrix.os }}.tar.gz" .
+
       - name: Upload stable-diffusion
         uses: actions/upload-artifact@v7
         with:
           name: stable-diffusion-${{ matrix.backend }}-${{ matrix.os }}
-          path: build/bin/*stable-diffusion.*
+          path: stable-diffusion-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
           if-no-files-found: error
           retention-days: 3
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download stable-diffusion builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: stable-diffusion-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish stable-diffusion release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: stable-diffusion.cpp-${{ env.REF }}
+          target_commitish: ${{ github.sha }}
+          name: stable-diffusion.cpp ${{ env.REF }}
+          body: Koharu runtime dependency.
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          files: release/*.tar.gz
