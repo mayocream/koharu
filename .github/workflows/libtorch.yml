@@ -78,7 +78,7 @@ jobs:
 
       - name: Install CUDA 13.0
         if: matrix.backend == 'cuda'
-        uses: Jimver/cuda-toolkit@v0.2.28
+        uses: Jimver/cuda-toolkit@master
         with:
           cuda: '13.0.1'
           method: network
