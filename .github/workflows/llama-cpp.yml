@@ -51,6 +51,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Cache CUDA compilation
+        if: matrix.backend == 'cuda'
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
+          variant: sccache
+          max-size: 2G
+
       - name: Clone llama.cpp
         shell: bash
         run: |
