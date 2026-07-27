@@ -1,0 +1,13 @@
+diff --git a/caffe2/CMakeLists.txt b/caffe2/CMakeLists.txt
+--- a/caffe2/CMakeLists.txt
++++ b/caffe2/CMakeLists.txt
+@@ -563,6 +563,8 @@
+ if(USE_CUDA)
+   list(APPEND Caffe2_GPU_CU_SRCS ${Caffe2_GPU_HIP_JIT_FUSERS_SRCS})
+-  add_library(caffe2_nvrtc SHARED ${ATen_NVRTC_STUB_SRCS})
++  # Let BUILD_SHARED_LIBS select the linkage so a static LibTorch consumer does
++  # not retain a private caffe2_nvrtc runtime library.
++  add_library(caffe2_nvrtc ${ATen_NVRTC_STUB_SRCS})
+   if(MSVC)
+     # Delay load nvcuda.dll so we can import torch compiled with cuda on a CPU-only machine
+     set(DELAY_LOAD_FLAGS "-DELAYLOAD:nvcuda.dll;delayimp.lib")

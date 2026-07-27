@@ -1,0 +1,240 @@
+name: LibTorch
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: PyTorch branch or tag to build
+        required: true
+        default: v2.12.1
+  push:
+    branches: ['main']
+    paths:
+      - '.github/libtorch/**'
+      - '.github/workflows/libtorch.yml'
+      - 'crates/koharu-torch-sys/libtch/**'
+  pull_request:
+    branches: ['main']
+    paths:
+      - '.github/libtorch/**'
+      - '.github/workflows/libtorch.yml'
+      - 'crates/koharu-torch-sys/libtch/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTORCH_REF: ${{ github.event.inputs.ref || 'v2.12.1' }}
+
+jobs:
+  build:
+    name: ${{ matrix.backend }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cuda
+            os: windows-2022
+          - backend: metal
+            os: macos-15
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache CUDA compilation
+        if: matrix.backend == 'cuda'
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: ${{ github.workflow }}-${{ runner.os }}
+          variant: sccache
+          max-size: 2G
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Enable MSVC
+        if: matrix.backend == 'cuda'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            choco install ninja --no-progress -y
+          else
+            brew install ninja
+          fi
+
+      - name: Install CUDA 13.0
+        if: matrix.backend == 'cuda'
+        uses: Jimver/cuda-toolkit@v0.2.28
+        with:
+          cuda: '13.0.1'
+          method: network
+          sub-packages: >-
+            ["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas",
+            "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev",
+            "cusolver", "cusolver_dev", "cusparse", "cusparse_dev", "nvrtc",
+            "nvrtc_dev", "nvjitlink", "nvjitlink_dev",
+            "visual_studio_integration"]
+
+      - name: Install cuDNN 9.20
+        if: matrix.backend == 'cuda'
+        run: |
+          python -m pip install nvidia-cudnn-cu13==9.20.0.48
+          cudnn_root=$(python -c \
+            "import importlib.util; print(next(iter(importlib.util.find_spec('nvidia.cudnn').submodule_search_locations)))")
+          cudnn_root=$(cygpath -m "$cudnn_root")
+          {
+            echo "CUDNN_ROOT=$cudnn_root"
+            echo "CUDNN_INCLUDE_DIR=$cudnn_root/include"
+            echo "CUDNN_LIBRARY=$cudnn_root/lib/x64"
+          } >> "$GITHUB_ENV"
+
+      - name: Clone PyTorch
+        run: |
+          mkdir -p upstream
+          git clone --depth 1 --branch "$PYTORCH_REF" \
+            --recurse-submodules --shallow-submodules \
+            https://github.com/pytorch/pytorch upstream/pytorch
+
+      - name: Make the NVRTC shim static
+        if: matrix.backend == 'cuda'
+        run: git -C upstream/pytorch apply "$GITHUB_WORKSPACE/.github/libtorch/pytorch-static.patch"
+
+      - name: Install PyTorch build requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r upstream/pytorch/requirements.txt
+
+      - name: Build static LibTorch
+        working-directory: upstream/pytorch
+        run: |
+          backend_env=()
+          if [[ '${{ matrix.backend }}' == cuda ]]; then
+            backend_env+=(
+              CMAKE_C_COMPILER=cl.exe
+              CMAKE_C_COMPILER_LAUNCHER=sccache
+              CMAKE_CXX_COMPILER=cl.exe
+              CMAKE_CXX_COMPILER_LAUNCHER=sccache
+              DISTUTILS_USE_SDK=1
+              TORCH_CUDA_ARCH_LIST=8.0
+              USE_CUDA=ON
+              USE_CUDNN=ON
+              USE_MPS=OFF
+            )
+          else
+            backend_env+=(
+              CMAKE_OSX_ARCHITECTURES=arm64
+              USE_CUDA=OFF
+              USE_CUDNN=OFF
+              USE_MPS=ON
+            )
+          fi
+
+          env \
+            BLAS=Eigen \
+            BUILD_BINARY=OFF \
+            BUILD_SHARED_LIBS=OFF \
+            BUILD_TEST=OFF \
+            CMAKE_BUILD_TYPE=Release \
+            CMAKE_GENERATOR=Ninja \
+            MAX_JOBS=4 \
+            USE_CUDSS=OFF \
+            USE_CUFILE=OFF \
+            USE_CUSPARSELT=OFF \
+            USE_DISTRIBUTED=OFF \
+            USE_ITT=OFF \
+            USE_KINETO=OFF \
+            USE_MAGMA=OFF \
+            USE_NUMPY=OFF \
+            USE_OPENMP=OFF \
+            USE_ROCM=OFF \
+            USE_VULKAN=OFF \
+            USE_XPU=OFF \
+            "${backend_env[@]}" \
+            python tools/build_libtorch.py
+
+      - name: Reclaim PyTorch build space
+        run: rm -rf upstream/pytorch/build
+
+      - name: Configure Koharu Torch shim
+        run: |
+          platform_args=()
+
+          case "${{ matrix.backend }}" in
+            cuda)
+              platform_args+=(
+                "-DCMAKE_C_COMPILER=cl.exe"
+                "-DCMAKE_C_COMPILER_LAUNCHER=sccache"
+                "-DCMAKE_CXX_COMPILER=cl.exe"
+                "-DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+              )
+              ;;
+            metal)
+              platform_args+=("-DCMAKE_OSX_ARCHITECTURES=arm64")
+              ;;
+          esac
+
+          cmake -S crates/koharu-torch-sys/libtch -B build/libtorch-shim -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$PWD/upstream/pytorch/torch" \
+            "${platform_args[@]}"
+
+      - name: Build and install Koharu Torch shim
+        run: |
+          cmake --build build/libtorch-shim --config Release \
+            --parallel 4
+          cmake --install build/libtorch-shim --prefix package
+
+      - name: Package Koharu Torch
+        run: |
+          cp upstream/pytorch/LICENSE package/pytorch-LICENSE
+          cp upstream/pytorch/NOTICE package/pytorch-NOTICE
+          tar -C package -czf \
+            'koharu-torch-${{ matrix.backend }}-${{ matrix.os }}.tar.gz' .
+
+      - name: Upload Koharu Torch
+        uses: actions/upload-artifact@v7
+        with:
+          name: koharu-torch-${{ matrix.backend }}-${{ matrix.os }}
+          path: koharu-torch-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Koharu Torch builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: koharu-torch-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish Koharu Torch release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: libtorch-${{ env.PYTORCH_REF }}-static
+          target_commitish: ${{ github.sha }}
+          name: LibTorch ${{ env.PYTORCH_REF }} static
+          body: Koharu Torch shims with static CUDA and Metal LibTorch builds.
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          files: release/*.tar.gz
