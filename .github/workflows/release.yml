@@ -1,9 +1,8 @@
 name: Release
 
+# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  push:
-    tags:
-      - '*'
+  workflow_dispatch:
 
 permissions:
   contents: write
