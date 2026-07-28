@@ -3,9 +3,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::builtin::{
-    AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, FontDetectorConfig,
-    KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, MangaOcrConfig, PaddleOcrVl1_6Config,
-    RoremMixedConfig,
+    AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig,
+    LaMaConfig, MangaOcrConfig, PaddleOcrVl1_6Config, RoremMixedConfig,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
@@ -13,7 +12,6 @@ use crate::builtin::{
 pub struct PipelineConfig {
     pub detection: DetectionModel,
     pub ocr: OcrModel,
-    pub typography: TypographyModel,
     pub inpainting: InpaintingModel,
 }
 
@@ -24,7 +22,6 @@ impl Default for PipelineConfig {
                 KoharuLayoutRFDetrSeg2XLConfig::default(),
             ),
             ocr: OcrModel::PaddleOcrVl1_6(PaddleOcrVl1_6Config::default()),
-            typography: TypographyModel::FontDetector(FontDetectorConfig::default()),
             inpainting: InpaintingModel::LaMa(LaMaConfig::default()),
         }
     }
@@ -45,11 +42,6 @@ impl PipelineConfig {
                 );
             }
         }
-        let TypographyModel::FontDetector(typography) = &self.typography;
-        ensure!(
-            typography.top_k > 0,
-            "font detector top_k must be greater than zero"
-        );
         match &self.inpainting {
             InpaintingModel::LaMa(config) => {
                 ensure!(
@@ -107,12 +99,11 @@ impl PipelineConfig {
     pub(crate) fn nodes(
         &self,
         translation: &koharu_translator::TranslationConfig,
-    ) -> [crate::ConfiguredNode; 5] {
+    ) -> [crate::ConfiguredNode; 4] {
         [
             crate::ConfiguredNode::Detection(self.detection.clone()),
             crate::ConfiguredNode::Ocr(self.ocr.clone()),
             crate::ConfiguredNode::Translation(translation.model.clone()),
-            crate::ConfiguredNode::Typography(self.typography.clone()),
             crate::ConfiguredNode::Inpainting(self.inpainting.clone()),
         ]
     }
@@ -134,13 +125,6 @@ pub enum OcrModel {
     MangaOcr(MangaOcrConfig),
     #[serde(rename = "baberu-ocr")]
     BaberuOcr(BaberuOcrConfig),
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "model", deny_unknown_fields)]
-pub enum TypographyModel {
-    #[serde(rename = "font-detector")]
-    FontDetector(FontDetectorConfig),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
@@ -169,10 +153,6 @@ mod tests {
             DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
         ));
         assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6(_)));
-        assert!(matches!(
-            config.typography,
-            TypographyModel::FontDetector(_)
-        ));
         assert!(matches!(config.inpainting, InpaintingModel::LaMa(_)));
     }
 
@@ -185,10 +165,6 @@ mod tests {
 
                 [ocr]
                 model = "baberu-ocr"
-
-                [typography]
-                model = "font-detector"
-                top_k = 5
 
                 [inpainting]
                 model = "rorem-mixed"
@@ -203,10 +179,6 @@ mod tests {
             DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
         ));
         assert!(matches!(config.ocr, OcrModel::BaberuOcr(_)));
-        assert!(matches!(
-            config.typography,
-            TypographyModel::FontDetector(config) if config.top_k == 5
-        ));
         assert!(matches!(
             config.inpainting,
             InpaintingModel::RoremMixed(config)
@@ -250,11 +222,6 @@ mod tests {
                 [ocr]
                 model = "paddleocr-vl-1.6"
                 legacy_language = "ja"
-
-                [typography]
-                model = "font-detector"
-                top_k = 5
-                legacy_fonts = ["Example"]
 
                 [inpainting]
                 model = "lama"

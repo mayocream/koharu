@@ -71,8 +71,6 @@ export function MenuBar() {
   const selectElements = useEditorStore((state) => state.selectElements)
   const display = useEditorStore((state) => state.display)
   const setDisplay = useEditorStore((state) => state.setDisplay)
-  const showTextBounds = useEditorStore((state) => state.showTextBounds)
-  const setShowTextBounds = useEditorStore((state) => state.setShowTextBounds)
   const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
   const native = connection === 'connected'
 
@@ -230,20 +228,18 @@ export function MenuBar() {
                 {t('native.menu.reprocessProject', { defaultValue: 'Rerun Entire Project' })}
               </MenubarItem>
               <MenubarSeparator />
-              {(['detection', 'ocr', 'translation', 'typography', 'inpainting'] as Stage[]).map(
-                (stage) => (
-                  <MenubarItem
-                    key={stage}
-                    disabled={!project || pages.length === 0 || !settings}
-                    onSelect={() => run({ scope: 'project' }, stage)}
-                  >
-                    {t('native.menu.runPhase', {
-                      phase: t(`native.phase.${stage}`, { defaultValue: stage }),
-                      defaultValue: 'Run {{phase}}',
-                    })}
-                  </MenubarItem>
-                ),
-              )}
+              {(['detection', 'ocr', 'translation', 'inpainting'] as Stage[]).map((stage) => (
+                <MenubarItem
+                  key={stage}
+                  disabled={!project || pages.length === 0 || !settings}
+                  onSelect={() => run({ scope: 'project' }, stage)}
+                >
+                  {t('native.menu.runPhase', {
+                    phase: t(`native.phase.${stage}`, { defaultValue: stage }),
+                    defaultValue: 'Run {{phase}}',
+                  })}
+                </MenubarItem>
+              ))}
             </MenubarContent>
           </MenubarMenu>
 
@@ -289,12 +285,6 @@ export function MenuBar() {
                 }
               >
                 {t('native.menu.brushMask', { defaultValue: 'Brush Mask' })}
-              </MenubarCheckboxItem>
-              <MenubarCheckboxItem
-                checked={showTextBounds}
-                onCheckedChange={(checked) => setShowTextBounds(checked === true)}
-              >
-                {t('native.menu.textBounds', { defaultValue: 'Text Bounds' })}
               </MenubarCheckboxItem>
             </MenubarContent>
           </MenubarMenu>

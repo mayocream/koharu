@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ThemeProvider } from 'next-themes'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ActivityBubble } from '@/components/ActivityBubble'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
+import { StatusBar } from '@/components/canvas/StatusBar'
 import { ToolRail } from '@/components/canvas/ToolRail'
 import { MenuBar } from '@/components/MenuBar'
 import { Navigator } from '@/components/Navigator'
@@ -42,7 +43,6 @@ const fontSettings: SettingsView = {
   pipeline: {
     detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
     ocr: { model: 'paddleocr-vl-1.6' },
-    typography: { model: 'font-detector', top_k: 3 },
     inpainting: { model: 'lama' },
   },
   translation: {
@@ -200,6 +200,153 @@ describe('native editor components', () => {
     expect(screen.getByTestId('render-align-center')).toHaveAttribute('data-variant', 'toggle_on')
   })
 
+  it('lists detection-only text regions and saves OCR corrections', () => {
+    installProject()
+    useEditorStore.setState((state) => ({
+      settings: fontSettings,
+      page: state.page && {
+        ...state.page,
+        entities: [
+          {
+            ...textElement,
+            id: 'detected',
+            source_text: null,
+            translation: null,
+            region: { kind: 'dev.koharu.region.text', label: 'text' },
+          },
+        ],
+      },
+      selectedElements: ['detected'],
+    }))
+    const fire = vi.spyOn(koharuClient, 'fire').mockImplementation(() => undefined)
+
+    render(
+      <TooltipProvider>
+        <Panels />
+      </TooltipProvider>,
+    )
+
+    expect(screen.getByTestId('textblocks-count')).toHaveAttribute('data-count', '1')
+    const ocr = screen.getByTestId('textblock-ocr-detected')
+    expect(ocr).toHaveValue('')
+    fireEvent.change(ocr, { target: { value: 'corrected OCR' } })
+    fireEvent.blur(ocr)
+    expect(fire).toHaveBeenLastCalledWith({
+      type: 'set_source_text',
+      entity: 'detected',
+      text: 'corrected OCR',
+    })
+  })
+
+  it('runs individual pipeline stages and exposes current translation quick settings', () => {
+    installProject()
+    useEditorStore.setState({
+      settings: {
+        ...fontSettings,
+        local_translation_models: ['lfm2.5-1.2b-instruct', 'qwen3.5-0.8b'],
+        target_languages: [
+          { tag: 'en-US', name: 'English' },
+          { tag: 'ja-JP', name: 'Japanese' },
+        ],
+      },
+    })
+    const fire = vi.spyOn(koharuClient, 'fire').mockImplementation(() => undefined)
+    render(<CanvasToolbar />)
+
+    expect(screen.queryByRole('button', { name: 'Process' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('toolbar-detection'))
+    expect(fire).toHaveBeenLastCalledWith({
+      type: 'run_pipeline',
+      scope: { scope: 'pages', value: ['page'] },
+      target: { target: 'exact', stages: ['detection'] },
+    })
+    fireEvent.click(screen.getByTestId('toolbar-translation'))
+    expect(fire).toHaveBeenLastCalledWith({
+      type: 'run_pipeline',
+      scope: { scope: 'entities', value: ['element'] },
+      target: { target: 'exact', stages: ['translation'] },
+    })
+
+    fireEvent.click(screen.getByTestId('llm-trigger'))
+    expect(screen.getByTestId('llm-trigger')).toHaveTextContent('lfm2.5-1.2b-instruct')
+    expect(screen.getByTestId('llm-popover')).toBeInTheDocument()
+    expect(screen.getByLabelText('Local model')).toHaveTextContent('lfm2.5-1.2b-instruct')
+    expect(screen.getByLabelText('Target language')).toHaveTextContent('English')
+    expect(screen.getByLabelText('Instructions')).toHaveValue('')
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('toolbar-typography')).not.toBeInTheDocument()
+  })
+
+  it('auto-saves cloud provider credentials from translation quick settings', async () => {
+    installProject()
+    useEditorStore.setState({
+      settings: {
+        ...fontSettings,
+        translation: {
+          ...fontSettings.translation,
+          model: {
+            provider: 'openai',
+            model: 'gpt-4.1-mini',
+            temperature: null,
+            max_tokens: null,
+            thinking: false,
+          },
+        },
+      },
+    })
+    const command = vi.spyOn(koharuClient, 'command').mockResolvedValue('accepted')
+    render(<CanvasToolbar />)
+
+    fireEvent.click(screen.getByTestId('llm-trigger'))
+    expect(screen.getByTestId('llm-trigger')).toHaveTextContent('gpt-4.1-mini')
+    fireEvent.change(screen.getByLabelText('openai credential'), {
+      target: { value: 'secret' },
+    })
+
+    await waitFor(
+      () =>
+        expect(command).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'set_settings',
+            translation: expect.objectContaining({
+              credentials: expect.objectContaining({
+                openai: { configured: false, value: 'secret', clear: false },
+              }),
+            }),
+          }),
+        ),
+      { timeout: 1500 },
+    )
+  })
+
+  it('shows live system resources instead of revision metadata', () => {
+    useEditorStore.setState({
+      resources: {
+        process_memory_bytes: 2 * 1024 ** 3,
+        system_memory_total_bytes: 32 * 1024 ** 3,
+        system_memory_used_bytes: 12 * 1024 ** 3,
+        process_cpu_percent: 8,
+        system_cpu_percent: 24,
+        devices: [
+          {
+            name: 'GPU',
+            selected: true,
+            memory_budget_bytes: 16 * 1024 ** 3,
+            memory_used_bytes: 6 * 1024 ** 3,
+            utilization_percent: 40,
+          },
+        ],
+      },
+    })
+    render(<StatusBar />)
+
+    expect(screen.getByText('CPU 24%')).toBeInTheDocument()
+    expect(screen.getByText('RAM 12.0/32.0 GB')).toBeInTheDocument()
+    expect(screen.getByText('GPU 40%')).toBeInTheDocument()
+    expect(screen.getByText('VRAM 6.0/16.0 GB')).toBeInTheDocument()
+    expect(screen.queryByText(/Revision/)).not.toBeInTheDocument()
+  })
+
   it('shows retained job progress and the typed settings builder', () => {
     useEditorStore.setState({
       jobs: {
@@ -218,7 +365,6 @@ describe('native editor components', () => {
         pipeline: {
           detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
           ocr: { model: 'paddleocr-vl-1.6' },
-          typography: { model: 'font-detector', top_k: 3 },
           inpainting: { model: 'lama' },
         },
         translation: {
@@ -260,14 +406,18 @@ describe('native editor components', () => {
     )
     expect(screen.getByText('25%')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /pipeline/i }))
-    expect(screen.getByText('Pipeline', { selector: 'h3' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Pipeline' })).toBeInTheDocument()
     expect(
       screen.queryByText('Settings are unavailable while disconnected.'),
     ).not.toBeInTheDocument()
-    expect(screen.getAllByRole('combobox').length).toBeGreaterThanOrEqual(5)
+    expect(screen.getAllByRole('combobox')).toHaveLength(3)
     expect(screen.queryByText('Segmentation')).not.toBeInTheDocument()
-    expect(screen.getByText(/^typography$/i)).toBeInTheDocument()
-    expect(screen.getByLabelText('Top predictions')).toHaveValue(3)
+    expect(screen.queryByText(/^typography$/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('openai credential')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^translation$/i }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Translation' })).toBeInTheDocument()
+    expect(screen.queryByText('Page analysis')).not.toBeInTheDocument()
     const credential = screen.getByLabelText('openai credential')
     expect(credential).toHaveAttribute('type', 'password')
     expect(credential).toHaveValue('')

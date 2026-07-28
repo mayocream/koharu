@@ -27,11 +27,10 @@ use arc_swap::ArcSwap;
 use koharu_scene::{Asset, Geometry, SceneComponent, SceneSnapshot, SourceText};
 
 pub use builtin::{
-    AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, FontDetectorConfig,
-    KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, LaMaHDStrategy, MangaOcrConfig,
-    PaddleOcrVl1_6Config, RoremMixedConfig,
+    AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig,
+    LaMaConfig, LaMaHDStrategy, MangaOcrConfig, PaddleOcrVl1_6Config, RoremMixedConfig,
 };
-pub use config::{DetectionModel, InpaintingModel, OcrModel, PipelineConfig, TypographyModel};
+pub use config::{DetectionModel, InpaintingModel, OcrModel, PipelineConfig};
 pub use events::{CancellationToken, EventSink, PipelineEvent, RunId, UnloadReason};
 pub use graph::{Dependency, Stage, Target};
 pub use run::{NodeMeasurements, NodeReport, Run, RunError, RunReport};
@@ -258,14 +257,11 @@ impl Pipeline {
         {
             bail!("exact translation requires existing source text");
         }
-        if selection
-            .stages
-            .iter()
-            .any(|stage| matches!(stage, Stage::Ocr | Stage::Typography))
+        if selection.stages.contains(&Stage::Ocr)
             && !selection.stages.contains(&Stage::Detection)
             && !scope_has::<Geometry>(snapshot, scope, "default")?
         {
-            bail!("exact OCR or typography requires existing detected geometry");
+            bail!("exact OCR requires existing detected geometry");
         }
         if selection.stages.contains(&Stage::Inpainting)
             && !selection.stages.contains(&Stage::Detection)

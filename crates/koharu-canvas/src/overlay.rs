@@ -1,7 +1,9 @@
+use ab_glyph::{Font as _, FontVec, GlyphId, PxScale, ScaleFont as _, point};
 use bytemuck::{Pod, Zeroable};
+use koharu_renderer::FontSystem;
 use wgpu::util::DeviceExt as _;
 
-use crate::{Color, PhysicalPoint, PhysicalSize};
+use crate::{Color, Error, PhysicalPoint, PhysicalSize, Result};
 
 // Editor chrome is intentionally rendered with a tiny WGPU pipeline rather
 // than folded into the Vello content scene. Selection or cursor movement can
@@ -19,6 +21,113 @@ struct Vertex {
 struct Uniforms {
     viewport: [f32; 2],
     _padding: [f32; 2],
+}
+
+struct RasterGlyph {
+    id: GlyphId,
+    advance: f32,
+    offset: [f32; 2],
+    width: usize,
+    coverage: Vec<f32>,
+}
+
+pub(crate) struct IndicatorFont {
+    font: FontVec,
+    scale: PxScale,
+    ascent: f32,
+    descent: f32,
+    glyphs: Vec<RasterGlyph>,
+}
+
+impl IndicatorFont {
+    pub fn system() -> Result<Self> {
+        let mut system = FontSystem::new();
+        let font = [
+            "Inter",
+            "Segoe UI",
+            "SF Pro Text",
+            "Noto Sans",
+            "Roboto",
+            "Arial",
+        ]
+        .into_iter()
+        .find_map(|family| system.query_family(family).ok())
+        .or_else(|| system.first_font().ok())
+        .ok_or_else(|| Error::Invalid("no system sans-serif font is available".into()))?;
+        let font = FontVec::try_from_vec_and_index(font.data().to_vec(), font.face_index())
+            .map_err(|error| Error::Invalid(format!("failed to load indicator font: {error}")))?;
+        let scale = PxScale::from(18.0);
+        let scaled = font.as_scaled(scale);
+        let ascent = scaled.ascent();
+        let descent = scaled.descent();
+        let mut glyphs = Vec::with_capacity(10);
+        for digit in '0'..='9' {
+            let id = font.glyph_id(digit);
+            let advance = scaled.h_advance(id);
+            let outlined = font
+                .outline_glyph(id.with_scale_and_position(scale, point(0.0, 0.0)))
+                .ok_or_else(|| Error::Invalid(format!("indicator font has no {digit:?} glyph")))?;
+            let bounds = outlined.px_bounds();
+            let width = (bounds.max.x - bounds.min.x).ceil().max(0.0) as usize;
+            let height = (bounds.max.y - bounds.min.y).ceil().max(0.0) as usize;
+            let mut coverage = vec![0.0; width.saturating_mul(height)];
+            outlined.draw(|x, y, value| {
+                if let Some(pixel) = coverage.get_mut(y as usize * width + x as usize) {
+                    *pixel = value;
+                }
+            });
+            glyphs.push(RasterGlyph {
+                id,
+                advance,
+                offset: [bounds.min.x, bounds.min.y],
+                width,
+                coverage,
+            });
+        }
+        Ok(Self {
+            font,
+            scale,
+            ascent,
+            descent,
+            glyphs,
+        })
+    }
+
+    fn draw(&self, geometry: &mut OverlayGeometry, center: PhysicalPoint, text: &str) {
+        let scaled = self.font.as_scaled(self.scale);
+        let mut previous = None;
+        let width = text.chars().fold(0.0, |width, character| {
+            let glyph = &self.glyphs[character as usize - '0' as usize];
+            let kern = previous.map_or(0.0, |previous| scaled.kern(previous, glyph.id));
+            previous = Some(glyph.id);
+            width + kern + glyph.advance
+        });
+        let mut pen_x = center.x as f32 - width * 0.5;
+        let baseline = center.y as f32 + (self.ascent + self.descent) * 0.5;
+        previous = None;
+        for character in text.chars() {
+            let glyph = &self.glyphs[character as usize - '0' as usize];
+            pen_x += previous.map_or(0.0, |previous| scaled.kern(previous, glyph.id));
+            for (index, &coverage) in glyph.coverage.iter().enumerate() {
+                if coverage <= 0.0 {
+                    continue;
+                }
+                let x = index % glyph.width;
+                let y = index / glyph.width;
+                geometry.solid_rect(
+                    PhysicalPoint::new(
+                        f64::from(pen_x + glyph.offset[0] + x as f32 + 0.5),
+                        f64::from(baseline + glyph.offset[1] + y as f32 + 0.5),
+                    ),
+                    1.0,
+                    1.0,
+                    [255, 255, 255, (coverage * 255.0).round() as u8],
+                );
+            }
+            pen_x += glyph.advance;
+            previous = Some(glyph.id);
+        }
+    }
 }
 
 pub(crate) struct OverlayRenderer {
@@ -248,6 +357,83 @@ impl OverlayGeometry {
         }
     }
 
+    pub fn rounded_rect(
+        &mut self,
+        corners: [PhysicalPoint; 4],
+        radius: f64,
+        fill: Color,
+        border_width: f64,
+        border: Color,
+    ) {
+        if corners
+            .iter()
+            .flat_map(|point| [point.x, point.y])
+            .any(|value| !value.is_finite())
+            || !radius.is_finite()
+            || radius < 0.0
+            || !border_width.is_finite()
+            || border_width <= 0.0
+        {
+            return;
+        }
+        let shortest_edge = (0..4)
+            .map(|index| {
+                let from = corners[index];
+                let to = corners[(index + 1) % 4];
+                (to.x - from.x).hypot(to.y - from.y)
+            })
+            .fold(f64::INFINITY, f64::min);
+        if !shortest_edge.is_finite() || shortest_edge <= f64::EPSILON {
+            return;
+        }
+        let radius = radius.min(shortest_edge * 0.5);
+        let mut perimeter = Vec::with_capacity(20);
+        for index in 0..4 {
+            let previous = corners[(index + 3) % 4];
+            let corner = corners[index];
+            let next = corners[(index + 1) % 4];
+            let incoming_length = (corner.x - previous.x).hypot(corner.y - previous.y);
+            let outgoing_length = (next.x - corner.x).hypot(next.y - corner.y);
+            if incoming_length <= f64::EPSILON || outgoing_length <= f64::EPSILON {
+                return;
+            }
+            let before = PhysicalPoint::new(
+                corner.x - (corner.x - previous.x) / incoming_length * radius,
+                corner.y - (corner.y - previous.y) / incoming_length * radius,
+            );
+            let after = PhysicalPoint::new(
+                corner.x + (next.x - corner.x) / outgoing_length * radius,
+                corner.y + (next.y - corner.y) / outgoing_length * radius,
+            );
+            for step in 0..=4 {
+                let t = f64::from(step) / 4.0;
+                let inverse = 1.0 - t;
+                perimeter.push(PhysicalPoint::new(
+                    inverse * inverse * before.x + 2.0 * inverse * t * corner.x + t * t * after.x,
+                    inverse * inverse * before.y + 2.0 * inverse * t * corner.y + t * t * after.y,
+                ));
+            }
+        }
+        let center = PhysicalPoint::new(
+            corners.iter().map(|point| point.x).sum::<f64>() * 0.25,
+            corners.iter().map(|point| point.y).sum::<f64>() * 0.25,
+        );
+        for index in 0..perimeter.len() {
+            self.triangle(
+                center,
+                perimeter[index],
+                perimeter[(index + 1) % perimeter.len()],
+                fill,
+            );
+            self.line(
+                perimeter[index],
+                perimeter[(index + 1) % perimeter.len()],
+                border_width,
+                border,
+            );
+        }
+    }
+
     pub fn solid_rect(&mut self, center: PhysicalPoint, width: f64, height: f64, color: Color) {
         if ![center.x, center.y, width, height]
             .into_iter()
@@ -287,53 +473,40 @@ impl OverlayGeometry {
         }
     }
 
-    pub fn label(&mut self, anchor: PhysicalPoint, number: usize, color: Color) {
-        let center = PhysicalPoint::new(anchor.x + 7.0, anchor.y - 7.0);
-        self.solid_rect(center, 16.0, 16.0, color);
-        let text = number.to_string();
-        let width = text.len() as f64 * 4.0 - 1.0;
-        let mut x = center.x - width * 0.5;
-        for digit in text.bytes() {
-            self.digit(
-                PhysicalPoint::new(x, center.y - 2.5),
-                digit,
-                [255, 255, 255, 255],
+    pub fn solid_circle(&mut self, center: PhysicalPoint, radius: f64, color: Color) {
+        if ![center.x, center.y, radius].into_iter().all(f64::is_finite) || radius <= 0.0 {
+            return;
+        }
+        let segments = 32;
+        for index in 0..segments {
+            let a = std::f64::consts::TAU * index as f64 / segments as f64;
+            let b = std::f64::consts::TAU * (index + 1) as f64 / segments as f64;
+            self.triangle(
+                center,
+                PhysicalPoint::new(center.x + radius * a.cos(), center.y + radius * a.sin()),
+                PhysicalPoint::new(center.x + radius * b.cos(), center.y + radius * b.sin()),
+                color,
             );
-            x += 4.0;
         }
     }
 
-    fn digit(&mut self, origin: PhysicalPoint, digit: u8, color: Color) {
-        const DIGITS: [[u8; 5]; 10] = [
-            [0b111, 0b101, 0b101, 0b101, 0b111],
-            [0b010, 0b110, 0b010, 0b010, 0b111],
-            [0b111, 0b001, 0b111, 0b100, 0b111],
-            [0b111, 0b001, 0b111, 0b001, 0b111],
-            [0b101, 0b101, 0b111, 0b001, 0b001],
-            [0b111, 0b100, 0b111, 0b001, 0b111],
-            [0b111, 0b100, 0b111, 0b101, 0b111],
-            [0b111, 0b001, 0b010, 0b010, 0b010],
-            [0b111, 0b101, 0b111, 0b101, 0b111],
-            [0b111, 0b101, 0b111, 0b001, 0b111],
-        ];
-        let Some(rows) = digit
-            .checked_sub(b'0')
-            .and_then(|value| DIGITS.get(value as usize))
-        else {
-            return;
-        };
-        for (row, bits) in rows.iter().enumerate() {
-            for column in 0..3 {
-                if bits & (1 << (2 - column)) != 0 {
-                    self.solid_rect(
-                        PhysicalPoint::new(origin.x + column as f64, origin.y + row as f64),
-                        1.0,
-                        1.0,
-                        color,
-                    );
-                }
-            }
-        }
+    pub fn label(
+        &mut self,
+        corners: [PhysicalPoint; 4],
+        number: usize,
+        color: Color,
+        font: &IndicatorFont,
+    ) {
+        let anchor = corners[0];
+        let center = indicator_center(corners, 17.5);
+        self.line(center, anchor, 3.0, color);
+        self.solid_circle(
+            PhysicalPoint::new(center.x, center.y + 1.0),
+            17.0,
+            [0, 0, 0, 36],
+        );
+        self.solid_circle(center, 16.0, color);
+        font.draw(self, center, &number.to_string());
     }
 
     fn quad(&mut self, points: [PhysicalPoint; 4], color: Color) {
@@ -344,5 +517,120 @@ impl OverlayGeometry {
                 color,
             });
         }
+    }
+
+    fn triangle(
+        &mut self,
+        first: PhysicalPoint,
+        second: PhysicalPoint,
+        third: PhysicalPoint,
+        color: Color,
+    ) {
+        let color = color.map(|channel| f32::from(channel) / 255.0);
+        for point in [first, second, third] {
+            self.vertices.push(Vertex {
+                position: [point.x as f32, point.y as f32],
+                color,
+            });
+        }
+    }
+}
+
+fn indicator_center(corners: [PhysicalPoint; 4], distance: f64) -> PhysicalPoint {
+    let anchor = corners[0];
+    let normalize = |point: PhysicalPoint| {
+        let dx = point.x - anchor.x;
+        let dy = point.y - anchor.y;
+        let length = dx.hypot(dy);
+        (dx / length, dy / length)
+    };
+    let (top_x, top_y) = normalize(corners[1]);
+    let (left_x, left_y) = normalize(corners[3]);
+    let outward_x = -(top_x + left_x);
+    let outward_y = -(top_y + left_y);
+    let length = outward_x.hypot(outward_y);
+    if !length.is_finite() || length <= f64::EPSILON {
+        return PhysicalPoint::new(anchor.x - distance, anchor.y - distance);
+    }
+    PhysicalPoint::new(
+        anchor.x + outward_x / length * distance,
+        anchor.y + outward_y / length * distance,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rounded_text_block_rect_contains_fill_and_border_geometry() {
+        let mut geometry = OverlayGeometry::default();
+        geometry.rounded_rect(
+            [
+                PhysicalPoint::new(10.0, 20.0),
+                PhysicalPoint::new(110.0, 20.0),
+                PhysicalPoint::new(110.0, 70.0),
+                PhysicalPoint::new(10.0, 70.0),
+            ],
+            6.0,
+            [251, 113, 133, 13],
+            2.0,
+            [251, 113, 133, 153],
+        );
+
+        assert_eq!(geometry.vertices.len(), 180);
+        assert!(
+            geometry
+                .vertices
+                .iter()
+                .all(|vertex| vertex.position.into_iter().all(f32::is_finite))
+        );
+        assert!(
+            geometry
+                .vertices
+                .iter()
+                .any(|vertex| (vertex.color[3] - 13.0 / 255.0).abs() < f32::EPSILON)
+        );
+        assert!(
+            geometry
+                .vertices
+                .iter()
+                .any(|vertex| (vertex.color[3] - 153.0 / 255.0).abs() < f32::EPSILON)
+        );
+    }
+
+    #[test]
+    fn text_block_label_is_tangent_to_the_top_left_corner() {
+        let mut geometry = OverlayGeometry::default();
+        let font = IndicatorFont::system().unwrap();
+        let color = [244, 63, 94, 255];
+        let corners = [
+            PhysicalPoint::new(100.0, 200.0),
+            PhysicalPoint::new(200.0, 200.0),
+            PhysicalPoint::new(200.0, 250.0),
+            PhysicalPoint::new(100.0, 250.0),
+        ];
+        geometry.label(corners, 1, color, &font);
+        let expected = color.map(|channel| f32::from(channel) / 255.0);
+        let indicator = geometry
+            .vertices
+            .iter()
+            .filter(|vertex| vertex.color == expected)
+            .collect::<Vec<_>>();
+
+        assert!(indicator.len() >= 96);
+        let min_x = indicator
+            .iter()
+            .map(|vertex| vertex.position[0])
+            .fold(f32::INFINITY, f32::min);
+        let max_x = indicator
+            .iter()
+            .map(|vertex| vertex.position[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!((min_x - 71.625_63).abs() < 1e-3);
+        assert!((max_x - 103.625_63).abs() < 1e-3);
+        assert!(geometry.vertices.iter().any(|vertex| {
+            vertex.color[0..3] == [1.0, 1.0, 1.0] && vertex.color[3] > 0.0 && vertex.color[3] < 1.0
+        }));
     }
 }

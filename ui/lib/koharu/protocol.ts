@@ -46,7 +46,7 @@ export type CanvasDisplay = {
 
 export type CanvasGuide = { axis: "horizontal"; position: number } | { axis: "vertical"; position: number };
 
-export type CanvasInteraction = { type: "show_page"; page: EntityId } | { type: "set_camera"; zoom: number; translation: [number, number] } | { type: "set_zoom"; zoom: number } | { type: "fit_window" } | { type: "set_display"; display: CanvasDisplay } | { type: "set_overlays"; selected: EntityId[]; hovered: EntityId | null; draft: Frame | null; guides: CanvasGuide[]; show_text_bounds: boolean; brush_cursor: CanvasBrushCursor | null } | { type: "hit_test"; id: number; x: number; y: number } | { type: "begin_transform"; elements: EntityId[]; target: HitTarget; x: number; y: number } | { type: "update_transform"; x: number; y: number } | { type: "cancel_transform" } | { type: "begin_mask_stroke"; plane: MaskPlane; diameter: number; erase: boolean; x: number; y: number } | { type: "extend_mask_stroke"; x: number; y: number } | { type: "finish_mask_stroke" } | { type: "cancel_mask_stroke" };
+export type CanvasInteraction = { type: "show_page"; page: EntityId } | { type: "set_camera"; zoom: number; translation: [number, number] } | { type: "set_zoom"; zoom: number } | { type: "fit_window" } | { type: "set_display"; display: CanvasDisplay } | { type: "set_overlays"; selected: EntityId[]; hovered: EntityId | null; draft: Frame | null; guides: CanvasGuide[]; brush_cursor: CanvasBrushCursor | null } | { type: "hit_test"; id: number; x: number; y: number } | { type: "begin_transform"; elements: EntityId[]; target: HitTarget; x: number; y: number } | { type: "update_transform"; x: number; y: number } | { type: "cancel_transform" } | { type: "begin_mask_stroke"; plane: MaskPlane; diameter: number; erase: boolean; x: number; y: number } | { type: "extend_mask_stroke"; x: number; y: number } | { type: "finish_mask_stroke" } | { type: "cancel_mask_stroke" };
 
 export type CanvasMaskOverlay = {
 	tint: [number, number, number, number],
@@ -82,6 +82,14 @@ export type DeepSeekConfig = {
 export type DetectionModel = {
 	model: "koharu-layout-rfdetr-seg-2xl",
 } & KoharuLayoutRFDetrSeg2XLConfig;
+
+export type DeviceResourcesView = {
+	name: string,
+	selected: boolean,
+	memory_budget_bytes: number | null,
+	memory_used_bytes: number | null,
+	utilization_percent: number | null,
+};
 
 export type DocumentId = string;
 
@@ -119,10 +127,6 @@ export type Flux2KleinConfig = {
 	strength?: number,
 	num_inference_steps?: number,
 	seed?: number,
-};
-
-export type FontDetectorConfig = {
-	top_k?: number,
 };
 
 export type FontFaceStyleView = "normal" | "italic" | "oblique";
@@ -259,7 +263,6 @@ export type PageView = {
 export type PipelineConfig = {
 	detection?: DetectionModel,
 	ocr?: OcrModel,
-	typography?: TypographyModel,
 	inpainting?: InpaintingModel,
 };
 
@@ -350,7 +353,16 @@ export type SourceTextView = {
 	language: string | null,
 };
 
-export type Stage = "detection" | "ocr" | "translation" | "typography" | "inpainting";
+export type Stage = "detection" | "ocr" | "translation" | "inpainting";
+
+export type SystemResourcesView = {
+	process_memory_bytes: number,
+	system_memory_total_bytes: number,
+	system_memory_used_bytes: number,
+	process_cpu_percent: number,
+	system_cpu_percent: number,
+	devices: DeviceResourcesView[],
+};
 
 export type Target = { target: "all" } | { target: "stage"; stages: Stage } | { target: "stages"; stages: Stage[] } | { target: "exact"; stages: Stage[] };
 
@@ -393,11 +405,7 @@ export type TypographyIntent = {
 	writing_mode: WritingMode | null,
 };
 
-export type TypographyModel = {
-	model: "font-detector",
-} & FontDetectorConfig;
-
-export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: EntityId; label: string } | { type: "delete_pages"; pages: EntityId[] } | { type: "move_page"; page: EntityId; index: number } | { type: "add_text"; page: EntityId; frame: Frame } | { type: "set_translation"; entity: EntityId; locale: string; text: string | null } | { type: "set_typography"; entities: EntityTypography[] } | { type: "set_geometry"; entities: EntityGeometry[] } | { type: "set_visibility"; entities: EntityId[]; visible: boolean | null; opacity: number | null } | { type: "delete_entities"; entities: EntityId[] } | { type: "move_entity"; entity: EntityId; parent: EntityId; index: number } | { type: "finish_transform" } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: Target } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: EntityId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
+export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: EntityId; label: string } | { type: "delete_pages"; pages: EntityId[] } | { type: "move_page"; page: EntityId; index: number } | { type: "add_text"; page: EntityId; frame: Frame } | { type: "set_source_text"; entity: EntityId; text: string } | { type: "set_translation"; entity: EntityId; locale: string; text: string | null } | { type: "set_typography"; entities: EntityTypography[] } | { type: "set_geometry"; entities: EntityGeometry[] } | { type: "set_visibility"; entities: EntityId[]; visible: boolean | null; opacity: number | null } | { type: "delete_entities"; entities: EntityId[] } | { type: "move_entity"; entity: EntityId; parent: EntityId; index: number } | { type: "finish_transform" } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: Target } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: EntityId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
 
 export type UiError = {
 	code: UiErrorCode,
@@ -407,13 +415,13 @@ export type UiError = {
 
 export type UiErrorCode = "stale_revision" | "no_project" | "not_found" | "busy" | "invalid_input" | "io_failed" | "internal";
 
-export type UiEvent = ({ type: "accepted"; id: RequestId; revision: Revision }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; page?: never; pages?: never; project?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "command_cancelled"; id: RequestId; revision: Revision }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; page?: never; pages?: never; project?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "rejected"; id: RequestId; error: UiError }) & { auto_fit?: never; blobs?: never; bytes?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "problem"; error: UiError }) & { auto_fit?: never; blobs?: never; bytes?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "project_opened"; revision: Revision; project: ProjectHeader; pages: PageSummary[] }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "page_loaded"; revision: Revision; page: PageView }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; pages?: never; project?: never; settings?: never; target?: never; translation?: never; zoom?: never } | {
+export type UiEvent = ({ type: "accepted"; id: RequestId; revision: Revision }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; page?: never; pages?: never; project?: never; resources?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "command_cancelled"; id: RequestId; revision: Revision }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; page?: never; pages?: never; project?: never; resources?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "rejected"; id: RequestId; error: UiError }) & { auto_fit?: never; blobs?: never; bytes?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "problem"; error: UiError }) & { auto_fit?: never; blobs?: never; bytes?: never; id?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "project_opened"; revision: Revision; project: ProjectHeader; pages: PageSummary[] }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; resources?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "page_loaded"; revision: Revision; page: PageView }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; pages?: never; project?: never; resources?: never; settings?: never; target?: never; translation?: never; zoom?: never } | {
 	type: "project_changed",
-} & ProjectDelta | ({ type: "project_closed" }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "hit_test"; id: number; target: HitTarget | null }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; translation?: never; zoom?: never } | ({ type: "view_changed"; zoom: number; translation: [number, number]; auto_fit: boolean }) & { blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never } | {
+} & ProjectDelta | ({ type: "project_closed" }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "hit_test"; id: number; target: HitTarget | null }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; settings?: never; translation?: never; zoom?: never } | ({ type: "view_changed"; zoom: number; translation: [number, number]; auto_fit: boolean }) & { blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; settings?: never; target?: never } | {
 	type: "job_changed",
 } & JobStatus | {
 	type: "download_changed",
-} & DownloadStatus | ({ type: "settings_changed"; settings: SettingsView }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; target?: never; translation?: never; zoom?: never } | ({ type: "garbage_collected"; blobs: number; bytes: number }) & { auto_fit?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never };
+} & DownloadStatus | ({ type: "settings_changed"; settings: SettingsView }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; target?: never; translation?: never; zoom?: never } | ({ type: "resources_changed"; resources: SystemResourcesView }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never } | ({ type: "garbage_collected"; blobs: number; bytes: number }) & { auto_fit?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; resources?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never };
 
 export type VisibilityView = {
 	visible: boolean,

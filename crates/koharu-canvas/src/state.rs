@@ -139,7 +139,6 @@ pub struct OverlayState {
     pub selected: Vec<ElementId>,
     pub hovered: Option<ElementId>,
     pub guides: Vec<Guide>,
-    pub show_text_bounds: bool,
     pub draft: Option<Frame>,
     pub brush_cursor: Option<BrushCursor>,
 }

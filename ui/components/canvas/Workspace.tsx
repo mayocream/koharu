@@ -14,7 +14,7 @@ import {
   type CanvasMaskOverlay,
   type Frame,
 } from '@/lib/koharu'
-import { draftFrame, pagePoint, zoomAtPoint } from '@/lib/koharu/geometry'
+import { draftFrame, pagePoint, scrollCamera, zoomAtPoint } from '@/lib/koharu/geometry'
 
 interface PendingHit {
   id: number
@@ -57,7 +57,6 @@ export function Workspace() {
   const tool = useEditorStore((state) => state.tool)
   const selectedElements = useEditorStore((state) => state.selectedElements)
   const hoveredElement = useEditorStore((state) => state.hoveredElement)
-  const showTextBounds = useEditorStore((state) => state.showTextBounds)
   const display = useEditorStore((state) => state.display)
   const brushSize = useEditorStore((state) => state.brushSize)
 
@@ -71,7 +70,6 @@ export function Workspace() {
       hovered: state.hoveredElement,
       draft,
       guides: [],
-      show_text_bounds: state.showTextBounds,
       brush_cursor:
         showCursor && cursor.current
           ? { x: cursor.current[0], y: cursor.current[1], diameter: state.brushSize }
@@ -129,7 +127,6 @@ export function Workspace() {
     hoveredElement,
     selectedElements,
     sendOverlays,
-    showTextBounds,
     tool,
   ])
 
@@ -398,7 +395,7 @@ export function Workspace() {
     if (!page) return
     event.preventDefault()
     const state = useEditorStore.getState()
-    if (event.ctrlKey || event.metaKey || Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
+    if (event.ctrlKey) {
       const point = physicalPoint(event.clientX, event.clientY)
       const nextZoom = Math.min(
         16,
@@ -407,14 +404,8 @@ export function Workspace() {
       const camera = zoomAtPoint(state.camera, point, nextZoom)
       koharuClient.interact({ type: 'set_camera', ...camera })
     } else {
-      koharuClient.interact({
-        type: 'set_camera',
-        zoom: state.camera.zoom,
-        translation: [
-          state.camera.translation[0] - event.deltaX * window.devicePixelRatio,
-          state.camera.translation[1] - event.deltaY * window.devicePixelRatio,
-        ],
-      })
+      const camera = scrollCamera(state.camera, [event.deltaX, event.deltaY])
+      koharuClient.interact({ type: 'set_camera', ...camera })
     }
   }
 

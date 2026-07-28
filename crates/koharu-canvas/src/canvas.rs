@@ -16,9 +16,9 @@ use crate::damage::RenderDamage;
 use crate::{
     ActiveStroke, ActiveTransform, Brush, Camera, CanvasDiagnostic, CanvasElement, CanvasGpu,
     CanvasOptions, CanvasPage, ElementId, ElementSceneContext, ElementScenes, Error, Frame,
-    GpuRenderer, Guide, Handle, HitTarget, MaskCommit, MaskPlane, MaskState, OverlayGeometry,
-    OverlayState, PageId, PagePoint, PageView, PhysicalPoint, PhysicalSize, ResourceEvent,
-    ResourceKind, Resources, Result, TransformCommit, frame_contains, frame_corners,
+    GpuRenderer, Guide, Handle, HitTarget, IndicatorFont, MaskCommit, MaskPlane, MaskState,
+    OverlayGeometry, OverlayState, PageId, PagePoint, PageView, PhysicalPoint, PhysicalSize,
+    ResourceEvent, ResourceKind, Resources, Result, TransformCommit, frame_contains, frame_corners,
 };
 
 // Handles are editor controls, so they remain a fixed physical-pixel size
@@ -55,6 +55,7 @@ pub struct Canvas {
 
     // Authoritative presentation inputs and asynchronously decoded assets.
     resources: Resources,
+    indicator_font: IndicatorFont,
     view: crate::ViewState,
     overlays: OverlayState,
     snapshot: Option<SceneSnapshot>,
@@ -89,12 +90,14 @@ impl Canvas {
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self> {
         let resources = Resources::new(options.max_decoded_bytes, wake);
+        let indicator_font = IndicatorFont::system()?;
         let view = crate::ViewState::default();
         let gpu = GpuRenderer::new(gpu, view.size)?;
         Ok(Self {
             gpu,
             options,
             resources,
+            indicator_font,
             view,
             overlays: OverlayState::default(),
             snapshot: None,
@@ -302,11 +305,14 @@ impl Canvas {
             let Some(selected) = page.element(element) else {
                 continue;
             };
-            if !selected.visible || selected.opacity <= 0.0 {
+            if !selected.selectable() || !selected.visible || selected.opacity <= 0.0 {
                 continue;
             }
             let frame = self.preview_frame(selected);
             for (handle, position) in handle_positions(frame, self.view.camera) {
+                if selected.has_text && handle == Handle::NorthWest {
+                    continue;
+                }
                 if handle_contains(handle, position, point) {
                     return Some(HitTarget::Handle { element, handle });
                 }
@@ -316,7 +322,8 @@ impl Canvas {
             .iter()
             .rev()
             .find(|element| {
-                element.visible
+                element.selectable()
+                    && element.visible
                     && element.opacity > 0.0
                     && frame_contains(self.preview_frame(element), page_point)
             })
@@ -341,7 +348,33 @@ impl Canvas {
         }
         let page_point = self.screen_to_page(point).ok_or(Error::NoPage)?;
         let page = self.page.as_ref().ok_or(Error::NoPage)?;
-        self.transform = Some(ActiveTransform::new(page, selected, target, page_point)?);
+        let selectable = selected
+            .iter()
+            .copied()
+            .filter(|element| {
+                page.element(*element)
+                    .is_some_and(CanvasElement::selectable)
+            })
+            .collect::<Vec<_>>();
+        let target_element = page.element(target.element());
+        if !target_element.is_some_and(CanvasElement::selectable) {
+            return Err(Error::Invalid(
+                "transform target is not an editable text or image entity".into(),
+            ));
+        }
+        if matches!(
+            target,
+            HitTarget::Handle {
+                handle: Handle::NorthWest,
+                ..
+            }
+        ) && target_element.is_some_and(|element| element.has_text)
+        {
+            return Err(Error::Invalid(
+                "the text-block indicator occupies the north-west handle".into(),
+            ));
+        }
+        self.transform = Some(ActiveTransform::new(page, &selectable, target, page_point)?);
         self.damage.overlay();
         Ok(())
     }
@@ -936,16 +969,37 @@ impl Canvas {
                 ),
             }
         }
-        if self.overlays.show_text_bounds {
-            for (index, element) in page
-                .elements
-                .iter()
-                .filter(|element| element.has_text && element.visible && element.opacity > 0.0)
-                .enumerate()
-            {
+        let text_blocks = page
+            .elements
+            .iter()
+            .filter(|element| element.has_text && element.visible && element.opacity > 0.0)
+            .enumerate()
+            .collect::<Vec<_>>();
+        // Preserve the old stacking rule: every text block and indicator is
+        // visible, with selected blocks drawn above every unselected block.
+        for selected in [false, true] {
+            for &(index, element) in &text_blocks {
+                if self.overlays.selected.contains(&element.id) != selected {
+                    continue;
+                }
                 let corners = screen_corners(self.preview_frame(element), camera);
-                geometry.outline(corners, 1.0, [255, 91, 145, 210]);
-                geometry.label(corners[0], index + 1, [255, 91, 145, 240]);
+                let (fill, border_width, border, indicator) = if selected {
+                    (
+                        [244, 63, 94, 38],
+                        4.0,
+                        [244, 63, 94, 255],
+                        [244, 63, 94, 255],
+                    )
+                } else {
+                    (
+                        [251, 113, 133, 13],
+                        3.0,
+                        [251, 113, 133, 153],
+                        [251, 113, 133, 255],
+                    )
+                };
+                geometry.rounded_rect(corners, 6.0, fill, border_width, border);
+                geometry.label(corners, index + 1, indicator, &self.indicator_font);
             }
         }
         if let Some(frame) = self.overlays.draft {
@@ -962,22 +1016,41 @@ impl Canvas {
             }
         }
         if let Some(element) = self.overlays.hovered
+            && let Some(canvas_element) = page.element(element)
+            && canvas_element.selectable()
+            && !canvas_element.has_text
             && let Some(frame) = self.element_frame(element)
         {
             geometry.outline(screen_corners(frame, camera), 1.5, [80, 225, 235, 255]);
         }
         for &element in &self.overlays.selected {
+            let Some(canvas_element) = page.element(element) else {
+                continue;
+            };
+            if !canvas_element.selectable() {
+                continue;
+            }
             let Some(frame) = self.element_frame(element) else {
                 continue;
             };
-            geometry.outline(screen_corners(frame, camera), 2.0, [80, 145, 255, 255]);
+            let accent = if canvas_element.has_text {
+                [244, 63, 94, 255]
+            } else {
+                [80, 145, 255, 255]
+            };
+            if !canvas_element.has_text {
+                geometry.outline(screen_corners(frame, camera), 2.0, accent);
+            }
             let positions = handle_positions(frame, camera);
             let north = positions[1].1;
             let rotate = positions[8].1;
-            geometry.line(north, rotate, 1.5, [80, 145, 255, 255]);
+            geometry.line(north, rotate, 1.5, accent);
             for (handle, point) in positions {
+                if canvas_element.has_text && handle == Handle::NorthWest {
+                    continue;
+                }
                 if handle == Handle::Rotate {
-                    geometry.circle_ring(point, HANDLE_VISUAL_SIZE * 0.5, 4.0, [80, 145, 255, 255]);
+                    geometry.circle_ring(point, HANDLE_VISUAL_SIZE * 0.5, 4.0, accent);
                 } else {
                     geometry.solid_rect(
                         point,
@@ -989,7 +1062,7 @@ impl Canvas {
                         point,
                         HANDLE_VISUAL_SIZE - 4.0,
                         HANDLE_VISUAL_SIZE - 4.0,
-                        [80, 145, 255, 255],
+                        accent,
                     );
                 }
             }

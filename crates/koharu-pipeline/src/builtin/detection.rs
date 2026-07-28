@@ -136,7 +136,8 @@ fn write_page(
                 && bottom > bounds.y as f32
         })
     });
-    detections.sort_by(detection_order);
+    non_maximum_suppression(&mut detections, 0.5);
+    sort_by_layout(&mut detections);
 
     let mut bubbles = Vec::<(koharu_scene::EntityId, [f32; 4])>::new();
     let mut texts = Vec::<(koharu_scene::EntityId, [f32; 4])>::new();
@@ -203,7 +204,7 @@ fn write_page(
     for (text, bounds) in texts {
         if let Some((bubble, _)) = bubbles
             .iter()
-            .filter(|(_, candidate)| contains(*candidate, bounds))
+            .filter(|(_, candidate)| containment(*candidate, bounds) >= 0.5)
             .min_by(|(_, left), (_, right)| area(*left).total_cmp(&area(*right)))
         {
             edit.add_relation(relation.clone(), text, *bubble)?;
@@ -302,13 +303,282 @@ fn detection_order(left: &KoharuLayoutDetection, right: &KoharuLayoutDetection) 
         .then_with(|| left.label.cmp(&right.label))
 }
 
-fn contains(container: [f32; 4], value: [f32; 4]) -> bool {
-    container[0] <= value[0]
-        && container[1] <= value[1]
-        && container[2] >= value[2]
-        && container[3] >= value[3]
+fn non_maximum_suppression(detections: &mut Vec<KoharuLayoutDetection>, threshold: f32) {
+    detections.sort_by(|left, right| {
+        right
+            .score
+            .total_cmp(&left.score)
+            .then_with(|| detection_order(left, right))
+    });
+    let mut kept = Vec::with_capacity(detections.len());
+    for candidate in detections.drain(..) {
+        let suppressed = kept.iter().any(|existing: &KoharuLayoutDetection| {
+            existing.label == candidate.label
+                && intersection_over_union(existing.bbox, candidate.bbox) > threshold
+        });
+        if !suppressed {
+            kept.push(candidate);
+        }
+    }
+    *detections = kept;
+}
+
+fn sort_by_layout(detections: &mut Vec<KoharuLayoutDetection>) {
+    let order = layout_order(detections);
+    let mut values = std::mem::take(detections)
+        .into_iter()
+        .map(Some)
+        .collect::<Vec<_>>();
+    *detections = order
+        .into_iter()
+        .map(|index| {
+            values[index]
+                .take()
+                .expect("layout order contains each detection once")
+        })
+        .collect();
+}
+
+fn layout_order(detections: &[KoharuLayoutDetection]) -> Vec<usize> {
+    let panels = spatial_order(
+        detections,
+        detections
+            .iter()
+            .enumerate()
+            .filter_map(|(index, detection)| (detection.label == "panel").then_some(index))
+            .collect(),
+    );
+    let bubbles = detections
+        .iter()
+        .enumerate()
+        .filter_map(|(index, detection)| (detection.label == "bubble").then_some(index))
+        .collect::<Vec<_>>();
+    let texts = detections
+        .iter()
+        .enumerate()
+        .filter_map(|(index, detection)| (detection.label == "text").then_some(index))
+        .collect::<Vec<_>>();
+
+    let mut panel_for_bubble = vec![None; detections.len()];
+    for &bubble in &bubbles {
+        panel_for_bubble[bubble] = best_container(detections, bubble, &panels);
+    }
+    let mut bubble_for_text = vec![None; detections.len()];
+    let mut panel_for_text = vec![None; detections.len()];
+    for &text in &texts {
+        let bubble = best_container(detections, text, &bubbles);
+        bubble_for_text[text] = bubble;
+        panel_for_text[text] = bubble
+            .and_then(|bubble| panel_for_bubble[bubble])
+            .or_else(|| best_container(detections, text, &panels));
+    }
+
+    let mut order = Vec::with_capacity(detections.len());
+    let mut included = vec![false; detections.len()];
+    let append = |index: usize, order: &mut Vec<usize>, included: &mut [bool]| {
+        if !included[index] {
+            included[index] = true;
+            order.push(index);
+        }
+    };
+
+    for &panel in &panels {
+        append(panel, &mut order, &mut included);
+        let panel_bubbles = spatial_order(
+            detections,
+            bubbles
+                .iter()
+                .copied()
+                .filter(|&bubble| panel_for_bubble[bubble] == Some(panel))
+                .collect(),
+        );
+        for bubble in panel_bubbles {
+            append(bubble, &mut order, &mut included);
+            for text in spatial_order(
+                detections,
+                texts
+                    .iter()
+                    .copied()
+                    .filter(|&text| bubble_for_text[text] == Some(bubble))
+                    .collect(),
+            ) {
+                append(text, &mut order, &mut included);
+            }
+        }
+        for text in spatial_order(
+            detections,
+            texts
+                .iter()
+                .copied()
+                .filter(|&text| {
+                    bubble_for_text[text].is_none() && panel_for_text[text] == Some(panel)
+                })
+                .collect(),
+        ) {
+            append(text, &mut order, &mut included);
+        }
+    }
+
+    for bubble in spatial_order(
+        detections,
+        bubbles
+            .iter()
+            .copied()
+            .filter(|&bubble| panel_for_bubble[bubble].is_none())
+            .collect(),
+    ) {
+        append(bubble, &mut order, &mut included);
+        for text in spatial_order(
+            detections,
+            texts
+                .iter()
+                .copied()
+                .filter(|&text| bubble_for_text[text] == Some(bubble))
+                .collect(),
+        ) {
+            append(text, &mut order, &mut included);
+        }
+    }
+
+    for text in spatial_order(
+        detections,
+        texts
+            .iter()
+            .copied()
+            .filter(|&text| bubble_for_text[text].is_none() && panel_for_text[text].is_none())
+            .collect(),
+    ) {
+        append(text, &mut order, &mut included);
+    }
+    for index in spatial_order(
+        detections,
+        (0..detections.len())
+            .filter(|&index| !included[index])
+            .collect(),
+    ) {
+        append(index, &mut order, &mut included);
+    }
+    order
+}
+
+fn spatial_order(detections: &[KoharuLayoutDetection], mut indices: Vec<usize>) -> Vec<usize> {
+    indices.sort_by(|&left, &right| {
+        detection_order(&detections[left], &detections[right])
+            .then_with(|| detections[right].score.total_cmp(&detections[left].score))
+            .then_with(|| left.cmp(&right))
+    });
+    indices
+}
+
+fn best_container(
+    detections: &[KoharuLayoutDetection],
+    value: usize,
+    candidates: &[usize],
+) -> Option<usize> {
+    candidates
+        .iter()
+        .copied()
+        .filter(|&candidate| containment(detections[candidate].bbox, detections[value].bbox) >= 0.5)
+        .min_by(|&left, &right| {
+            area(detections[left].bbox)
+                .total_cmp(&area(detections[right].bbox))
+                .then_with(|| detection_order(&detections[left], &detections[right]))
+                .then_with(|| left.cmp(&right))
+        })
+}
+
+fn containment(container: [f32; 4], value: [f32; 4]) -> f32 {
+    let value_area = area(value);
+    if value_area <= 0.0 {
+        return 0.0;
+    }
+    intersection_area(container, value) / value_area
+}
+
+fn intersection_over_union(left: [f32; 4], right: [f32; 4]) -> f32 {
+    let intersection = intersection_area(left, right);
+    let union = area(left) + area(right) - intersection;
+    if union <= 0.0 {
+        0.0
+    } else {
+        intersection / union
+    }
+}
+
+fn intersection_area(left: [f32; 4], right: [f32; 4]) -> f32 {
+    (left[2].min(right[2]) - left[0].max(right[0])).max(0.0)
+        * (left[3].min(right[3]) - left[1].max(right[1])).max(0.0)
 }
 
 fn area(bounds: [f32; 4]) -> f32 {
     (bounds[2] - bounds[0]).max(0.0) * (bounds[3] - bounds[1]).max(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_ml::koharu_layout_rfdetr_seg_2xl::{KoharuLayoutDetection, KoharuLayoutMask};
+
+    use super::{layout_order, non_maximum_suppression};
+
+    fn detection(label: &str, score: f32, bbox: [f32; 4]) -> KoharuLayoutDetection {
+        KoharuLayoutDetection {
+            label_id: 0,
+            label: label.to_owned(),
+            score,
+            bbox,
+            area: 0,
+            mask: KoharuLayoutMask {
+                width: 1,
+                height: 1,
+                pixels: vec![0],
+            },
+        }
+    }
+
+    #[test]
+    fn nms_removes_lower_scored_overlapping_regions_per_class() {
+        let mut detections = vec![
+            detection("text", 0.8, [5.0, 5.0, 105.0, 105.0]),
+            detection("bubble", 0.7, [0.0, 0.0, 100.0, 100.0]),
+            detection("text", 0.9, [0.0, 0.0, 100.0, 100.0]),
+            detection("text", 0.6, [200.0, 0.0, 250.0, 50.0]),
+        ];
+
+        non_maximum_suppression(&mut detections, 0.5);
+
+        let text_scores = detections
+            .iter()
+            .filter(|detection| detection.label == "text")
+            .map(|detection| detection.score)
+            .collect::<Vec<_>>();
+        assert_eq!(text_scores, [0.9, 0.6]);
+        assert!(
+            detections
+                .iter()
+                .any(|detection| detection.label == "bubble")
+        );
+    }
+
+    #[test]
+    fn layout_order_follows_panels_then_bubbles_then_their_text() {
+        let detections = vec![
+            detection("text", 0.63, [20.0, 30.0, 70.0, 70.0]),
+            detection("bubble", 0.7, [10.0, 20.0, 80.0, 80.0]),
+            detection("panel", 0.9, [100.0, 0.0, 200.0, 200.0]),
+            detection("text", 0.62, [130.0, 110.0, 180.0, 150.0]),
+            detection("bubble", 0.8, [120.0, 20.0, 190.0, 80.0]),
+            detection("panel", 0.9, [0.0, 0.0, 95.0, 200.0]),
+            detection("text", 0.61, [130.0, 30.0, 180.0, 70.0]),
+            detection("bubble", 0.7, [120.0, 100.0, 190.0, 160.0]),
+        ];
+
+        let text_scores = layout_order(&detections)
+            .into_iter()
+            .filter_map(|index| {
+                (detections[index].label == "text").then_some(detections[index].score)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(text_scores, [0.61, 0.62, 0.63]);
+    }
 }

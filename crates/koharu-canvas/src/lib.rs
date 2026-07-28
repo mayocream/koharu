@@ -42,6 +42,6 @@ use geometry::{frame_contains, frame_corners};
 use gpu::GpuRenderer;
 use mask::{ActiveStroke, MaskState};
 use model::{CanvasElement, CanvasPage};
-use overlay::{OverlayGeometry, OverlayRenderer};
+use overlay::{IndicatorFont, OverlayGeometry, OverlayRenderer};
 use resources::{ResourceEvent, ResourceKind, Resources};
 use transform::ActiveTransform;

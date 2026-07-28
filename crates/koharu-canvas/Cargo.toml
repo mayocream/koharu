@@ -12,6 +12,7 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+ab_glyph = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }
 image = { workspace = true }
 koharu-renderer = { workspace = true }

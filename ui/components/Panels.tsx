@@ -11,6 +11,7 @@ import {
   SlidersHorizontalIcon,
   Trash2,
 } from 'lucide-react'
+import { motion } from 'motion/react'
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -22,7 +23,6 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
@@ -168,56 +168,132 @@ function Layers() {
   )
 }
 
-function TranslationEditor({ entity }: { entity: EntityView }) {
-  const { t } = useTranslation()
-  const locale = useEditorStore((state) => state.settings?.translation.target_language ?? null)
-  const value = entity.translation?.text ?? ''
+type AutosaveTextareaProps = {
+  id: string
+  value: string
+  placeholder: string
+  testId: string
+  disabled?: boolean
+  onCommit: (value: string) => void
+}
+
+function AutosaveTextarea({
+  id,
+  value,
+  placeholder,
+  testId,
+  disabled = false,
+  onCommit,
+}: AutosaveTextareaProps) {
   const [draft, setDraft] = useState(value)
   const submitted = useRef(value)
+  const focused = useRef(false)
+  const composing = useRef(false)
+  const draftRef = useRef(value)
+
   useEffect(() => {
-    setDraft(value)
-    submitted.current = value
-  }, [entity.id, value])
-  const commit = useCallback(() => {
-    if (!locale || draft === value || submitted.current === draft) return
-    submitted.current = draft
-    koharuClient.fire({
-      type: 'set_translation',
-      entity: entity.id,
-      locale,
-      text: draft || null,
-    })
-  }, [draft, entity.id, locale, value])
+    draftRef.current = draft
+  }, [draft])
+
   useEffect(() => {
-    if (!locale || draft === value) return
-    const timer = window.setTimeout(commit, 650)
+    if (!focused.current) {
+      setDraft(value)
+      submitted.current = value
+    } else if (draftRef.current === value) {
+      submitted.current = value
+    }
+  }, [id, value])
+
+  const commit = useCallback(
+    (next: string) => {
+      if (disabled || next === value || submitted.current === next) return
+      submitted.current = next
+      onCommit(next)
+    },
+    [disabled, onCommit, value],
+  )
+
+  useEffect(() => {
+    if (disabled || composing.current || draft === value || submitted.current === draft) return
+    const timer = window.setTimeout(() => commit(draft), 500)
     return () => window.clearTimeout(timer)
-  }, [commit, draft, locale, value])
+  }, [commit, disabled, draft, value])
+
+  return (
+    <Textarea
+      id={id}
+      value={draft}
+      rows={2}
+      disabled={disabled}
+      placeholder={placeholder}
+      data-testid={testId}
+      className='min-h-0 resize-none px-1.5 py-1 text-xs'
+      onFocus={() => {
+        focused.current = true
+      }}
+      onBlur={(event) => {
+        focused.current = false
+        composing.current = false
+        commit(event.currentTarget.value)
+      }}
+      onCompositionStart={() => {
+        composing.current = true
+      }}
+      onCompositionEnd={(event) => {
+        composing.current = false
+        const next = event.currentTarget.value
+        setDraft(next)
+        commit(next)
+      }}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+    />
+  )
+}
+
+function TextEditors({ entity }: { entity: EntityView }) {
+  const { t } = useTranslation()
+  const locale = useEditorStore((state) => state.settings?.translation.target_language ?? null)
+  const source = entity.source_text?.text ?? ''
+  const translation = entity.translation?.text ?? ''
 
   return (
     <div className='space-y-1.5 text-xs'>
-      <div className='text-[10px] font-medium tracking-wide text-muted-foreground uppercase'>
-        {t('textBlocks.ocrLabel')}
+      <div className='space-y-0.5'>
+        <label htmlFor={`ocr-${entity.id}`} className='text-[10px] text-muted-foreground uppercase'>
+          {t('textBlocks.ocrLabel')}
+        </label>
+        <AutosaveTextarea
+          id={`ocr-${entity.id}`}
+          value={source}
+          placeholder={t('textBlocks.addOcrPlaceholder')}
+          testId={`textblock-ocr-${entity.id}`}
+          onCommit={(text) =>
+            koharuClient.fire({ type: 'set_source_text', entity: entity.id, text })
+          }
+        />
       </div>
-      <div className='rounded border border-border/60 bg-muted/30 px-1.5 py-1 text-xs whitespace-pre-wrap text-muted-foreground'>
-        {entity.source_text?.text || '—'}
-      </div>
-      <div className='space-y-1'>
-        <Label
+      <div className='space-y-0.5'>
+        <label
           htmlFor={`translation-${entity.id}`}
           className='text-[10px] text-muted-foreground uppercase'
         >
           {t('textBlocks.translationLabel')}
-        </Label>
-        <Textarea
+        </label>
+        <AutosaveTextarea
           id={`translation-${entity.id}`}
-          value={draft}
-          rows={2}
+          value={translation}
+          placeholder={t('textBlocks.addTranslationPlaceholder')}
+          testId={`textblock-translation-${entity.id}`}
           disabled={!locale}
-          data-testid={`textblock-translation-${entity.id}`}
-          className='min-h-0 resize-none px-1.5 py-1 text-xs'
-          onChange={(event) => setDraft(event.currentTarget.value)}
-          onBlur={commit}
+          onCommit={(text) => {
+            if (!locale) return
+            koharuClient.fire({
+              type: 'set_translation',
+              entity: entity.id,
+              locale,
+              text: text || null,
+            })
+          }}
         />
       </div>
     </div>
@@ -255,49 +331,56 @@ function TextContent() {
       >
         {texts.map((entity, index) => {
           const selectedEntity = selected.includes(entity.id)
-          const source = entity.source_text.text.trim()
+          const source = entity.source_text?.text.trim() ?? ''
           const translation = entity.translation?.text.trim() ?? ''
           return (
-            <AccordionItem
+            <motion.div
               key={entity.id}
-              value={String(index)}
               data-testid={`textblock-card-${index}`}
               data-selected={selectedEntity}
-              className='overflow-hidden rounded-md bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: index * 0.03 }}
             >
-              <AccordionTrigger
-                data-testid={`textblock-trigger-${index}`}
-                className='flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left hover:no-underline [&>svg]:hidden'
+              <AccordionItem
+                value={String(index)}
+                data-selected={selectedEntity}
+                className='overflow-hidden rounded-md bg-card/90 text-xs ring-1 ring-border data-[selected=true]:ring-primary'
               >
-                <span
-                  className={cn(
-                    'min-w-6 rounded-md px-1.5 py-0.5 text-center text-[10px] font-medium text-white',
-                    selectedEntity ? 'bg-primary' : 'bg-muted-foreground/60',
-                  )}
+                <AccordionTrigger
+                  data-testid={`textblock-trigger-${index}`}
+                  className='flex w-full cursor-pointer items-center gap-1.5 px-2 py-1.5 text-left transition outline-none hover:no-underline data-[state=open]:bg-accent [&>svg]:hidden'
                 >
-                  {index + 1}
-                </span>
-                <span className='line-clamp-1 min-w-0 flex-1 text-xs text-muted-foreground'>
-                  {translation || source || t('native.layers.text', { defaultValue: 'Text' })}
-                </span>
-              </AccordionTrigger>
-              <AccordionContent className='px-2 pt-1.5 pb-2'>
-                <div className='mb-1 flex justify-end'>
-                  <Button
-                    size='icon-xs'
-                    variant='ghost'
-                    className='size-5 text-rose-600 hover:text-rose-600'
-                    aria-label={t('workspace.deleteBlock')}
-                    onClick={() =>
-                      koharuClient.fire({ type: 'delete_entities', entities: [entity.id] })
-                    }
+                  <span
+                    className={cn(
+                      'min-w-6 rounded-md px-1.5 py-0.5 text-center text-[10px] font-medium text-white tabular-nums',
+                      selectedEntity ? 'bg-primary' : 'bg-muted-foreground/60',
+                    )}
                   >
-                    <Trash2 className='size-3' />
-                  </Button>
-                </div>
-                <TranslationEditor entity={entity} />
-              </AccordionContent>
-            </AccordionItem>
+                    {index + 1}
+                  </span>
+                  <span className='line-clamp-1 min-w-0 flex-1 text-xs text-muted-foreground'>
+                    {translation || source || t('native.layers.text', { defaultValue: 'Text' })}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className='px-2 pt-1.5 pb-2 shadow-[inset_0_1px_0_0_var(--color-border)]'>
+                  <div className='mb-1 flex justify-end'>
+                    <Button
+                      size='icon-xs'
+                      variant='ghost'
+                      className='size-5 text-rose-600 hover:text-rose-600'
+                      aria-label={t('workspace.deleteBlock')}
+                      onClick={() =>
+                        koharuClient.fire({ type: 'delete_entities', entities: [entity.id] })
+                      }
+                    >
+                      <Trash2 className='size-3' />
+                    </Button>
+                  </div>
+                  <TextEditors entity={entity} />
+                </AccordionContent>
+              </AccordionItem>
+            </motion.div>
           )
         })}
       </Accordion>

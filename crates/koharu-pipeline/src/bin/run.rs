@@ -3,10 +3,9 @@ use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc, time::Duration};
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
 use koharu_pipeline::{
-    AotInpaintingConfig, BaberuOcrConfig, DetectionModel, Flux2KleinConfig, FontDetectorConfig,
-    InpaintingModel, KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, MangaOcrConfig, OcrModel,
-    PaddleOcrVl1_6Config, Pipeline, PipelineConfig, PipelineEvent, RoremMixedConfig,
-    TypographyModel,
+    AotInpaintingConfig, BaberuOcrConfig, DetectionModel, Flux2KleinConfig, InpaintingModel,
+    KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, MangaOcrConfig, OcrModel, PaddleOcrVl1_6Config,
+    Pipeline, PipelineConfig, PipelineEvent, RoremMixedConfig,
 };
 use koharu_renderer::{RenderRequest, Renderer};
 use koharu_scene::{
@@ -41,7 +40,7 @@ struct Arguments {
     #[arg(long)]
     translation_instructions: Option<String>,
 
-    #[arg(long, default_value = "gemma4-12b-it")]
+    #[arg(long, default_value = "qwen3.5-0.8b")]
     llm: String,
 }
 
@@ -90,7 +89,6 @@ impl Arguments {
                 OcrChoice::MangaOcr => OcrModel::MangaOcr(MangaOcrConfig::default()),
                 OcrChoice::BaberuOcr => OcrModel::BaberuOcr(BaberuOcrConfig::default()),
             },
-            typography: TypographyModel::FontDetector(FontDetectorConfig::default()),
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa(LaMaConfig::default()),
                 InpaintingChoice::AotInpainting => {

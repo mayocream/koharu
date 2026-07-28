@@ -117,6 +117,37 @@ describe('KoharuClient', () => {
     client.disconnect()
   })
 
+  it('accepts native CPU, RAM, and VRAM telemetry', () => {
+    useEditorStore.setState({ resources: null })
+    const { bridge, client } = connected()
+    bridge.emit({
+      type: 'resources_changed',
+      resources: {
+        process_memory_bytes: 1024,
+        system_memory_total_bytes: 4096,
+        system_memory_used_bytes: 2048,
+        process_cpu_percent: 5,
+        system_cpu_percent: 20,
+        devices: [
+          {
+            name: 'GPU',
+            selected: true,
+            memory_budget_bytes: 8192,
+            memory_used_bytes: 4096,
+            utilization_percent: 40,
+          },
+        ],
+      },
+    })
+
+    expect(useEditorStore.getState().resources).toMatchObject({
+      system_cpu_percent: 20,
+      system_memory_used_bytes: 2048,
+      devices: [{ memory_used_bytes: 4096 }],
+    })
+    client.disconnect()
+  })
+
   it('accepts settings with all required phase models', () => {
     useEditorStore.setState({ error: null, settings: null })
     const { bridge, client } = connected()
@@ -126,7 +157,6 @@ describe('KoharuClient', () => {
         pipeline: {
           detection: { model: 'koharu-layout-rfdetr-seg-2xl' },
           ocr: { model: 'paddleocr-vl-1.6' },
-          typography: { model: 'font-detector', top_k: 3 },
           inpainting: { model: 'lama' },
         },
         translation: {

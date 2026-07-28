@@ -1,13 +1,12 @@
 use koharu_translator::Providers;
 
-use crate::{DetectionModel, InpaintingModel, OcrModel, Stage, TypographyModel};
+use crate::{DetectionModel, InpaintingModel, OcrModel, Stage};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ConfiguredNode {
     Detection(DetectionModel),
     Ocr(OcrModel),
     Translation(Providers),
-    Typography(TypographyModel),
     Inpainting(InpaintingModel),
 }
 
@@ -17,7 +16,6 @@ impl ConfiguredNode {
             Self::Detection(_) => Stage::Detection,
             Self::Ocr(_) => Stage::Ocr,
             Self::Translation(_) => Stage::Translation,
-            Self::Typography(_) => Stage::Typography,
             Self::Inpainting(_) => Stage::Inpainting,
         }
     }
@@ -31,7 +29,6 @@ impl ConfiguredNode {
             Self::Ocr(OcrModel::MangaOcr(_)) => "manga-ocr".to_owned(),
             Self::Ocr(OcrModel::BaberuOcr(_)) => "baberu-ocr".to_owned(),
             Self::Translation(provider) => provider_name(provider).to_owned(),
-            Self::Typography(TypographyModel::FontDetector(_)) => "font-detector".to_owned(),
             Self::Inpainting(InpaintingModel::LaMa(_)) => "lama".to_owned(),
             Self::Inpainting(InpaintingModel::AotInpainting(_)) => "aot-inpainting".to_owned(),
             Self::Inpainting(InpaintingModel::Flux2Klein(_)) => "flux2-klein".to_owned(),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { draftFrame, zoomAtPoint } from '@/lib/koharu/geometry'
+import { draftFrame, scrollCamera, zoomAtPoint } from '@/lib/koharu/geometry'
 
 describe('editor geometry', () => {
   it('normalizes reverse-direction frame drafts', () => {
@@ -11,5 +11,12 @@ describe('editor geometry', () => {
     const before = { zoom: 2, translation: [10, 20] as [number, number] }
     const after = zoomAtPoint(before, [110, 220], 4)
     expect(after.translation).toEqual([-90, -180])
+  })
+
+  it('scrolls the camera without changing zoom', () => {
+    expect(scrollCamera({ zoom: 2, translation: [100, 200] }, [12, -8], 2)).toEqual({
+      zoom: 2,
+      translation: [76, 216],
+    })
   })
 })

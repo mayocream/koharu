@@ -34,3 +34,17 @@ export function zoomAtPoint(
     translation: [point[0] - pageX * nextZoom, point[1] - pageY * nextZoom],
   }
 }
+
+export function scrollCamera(
+  camera: { zoom: number; translation: [number, number] },
+  delta: [number, number],
+  dpr = window.devicePixelRatio,
+): { zoom: number; translation: [number, number] } {
+  return {
+    zoom: camera.zoom,
+    translation: [
+      camera.translation[0] - delta[0] * dpr,
+      camera.translation[1] - delta[1] * dpr,
+    ],
+  }
+}

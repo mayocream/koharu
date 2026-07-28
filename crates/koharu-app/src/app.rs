@@ -29,8 +29,8 @@ use crate::{
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
         CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, Handle,
-        HitTarget, JobKind, JobStatus, MaskPlane, RequestId, SettingsView, TargetLanguageView,
-        TranslationSettings,
+        HitTarget, JobKind, JobStatus, MaskPlane, RequestId, SettingsView, SystemResourcesView,
+        TargetLanguageView, TranslationSettings,
     },
     resources::Resources,
 };
@@ -107,6 +107,7 @@ pub struct App {
     fonts: Vec<FontFaceView>,
     jobs: HashMap<RequestId, RunningJob>,
     downloads: HashMap<u64, DownloadStatus>,
+    system_resources: SystemResourcesView,
     pending_masks: HashSet<(EntityId, CanvasMaskPlane, u64)>,
     initial_path: Option<PathBuf>,
     initialization_error: Option<String>,
@@ -143,6 +144,7 @@ impl App {
             fonts,
             jobs: HashMap::new(),
             downloads: HashMap::new(),
+            system_resources: SystemResourcesView::default(),
             pending_masks: HashSet::new(),
             initial_path,
             initialization_error: None,
@@ -454,6 +456,8 @@ impl App {
             } => {
                 let (translation, credentials) = (*translation).into_parts()?;
                 koharu_pipeline::Pipeline::new(pipeline.clone(), translation.clone())?;
+                let target_language_changed =
+                    self.translation.read()?.target_language != translation.target_language;
                 let locale = LanguageTag::new(translation.target_language.clone())?;
                 {
                     let mut current = self.pipeline.write()?;
@@ -469,7 +473,9 @@ impl App {
                 self.background.reconfigure(pipeline, translation)?;
                 desktop.canvas().set_locale(Some(locale.clone()));
                 self.emit_settings(desktop)?;
-                if let Some(page) = self.project.as_ref().and_then(Project::visible_page) {
+                if target_language_changed
+                    && let Some(page) = self.project.as_ref().and_then(Project::visible_page)
+                {
                     desktop.emit(
                         EVENT_NAME,
                         AppEvent::PageLoaded {
@@ -619,7 +625,6 @@ impl App {
                 hovered,
                 draft,
                 guides,
-                show_text_bounds,
                 brush_cursor,
             } => desktop.set_overlays(OverlayState {
                 selected,
@@ -636,7 +641,6 @@ impl App {
                         }
                     })
                     .collect(),
-                show_text_bounds,
                 brush_cursor: brush_cursor.map(|cursor| BrushCursor {
                     point: PhysicalPoint::new(cursor.x, cursor.y),
                     diameter: cursor.diameter,
@@ -844,6 +848,12 @@ impl App {
         self.emit_project(desktop)?;
         self.emit_settings(desktop)?;
         self.emit_view(desktop)?;
+        desktop.emit(
+            EVENT_NAME,
+            AppEvent::ResourcesChanged {
+                resources: self.system_resources.clone(),
+            },
+        )?;
         for job in self.jobs.values() {
             desktop.emit(EVENT_NAME, AppEvent::JobChanged(job.status.clone()))?;
         }
@@ -977,6 +987,7 @@ impl Application for App {
 
     fn started(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
         self.background.subscribe_downloads(desktop.handle());
+        self.background.subscribe_resources(desktop.handle());
         start_runtime_initialization(desktop.handle());
         Ok(())
     }
@@ -1113,6 +1124,18 @@ impl Application for App {
                     status.clone(),
                 );
                 desktop.emit(EVENT_NAME, AppEvent::DownloadChanged(status))
+            }
+            NativeEvent::Resources(snapshot) => {
+                self.system_resources = snapshot.into();
+                if self.frontend_ready {
+                    desktop.emit(
+                        EVENT_NAME,
+                        AppEvent::ResourcesChanged {
+                            resources: self.system_resources.clone(),
+                        },
+                    )?;
+                }
+                Ok(())
             }
             NativeEvent::ProjectAdvanced { job } => {
                 if self.jobs.contains_key(&job) {

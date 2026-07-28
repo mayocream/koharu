@@ -43,6 +43,7 @@ const EVENT_TYPES = new Set([
   'job_changed',
   'download_changed',
   'settings_changed',
+  'resources_changed',
   'garbage_collected',
 ])
 const ERROR_CODES = new Set([
@@ -307,7 +308,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
       const pipeline = settings.pipeline
       const translation = settings.translation
       return (
-        (['detection', 'ocr', 'typography', 'inpainting'] as const).every(
+        (['detection', 'ocr', 'inpainting'] as const).every(
           (phase) =>
             pipeline[phase] === undefined ||
             pipeline[phase] === null ||
@@ -333,6 +334,28 @@ export function isUiEvent(value: unknown): value is UiEvent {
             typeof font.stretch === 'number' &&
             ['normal', 'italic', 'oblique'].includes(String(font.style)) &&
             ['system', 'registered'].includes(String(font.source)),
+        )
+      )
+    }
+    case 'resources_changed': {
+      const resources = value.resources
+      return (
+        isRecord(resources) &&
+        typeof resources.process_memory_bytes === 'number' &&
+        typeof resources.system_memory_total_bytes === 'number' &&
+        typeof resources.system_memory_used_bytes === 'number' &&
+        typeof resources.process_cpu_percent === 'number' &&
+        typeof resources.system_cpu_percent === 'number' &&
+        Array.isArray(resources.devices) &&
+        resources.devices.every(
+          (device) =>
+            isRecord(device) &&
+            typeof device.name === 'string' &&
+            typeof device.selected === 'boolean' &&
+            (device.memory_budget_bytes === null ||
+              typeof device.memory_budget_bytes === 'number') &&
+            (device.memory_used_bytes === null || typeof device.memory_used_bytes === 'number') &&
+            (device.utilization_percent === null || typeof device.utilization_percent === 'number'),
         )
       )
     }

@@ -8,14 +8,13 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
-use koharu_scene::{Generation, ProducerId, SceneEdit};
+use koharu_scene::{Generation, ProducerId, SceneEdit, ScenePatch};
 
 pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
 pub use inpainting::{
     AotInpaintingConfig, Flux2KleinConfig, LaMaConfig, LaMaHDStrategy, RoremMixedConfig,
 };
 pub use ocr::{BaberuOcrConfig, MangaOcrConfig, PaddleOcrVl1_6Config};
-pub use typography::FontDetectorConfig;
 
 use crate::{
     ConfiguredNode, DownloadContext, LoadContext, NodeInput, NodeOutput, Processor, ProcessorSpec,
@@ -48,26 +47,65 @@ struct BuiltinProcessor {
 }
 
 enum Loaded {
-    Detection(detection::Model),
+    Detection(DetectionModels),
     Ocr(ocr::Model),
     Translation(translation::Model),
-    Typography(typography::Model),
     Inpainting(inpainting::Model),
+}
+
+struct DetectionModels {
+    layout: detection::Model,
+    typography: typography::Model,
+}
+
+impl DetectionModels {
+    async fn load(device: koharu_ml::Device, config: &crate::DetectionModel) -> Result<Self> {
+        let (layout, typography) = tokio::try_join!(
+            detection::Model::load(device.clone(), config),
+            typography::Model::load(device),
+        )?;
+        Ok(Self { layout, typography })
+    }
+
+    async fn run(&self, input: NodeInput) -> Result<NodeOutput> {
+        let detected = self.layout.run(input.clone()).await?;
+        let preview = input.scene.preview([&detected.patch])?;
+        let styled = self
+            .typography
+            .run(NodeInput {
+                scene: preview,
+                ..input
+            })
+            .await?;
+        let patch = ScenePatch::merge([&detected.patch, &styled.patch])?;
+        let mut artifacts = detected.artifacts;
+        for (id, artifact) in styled.artifacts {
+            if artifacts.insert(id.clone(), artifact).is_some() {
+                bail!("detection sub-models produced duplicate artifact {id}");
+            }
+        }
+        let mut measurements = detected.measurements;
+        measurements.queue += styled.measurements.queue;
+        measurements.load += styled.measurements.load;
+        measurements.execution += styled.measurements.execution;
+        Ok(NodeOutput {
+            patch,
+            artifacts,
+            measurements,
+        })
+    }
 }
 
 impl Loaded {
     async fn load(node: &ConfiguredNode, device: koharu_ml::Device) -> Result<Self> {
         match node {
-            ConfiguredNode::Detection(config) => detection::Model::load(device, config)
+            ConfiguredNode::Detection(config) => DetectionModels::load(device, config)
                 .await
                 .map(Self::Detection),
             ConfiguredNode::Ocr(config) => ocr::Model::load(device, config).await.map(Self::Ocr),
             ConfiguredNode::Translation(config) => translation::Model::load(device, config)
                 .await
                 .map(Self::Translation),
-            ConfiguredNode::Typography(config) => typography::Model::load(device, config)
-                .await
-                .map(Self::Typography),
             ConfiguredNode::Inpainting(config) => inpainting::Model::load(device, config)
                 .await
                 .map(Self::Inpainting),
@@ -79,7 +117,6 @@ impl Loaded {
             Self::Detection(model) => model.run(input).await,
             Self::Ocr(model) => model.run(input).await,
             Self::Translation(model) => model.run(input).await,
-            Self::Typography(model) => model.run(input).await,
             Self::Inpainting(model) => model.run(input).await,
         }
     }
@@ -138,9 +175,11 @@ impl Processor for BuiltinProcessor {
 
 async fn download(node: &ConfiguredNode) -> Result<()> {
     match node {
-        ConfiguredNode::Detection(_) => {
-            koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::download().await
-        }
+        ConfiguredNode::Detection(_) => tokio::try_join!(
+            koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::download(),
+            koharu_ml::font_detector::FontDetector::download(),
+        )
+        .map(|_| ()),
         ConfiguredNode::Ocr(crate::OcrModel::MangaOcr(_)) => {
             koharu_ml::manga_ocr::MangaOcr::download().await
         }
@@ -160,7 +199,6 @@ async fn download(node: &ConfiguredNode) -> Result<()> {
                 .map_err(Into::into)
         }
         ConfiguredNode::Translation(_) => Ok(()),
-        ConfiguredNode::Typography(_) => koharu_ml::font_detector::FontDetector::download().await,
         ConfiguredNode::Inpainting(crate::InpaintingModel::LaMa(_)) => {
             koharu_ml::lama::LaMa::download().await
         }
@@ -180,6 +218,7 @@ fn is_downloaded(node: &ConfiguredNode) -> bool {
     match node {
         ConfiguredNode::Detection(_) => {
             koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::is_downloaded()
+                && koharu_ml::font_detector::FontDetector::is_downloaded()
         }
         ConfiguredNode::Ocr(crate::OcrModel::MangaOcr(_)) => {
             koharu_ml::manga_ocr::MangaOcr::is_downloaded()
@@ -195,7 +234,6 @@ fn is_downloaded(node: &ConfiguredNode) -> bool {
             .parse::<koharu_translator::LocalModel>()
             .is_ok_and(koharu_translator::LocalTranslator::is_downloaded),
         ConfiguredNode::Translation(_) => true,
-        ConfiguredNode::Typography(_) => koharu_ml::font_detector::FontDetector::is_downloaded(),
         ConfiguredNode::Inpainting(crate::InpaintingModel::LaMa(_)) => {
             koharu_ml::lama::LaMa::is_downloaded()
         }
@@ -230,7 +268,6 @@ fn producer(stage: Stage) -> &'static str {
         Stage::Detection => "dev.koharu.pipeline.detection",
         Stage::Ocr => "dev.koharu.pipeline.ocr",
         Stage::Translation => "dev.koharu.pipeline.translation",
-        Stage::Typography => "dev.koharu.pipeline.typography",
         Stage::Inpainting => "dev.koharu.pipeline.inpainting",
     }
 }

@@ -59,7 +59,7 @@ Koharu 通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 支持本地 GG
 
 本地模型选择器里还包含一些并非专门为翻译调校的通用家族：
 
-默认本地翻译模型是 `gemma4-12b-it`。
+默认本地翻译模型是 `qwen3.5-0.8b`。
 
 - LFM2.5 Instruct：`lfm2.5-1.2b-instruct`
 - Ministral 3 Instruct：`ministral-3-8b-instruct`

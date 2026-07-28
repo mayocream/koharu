@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use koharu_scene::{Asset, BlobId, EntityId, Geometry, SceneSnapshot, SourceText, Visibility};
+use koharu_scene::{
+    Asset, BlobId, EntityId, Geometry, Region, SceneSnapshot, SourceText, Visibility,
+};
 
 use crate::{Error, Frame, PhysicalSize, Result};
 
@@ -34,6 +36,12 @@ pub(crate) struct CanvasElement {
     pub opacity: f32,
     pub image: Option<BlobId>,
     pub has_text: bool,
+}
+
+impl CanvasElement {
+    pub(crate) const fn selectable(&self) -> bool {
+        self.has_text || self.image.is_some()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -96,9 +104,7 @@ impl CanvasPage {
                 visible: visibility.visible,
                 opacity: visibility.opacity,
                 image: asset_blob(snapshot, entity, "source")?,
-                has_text: snapshot
-                    .component::<SourceText>(entity, "default")?
-                    .is_some(),
+                has_text: is_text_block(snapshot, entity)?,
             });
         }
 
@@ -118,6 +124,18 @@ impl CanvasPage {
     pub(crate) fn contains(&self, id: EntityId) -> bool {
         id == self.id || self.members.contains(&id)
     }
+}
+
+fn is_text_block(snapshot: &SceneSnapshot, entity: EntityId) -> Result<bool> {
+    if snapshot
+        .component::<SourceText>(entity, "default")?
+        .is_some()
+    {
+        return Ok(true);
+    }
+    Ok(snapshot
+        .component::<Region>(entity, "default")?
+        .is_some_and(|region| region.kind.as_str() == "dev.koharu.region.text"))
 }
 
 fn asset_blob(snapshot: &SceneSnapshot, entity: EntityId, slot: &str) -> Result<Option<BlobId>> {
@@ -203,7 +221,7 @@ fn rectangle_frame(points: &[koharu_scene::Point]) -> Option<Frame> {
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{Geometry, Origin, Point};
+    use koharu_scene::{At, Geometry, Origin, PageDraft, Point, Region, RegionKind, SceneSession};
 
     use super::*;
 
@@ -250,5 +268,62 @@ mod tests {
             geometry_frame(&geometry),
             Some(Frame::new(2.0, 3.0, 10.0, 8.0))
         );
+    }
+
+    #[test]
+    fn detected_text_regions_are_canvas_text_blocks_before_ocr() {
+        let mut session = SceneSession::memory().unwrap();
+        let mut entities = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(PageDraft::new("page", 100.0, 100.0), At::End)?;
+                let text = edit.add_entity(page, At::End)?;
+                edit.set(
+                    text,
+                    "default",
+                    &Region {
+                        origin: Origin::User,
+                        kind: RegionKind::new("dev.koharu.region.text")?,
+                        label: Some("text".into()),
+                    },
+                )?;
+                let bubble = edit.add_entity(page, At::End)?;
+                edit.set(
+                    bubble,
+                    "default",
+                    &Region {
+                        origin: Origin::User,
+                        kind: RegionKind::new("dev.koharu.region.bubble")?,
+                        label: Some("bubble".into()),
+                    },
+                )?;
+                entities = Some((text, bubble));
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).unwrap().snapshot;
+        let (text, bubble) = entities.unwrap();
+
+        assert!(is_text_block(&snapshot, text).unwrap());
+        assert!(!is_text_block(&snapshot, bubble).unwrap());
+
+        let frame = Frame::new(0.0, 0.0, 10.0, 10.0);
+        let analysis_region = CanvasElement {
+            id: bubble,
+            geometry: Geometry::rectangle(0.0, 0.0, 10.0, 10.0),
+            frame,
+            visible: true,
+            opacity: 1.0,
+            image: None,
+            has_text: false,
+        };
+        let text_block = CanvasElement {
+            id: text,
+            has_text: true,
+            ..analysis_region.clone()
+        };
+        assert!(!analysis_region.selectable());
+        assert!(text_block.selectable());
     }
 }

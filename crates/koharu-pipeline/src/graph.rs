@@ -27,16 +27,14 @@ pub enum Stage {
     Detection,
     Ocr,
     Translation,
-    Typography,
     Inpainting,
 }
 
 impl Stage {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 4] = [
         Self::Detection,
         Self::Ocr,
         Self::Translation,
-        Self::Typography,
         Self::Inpainting,
     ];
 }
@@ -85,12 +83,6 @@ impl PipelineGraph {
             Stage::Translation,
             Stage::Ocr,
             Dependency::RecognizedSourceText,
-        );
-        depends_on(
-            &mut dependencies,
-            Stage::Typography,
-            Stage::Detection,
-            Dependency::DetectedTextRegions,
         );
         depends_on(
             &mut dependencies,
@@ -253,7 +245,6 @@ mod tests {
                 Stage::Detection,
                 Stage::Ocr,
                 Stage::Translation,
-                Stage::Typography,
                 Stage::Inpainting,
             ]
         );

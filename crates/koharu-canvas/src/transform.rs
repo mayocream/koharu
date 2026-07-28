@@ -202,7 +202,7 @@ pub(crate) fn frame_transform(original: Frame, preview: Frame) -> Affine {
 }
 
 impl HitTarget {
-    const fn element(self) -> ElementId {
+    pub(crate) const fn element(self) -> ElementId {
         match self {
             Self::Element(element) | Self::Handle { element, .. } => element,
         }

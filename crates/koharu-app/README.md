@@ -64,6 +64,8 @@ remaining page becomes visible; an empty project has no visible page.
 
 Commands express intent:
 
+- `SetSourceText` corrects OCR text while preserving its detected language and
+  promotes the text to user authorship.
 - `SetTranslation` requires an explicit language tag.
 - `SetTypography` carries semantic typography preferences, not glyph layout or
   renderer effects.

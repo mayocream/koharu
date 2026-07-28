@@ -266,7 +266,6 @@ pub enum Stage {
     Detection,
     Ocr,
     Translation,
-    Typography,
     Inpainting,
 }
 
@@ -314,9 +313,8 @@ Scope is normalized once against the base snapshot into stable page and entity
 order. Duplicate IDs are removed, every entity must belong to the selected
 project, region coordinates must be finite and non-empty, and unsupported
 stage/scope combinations fail before any model loads. `Project` means all pages
-in scene order. `Entities` is intended for an exact OCR, translation, or
-typography rerun over existing text entities; detection and page-level
-inpainting reject it.
+in scene order. `Entities` is intended for an exact OCR or translation rerun
+over existing text entities; detection and page-level inpainting reject it.
 
 `Pipeline::run` owns the cheap `SceneSnapshot` clone. It never borrows a
 `SceneSession` across an `await`. `RunReport::preview` is the already validated
@@ -331,7 +329,6 @@ There is exactly one configured implementation for each stage:
 pub struct PipelineConfig {
     pub detection: DetectionModel,
     pub ocr: OcrModel,
-    pub typography: TypographyModel,
     pub inpainting: InpaintingModel,
 }
 ```
@@ -357,14 +354,14 @@ final authority without creating a production tuning API.
 
 ## Stage contracts and scene ownership
 
-The built-in graph has five stable responsibilities:
+The built-in graph has four stable responsibilities. Typography inference is a
+fixed internal part of detection rather than a configurable stage:
 
 | Stage | Reads | Writes | Stable producer |
 | --- | --- | --- | --- |
-| Detection | page source asset and scope | generated region/text entities, `Geometry`, `Region`, `DetectionAnalysis`, and text-to-bubble relations | `dev.koharu.pipeline.detection` |
+| Detection | page source asset and scope | generated region/text entities, `Geometry`, `Region`, `DetectionAnalysis`, text-to-bubble relations, and default renderer-independent `Typography` intent | `dev.koharu.pipeline.detection`; internal typography uses `dev.koharu.pipeline.typography` |
 | OCR | source asset and detected text entities | `SourceText` and `OcrAnalysis` on detected text entities | `dev.koharu.pipeline.ocr` |
 | Translation | `SourceText`, source language, target locale, and instructions | locale-slotted `Translation` | `dev.koharu.pipeline.translation` |
-| Typography | source asset and detected text entities | renderer-independent `Typography` intent | `dev.koharu.pipeline.typography` |
 | Inpainting | source asset and detected text mask | page `Asset` in the configured clean-image role | `dev.koharu.pipeline.inpainting` |
 
 Detection emits the semantic kinds already consumed by the renderer, including
@@ -372,6 +369,21 @@ Detection emits the semantic kinds already consumed by the renderer, including
 `dev.koharu.relation.text-region`. These stable identifiers belong to the scene
 contract shared by the producer and renderer; adapters do not invent private
 aliases.
+
+The detection adapter applies class-aware bounding-box NMS before it creates
+scene entities. It then derives deterministic manga reading order from the
+detected layout: panels are ordered top-to-bottom and right-to-left, bubbles
+are ordered within their containing panel, and text is ordered within its
+smallest containing bubble. A region is associated with a container when at
+least half of its area overlaps it, so slightly imperfect detector boxes do not
+break the hierarchy. Text outside a bubble or panel falls back to the same
+spatial order.
+
+The detection slot downloads, loads, and recycles the layout and font models as
+one unit. It runs layout inference first, previews that patch, runs the font
+detector with its fixed default behavior over the new text entities, and merges
+both patches into one detection result. There is no public typography target,
+configuration field, model-status row, or independent scheduling node.
 
 Every processor creates its patch with
 `SceneSnapshot::edit_as(Generation)`. The producer is the stable responsibility
@@ -408,18 +420,14 @@ struct PipelineGraph {
 The graph is:
 
 ```text
-                                  +--> OCR --> Translation
-                                  |
-Source snapshot --> Detection ----+--> Typography
-                                  |
-                                  +--> Inpainting
+Source snapshot --> Detection ----+--> OCR --> Translation
+                                  `--> Inpainting
 ```
 
 | Prerequisite | Dependent | Edge value |
 | --- | --- | --- |
 | Detection | OCR | `DetectedTextRegions` |
 | OCR | Translation | `RecognizedSourceText` |
-| Detection | Typography | `DetectedTextRegions` |
 | Detection | Inpainting | `DetectedTextMask` |
 
 Edges always point from prerequisite to dependent. One helper makes that
@@ -455,8 +463,8 @@ not represented as a graph edge.
 ## Readiness-driven scheduler
 
 The scheduler does not precompute topological waves. Waves introduce a false
-barrier: translation would wait for unrelated typography and inpainting even
-after OCR had completed.
+barrier: translation would wait for unrelated inpainting even after OCR had
+completed.
 
 For the selected stage set, execution proceeds as follows:
 
@@ -470,9 +478,9 @@ For the selected stage set, execution proceeds as follows:
 7. Continue until all selected stages succeed, cancellation wins, or one stage
    fails.
 
-For a full run, OCR, typography, and inpainting become ready together after
-detection. Translation becomes ready as soon as OCR completes, regardless of
-whether the other two siblings have completed.
+For a full run, OCR and inpainting become ready together after detection.
+Translation becomes ready as soon as OCR completes, regardless of whether
+inpainting has completed.
 
 Ready ordering is deterministic, while completion order is allowed to vary.
 Per-model usage gates serialize only callers of the same configured model slot;
@@ -560,9 +568,9 @@ retains the original durable revision and carries patch ancestry through
 
 Consequently:
 
-- OCR, typography, and inpainting see detection output;
+- OCR and inpainting see detection output, including its typography intent;
 - translation sees detection and OCR output; and
-- translation never sees typography or inpainting output.
+- translation never sees inpainting output.
 
 Every processor returns a `ScenePatch` created from its provided preview. The
 patch contains only that processor's edits while retaining its ancestor
@@ -570,11 +578,11 @@ preconditions. After all selected stages succeed, the scheduler passes patches
 to `ScenePatch::merge` in canonical topological order, previews the merged patch
 on the original base, and returns both in `RunReport`.
 
-Component kind plus slot is the concurrency boundary. OCR, translation, and
-typography can edit the same entity concurrently because they write distinct
-components or locale slots. Two siblings writing the same component key fail
-with a scene/storage patch conflict. The pipeline does not implement JSON-field
-merging or inspect raw operation footprints.
+Component kind plus slot is the concurrency boundary. OCR and translation can
+edit the same entity because they write distinct components or locale slots.
+Two siblings writing the same component key fail with a scene/storage patch
+conflict. The pipeline does not implement JSON-field merging or inspect raw
+operation footprints.
 
 These rules guarantee:
 
@@ -850,9 +858,10 @@ consumes a `SceneSnapshot` independently:
 
 Detection must emit the region and relation semantics expected by the renderer.
 OCR must retain `LanguageTag`; translation writes the target locale slot; and
-typography writes only renderer-independent intent. Glyph runs, fallback-family
-resolution, punctuation shaping, balloon line profiles, and rendered images do
-not become pipeline artifacts or scene components.
+detection's internal font model writes only renderer-independent typography
+intent. Glyph runs, fallback-family resolution, punctuation shaping, balloon
+line profiles, and rendered images do not become pipeline artifacts or scene
+components.
 
 ## Target module layout
 
@@ -874,7 +883,7 @@ src/
     detection.rs
     ocr.rs
     translation.rs
-    typography.rs
+    typography.rs       hidden default font inference owned by detection
     inpainting.rs
   bin/run.rs          headless caller of the same in-process API
 ```
@@ -1003,8 +1012,8 @@ The implementation is complete only when automated tests prove:
     implicit stage, and missing exact-target inputs fail before download/load.
 15. Canonical graph order is stable across construction runs and independent of
     hash-map iteration.
-16. After detection, OCR, typography, and inpainting overlap when the fake
-    resource monitor reports sufficient headroom.
+16. After detection, OCR and inpainting overlap when the fake resource monitor
+    reports sufficient headroom; typography is already part of detection.
 17. Translation starts immediately after OCR while a slower independent sibling
     is still running, and a pressured GPU stage does not block ready network or
     light CPU work.
@@ -1014,8 +1023,8 @@ The implementation is complete only when automated tests prove:
     artifacts.
 20. Given fixed processor patches, randomized completion delays produce the
     same merged patch fingerprint and canonically ordered `NodeReport` values.
-21. OCR, translation, and typography patches on one entity merge because their
-    component keys differ; deliberate sibling writes to one key conflict.
+21. OCR and translation patches on one entity merge because their component
+    keys differ; deliberate sibling writes to one key conflict.
 22. Detection-created entity IDs remain usable by descendant patches and final
     merge.
 23. A successful full run previews as a semantically valid scene and commits as

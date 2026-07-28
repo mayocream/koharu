@@ -7,36 +7,18 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::DynamicImage;
 use koharu_ml::font_detector::{FontDetector, FontPrediction, TextDirection as FontDirection};
 use koharu_scene::{Geometry, Origin, Region, SourceText, Typography, WritingMode};
-use serde::{Deserialize, Serialize};
-use specta::Type;
 
-use super::{finish, generation, producer};
-use crate::{NodeInput, NodeOutput, Stage, TypographyModel, scope::geometry_extents};
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
-pub struct FontDetectorConfig {
-    #[specta(type = f64)]
-    pub top_k: usize,
-}
-
-impl Default for FontDetectorConfig {
-    fn default() -> Self {
-        Self { top_k: 3 }
-    }
-}
+use super::{finish, generation};
+use crate::{NodeInput, NodeOutput, scope::geometry_extents};
 
 pub(super) struct Model {
     model: Arc<Mutex<FontDetector>>,
-    top_k: usize,
 }
 
 impl Model {
-    pub(super) async fn load(device: koharu_ml::Device, config: &TypographyModel) -> Result<Self> {
-        let TypographyModel::FontDetector(config) = config;
+    pub(super) async fn load(device: koharu_ml::Device) -> Result<Self> {
         Ok(Self {
             model: Arc::new(Mutex::new(FontDetector::load(device).await?)),
-            top_k: config.top_k,
         })
     }
 
@@ -85,12 +67,11 @@ impl Model {
             Vec::new()
         } else {
             let model = self.model.clone();
-            let top_k = self.top_k;
             tokio::task::spawn_blocking(move || {
                 model
                     .lock()
                     .map_err(|_| anyhow!("font detector model lock is poisoned"))?
-                    .inference(&images, top_k)
+                    .inference(&images, 3)
             })
             .await
             .context("font detector task panicked")??
@@ -98,7 +79,7 @@ impl Model {
         if input.cancellation.is_cancelled() {
             bail!("typography detection was cancelled");
         }
-        let generation = generation(producer(Stage::Typography), "font-detector")?;
+        let generation = generation("dev.koharu.pipeline.typography", "font-detector")?;
         let mut edit = input.scene.edit_as(generation.clone());
         for ((entity, _), prediction) in targets.into_iter().zip(predictions) {
             edit.set(

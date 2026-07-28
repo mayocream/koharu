@@ -59,7 +59,7 @@ Koharu は [llama.cpp](https://github.com/ggml-org/llama.cpp) を通じてロー
 
 LLM ピッカーには、翻訳専用ではない汎用ファミリも含まれています。
 
-既定のローカル翻訳モデルは `gemma4-12b-it` です。
+既定のローカル翻訳モデルは `qwen3.5-0.8b` です。
 
 - LFM2.5 Instruct: `lfm2.5-1.2b-instruct`
 - Ministral 3 Instruct: `ministral-3-8b-instruct`

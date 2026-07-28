@@ -12,6 +12,7 @@ import type {
   PageView,
   ProjectHeader,
   SettingsView,
+  SystemResourcesView,
   UiEvent,
 } from './protocol'
 
@@ -27,6 +28,7 @@ interface EditorStore {
   pages: PageSummary[]
   page: PageView | null
   settings: SettingsView | null
+  resources: SystemResourcesView | null
   jobs: Record<string, JobStatus>
   downloads: Record<string, DownloadStatus>
   camera: { zoom: number; translation: [number, number]; autoFit: boolean }
@@ -39,7 +41,6 @@ interface EditorStore {
   brushSize: number
   erase: boolean
   display: CanvasDisplay
-  showTextBounds: boolean
   settingsOpen: boolean
   showNavigator: boolean
   shortcuts: EditorShortcuts
@@ -53,7 +54,6 @@ interface EditorStore {
   setBrushSize: (size: number) => void
   setErase: (erase: boolean) => void
   setDisplay: (display: CanvasDisplay) => void
-  setShowTextBounds: (show: boolean) => void
   setSettingsOpen: (open: boolean) => void
   setShowNavigator: (show: boolean) => void
   setShortcut: (action: ShortcutAction, key: string) => void
@@ -104,6 +104,7 @@ export const useEditorStore = create<EditorStore>()(
       pages: [],
       page: null,
       settings: null,
+      resources: null,
       jobs: {},
       downloads: {},
       camera: { zoom: 1, translation: [0, 0], autoFit: true },
@@ -116,7 +117,6 @@ export const useEditorStore = create<EditorStore>()(
       brushSize: 48,
       erase: false,
       display: defaultDisplay,
-      showTextBounds: false,
       settingsOpen: false,
       showNavigator: true,
       shortcuts: defaultShortcuts,
@@ -131,7 +131,6 @@ export const useEditorStore = create<EditorStore>()(
       setBrushSize: (brushSize) => set({ brushSize: Math.min(512, Math.max(1, brushSize)) }),
       setErase: (erase) => set({ erase }),
       setDisplay: (display) => set({ display }),
-      setShowTextBounds: (showTextBounds) => set({ showTextBounds }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       setShowNavigator: (showNavigator) => set({ showNavigator }),
       setShortcut: (action, key) =>
@@ -159,7 +158,6 @@ export const useEditorStore = create<EditorStore>()(
         brushSize: state.brushSize,
         erase: state.erase,
         display: state.display,
-        showTextBounds: state.showTextBounds,
         showNavigator: state.showNavigator,
         shortcuts: state.shortcuts,
       }),
@@ -278,6 +276,8 @@ export function dispatchEvent(event: UiEvent): boolean {
       }
       case 'settings_changed':
         return { settings: event.settings }
+      case 'resources_changed':
+        return { resources: event.resources }
       case 'garbage_collected':
         return {
           notice: `Removed ${event.blobs} unused blobs (${formatBytes(event.bytes)}).`,

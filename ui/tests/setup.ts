@@ -44,6 +44,7 @@ beforeEach(() => {
     pages: [],
     page: null,
     settings: null,
+    resources: null,
     jobs: {},
     error: null,
     notice: null,

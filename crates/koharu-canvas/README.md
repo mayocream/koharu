@@ -29,7 +29,8 @@ An editable page uses these scene components:
 | page descendants | `Geometry` | editable polygon and drawing bounds |
 | page descendants | `Visibility` | visibility and opacity |
 | page descendants | asset `source` | optional image layer |
-| page descendants | `SourceText` and typography components | optional text layer |
+| page descendants | `SourceText` | editable OCR data and text-block identity; never drawn as a viewport overlay |
+| page descendants | locale-keyed `Translation` and typography components | optional viewport text layer |
 
 Descendants are drawn in subtree order. Four-point rectangular geometries keep
 their rotation in the editor; arbitrary polygons currently use their
@@ -88,6 +89,14 @@ The render path has three damage-tracked stages:
 3. Compose inexpensive editor overlays when the camera, selection, handles,
    guides, cursor, or draft bounds change.
 
+Every text block always uses fixed screen-space editor chrome: a translucent
+rose rounded rectangle and a numbered circular indicator at the top-left
+corner. The 32 px indicator is tangent to the outside of the block so it never
+covers text, and its number is antialiased with a platform sans-serif font.
+Selected bounds use the stronger primary rose treatment and expose visible
+resize and rotation handles, except that the numbered indicator owns the
+north-west corner instead of a resize handle.
+
 Image bytes are read from the snapshot and decoded off the event-loop thread.
 Decoded images use an LRU budget controlled by `CanvasOptions::max_decoded_bytes`.
 Masks stay as single-channel 256×256 copy-on-write tiles, so a stroke clones
@@ -97,6 +106,9 @@ Text uses the same `RenderPlan`, `PreparedPage`, `RenderResources`, and
 `RenderTheme` pipeline as `koharu-renderer`. The canvas asks it to prepare
 transparent text-only layers and reuses per-entity Vello scenes for live
 transforms. This avoids duplicated shaping policy and avoids GPU readback.
+The interactive canvas requires a target locale and disables source-text
+fallback: OCR text remains editable scene data but is never drawn as an editor
+overlay when a translation is missing.
 `set_text_options`, `set_locale`, and `invalidate_fonts` explicitly invalidate
 prepared text.
 
@@ -110,6 +122,10 @@ active.
 Coordinate conversion, rotated hit testing, handles, move/resize/rotate
 previews, mask painting, and cancellation are owned by the canvas. Persistent
 mutation is owned by the application.
+
+Only text blocks and child image entities participate in editor hit testing.
+Detection-only panel, bubble, and other analysis regions remain scene data for
+pipeline and rendering decisions but cannot be selected or transformed.
 
 Element transforms follow this flow:
 

@@ -170,6 +170,20 @@ impl Project {
                     )
                 })?
             }
+            AppCommand::SetSourceText { entity, text } => {
+                let language = snapshot
+                    .component::<SourceText>(entity, "default")?
+                    .and_then(|source| source.language);
+                snapshot.patch(|edit| {
+                    edit.set_source_text(
+                        entity,
+                        SourceText {
+                            text: Authored::user(text),
+                            language,
+                        },
+                    )
+                })?
+            }
             AppCommand::SetTranslation {
                 entity,
                 locale,
@@ -715,6 +729,58 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(translation.text.value, "مرحبا");
+    }
+
+    #[test]
+    fn source_text_corrections_are_user_authored_and_preserve_language() {
+        let mut project = memory_project();
+        let page = project.visible_page().unwrap();
+        project
+            .apply(AppCommand::AddText {
+                page,
+                frame: Frame {
+                    width: 20.0,
+                    height: 20.0,
+                    ..Frame::default()
+                },
+            })
+            .unwrap();
+        let entity = project
+            .snapshot()
+            .descendants(page)
+            .unwrap()
+            .next()
+            .unwrap()
+            .id();
+        let snapshot = project.snapshot();
+        let patch = snapshot
+            .patch(|edit| {
+                edit.set_source_text(
+                    entity,
+                    SourceText {
+                        text: Authored::user("誤り".into()),
+                        language: Some(LanguageTag::new("ja-JP")?),
+                    },
+                )
+            })
+            .unwrap();
+        project.session_mut().commit(patch).unwrap();
+
+        project
+            .apply(AppCommand::SetSourceText {
+                entity,
+                text: "訂正".into(),
+            })
+            .unwrap();
+
+        let source = project
+            .snapshot()
+            .component::<SourceText>(entity, "default")
+            .unwrap()
+            .unwrap();
+        assert_eq!(source.text.value, "訂正");
+        assert_eq!(source.text.origin, Origin::User);
+        assert_eq!(source.language.unwrap().as_str(), "ja-JP");
     }
 
     #[test]

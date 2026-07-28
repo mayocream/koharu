@@ -23,6 +23,7 @@ pub enum NativeEvent {
         retry_after_ms: u64,
     },
     Download(koharu_runtime::download::Event),
+    Resources(koharu_pipeline::ResourceSnapshot),
     PipelineProgress {
         job: RequestId,
         completed: usize,
@@ -80,6 +81,7 @@ pub struct Background {
     export_worker: JoinHandle<()>,
     jobs: Mutex<Vec<JoinHandle<()>>>,
     download_worker: Option<JoinHandle<()>>,
+    resource_worker: Option<JoinHandle<()>>,
 }
 
 impl Background {
@@ -99,6 +101,7 @@ impl Background {
             export_worker,
             jobs: Mutex::new(Vec::new()),
             download_worker: None,
+            resource_worker: None,
         })
     }
 
@@ -120,6 +123,28 @@ impl Background {
                         tracing::warn!(skipped, "download event subscriber fell behind");
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        }));
+    }
+
+    pub fn subscribe_resources(&mut self, desktop: DesktopHandle<NativeEvent>) {
+        if self.resource_worker.is_some() {
+            return;
+        }
+
+        let mut resources = self.pipeline.subscribe_resources();
+        self.resource_worker = Some(tokio::spawn(async move {
+            loop {
+                if resources.changed().await.is_err() {
+                    break;
+                }
+                let snapshot = resources.borrow_and_update().clone();
+                if desktop
+                    .send_event(NativeEvent::Resources(snapshot))
+                    .is_err()
+                {
+                    break;
                 }
             }
         }));
@@ -188,6 +213,9 @@ impl Background {
 impl Drop for Background {
     fn drop(&mut self) {
         if let Some(worker) = self.download_worker.take() {
+            worker.abort();
+        }
+        if let Some(worker) = self.resource_worker.take() {
             worker.abort();
         }
         self.export_worker.abort();
