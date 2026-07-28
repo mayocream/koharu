@@ -6,9 +6,8 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 import type {
   CanvasDisplay,
   DownloadStatus,
-  ElementId,
+  EntityId,
   JobStatus,
-  PageId,
   PageSummary,
   PageView,
   ProjectHeader,
@@ -33,9 +32,9 @@ interface EditorStore {
   camera: { zoom: number; translation: [number, number]; autoFit: boolean }
   error: string | null
   notice: string | null
-  selectedElements: ElementId[]
-  selectedPages: PageId[]
-  hoveredElement: ElementId | null
+  selectedElements: EntityId[]
+  selectedPages: EntityId[]
+  hoveredElement: EntityId | null
   tool: EditorTool
   brushSize: number
   erase: boolean
@@ -47,9 +46,9 @@ interface EditorStore {
   setConnection: (connection: ConnectionState) => void
   setError: (error: string | null) => void
   setNotice: (notice: string | null) => void
-  selectElements: (elements: ElementId[]) => void
-  selectPages: (pages: PageId[]) => void
-  setHoveredElement: (element: ElementId | null) => void
+  selectElements: (elements: EntityId[]) => void
+  selectPages: (pages: EntityId[]) => void
+  setHoveredElement: (element: EntityId | null) => void
   setTool: (tool: EditorTool) => void
   setBrushSize: (size: number) => void
   setErase: (erase: boolean) => void
@@ -184,6 +183,7 @@ export function dispatchEvent(event: UiEvent): boolean {
         return { error: event.error.message }
       case 'project_closed':
         return {
+          connection: 'connected',
           revision: 0,
           project: null,
           pages: [],
@@ -192,9 +192,11 @@ export function dispatchEvent(event: UiEvent): boolean {
           selectedPages: [],
           hoveredElement: null,
           jobs: {},
+          error: null,
         }
       case 'project_opened':
         return {
+          connection: 'connected',
           revision: event.revision,
           project: event.project,
           pages: event.pages,
@@ -230,25 +232,9 @@ export function dispatchEvent(event: UiEvent): boolean {
         for (const page of event.pages) summaries.set(page.id, page)
         for (const page of event.deleted_pages) summaries.delete(page)
 
-        let currentPage = state.page
-        if (event.visible_page && currentPage?.id === event.visible_page.id) {
-          const elements = new Map(currentPage.elements.map((element) => [element.id, element]))
-          for (const element of event.visible_page.elements) elements.set(element.id, element)
-          for (const element of event.visible_page.deleted_elements) elements.delete(element)
-          currentPage = {
-            id: event.visible_page.id,
-            name: event.visible_page.name,
-            size: event.visible_page.size,
-            source: event.visible_page.source,
-            assets: event.visible_page.assets,
-            elements: event.visible_page.element_order.flatMap((id) => {
-              const element = elements.get(id)
-              return element ? [element] : []
-            }),
-          }
-        }
+        let currentPage = event.visible_page ?? state.page
         if (currentPage && !event.page_order.includes(currentPage.id)) currentPage = null
-        const existingElements = new Set(currentPage?.elements.map((element) => element.id) ?? [])
+        const existingElements = new Set(currentPage?.entities.map((entity) => entity.id) ?? [])
         return {
           revision: event.revision,
           project: {

@@ -7,6 +7,7 @@ export type AotInpaintingConfig = {
 };
 
 export type AssetView = {
+	source: string | null,
 	clean: string | null,
 	rendered: string | null,
 	text_mask: string | null,
@@ -17,11 +18,12 @@ export type AssetView = {
 
 export type BaberuOcrConfig = Record<string, never>;
 
-export type BevelStyle = "Inner" | "Outer" | "Emboss" | "Pillow" | "Stroke";
-
-export type BlendMode = "Normal" | "Multiply" | "Screen" | "Overlay" | "Darken" | "Lighten" | "ColorDodge" | "ColorBurn" | "HardLight" | "SoftLight" | "Difference" | "Exclusion";
-
-export type BlobId = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+export type Bounds = {
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+};
 
 export type BridgeEvent = { type: "app"; payload: UiEvent };
 
@@ -44,7 +46,7 @@ export type CanvasDisplay = {
 
 export type CanvasGuide = { axis: "horizontal"; position: number } | { axis: "vertical"; position: number };
 
-export type CanvasInteraction = { type: "show_page"; page: PageId } | { type: "set_camera"; zoom: number; translation: [number, number] } | { type: "set_zoom"; zoom: number } | { type: "fit_window" } | { type: "set_display"; display: CanvasDisplay } | { type: "set_overlays"; selected: ElementId[]; hovered: ElementId | null; draft: Frame | null; guides: CanvasGuide[]; show_text_bounds: boolean; brush_cursor: CanvasBrushCursor | null } | { type: "hit_test"; id: number; x: number; y: number } | { type: "begin_transform"; elements: ElementId[]; target: HitTarget; x: number; y: number } | { type: "update_transform"; x: number; y: number } | { type: "cancel_transform" } | { type: "begin_mask_stroke"; plane: MaskPlane; diameter: number; erase: boolean; x: number; y: number } | { type: "extend_mask_stroke"; x: number; y: number } | { type: "finish_mask_stroke" } | { type: "cancel_mask_stroke" };
+export type CanvasInteraction = { type: "show_page"; page: EntityId } | { type: "set_camera"; zoom: number; translation: [number, number] } | { type: "set_zoom"; zoom: number } | { type: "fit_window" } | { type: "set_display"; display: CanvasDisplay } | { type: "set_overlays"; selected: EntityId[]; hovered: EntityId | null; draft: Frame | null; guides: CanvasGuide[]; show_text_bounds: boolean; brush_cursor: CanvasBrushCursor | null } | { type: "hit_test"; id: number; x: number; y: number } | { type: "begin_transform"; elements: EntityId[]; target: HitTarget; x: number; y: number } | { type: "update_transform"; x: number; y: number } | { type: "cancel_transform" } | { type: "begin_mask_stroke"; plane: MaskPlane; diameter: number; erase: boolean; x: number; y: number } | { type: "extend_mask_stroke"; x: number; y: number } | { type: "finish_mask_stroke" } | { type: "cancel_mask_stroke" };
 
 export type CanvasMaskOverlay = {
 	tint: [number, number, number, number],
@@ -58,6 +60,12 @@ export type ClaudeConfig = {
 	temperature: number | null,
 	max_tokens: number | null,
 	thinking: boolean,
+};
+
+export type CredentialEdit = {
+	configured: boolean,
+	value: string | null,
+	clear: boolean,
 };
 
 export type DeepLConfig = {
@@ -75,34 +83,32 @@ export type DetectionModel = {
 	model: "koharu-layout-rfdetr-seg-2xl",
 } & KoharuLayoutRFDetrSeg2XLConfig;
 
+export type DocumentId = string;
+
 export type DownloadStatus = { state: "running"; id: number; name: string; completed: number; total: number } | { state: "finished"; id: number } | { state: "failed"; id: number; name: string; error: string };
 
-export type Element = {
-	id: ElementId,
-	frame: Frame,
-	visible: boolean,
-	opacity: number,
-	kind: ElementKind,
+export type EntityGeometry = {
+	entity: EntityId,
+	points: Point[],
 };
 
-export type ElementFrame = {
-	page: PageId,
-	element: ElementId,
-	frame: Frame,
+export type EntityId = RecordId;
+
+export type EntityTypography = {
+	entity: EntityId,
+	typography: TypographyIntent,
 };
 
-export type ElementId = string;
-
-export type ElementKind = ({ Text: TextBlock }) & { Image?: never; Region?: never } | ({ Image: ImageElement }) & { Region?: never; Text?: never } | ({ Region: Region }) & { Image?: never; Text?: never };
-
-export type ElementTextLayout = {
-	element: ElementId,
-	layout: TextLayout,
-};
-
-export type ElementTextStyle = {
-	element: ElementId,
-	style: TextStyle,
+export type EntityView = {
+	id: EntityId,
+	parent: EntityId | null,
+	geometry: GeometryView | null,
+	visibility: VisibilityView,
+	image: string | null,
+	source_text: SourceTextView | null,
+	translation: TranslationView | null,
+	typography: TypographyIntent | null,
+	region: RegionView | null,
 };
 
 export type ExportFormat = "png" | "psd";
@@ -128,15 +134,9 @@ export type FontFaceView = {
 	stretch: number,
 	style: FontFaceStyleView,
 	source: FontSourceView,
-	category: string | null,
-	cached: boolean,
 };
 
-export type FontSlant = "Normal" | "Italic" | { Oblique: {
-	angle_degrees: number,
-} };
-
-export type FontSourceView = "system" | "google";
+export type FontSourceView = "system" | "registered";
 
 export type Frame = {
 	x: number,
@@ -153,22 +153,15 @@ export type GeminiConfig = {
 	thinking: boolean,
 };
 
-export type GoogleCloudConfig = Record<string, never>;
-
-export type GradientStop = {
-	offset: number,
-	color: [number, number, number, number],
+export type GeometryView = {
+	points: Point[],
 };
+
+export type GoogleCloudConfig = Record<string, never>;
 
 export type Handle = "north_west" | "north" | "north_east" | "east" | "south_east" | "south" | "south_west" | "west" | "rotate";
 
-export type HitTarget = { type: "element"; element: ElementId } | { type: "handle"; element: ElementId; handle: Handle };
-
-export type ImageElement = {
-	blob: BlobId,
-	natural_size: Size,
-	name: string,
-};
+export type HitTarget = { type: "element"; element: EntityId } | { type: "handle"; element: EntityId; handle: Handle };
 
 export type InpaintingModel = {
 	model: "lama",
@@ -182,7 +175,7 @@ export type InpaintingModel = {
 
 export type JobKind = "pipeline" | "import" | "export";
 
-export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; phase: Phase | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "cancelled"; id: RequestId };
+export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; phase: Stage | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "cancelled"; id: RequestId };
 
 export type KoharuLayoutRFDetrSeg2XLConfig = {
 	text_threshold?: number | null,
@@ -216,11 +209,6 @@ export type MangaOcrConfig = Record<string, never>;
 
 export type MaskPlane = "text" | "brush";
 
-export type ModelPrediction = {
-	model: string,
-	confidence: number,
-};
-
 export type OcrModel = { model: "paddleocr-vl-1.6" } | { model: "manga-ocr" } | { model: "baberu-ocr" };
 
 export type OpenAiCompatibleConfig = {
@@ -246,56 +234,48 @@ export type OpenRouterConfig = {
 
 export type PaddleOcrVl1_6Config = Record<string, never>;
 
-export type PageDelta = {
-	id: PageId,
-	name: string,
-	size: Size,
-	source: string,
-	assets: AssetView,
-	element_order: ElementId[],
-	elements: Element[],
-	deleted_elements: ElementId[],
+export type PageSize = {
+	width: number,
+	height: number,
 };
 
-export type PageId = string;
-
 export type PageSummary = {
-	id: PageId,
-	name: string,
-	size: Size,
-	source: string,
+	id: EntityId,
+	label: string,
+	size: PageSize,
+	source: string | null,
 	clean: string | null,
-	elements: number,
+	entities: number,
 };
 
 export type PageView = {
-	id: PageId,
-	name: string,
-	size: Size,
-	source: string,
+	id: EntityId,
+	label: string,
+	size: PageSize,
 	assets: AssetView,
-	elements: Element[],
+	entities: EntityView[],
 };
-
-export type Phase = "detection" | "ocr" | "translation" | "typography" | "inpainting";
 
 export type PipelineConfig = {
-	detection: DetectionModel,
-	ocr: OcrModel,
-	typography: TypographyModel,
-	inpainting: InpaintingModel,
+	detection?: DetectionModel,
+	ocr?: OcrModel,
+	typography?: TypographyModel,
+	inpainting?: InpaintingModel,
 };
 
-export type ProcessorId = "koharu-layout-rfdetr-seg-2xl" | "paddleocr-vl-1.6" | "manga-ocr" | "baberu-ocr" | "translation" | "font-detector" | "lama" | "aot-inpainting" | "flux2-klein" | "rorem-mixed";
+export type Point = {
+	x: number,
+	y: number,
+};
 
 export type ProjectDelta = {
 	from: Revision,
 	revision: Revision,
 	name: string,
-	page_order: PageId[],
+	page_order: EntityId[],
 	pages: PageSummary[],
-	deleted_pages: PageId[],
-	visible_page: PageDelta | null,
+	deleted_pages: EntityId[],
+	visible_page: PageView | null,
 	can_undo: boolean,
 	can_redo: boolean,
 };
@@ -303,12 +283,12 @@ export type ProjectDelta = {
 export type ProjectHeader = {
 	id: ProjectId,
 	name: string,
-	visible_page: PageId | null,
+	visible_page: EntityId | null,
 	can_undo: boolean,
 	can_redo: boolean,
 };
 
-export type ProjectId = string;
+export type ProjectId = DocumentId;
 
 export type Providers = {
 	provider: "local",
@@ -330,17 +310,12 @@ export type Providers = {
 	provider: "deepl",
 } & DeepLConfig | { provider: "google_cloud_translation" } | { provider: "caiyun" };
 
-export type Region = {
-	kind: RegionKind,
-	/**  Page-space polygon. An empty polygon means the element frame is authoritative. */
-	polygon: ([number, number])[],
-	/**  Non-zero label in the corresponding page mask, when an instance mask exists. */
-	mask_id: number | null,
-	reading_order: number | null,
-	predictions: ModelPrediction[],
-};
+export type RecordId = string;
 
-export type RegionKind = "Panel" | "Bubble";
+export type RegionView = {
+	kind: string,
+	label: string | null,
+};
 
 export type RequestId = string;
 
@@ -357,9 +332,10 @@ export type RoremMixedConfig = {
 	seed?: number,
 };
 
-export type RunTarget = { target: "all" } | { target: "phase"; phase: Phase } | { target: "processors"; processors: ProcessorId[] };
-
-export type Scope = { scope: "project" } | { scope: "pages"; pages: PageId[] } | { scope: "region"; page: PageId; frame: Frame } | { scope: "elements"; elements: ElementId[] };
+export type Scope = { scope: "project" } | { scope: "pages"; value: EntityId[] } | { scope: "region"; value: {
+	page: EntityId,
+	bounds: Bounds,
+} } | { scope: "entities"; value: EntityId[] };
 
 export type SettingsView = {
 	pipeline: PipelineConfig,
@@ -369,145 +345,33 @@ export type SettingsView = {
 	fonts: FontFaceView[],
 };
 
-export type Size = {
-	width: number,
-	height: number,
-};
-
-export type SourceText = {
+export type SourceTextView = {
 	text: string,
 	language: string | null,
-	direction: TextDirection,
-	confidence: number | null,
-	lines: ([([number, number]), ([number, number]), ([number, number]), ([number, number])])[],
 };
 
-export type StrokePosition = "Inside" | "Center" | "Outside";
+export type Stage = "detection" | "ocr" | "translation" | "typography" | "inpainting";
+
+export type Target = { target: "all" } | { target: "stage"; stages: Stage } | { target: "stages"; stages: Stage[] } | { target: "exact"; stages: Stage[] };
 
 export type TargetLanguageView = {
 	tag: string,
 	name: string,
 };
 
-export type TextAlign = "Start" | "Center" | "End" | "Justify";
-
-export type TextBlock = {
-	source: SourceText | null,
-	translation: string | null,
-	style: TextStyle,
-	layout: TextLayout,
-	role: TextRole,
-	panel: ElementId | null,
-	bubble: ElementId | null,
-	reading_order: number | null,
-	/**  Page-space region polygon. Empty means the element frame is authoritative. */
-	polygon: ([number, number])[],
-	predictions: ModelPrediction[],
-};
-
-export type TextDecoration = {
-	underline: boolean,
-	strikethrough: boolean,
-};
-
-export type TextDirection = "Auto" | "Horizontal" | "Vertical";
-
-export type TextEffect = {
-	enabled: boolean,
-	opacity: number,
-	blend_mode: BlendMode,
-	kind: TextEffectKind,
-};
-
-export type TextEffectKind = ({ Stroke: {
-	color: [number, number, number, number],
-	width: number,
-	position: StrokePosition,
-} }) & { Bevel?: never; ColorOverlay?: never; Glow?: never; GradientOverlay?: never; Satin?: never; Shadow?: never } | ({ Shadow: {
-	inner: boolean,
-	color: [number, number, number, number],
-	angle_degrees: number,
-	distance: number,
-	spread: number,
-	size: number,
-} }) & { Bevel?: never; ColorOverlay?: never; Glow?: never; GradientOverlay?: never; Satin?: never; Stroke?: never } | ({ Glow: {
-	inner: boolean,
-	color: [number, number, number, number],
-	spread: number,
-	size: number,
-} }) & { Bevel?: never; ColorOverlay?: never; GradientOverlay?: never; Satin?: never; Shadow?: never; Stroke?: never } | ({ Bevel: {
-	style: BevelStyle,
-	depth: number,
-	size: number,
-	soften: number,
-	angle_degrees: number,
-	altitude_degrees: number,
-	highlight: [number, number, number, number],
-	shadow: [number, number, number, number],
-} }) & { ColorOverlay?: never; Glow?: never; GradientOverlay?: never; Satin?: never; Shadow?: never; Stroke?: never } | ({ Satin: {
-	color: [number, number, number, number],
-	angle_degrees: number,
-	distance: number,
-	size: number,
-	invert: boolean,
-} }) & { Bevel?: never; ColorOverlay?: never; Glow?: never; GradientOverlay?: never; Shadow?: never; Stroke?: never } | ({ ColorOverlay: {
-	color: [number, number, number, number],
-} }) & { Bevel?: never; Glow?: never; GradientOverlay?: never; Satin?: never; Shadow?: never; Stroke?: never } | ({ GradientOverlay: {
-	stops: GradientStop[],
-	angle_degrees: number,
-	scale: number,
-	reverse: boolean,
-} }) & { Bevel?: never; ColorOverlay?: never; Glow?: never; Satin?: never; Shadow?: never; Stroke?: never };
-
-export type TextFit = "Frame" | "Bubble";
-
-export type TextLayout = {
-	horizontal_align: TextAlign,
-	vertical_align: VerticalAlign,
-	writing_mode: WritingMode,
-	/**  Insets ordered top, right, bottom, left. */
-	inset: [number, number, number, number],
-	overflow: TextOverflow,
-	fit: TextFit,
-};
-
-export type TextOverflow = "Visible" | "Clip";
-
-export type TextRole = "Dialogue" | "Narration" | "FreeText" | "Onomatopoeia" | "Furigana";
-
-export type TextStyle = {
-	font_families: string[],
-	font_size: number,
-	/**  OpenType weight in `1..=1000`. */
-	font_weight: number,
-	/**  Percentage where `100` is the normal face width. */
-	font_stretch: number,
-	font_slant: FontSlant,
-	color: [number, number, number, number],
-	/**  Ratio relative to `font_size`. */
-	line_height: number,
-	letter_spacing: number,
-	word_spacing: number,
-	horizontal_scale: number,
-	vertical_scale: number,
-	baseline_shift: number,
-	/**  Rotation inside the text frame, separate from element rotation. */
-	angle_degrees: number,
-	decoration: TextDecoration,
-	effects: TextEffect[],
-};
+export type TextAlignment = "Start" | "Center" | "End" | "Justify";
 
 export type TranslationCredentialsView = {
-	openai: string,
-	gemini: string,
-	claude: string,
-	deepseek: string,
-	openai_compatible: string,
-	openrouter: string,
-	lm_studio: string,
-	deepl: string,
-	google_cloud_translation: string,
-	caiyun: string,
+	openai: CredentialEdit,
+	gemini: CredentialEdit,
+	claude: CredentialEdit,
+	deepseek: CredentialEdit,
+	openai_compatible: CredentialEdit,
+	openrouter: CredentialEdit,
+	lm_studio: CredentialEdit,
+	deepl: CredentialEdit,
+	google_cloud_translation: CredentialEdit,
+	caiyun: CredentialEdit,
 };
 
 export type TranslationSettings = {
@@ -517,11 +381,23 @@ export type TranslationSettings = {
 	credentials: TranslationCredentialsView,
 };
 
+export type TranslationView = {
+	locale: string,
+	text: string,
+};
+
+export type TypographyIntent = {
+	preferred_font: string | null,
+	size: number | null,
+	alignment: TextAlignment | null,
+	writing_mode: WritingMode | null,
+};
+
 export type TypographyModel = {
 	model: "font-detector",
 } & FontDetectorConfig;
 
-export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: PageId; name: string } | { type: "delete_page"; page: PageId } | { type: "delete_pages"; pages: PageId[] } | { type: "move_page"; page: PageId; index: number } | { type: "add_text"; page: PageId; frame: Frame } | { type: "set_translation"; page: PageId; element: ElementId; translation: string | null } | { type: "set_text_style"; page: PageId; element: ElementId; style: TextStyle } | { type: "set_text_layout"; page: PageId; element: ElementId; layout: TextLayout } | { type: "set_text_styles"; page: PageId; elements: ElementTextStyle[] } | { type: "set_text_layouts"; page: PageId; elements: ElementTextLayout[] } | { type: "cache_font"; family: string; weight: number; italic: boolean } | { type: "set_element_frames"; elements: ElementFrame[] } | { type: "finish_transform" } | { type: "set_element_opacity"; page: PageId; elements: ElementId[]; opacity: number } | { type: "set_element_visibility"; page: PageId; elements: ElementId[]; visible: boolean } | { type: "delete_elements"; page: PageId; elements: ElementId[] } | { type: "move_element"; page: PageId; element: ElementId; index: number } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: RunTarget } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: PageId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
+export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: EntityId; label: string } | { type: "delete_pages"; pages: EntityId[] } | { type: "move_page"; page: EntityId; index: number } | { type: "add_text"; page: EntityId; frame: Frame } | { type: "set_translation"; entity: EntityId; locale: string; text: string | null } | { type: "set_typography"; entities: EntityTypography[] } | { type: "set_geometry"; entities: EntityGeometry[] } | { type: "set_visibility"; entities: EntityId[]; visible: boolean | null; opacity: number | null } | { type: "delete_entities"; entities: EntityId[] } | { type: "move_entity"; entity: EntityId; parent: EntityId; index: number } | { type: "finish_transform" } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: Target } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: EntityId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
 
 export type UiError = {
 	code: UiErrorCode,
@@ -539,8 +415,11 @@ export type UiEvent = ({ type: "accepted"; id: RequestId; revision: Revision }) 
 	type: "download_changed",
 } & DownloadStatus | ({ type: "settings_changed"; settings: SettingsView }) & { auto_fit?: never; blobs?: never; bytes?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; target?: never; translation?: never; zoom?: never } | ({ type: "garbage_collected"; blobs: number; bytes: number }) & { auto_fit?: never; error?: never; id?: never; page?: never; pages?: never; project?: never; revision?: never; settings?: never; target?: never; translation?: never; zoom?: never };
 
-export type VerticalAlign = "Top" | "Center" | "Bottom";
+export type VisibilityView = {
+	visible: boolean,
+	opacity: number,
+};
 
 export type WindowAction = "drag" | "resize_east" | "resize_north" | "resize_north_east" | "resize_north_west" | "resize_south" | "resize_south_east" | "resize_south_west" | "resize_west" | "minimize" | "toggle_maximize" | "close";
 
-export type WritingMode = "Auto" | "Horizontal" | "VerticalRightToLeft" | "VerticalLeftToRight";
+export type WritingMode = "Horizontal" | "Vertical";

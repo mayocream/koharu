@@ -89,7 +89,6 @@ export class KoharuClient {
       if (store.error === MALFORMED_EVENT_ERROR) store.setError(null)
       this.receive(event.payload)
     })
-    useEditorStore.getState().setConnection('connected')
     bridge.send({
       type: 'ready',
       dpr: window.devicePixelRatio,
@@ -245,7 +244,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
       return (
         typeof value.revision === 'number' &&
         isRecord(value.page) &&
-        Array.isArray(value.page.elements)
+        Array.isArray(value.page.entities)
       )
     case 'project_changed':
       return (
@@ -308,8 +307,11 @@ export function isUiEvent(value: unknown): value is UiEvent {
       const pipeline = settings.pipeline
       const translation = settings.translation
       return (
-        (['detection', 'ocr', 'typography', 'inpainting'] as const).every((phase) =>
-          isModelConfig(pipeline[phase]),
+        (['detection', 'ocr', 'typography', 'inpainting'] as const).every(
+          (phase) =>
+            pipeline[phase] === undefined ||
+            pipeline[phase] === null ||
+            isModelConfig(pipeline[phase]),
         ) &&
         isProviderConfig(translation.model) &&
         typeof translation.target_language === 'string' &&
@@ -330,9 +332,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
             typeof font.weight === 'number' &&
             typeof font.stretch === 'number' &&
             ['normal', 'italic', 'oblique'].includes(String(font.style)) &&
-            ['system', 'google'].includes(String(font.source)) &&
-            (font.category === null || typeof font.category === 'string') &&
-            typeof font.cached === 'boolean',
+            ['system', 'registered'].includes(String(font.source)),
         )
       )
     }
@@ -369,7 +369,15 @@ function isTranslationCredentials(value: unknown): boolean {
       'deepl',
       'google_cloud_translation',
       'caiyun',
-    ].every((provider) => typeof value[provider] === 'string')
+    ].every((provider) => {
+      const credential = value[provider]
+      return (
+        isRecord(credential) &&
+        typeof credential.configured === 'boolean' &&
+        (credential.value === null || typeof credential.value === 'string') &&
+        typeof credential.clear === 'boolean'
+      )
+    })
   )
 }
 

@@ -13,11 +13,11 @@ use std::{
 };
 
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use koharu_scene::{Frame, PageAsset, Session};
+use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, SceneSession};
 
 use crate::{
-    Camera, Canvas, CanvasGpu, DisplayState, Guide, Handle, HitTarget, OverlayState, PagePoint,
-    PageView, PhysicalPoint, PhysicalSize, ViewState,
+    Camera, Canvas, CanvasGpu, DisplayState, Frame, Guide, Handle, HitTarget, OverlayState,
+    PagePoint, PageView, PhysicalPoint, PhysicalSize, ViewState,
 };
 
 const VIEWPORT: PhysicalSize = PhysicalSize::new(64, 48);
@@ -68,19 +68,30 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
             .expect("gpu-tests requires a WGPU device")
     });
 
-    let mut session = Session::memory().unwrap();
-    let mut commands = session.commands();
-    let page = commands
-        .add_page("page", rgba_png((16, 12), [21, 34, 55, 255]))
+    let mut session = SceneSession::memory().unwrap();
+    let mut page = None;
+    let source = rgba_png((16, 12), [21, 34, 55, 255]);
+    let clean = rgba_png((16, 12), [89, 144, 233, 255]);
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let id = edit.add_page(PageDraft::new("page", 16.0, 12.0), At::End)?;
+            edit.set_asset(
+                id,
+                &AssetRole::new("source")?,
+                image_asset(source.clone(), 16, 12),
+            )?;
+            edit.set_asset(
+                id,
+                &AssetRole::new("clean")?,
+                image_asset(clean.clone(), 16, 12),
+            )?;
+            page = Some(id);
+            Ok(())
+        })
         .unwrap();
-    commands
-        .set_asset(
-            page,
-            PageAsset::Clean,
-            Some(rgba_png((16, 12), [89, 144, 233, 255])),
-        )
-        .unwrap();
-    session.apply(commands).unwrap();
+    let commit = session.commit(patch).unwrap();
+    let page = page.unwrap();
 
     // Resource decoding happens on a worker. The wake channel lets the test
     // wait until both source and clean images are ready before rendering.
@@ -97,10 +108,10 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     .unwrap();
     canvas.set_view(ViewState {
         size: VIEWPORT,
-        camera: Camera::contain(VIEWPORT, session.page(page).unwrap().size),
+        camera: Camera::contain(VIEWPORT, PhysicalSize::new(16, 12)),
         display: DisplayState::default(),
     });
-    canvas.show_page(&session, page).unwrap();
+    canvas.show_page(&commit.snapshot, page).unwrap();
     for _ in 0..2 {
         woke.recv_timeout(Duration::from_secs(2)).unwrap();
     }
@@ -119,7 +130,7 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     // than sleeping, keeping the rendering result deterministic.
     canvas.set_view(ViewState {
         size: VIEWPORT,
-        camera: Camera::contain(VIEWPORT, session.page(page).unwrap().size),
+        camera: Camera::contain(VIEWPORT, PhysicalSize::new(16, 12)),
         display: DisplayState {
             page: PageView::EditableClean,
             ..DisplayState::default()
@@ -133,18 +144,25 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
             .needs_redraw
     );
 
-    let mut edit = session.edit();
-    let image = edit
-        .page(page)
-        .unwrap()
-        .add_image(
-            Frame::new(2.0, 2.0, 6.0, 4.0),
-            "stamp",
-            rgba_png((6, 4), [233, 121, 52, 255]),
-        )
+    let mut image = None;
+    let stamp = rgba_png((6, 4), [233, 121, 52, 255]);
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let id = edit.add_entity(page, At::End)?;
+            edit.set(id, "default", &Geometry::rectangle(2.0, 2.0, 6.0, 4.0))?;
+            edit.set_asset(
+                id,
+                &AssetRole::new("source")?,
+                image_asset(stamp.clone(), 6, 4),
+            )?;
+            image = Some(id);
+            Ok(())
+        })
         .unwrap();
-    let changes = edit.commit().unwrap();
-    canvas.sync(&session, &changes).unwrap();
+    let commit = session.commit(patch).unwrap();
+    let image = image.unwrap();
+    canvas.sync(&commit.snapshot, &commit.changes).unwrap();
     assert_eq!(
         canvas.hit_test(canvas.page_to_screen(PagePoint::new(4.0, 3.0))),
         Some(HitTarget::Element(image))
@@ -225,4 +243,16 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
             .is_none()
     );
     assert!(canvas.hit_test(PhysicalPoint::new(1.0, 1.0)).is_none());
+}
+
+fn image_asset(bytes: Vec<u8>, width: u32, height: u32) -> AssetInput {
+    AssetInput::new(
+        Arc::<[u8]>::from(bytes),
+        "image/png",
+        AssetMetadata {
+            width: Some(width),
+            height: Some(height),
+            attributes: Default::default(),
+        },
+    )
 }

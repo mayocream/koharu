@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(cli.input)?;
 
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
     let model = MangaTextMaskGenerator::load(koharu_ml::device(cli.cpu)).await?;
     let segmentation = if let Some(max_side) = cli.max_side {
         model.inference_with_max_side(&image, max_side)?

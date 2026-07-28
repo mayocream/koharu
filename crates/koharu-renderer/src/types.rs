@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum FontSource {
     System,
-    Google,
+    Registered,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -26,9 +26,6 @@ pub struct FontFaceInfo {
     pub stretch: u16,
     pub style: FontFaceStyle,
     pub source: FontSource,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub category: Option<String>,
-    pub cached: bool,
 }
 
 /// Horizontal alignment within a text layout box.

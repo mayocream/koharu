@@ -10,50 +10,32 @@ import { Navigator } from '@/components/Navigator'
 import { Panels } from '@/components/Panels'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { koharuClient, useEditorStore, type Element, type SettingsView } from '@/lib/koharu'
+import { koharuClient, useEditorStore, type EntityView, type SettingsView } from '@/lib/koharu'
 
-const textElement: Element = {
+const emptyCredential = () => ({ configured: false, value: null, clear: false })
+
+const textElement: EntityView = {
   id: 'element',
-  frame: { x: 10, y: 20, width: 100, height: 50, angle_degrees: 0 },
-  visible: true,
-  opacity: 1,
-  kind: {
-    Text: {
-      source: { text: 'こんにちは', language: 'ja', direction: 'Auto', confidence: 0.9, lines: [] },
-      translation: 'Hello',
-      style: {
-        font_families: ['Noto Sans'],
-        font_size: 16,
-        font_weight: 400,
-        font_stretch: 100,
-        font_slant: 'Normal',
-        color: [0, 0, 0, 255],
-        line_height: 1.2,
-        letter_spacing: 0,
-        word_spacing: 0,
-        horizontal_scale: 100,
-        vertical_scale: 100,
-        baseline_shift: 0,
-        angle_degrees: 0,
-        decoration: { underline: false, strikethrough: false },
-        effects: [],
-      },
-      layout: {
-        horizontal_align: 'Center',
-        vertical_align: 'Center',
-        writing_mode: 'Auto',
-        inset: [0, 0, 0, 0],
-        overflow: 'Visible',
-        fit: 'Bubble',
-      },
-      role: 'Dialogue',
-      panel: null,
-      bubble: null,
-      reading_order: 0,
-      polygon: [],
-      predictions: [],
-    },
+  parent: 'page',
+  geometry: {
+    points: [
+      { x: 10, y: 20 },
+      { x: 110, y: 20 },
+      { x: 110, y: 70 },
+      { x: 10, y: 70 },
+    ],
   },
+  visibility: { visible: true, opacity: 1 },
+  image: null,
+  source_text: { text: 'こんにちは', language: 'ja' },
+  translation: { locale: 'en-US', text: 'Hello' },
+  typography: {
+    preferred_font: 'Noto Sans',
+    size: 16,
+    alignment: 'Center',
+    writing_mode: 'Horizontal',
+  },
+  region: null,
 }
 
 const fontSettings: SettingsView = {
@@ -68,16 +50,16 @@ const fontSettings: SettingsView = {
     target_language: 'en-US',
     instructions: null,
     credentials: {
-      openai: '',
-      gemini: '',
-      claude: '',
-      deepseek: '',
-      openai_compatible: '',
-      openrouter: '',
-      lm_studio: '',
-      deepl: '',
-      google_cloud_translation: '',
-      caiyun: '',
+      openai: emptyCredential(),
+      gemini: emptyCredential(),
+      claude: emptyCredential(),
+      deepseek: emptyCredential(),
+      openai_compatible: emptyCredential(),
+      openrouter: emptyCredential(),
+      lm_studio: emptyCredential(),
+      deepl: emptyCredential(),
+      google_cloud_translation: emptyCredential(),
+      caiyun: emptyCredential(),
     },
   },
   local_translation_models: [],
@@ -90,8 +72,6 @@ const fontSettings: SettingsView = {
       stretch: 100,
       style: 'normal',
       source: 'system',
-      category: null,
-      cached: true,
     },
     {
       family_name: 'Noto Sans',
@@ -100,8 +80,6 @@ const fontSettings: SettingsView = {
       stretch: 100,
       style: 'normal',
       source: 'system',
-      category: null,
-      cached: true,
     },
   ],
 }
@@ -120,19 +98,19 @@ function installProject() {
     pages: [
       {
         id: 'page',
-        name: 'Page 1',
+        label: 'Page 1',
         size: { width: 1000, height: 1500 },
         source: 'source',
         clean: 'clean',
-        elements: 1,
+        entities: 1,
       },
     ],
     page: {
       id: 'page',
-      name: 'Page 1',
+      label: 'Page 1',
       size: { width: 1000, height: 1500 },
-      source: 'source',
       assets: {
+        source: 'source',
         clean: 'clean',
         rendered: null,
         text_mask: null,
@@ -140,7 +118,7 @@ function installProject() {
         bubble_mask: null,
         brush_mask: null,
       },
-      elements: [textElement],
+      entities: [textElement],
     },
     selectedPages: ['page'],
     selectedElements: ['element'],
@@ -218,16 +196,8 @@ describe('native editor components', () => {
     expect(renderTab).toHaveAttribute('data-state', 'active')
     expect(screen.getByTestId('render-controls-panel')).toBeInTheDocument()
     expect(screen.getByTestId('render-font-select')).toHaveTextContent('Noto Sans')
-    expect(screen.getByTestId('render-font-variant-select')).toHaveTextContent(
-      'render.fontWeights.regular',
-    )
     expect(screen.getByTestId('render-font-size')).toHaveValue(16)
-    expect(screen.getByTestId('render-effect-toggle-bold')).toHaveAttribute(
-      'data-variant',
-      'toggle_off',
-    )
     expect(screen.getByTestId('render-align-center')).toHaveAttribute('data-variant', 'toggle_on')
-    expect(screen.getByTestId('render-stroke-enable')).toHaveAttribute('data-variant', 'toggle_off')
   })
 
   it('shows retained job progress and the typed settings builder', () => {
@@ -262,16 +232,16 @@ describe('native editor components', () => {
           target_language: 'en-US',
           instructions: null,
           credentials: {
-            openai: 'secret-value',
-            gemini: '',
-            claude: '',
-            deepseek: '',
-            openai_compatible: '',
-            openrouter: '',
-            lm_studio: '',
-            deepl: '',
-            google_cloud_translation: '',
-            caiyun: '',
+            openai: { configured: true, value: null, clear: false },
+            gemini: emptyCredential(),
+            claude: emptyCredential(),
+            deepseek: emptyCredential(),
+            openai_compatible: emptyCredential(),
+            openrouter: emptyCredential(),
+            lm_studio: emptyCredential(),
+            deepl: emptyCredential(),
+            google_cloud_translation: emptyCredential(),
+            caiyun: emptyCredential(),
           },
         },
         local_translation_models: ['lfm2.5-1.2b-instruct'],
@@ -300,9 +270,10 @@ describe('native editor components', () => {
     expect(screen.getByLabelText('Top predictions')).toHaveValue(3)
     const credential = screen.getByLabelText('openai credential')
     expect(credential).toHaveAttribute('type', 'password')
-    expect(credential).toHaveValue('secret-value')
+    expect(credential).toHaveValue('')
+    expect(credential).toHaveAttribute('placeholder', 'Configured')
     fireEvent.click(screen.getByRole('button', { name: 'Reveal credential' }))
-    expect(credential).toHaveAttribute('type', 'text')
+    expect(credential).toHaveAttribute('type', 'password')
   })
 
   it('shows runtime download progress', () => {

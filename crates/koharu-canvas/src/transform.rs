@@ -1,8 +1,12 @@
 use std::collections::HashSet;
 
-use koharu_scene::{ElementId, Frame, Page, PageId};
+use koharu_scene::{Geometry, Point};
+use vello::kurbo::{Affine, Point as KurboPoint};
 
-use crate::{ElementPreview, Error, Handle, HitTarget, PagePoint, Result, TransformCommit};
+use crate::{
+    CanvasPage, ElementId, ElementPreview, Error, Frame, Handle, HitTarget, PageId, PagePoint,
+    Result, TransformCommit,
+};
 
 /// Pure-Rust state for one pointer-driven move, resize, or rotation.
 ///
@@ -21,7 +25,7 @@ pub(crate) struct ActiveTransform {
 
 impl ActiveTransform {
     pub fn new(
-        page: &Page,
+        page: &CanvasPage,
         selected: &[ElementId],
         target: HitTarget,
         start: PagePoint,
@@ -69,6 +73,7 @@ impl ActiveTransform {
                 Ok(ElementPreview {
                     element,
                     frame: checked_frame(value.frame)?,
+                    geometry: value.geometry.clone(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -103,8 +108,9 @@ impl ActiveTransform {
         let mut previews = self.originals.clone();
         match self.target {
             HitTarget::Element(_) => {
-                for preview in &mut previews {
+                for (preview, original) in previews.iter_mut().zip(&self.originals) {
                     preview.frame = move_frame(preview.frame, dx, dy)?;
+                    preview.geometry = transformed_geometry(original, preview.frame);
                 }
             }
             HitTarget::Handle {
@@ -117,9 +123,11 @@ impl ActiveTransform {
                 }
                 self.previous_rotation = Some(current);
                 previews[0].frame = rotate_frame(self.originals[0].frame, self.rotation_delta)?;
+                previews[0].geometry = transformed_geometry(&self.originals[0], previews[0].frame);
             }
             HitTarget::Handle { handle, .. } => {
                 previews[0].frame = resize_frame(self.originals[0].frame, handle, dx, dy)?;
+                previews[0].geometry = transformed_geometry(&self.originals[0], previews[0].frame);
             }
         }
         self.previews = previews;
@@ -138,13 +146,59 @@ impl ActiveTransform {
             .previews
             .into_iter()
             .zip(self.originals)
-            .filter_map(|(preview, original)| (preview.frame != original.frame).then_some(preview))
+            .filter_map(|(preview, original)| {
+                (preview.geometry != original.geometry).then_some(preview)
+            })
             .collect();
         (!elements.is_empty()).then_some(TransformCommit {
             page: self.page,
             elements,
         })
     }
+}
+
+fn transformed_geometry(original: &ElementPreview, preview: Frame) -> Geometry {
+    let transform = frame_transform(original.frame, preview);
+    Geometry {
+        origin: original.geometry.origin.clone(),
+        points: original
+            .geometry
+            .points
+            .iter()
+            .map(|point| {
+                let point = transform * KurboPoint::new(point.x, point.y);
+                Point {
+                    x: point.x,
+                    y: point.y,
+                }
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn frame_transform(original: Frame, preview: Frame) -> Affine {
+    let original_angle = f64::from(original.angle_degrees).to_radians();
+    let preview_angle = f64::from(preview.angle_degrees).to_radians();
+    let (original_sin, original_cos) = original_angle.sin_cos();
+    let (preview_sin, preview_cos) = preview_angle.sin_cos();
+    let scale_x = f64::from(preview.width / original.width);
+    let scale_y = f64::from(preview.height / original.height);
+    let a = preview_cos * scale_x * original_cos + preview_sin * scale_y * original_sin;
+    let b = preview_sin * scale_x * original_cos - preview_cos * scale_y * original_sin;
+    let c = preview_cos * scale_x * original_sin - preview_sin * scale_y * original_cos;
+    let d = preview_sin * scale_x * original_sin + preview_cos * scale_y * original_cos;
+    let original_center_x = f64::from(original.x + original.width * 0.5);
+    let original_center_y = f64::from(original.y + original.height * 0.5);
+    let preview_center_x = f64::from(preview.x + preview.width * 0.5);
+    let preview_center_y = f64::from(preview.y + preview.height * 0.5);
+    Affine::new([
+        a,
+        b,
+        c,
+        d,
+        preview_center_x - a * original_center_x - c * original_center_y,
+        preview_center_y - b * original_center_x - d * original_center_y,
+    ])
 }
 
 impl HitTarget {
@@ -256,43 +310,80 @@ fn checked_frame(frame: Frame) -> Result<Frame> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_scene::Session;
+    use crate::{CanvasElement, PhysicalSize, model::PageAssets};
 
-    fn page_with_frame(frame: Frame) -> (Page, ElementId) {
-        let mut session = Session::memory().unwrap();
-        let mut commands = session.commands();
-        let page = commands.add_page("page", rgba_png(200, 200)).unwrap();
-        let element = commands
-            .add_image(page, frame, "node", rgba_png(10, 10))
+    fn page_with_frames(frames: &[Frame]) -> (CanvasPage, Vec<ElementId>) {
+        let session = koharu_scene::SceneSession::memory().unwrap();
+        let mut ids = None;
+        session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(
+                    koharu_scene::PageDraft::new("transform test", 200.0, 200.0),
+                    koharu_scene::At::End,
+                )?;
+                let elements = frames
+                    .iter()
+                    .map(|_| edit.add_entity(page, koharu_scene::At::End))
+                    .collect::<koharu_scene::Result<Vec<_>>>()?;
+                ids = Some((page, elements));
+                Ok(())
+            })
             .unwrap();
-        session.apply(commands).unwrap();
-        (session.page(page).unwrap().clone(), element)
+        let (page, ids) = ids.unwrap();
+        let elements = ids
+            .iter()
+            .copied()
+            .zip(frames.iter().copied())
+            .map(|(id, frame)| CanvasElement {
+                id,
+                geometry: geometry(frame),
+                frame,
+                visible: true,
+                opacity: 1.0,
+                image: None,
+                has_text: false,
+            })
+            .collect();
+        (
+            CanvasPage {
+                id: page,
+                size: PhysicalSize::new(200, 200),
+                assets: PageAssets::default(),
+                members: ids.iter().copied().collect(),
+                elements,
+            },
+            ids,
+        )
     }
 
-    fn rgba_png(width: u32, height: u32) -> Vec<u8> {
-        use std::io::Cursor;
+    fn page_with_frame(frame: Frame) -> (CanvasPage, ElementId) {
+        let (page, ids) = page_with_frames(&[frame]);
+        (page, ids[0])
+    }
 
-        use image::{DynamicImage, ImageFormat, RgbaImage};
-
-        let mut output = Cursor::new(Vec::new());
-        DynamicImage::ImageRgba8(RgbaImage::from_pixel(
-            width,
-            height,
-            image::Rgba([255, 255, 255, 255]),
-        ))
-        .write_to(&mut output, ImageFormat::Png)
-        .unwrap();
-        output.into_inner()
+    fn geometry(frame: Frame) -> Geometry {
+        Geometry {
+            origin: koharu_scene::Origin::User,
+            points: crate::frame_corners(frame)
+                .into_iter()
+                .map(|point| Point {
+                    x: point.x,
+                    y: point.y,
+                })
+                .collect(),
+        }
     }
 
     #[test]
     fn moving_translates_every_selected_element() {
-        let (mut page, first) = page_with_frame(Frame::new(10.0, 20.0, 40.0, 30.0));
-        let second = ElementId::new();
-        let mut copy = page.elements[0].clone();
-        copy.id = second;
-        copy.frame = Frame::new(80.0, 90.0, 20.0, 10.0);
-        page.elements.push(copy);
+        let (page, ids) = page_with_frames(&[
+            Frame::new(10.0, 20.0, 40.0, 30.0),
+            Frame::new(80.0, 90.0, 20.0, 10.0),
+        ]);
+        let [first, second] = ids[..] else {
+            unreachable!()
+        };
         let mut transform = ActiveTransform::new(
             &page,
             &[first, second],
@@ -369,12 +460,13 @@ mod tests {
 
     #[test]
     fn resizing_only_changes_the_handle_owner() {
-        let (mut page, first) = page_with_frame(Frame::new(10.0, 20.0, 40.0, 30.0));
-        let second = ElementId::new();
-        let mut copy = page.elements[0].clone();
-        copy.id = second;
-        copy.frame = Frame::new(80.0, 90.0, 20.0, 10.0);
-        page.elements.push(copy);
+        let (page, ids) = page_with_frames(&[
+            Frame::new(10.0, 20.0, 40.0, 30.0),
+            Frame::new(80.0, 90.0, 20.0, 10.0),
+        ]);
+        let [first, second] = ids[..] else {
+            unreachable!()
+        };
         let mut transform = ActiveTransform::new(
             &page,
             &[first, second],

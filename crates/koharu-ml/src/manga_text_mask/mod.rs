@@ -86,7 +86,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_loads_and_runs() -> anyhow::Result<()> {
-        crate::init_torch().await?;
+        crate::init().await?;
         let model = MangaTextMaskGenerator::load(crate::Device::cpu()).await?;
         let image = DynamicImage::ImageRgb8(RgbImage::from_fn(96, 64, |x, y| {
             Rgb([

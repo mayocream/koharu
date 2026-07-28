@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
     let image = image::load_from_memory(&image_data)
         .with_context(|| format!("failed to decode {}", cli.input.display()))?;
 
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
     let device = koharu_ml::device(cli.cpu);
     let detector = ComicOnomatopoeiaDetector::load(device.clone()).await?;
     let recognizer = if let Some(path) = cli.recognizer_weights.as_deref() {

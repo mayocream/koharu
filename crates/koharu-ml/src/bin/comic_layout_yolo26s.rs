@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
 
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
     let model = ComicLayoutYolo26sSegmenter::load(koharu_ml::device(cli.cpu)).await?;
     if cli.input.is_dir() {
         process_directory(&cli, &model)?;

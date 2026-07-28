@@ -46,7 +46,7 @@ export function StatusBar() {
       </div>
       <span className='ml-auto text-[11px] text-muted-foreground'>
         {t('native.status.revision', { defaultValue: 'Revision' })} {revision}
-        {page ? ` · ${pageIndex}/${pages.length} · ${page.name}` : ''}
+        {page ? ` · ${pageIndex}/${pages.length} · ${page.label}` : ''}
         {camera.autoFit ? ` · ${t('native.canvas.autoFit', { defaultValue: 'Auto fit' })}` : ''}
       </span>
     </footer>

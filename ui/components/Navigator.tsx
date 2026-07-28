@@ -43,9 +43,10 @@ export function Navigator() {
 
   const rename = (page: (typeof pages)[number]) => {
     const name = window
-      .prompt(t('native.navigator.renamePrompt', { defaultValue: 'Page name' }), page.name)
+      .prompt(t('native.navigator.renamePrompt', { defaultValue: 'Page name' }), page.label)
       ?.trim()
-    if (name && name !== page.name) koharuClient.fire({ type: 'rename_page', page: page.id, name })
+    if (name && name !== page.label)
+      koharuClient.fire({ type: 'rename_page', page: page.id, label: name })
   }
 
   return (
@@ -106,7 +107,7 @@ export function Navigator() {
               draggable
               data-selected={isSelected}
               data-active={active}
-              title={page.name}
+              title={page.label}
               className='group relative flex h-[220px] w-full cursor-pointer flex-col gap-0.5 rounded border border-transparent bg-card p-1.5 text-left shadow-sm transition select-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden data-[active=true]:border-primary data-[selected=true]:bg-accent/60'
               onClick={(event) => select(index, event.ctrlKey || event.metaKey, event.shiftKey)}
               onKeyDown={(event) => {
@@ -128,16 +129,17 @@ export function Navigator() {
               }}
             >
               <div className='relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded bg-muted/20'>
-                {project && (
-                  // Native resource URLs are immutable and never expose filesystem paths.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    alt={page.name}
-                    draggable={false}
-                    className='max-h-full max-w-full rounded object-contain'
-                    src={thumbnailUrl(project.id, page.clean ?? page.source, 320)}
-                  />
-                )}
+                {project &&
+                  (page.clean ?? page.source) && (
+                    // Native resource URLs are immutable and never expose filesystem paths.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt={page.label}
+                      draggable={false}
+                      className='max-h-full max-w-full rounded object-contain'
+                      src={thumbnailUrl(project.id, page.clean ?? page.source!, 320)}
+                    />
+                  )}
                 <Button
                   variant='destructive'
                   size='icon-xs'

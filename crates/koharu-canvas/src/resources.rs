@@ -7,7 +7,7 @@ use image::GrayImage;
 use koharu_scene::BlobId;
 use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 
-// Blob bytes come from the Session, but decoding them on the event-loop thread
+// Blob bytes come from a snapshot, but decoding them on the event-loop thread
 // would stall pointer handling and presentation. Resources performs CPU decode
 // work on Rayon, wakes the host, and installs completed results on the next
 // Canvas render.

@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
 
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
 
     let model = YoloV8mSpeechBubbleSegmenter::load(koharu_ml::device(cli.cpu)).await?;
     let result = match (cli.confidence_threshold, cli.nms_threshold) {

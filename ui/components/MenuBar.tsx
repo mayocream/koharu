@@ -18,8 +18,8 @@ import {
 import {
   koharuClient,
   useEditorStore,
-  type Phase,
   type Scope,
+  type Stage,
   type WindowAction,
 } from '@/lib/koharu'
 
@@ -76,11 +76,11 @@ export function MenuBar() {
   const setSettingsOpen = useEditorStore((state) => state.setSettingsOpen)
   const native = connection === 'connected'
 
-  const run = (scope: Scope, phase?: Phase) =>
+  const run = (scope: Scope, stage?: Stage) =>
     koharuClient.fire({
       type: 'run_pipeline',
       scope,
-      target: phase ? { target: 'phase', phase } : { target: 'all' },
+      target: stage ? { target: 'stage', stages: stage } : { target: 'all' },
     })
 
   const updateDisplay = (next: typeof display) => {
@@ -180,7 +180,7 @@ export function MenuBar() {
               <MenubarSeparator />
               <MenubarItem
                 disabled={!page}
-                onSelect={() => selectElements(page?.elements.map((element) => element.id) ?? [])}
+                onSelect={() => selectElements(page?.entities.map((entity) => entity.id) ?? [])}
               >
                 {t('native.menu.selectAll', { defaultValue: 'Select All Elements' })}
                 <MenubarShortcut>Ctrl+A</MenubarShortcut>
@@ -191,9 +191,8 @@ export function MenuBar() {
                 onSelect={() =>
                   page &&
                   koharuClient.fire({
-                    type: 'delete_elements',
-                    page: page.id,
-                    elements: selectedElements,
+                    type: 'delete_entities',
+                    entities: selectedElements,
                   })
                 }
               >
@@ -214,13 +213,13 @@ export function MenuBar() {
               </MenubarItem>
               <MenubarItem
                 disabled={selectedPages.length === 0}
-                onSelect={() => run({ scope: 'pages', pages: selectedPages })}
+                onSelect={() => run({ scope: 'pages', value: selectedPages })}
               >
                 {t('native.menu.processPages', { defaultValue: 'Process Selected Pages' })}
               </MenubarItem>
               <MenubarItem
                 disabled={selectedElements.length === 0}
-                onSelect={() => run({ scope: 'elements', elements: selectedElements })}
+                onSelect={() => run({ scope: 'entities', value: selectedElements })}
               >
                 {t('native.menu.processElements', { defaultValue: 'Process Selected Elements' })}
               </MenubarItem>
@@ -231,18 +230,18 @@ export function MenuBar() {
                 {t('native.menu.reprocessProject', { defaultValue: 'Rerun Entire Project' })}
               </MenubarItem>
               <MenubarSeparator />
-              {(['detection', 'ocr', 'translation', 'typography', 'inpainting'] as Phase[]).map(
-                (phase) => (
-                <MenubarItem
-                  key={phase}
-                  disabled={!project || pages.length === 0 || !settings}
-                  onSelect={() => run({ scope: 'project' }, phase)}
-                >
-                  {t('native.menu.runPhase', {
-                    phase: t(`native.phase.${phase}`, { defaultValue: phase }),
-                    defaultValue: 'Run {{phase}}',
-                  })}
-                </MenubarItem>
+              {(['detection', 'ocr', 'translation', 'typography', 'inpainting'] as Stage[]).map(
+                (stage) => (
+                  <MenubarItem
+                    key={stage}
+                    disabled={!project || pages.length === 0 || !settings}
+                    onSelect={() => run({ scope: 'project' }, stage)}
+                  >
+                    {t('native.menu.runPhase', {
+                      phase: t(`native.phase.${stage}`, { defaultValue: stage }),
+                      defaultValue: 'Run {{phase}}',
+                    })}
+                  </MenubarItem>
                 ),
               )}
             </MenubarContent>

@@ -1,4 +1,6 @@
-use koharu_scene::{PageId, Revision};
+use koharu_scene::Revision;
+
+use crate::PageId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

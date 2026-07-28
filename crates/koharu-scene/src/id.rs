@@ -3,60 +3,25 @@ use std::{fmt, str::FromStr};
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use uuid::Uuid;
 
-#[revisioned(revision = 1)]
-#[derive(
-    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
-)]
-#[serde(transparent)]
-pub struct ProjectId(Uuid);
+use crate::{Error, Result};
 
-#[revisioned(revision = 1)]
-#[derive(
-    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
-)]
-#[serde(transparent)]
-pub struct PageId(Uuid);
-
-#[revisioned(revision = 1)]
-#[derive(
-    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
-)]
-#[serde(transparent)]
-pub struct ElementId(Uuid);
-
-macro_rules! impl_uuid_id {
+macro_rules! record_id {
     ($name:ident) => {
+        #[revisioned(revision = 1)]
+        #[derive(
+            Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+        )]
+        #[serde(transparent)]
+        pub struct $name(koharu_storage::RecordId);
+
         impl $name {
-            #[must_use]
-            pub fn new() -> Self {
-                Self(Uuid::now_v7())
+            pub(crate) const fn from_storage(id: koharu_storage::RecordId) -> Self {
+                Self(id)
             }
 
-            #[must_use]
-            pub const fn as_uuid(self) -> Uuid {
+            pub(crate) const fn storage(self) -> koharu_storage::RecordId {
                 self.0
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-
-        impl From<Uuid> for $name {
-            fn from(value: Uuid) -> Self {
-                Self(value)
-            }
-        }
-
-        impl FromStr for $name {
-            type Err = uuid::Error;
-
-            fn from_str(value: &str) -> Result<Self, Self::Err> {
-                value.parse().map(Self)
             }
         }
 
@@ -68,74 +33,123 @@ macro_rules! impl_uuid_id {
     };
 }
 
-impl_uuid_id!(ProjectId);
-impl_uuid_id!(PageId);
-impl_uuid_id!(ElementId);
+record_id!(EntityId);
+record_id!(RelationId);
 
-#[revisioned(revision = 1)]
 #[derive(
-    Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
 )]
 #[serde(transparent)]
-pub struct Revision(#[specta(type = f64)] u64);
+pub struct ProjectId(pub(crate) koharu_storage::DocumentId);
 
-impl Revision {
-    pub const ZERO: Self = Self(0);
-
-    #[must_use]
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    pub(crate) fn next(self) -> Option<Self> {
-        self.0.checked_add(1).map(Self)
-    }
-}
-
-impl fmt::Display for Revision {
+impl fmt::Display for ProjectId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
     }
 }
 
-#[revisioned(revision = 1)]
-#[derive(
-    Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
-)]
-#[serde(transparent)]
-pub struct BlobId([u8; 32]);
+impl FromStr for ProjectId {
+    type Err = <koharu_storage::DocumentId as FromStr>::Err;
 
-impl BlobId {
-    #[must_use]
-    pub fn for_bytes(bytes: &[u8]) -> Self {
-        Self(*blake3::hash(bytes).as_bytes())
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        value.parse().map(Self)
+    }
+}
+
+#[revisioned(revision = 1)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type)]
+#[serde(transparent)]
+pub struct ProducerId(String);
+
+impl ProducerId {
+    pub fn new(value: impl Into<String>) -> Result<Self> {
+        let value = value.into();
+        validate_namespaced(&value, "producer")?;
+        Ok(Self(value))
     }
 
     #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; 32] {
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    pub(crate) const fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    pub(crate) fn validate(&self) -> Result<()> {
+        validate_namespaced(&self.0, "producer")
     }
 }
 
-impl FromStr for BlobId {
-    type Err = blake3::HexError;
+impl FromStr for ProducerId {
+    type Err = Error;
 
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        blake3::Hash::from_hex(value).map(|hash| Self(*hash.as_bytes()))
+    fn from_str(value: &str) -> Result<Self> {
+        Self::new(value)
     }
 }
 
-impl fmt::Display for BlobId {
+impl fmt::Display for ProducerId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        blake3::Hash::from_bytes(self.0).fmt(formatter)
+        formatter.write_str(&self.0)
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ComponentSlot(String);
+
+impl ComponentSlot {
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Self {
+        let value = value.into();
+        Self(if value.is_empty() {
+            "default".to_owned()
+        } else {
+            value
+        })
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        if self.0.is_empty() {
+            "default"
+        } else {
+            &self.0
+        }
+    }
+
+    pub(crate) fn storage(&self) -> Result<koharu_storage::ComponentSlot> {
+        koharu_storage::ComponentSlot::new(self.as_str()).map_err(Into::into)
+    }
+}
+
+impl From<&str> for ComponentSlot {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<String> for ComponentSlot {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl fmt::Display for ComponentSlot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+pub(crate) fn validate_namespaced(value: &str, what: &str) -> Result<()> {
+    let valid = value.len() <= 255
+        && value.contains('.')
+        && value.split('.').all(|part| {
+            !part.is_empty()
+                && part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(Error::invalid(format!("invalid {what}: {value}")))
     }
 }

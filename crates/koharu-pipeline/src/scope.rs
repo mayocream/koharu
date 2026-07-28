@@ -1,0 +1,193 @@
+use std::{collections::BTreeSet, sync::Arc};
+
+use anyhow::{Result, bail};
+use koharu_scene::{EntityId, Geometry, SceneSnapshot};
+use serde::{Deserialize, Serialize};
+use specta::Type;
+
+use crate::Stage;
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, Type)]
+pub struct Bounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Bounds {
+    fn validate(self) -> Result<()> {
+        if self.x.is_finite()
+            && self.y.is_finite()
+            && self.width.is_finite()
+            && self.height.is_finite()
+            && self.width > 0.0
+            && self.height > 0.0
+        {
+            Ok(())
+        } else {
+            bail!("region bounds must be finite and non-empty")
+        }
+    }
+
+    pub(crate) fn intersects(self, geometry: &Geometry) -> bool {
+        let Some((min_x, min_y, max_x, max_y)) = geometry_extents(geometry) else {
+            return false;
+        };
+        min_x < self.x + self.width
+            && max_x > self.x
+            && min_y < self.y + self.height
+            && max_y > self.y
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
+#[serde(tag = "scope", content = "value", rename_all = "snake_case")]
+pub enum Scope {
+    #[default]
+    Project,
+    Pages(Vec<EntityId>),
+    Region {
+        page: EntityId,
+        bounds: Bounds,
+    },
+    Entities(Vec<EntityId>),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct NormalizedScope {
+    pages: Arc<[EntityId]>,
+    entities: Option<Arc<BTreeSet<EntityId>>>,
+    region: Option<(EntityId, Bounds)>,
+}
+
+impl NormalizedScope {
+    pub(crate) fn new(
+        snapshot: &SceneSnapshot,
+        scope: &Scope,
+        selected: &BTreeSet<Stage>,
+    ) -> Result<Self> {
+        if matches!(scope, Scope::Entities(_))
+            && selected
+                .iter()
+                .any(|stage| matches!(stage, Stage::Detection | Stage::Inpainting))
+        {
+            bail!("detection and inpainting do not support entity-only scope");
+        }
+
+        match scope {
+            Scope::Project => Ok(Self {
+                pages: snapshot.pages().map(|page| page.id()).collect(),
+                entities: None,
+                region: None,
+            }),
+            Scope::Pages(requested) => {
+                if requested.is_empty() {
+                    bail!("page scope is empty");
+                }
+                let requested = requested.iter().copied().collect::<BTreeSet<_>>();
+                for id in &requested {
+                    snapshot.page(*id)?;
+                }
+                let pages = snapshot
+                    .pages()
+                    .map(|page| page.id())
+                    .filter(|id| requested.contains(id))
+                    .collect::<Arc<[_]>>();
+                Ok(Self {
+                    pages,
+                    entities: None,
+                    region: None,
+                })
+            }
+            Scope::Region { page, bounds } => {
+                snapshot.page(*page)?;
+                bounds.validate()?;
+                Ok(Self {
+                    pages: Arc::from([*page]),
+                    entities: None,
+                    region: Some((*page, *bounds)),
+                })
+            }
+            Scope::Entities(requested) => {
+                if requested.is_empty() {
+                    bail!("entity scope is empty");
+                }
+                let requested = requested.iter().copied().collect::<BTreeSet<_>>();
+                let mut page_set = BTreeSet::new();
+                for entity in &requested {
+                    snapshot.entity(*entity)?;
+                    page_set.insert(containing_page(snapshot, *entity)?);
+                }
+                let pages = snapshot
+                    .pages()
+                    .map(|page| page.id())
+                    .filter(|id| page_set.contains(id))
+                    .collect::<Arc<[_]>>();
+                Ok(Self {
+                    pages,
+                    entities: Some(Arc::new(requested)),
+                    region: None,
+                })
+            }
+        }
+    }
+
+    pub(crate) fn pages(&self) -> &[EntityId] {
+        &self.pages
+    }
+
+    pub(crate) fn contains_entity(
+        &self,
+        snapshot: &SceneSnapshot,
+        entity: EntityId,
+    ) -> Result<bool> {
+        if let Some(entities) = &self.entities {
+            return Ok(entities.contains(&entity));
+        }
+        let page = containing_page(snapshot, entity)?;
+        if !self.pages.contains(&page) {
+            return Ok(false);
+        }
+        let Some((region_page, bounds)) = self.region else {
+            return Ok(true);
+        };
+        if page != region_page {
+            return Ok(false);
+        }
+        Ok(snapshot
+            .component::<Geometry>(entity, "default")?
+            .is_some_and(|geometry| bounds.intersects(&geometry)))
+    }
+
+    pub(crate) fn region(&self, page: EntityId) -> Option<Bounds> {
+        self.region
+            .and_then(|(candidate, bounds)| (candidate == page).then_some(bounds))
+    }
+}
+
+fn containing_page(snapshot: &SceneSnapshot, mut entity: EntityId) -> Result<EntityId> {
+    loop {
+        if snapshot.page(entity).is_ok() {
+            return Ok(entity);
+        }
+        entity = snapshot
+            .parent(entity)?
+            .ok_or_else(|| anyhow::anyhow!("entity is not contained by a page"))?;
+    }
+}
+
+pub(crate) fn geometry_extents(geometry: &Geometry) -> Option<(f64, f64, f64, f64)> {
+    let first = geometry.points.first()?;
+    let mut min_x = first.x;
+    let mut min_y = first.y;
+    let mut max_x = first.x;
+    let mut max_y = first.y;
+    for point in &geometry.points[1..] {
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    Some((min_x, min_y, max_x, max_y))
+}

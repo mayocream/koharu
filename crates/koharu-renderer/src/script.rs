@@ -8,6 +8,7 @@ use icu_properties::{
 use unicode_bidi::BidiInfo;
 
 use crate::layout::WritingMode;
+
 pub(crate) fn shaping_direction_for_text(
     text: &str,
     writing_mode: WritingMode,

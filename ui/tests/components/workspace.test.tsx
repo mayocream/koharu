@@ -7,25 +7,28 @@ import {
   koharuClient,
   useEditorStore,
   type CanvasInteraction,
-  type Element,
+  type EntityView,
   type UiCommand,
   type UiEvent,
 } from '@/lib/koharu'
 
-const element: Element = {
+const element: EntityView = {
   id: 'element',
-  frame: { x: 10, y: 20, width: 100, height: 50, angle_degrees: 0 },
-  visible: true,
-  opacity: 1,
-  kind: {
-    Region: {
-      kind: 'Panel',
-      polygon: [],
-      mask_id: null,
-      reading_order: null,
-      predictions: [],
-    },
+  parent: 'page',
+  geometry: {
+    points: [
+      { x: 10, y: 20 },
+      { x: 110, y: 20 },
+      { x: 110, y: 70 },
+      { x: 10, y: 70 },
+    ],
   },
+  visibility: { visible: true, opacity: 1 },
+  image: null,
+  source_text: null,
+  translation: null,
+  typography: null,
+  region: { kind: 'panel', label: null },
 }
 
 function installProject() {
@@ -42,10 +45,10 @@ function installProject() {
     pages: [],
     page: {
       id: 'page',
-      name: 'Page',
+      label: 'Page',
       size: { width: 1000, height: 1000 },
-      source: 'source',
       assets: {
+        source: 'source',
         clean: null,
         rendered: null,
         text_mask: null,
@@ -53,7 +56,7 @@ function installProject() {
         bubble_mask: null,
         brush_mask: null,
       },
-      elements: [element],
+      entities: [element],
     },
     selectedElements: [],
     camera: { zoom: 1, translation: [0, 0], autoFit: false },

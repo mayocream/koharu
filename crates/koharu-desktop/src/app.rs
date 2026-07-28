@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{Context as _, Result, anyhow};
 use koharu_canvas::{Canvas, MaskCommit, OverlayState, ViewState};
-use koharu_scene::{ChangeSet, PageId, Session};
+use koharu_scene::{EntityId, SceneChangeSet, SceneSnapshot};
 use serde::Serialize;
 use serde_json::Value;
 use winit::{
@@ -38,6 +38,8 @@ html,body { width:100%; height:100%; margin:0; background:transparent; }
 </style></head><body></body></html>"#;
 const MAX_IPC_BYTES: usize = 1024 * 1024;
 
+type EmbeddedAssetProvider = dyn Fn(&str) -> Option<Cow<'static, [u8]>> + Send + Sync + 'static;
+
 #[derive(Clone)]
 pub enum Frontend {
     Html(String),
@@ -45,7 +47,7 @@ pub enum Frontend {
     /// Serve a static web application without a local HTTP server.
     Directory(PathBuf),
     /// Serve a static web application from assets owned by the executable.
-    Embedded(Arc<dyn Fn(&str) -> Option<Cow<'static, [u8]>> + Send + Sync + 'static>),
+    Embedded(Arc<EmbeddedAssetProvider>),
 }
 
 impl Frontend {
@@ -322,8 +324,12 @@ impl<E: Send + 'static> DesktopContext<'_, E> {
         self.request_redraw();
     }
 
-    pub fn show_page(&mut self, session: &Session, page: PageId) -> koharu_canvas::Result<()> {
-        self.renderer.canvas().show_page(session, page)?;
+    pub fn show_page(
+        &mut self,
+        snapshot: &SceneSnapshot,
+        page: EntityId,
+    ) -> koharu_canvas::Result<()> {
+        self.renderer.canvas().show_page(snapshot, page)?;
         self.request_redraw();
         Ok(())
     }
@@ -333,8 +339,12 @@ impl<E: Send + 'static> DesktopContext<'_, E> {
         self.request_redraw();
     }
 
-    pub fn sync(&mut self, session: &Session, changes: &ChangeSet) -> koharu_canvas::Result<()> {
-        self.renderer.canvas().sync(session, changes)?;
+    pub fn sync(
+        &mut self,
+        snapshot: &SceneSnapshot,
+        changes: &SceneChangeSet,
+    ) -> koharu_canvas::Result<()> {
+        self.renderer.canvas().sync(snapshot, changes)?;
         self.request_redraw();
         Ok(())
     }
@@ -844,7 +854,7 @@ fn static_response(root: &Path, request_path: &str) -> Response<Cow<'static, [u8
 }
 
 fn embedded_response(
-    get: &(dyn Fn(&str) -> Option<Cow<'static, [u8]>> + Send + Sync),
+    get: &EmbeddedAssetProvider,
     request_path: &str,
 ) -> Response<Cow<'static, [u8]>> {
     let relative = match frontend_path(request_path) {

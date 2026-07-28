@@ -17,13 +17,7 @@ pub struct HuggingFace {
 #[async_trait::async_trait]
 impl Package for HuggingFace {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
-        let repo = self.repo.replace('/', "--");
-        let revision = self.revision.replace('/', "--");
-        let path = HUGGINGFACE_DIR
-            .join(repo)
-            .join("revisions")
-            .join(revision)
-            .join(&self.filename);
+        let path = self.local_path();
         if path.exists() {
             return Ok(path);
         }
@@ -42,6 +36,16 @@ impl Package for HuggingFace {
     }
 }
 
+impl HuggingFace {
+    fn local_path(&self) -> PathBuf {
+        HUGGINGFACE_DIR
+            .join(self.repo.replace('/', "--"))
+            .join("revisions")
+            .join(self.revision.replace('/', "--"))
+            .join(&self.filename)
+    }
+}
+
 /// Resolves a Hugging Face package at an immutable revision.
 pub async fn resolve((repo, revision, filename): (&str, &str, &str)) -> anyhow::Result<PathBuf> {
     let package = HuggingFace {
@@ -50,6 +54,18 @@ pub async fn resolve((repo, revision, filename): (&str, &str, &str)) -> anyhow::
         filename: filename.to_owned(),
     };
     Package::resolve(&package).await
+}
+
+/// Returns whether an immutable artifact already exists in the local package store.
+#[must_use]
+pub fn is_resolved((repo, revision, filename): (&str, &str, &str)) -> bool {
+    HuggingFace {
+        repo: repo.to_owned(),
+        revision: revision.to_owned(),
+        filename: filename.to_owned(),
+    }
+    .local_path()
+    .is_file()
 }
 
 /// Macro to define HuggingFace packages in a concise manner.

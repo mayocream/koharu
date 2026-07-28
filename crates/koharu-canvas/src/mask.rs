@@ -4,12 +4,12 @@ use std::{
 };
 
 use image::{GrayImage, ImageEncoder, codecs::png::PngEncoder};
-use koharu_scene::{BlobId, PageId, Size};
+use koharu_scene::BlobId;
 use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 
 use crate::{
-    Brush, Error, MaskOverlay, MaskPlane, PagePoint, PhysicalSize, PixelRect, PixelSize, Result,
-    StrokeMode,
+    Brush, Error, MaskOverlay, MaskPlane, PageId, PagePoint, PhysicalSize, PixelRect, PixelSize,
+    Result, StrokeMode,
 };
 
 // Masks stay as single-channel page-sized data, split into copy-on-write tiles.
@@ -113,7 +113,7 @@ pub(crate) struct MaskState {
 }
 
 impl MaskState {
-    pub fn empty(size: Size) -> Self {
+    pub fn empty(size: PhysicalSize) -> Self {
         Self {
             source: None,
             generation: 0,
@@ -122,7 +122,12 @@ impl MaskState {
         }
     }
 
-    pub fn replace(&mut self, source: Option<BlobId>, image: Option<&GrayImage>, size: Size) {
+    pub fn replace(
+        &mut self,
+        source: Option<BlobId>,
+        image: Option<&GrayImage>,
+        size: PhysicalSize,
+    ) {
         self.source = source;
         self.generation = self.generation.wrapping_add(1).max(1);
         self.committed_generation = self.generation;
@@ -206,15 +211,18 @@ struct MaskBuffer {
 }
 
 impl MaskBuffer {
-    fn empty(size: Size) -> Self {
+    fn empty(size: PhysicalSize) -> Self {
         Self::from_pixels(size, &vec![0; size.width as usize * size.height as usize])
     }
 
     fn from_image(image: &GrayImage) -> Self {
-        Self::from_pixels(Size::new(image.width(), image.height()), image.as_raw())
+        Self::from_pixels(
+            PhysicalSize::new(image.width(), image.height()),
+            image.as_raw(),
+        )
     }
 
-    fn from_pixels(size: Size, pixels: &[u8]) -> Self {
+    fn from_pixels(size: PhysicalSize, pixels: &[u8]) -> Self {
         let tiles_x = size.width.div_ceil(TILE_SIZE);
         let tiles_y = size.height.div_ceil(TILE_SIZE);
         let mut tiles = Vec::with_capacity((tiles_x * tiles_y) as usize);
@@ -391,13 +399,29 @@ impl MaskBuffer {
 mod tests {
     use super::*;
 
+    fn page_id() -> PageId {
+        let session = koharu_scene::SceneSession::memory().unwrap();
+        let mut page = None;
+        session
+            .snapshot()
+            .patch(|edit| {
+                page = Some(edit.add_page(
+                    koharu_scene::PageDraft::new("mask test", 32.0, 32.0),
+                    koharu_scene::At::End,
+                )?);
+                Ok(())
+            })
+            .unwrap();
+        page.unwrap()
+    }
+
     #[test]
     fn snapshot_shares_unchanged_tiles_and_encodes_luma() {
         fn assert_send<T: Send>() {}
         assert_send::<MaskCommit>();
 
-        let page = PageId::new();
-        let mut state = MaskState::empty(Size::new(300, 300));
+        let page = page_id();
+        let mut state = MaskState::empty(PhysicalSize::new(300, 300));
         let mut before = HashMap::new();
         let dirty = state.paint(
             PagePoint::new(10.0, 10.0),
@@ -417,7 +441,7 @@ mod tests {
 
     #[test]
     fn restore_cancels_changed_tiles() {
-        let mut state = MaskState::empty(Size::new(32, 32));
+        let mut state = MaskState::empty(PhysicalSize::new(32, 32));
         let mut before = HashMap::new();
         state.paint(
             PagePoint::new(8.0, 8.0),
@@ -441,7 +465,7 @@ mod tests {
 
     #[test]
     fn stale_commit_acknowledgement_does_not_replace_a_newer_blob() {
-        let mut state = MaskState::empty(Size::new(32, 32));
+        let mut state = MaskState::empty(PhysicalSize::new(32, 32));
         let mut before = HashMap::new();
         let dirty = state.paint(
             PagePoint::new(8.0, 8.0),
@@ -452,7 +476,7 @@ mod tests {
             },
             &mut before,
         );
-        let page = PageId::new();
+        let page = page_id();
         let first = state.finish(page, MaskPlane::Text, dirty).generation;
         let mut second_before = HashMap::new();
         let second_dirty = state.paint(
@@ -474,8 +498,8 @@ mod tests {
 
     #[test]
     fn long_diagonal_stroke_has_no_sample_gaps() {
-        let page = PageId::new();
-        let mut state = MaskState::empty(Size::new(512, 512));
+        let page = page_id();
+        let mut state = MaskState::empty(PhysicalSize::new(512, 512));
         let mut before = HashMap::new();
         let dirty = state.paint(
             PagePoint::new(4.0, 4.0),
@@ -498,8 +522,8 @@ mod tests {
 
     #[test]
     fn erase_and_page_edge_clipping_are_applied() {
-        let page = PageId::new();
-        let mut state = MaskState::empty(Size::new(32, 32));
+        let page = page_id();
+        let mut state = MaskState::empty(PhysicalSize::new(32, 32));
         let mut paint_before = HashMap::new();
         state.paint(
             PagePoint::new(0.0, 0.0),
@@ -536,7 +560,7 @@ mod tests {
 
     #[test]
     fn empty_mask_does_not_create_rgba_preview_tiles() {
-        let mut state = MaskState::empty(Size::new(1024, 1024));
+        let mut state = MaskState::empty(PhysicalSize::new(1024, 1024));
         let overlay = MaskOverlay::new([255, 0, 0, 255], 0.5);
         assert!(state.tinted_tiles(overlay).is_empty());
 

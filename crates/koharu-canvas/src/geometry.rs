@@ -1,4 +1,3 @@
-use koharu_scene::Frame;
 use vello::kurbo::Affine;
 
 use crate::{Error, Result};
@@ -23,6 +22,42 @@ impl PhysicalSize {
 }
 
 pub type PixelSize = PhysicalSize;
+
+/// Axis-aligned editor bounds plus a transient rotation around their center.
+/// Persistent scene edits are returned as [`koharu_scene::Geometry`]; this
+/// compact form exists only for handles, hit testing, and pointer gestures.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Frame {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub angle_degrees: f32,
+}
+
+impl Frame {
+    #[must_use]
+    pub const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+            angle_degrees: 0.0,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn is_valid(self) -> bool {
+        self.x.is_finite()
+            && self.y.is_finite()
+            && self.width.is_finite()
+            && self.width > 0.0
+            && self.height.is_finite()
+            && self.height > 0.0
+            && self.angle_degrees.is_finite()
+    }
+}
 
 /// Pointer or overlay position in physical viewport pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -134,7 +169,7 @@ impl Camera {
     }
 
     #[must_use]
-    pub fn contain(viewport: PhysicalSize, page: koharu_scene::Size) -> Self {
+    pub fn contain(viewport: PhysicalSize, page: PhysicalSize) -> Self {
         if viewport.is_empty() || page.width == 0 || page.height == 0 {
             return Self::actual_size();
         }

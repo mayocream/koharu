@@ -39,9 +39,9 @@ export function CanvasToolbar() {
   const run = () => {
     const scope =
       selectedElements.length > 0
-        ? ({ scope: 'elements', elements: selectedElements } as const)
+        ? ({ scope: 'entities', value: selectedElements } as const)
         : selectedPages.length > 0
-          ? ({ scope: 'pages', pages: selectedPages } as const)
+          ? ({ scope: 'pages', value: selectedPages } as const)
           : ({ scope: 'project' } as const)
     koharuClient.fire({
       type: 'run_pipeline',

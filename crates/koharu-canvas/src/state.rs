@@ -1,9 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
-use koharu_renderer::PageRenderOptions;
-use koharu_scene::{BlobId, ElementId, Frame, PageId};
+use koharu_renderer::RenderTheme;
+use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag};
 
-use crate::{Camera, PhysicalPoint, PhysicalSize};
+use crate::{Camera, Frame, PhysicalPoint, PhysicalSize};
+
+pub type PageId = EntityId;
+pub type ElementId = EntityId;
 
 pub type Color = [u8; 4];
 
@@ -20,7 +23,8 @@ pub struct CanvasGpu {
 pub struct CanvasOptions {
     pub max_decoded_bytes: usize,
     pub workspace_color: Color,
-    pub text: PageRenderOptions,
+    pub text: RenderTheme,
+    pub locale: Option<LanguageTag>,
 }
 
 impl Default for CanvasOptions {
@@ -28,7 +32,8 @@ impl Default for CanvasOptions {
         Self {
             max_decoded_bytes: 512 * 1024 * 1024,
             workspace_color: [245, 245, 245, 255],
-            text: PageRenderOptions::default(),
+            text: RenderTheme::default(),
+            locale: None,
         }
     }
 }
@@ -77,7 +82,7 @@ impl MaskOverlay {
     }
 }
 
-/// Presentation-only choices; changing these never mutates the scene Session.
+/// Presentation-only choices; changing these never mutates the scene snapshot.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplayState {
     pub page: PageView,
@@ -114,10 +119,11 @@ pub enum Guide {
 }
 
 /// One transient frame produced while an element transform is active.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ElementPreview {
     pub element: ElementId,
     pub frame: Frame,
+    pub geometry: Geometry,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -172,10 +178,10 @@ pub enum MaskPlane {
 
 impl MaskPlane {
     #[must_use]
-    pub const fn asset(self) -> koharu_scene::PageAsset {
+    pub const fn slot(self) -> &'static str {
         match self {
-            Self::Text => koharu_scene::PageAsset::TextMask,
-            Self::Brush => koharu_scene::PageAsset::BrushMask,
+            Self::Text => "text-mask",
+            Self::Brush => "brush-mask",
         }
     }
 
@@ -213,15 +219,6 @@ impl CanvasDiagnostic {
             page,
             element: None,
             blob: Some(blob),
-            message: message.into(),
-        }
-    }
-
-    pub(crate) fn element(page: PageId, element: ElementId, message: impl Into<String>) -> Self {
-        Self {
-            page: Some(page),
-            element: Some(element),
-            blob: None,
             message: message.into(),
         }
     }

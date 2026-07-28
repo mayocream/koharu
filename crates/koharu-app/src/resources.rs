@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use image::imageops::FilterType;
 use koharu_desktop::{CustomProtocol, ProtocolRequest, ProtocolResponse};
-use koharu_scene::{BlobId, ElementKind, ProjectId, Session};
+use koharu_scene::{Asset, BlobId, ProjectId, SceneSession, SceneSnapshot};
 use url::Url;
 
 const DEFAULT_WIDTH: u32 = 160;
@@ -59,43 +59,43 @@ impl Resources {
         })
     }
 
-    pub fn install(&self, session: &Session, path: &Path) {
+    pub fn install(&self, snapshot: &SceneSnapshot, path: &Path) -> Result<()> {
         let mut allowed = HashSet::new();
-        for page in &session.project().pages {
-            allowed.insert(page.source);
-            allowed.extend(
-                [
-                    page.assets.clean,
-                    page.assets.rendered,
-                    page.assets.text_mask_candidate,
-                    page.assets.layout_text_mask,
-                    page.assets.text_mask,
-                    page.assets.coo_mask,
-                    page.assets.bubble_mask,
-                    page.assets.brush_mask,
-                ]
-                .into_iter()
-                .flatten(),
-            );
-            allowed.extend(
-                page.elements
-                    .iter()
-                    .filter_map(|element| match element.kind {
-                        ElementKind::Image(ref image) => Some(image.blob),
-                        ElementKind::Text(_) | ElementKind::Region(_) => None,
-                    }),
-            );
+        const ROLES: &[&str] = &[
+            "source",
+            "clean",
+            "rendered",
+            "text-mask-candidate",
+            "layout-text-mask",
+            "text-mask",
+            "coo-mask",
+            "bubble-mask",
+            "brush-mask",
+        ];
+        for entity in snapshot.entities() {
+            for role in ROLES {
+                if let Some(asset) = entity.component::<Asset>(*role)? {
+                    allowed.insert(asset.blob);
+                }
+            }
         }
-        *self.active.write().expect("resource project lock poisoned") = Some(ActiveProject {
-            id: session.id(),
+        *self
+            .active
+            .write()
+            .unwrap_or_else(|error| error.into_inner()) = Some(ActiveProject {
+            id: snapshot.project_id(),
             path: path.to_owned(),
             allowed,
         });
+        Ok(())
     }
 
     pub fn clear(&self) {
-        *self.active.write().expect("resource project lock poisoned") = None;
-        let mut cache = self.cache.lock().expect("resource cache lock poisoned");
+        *self
+            .active
+            .write()
+            .unwrap_or_else(|error| error.into_inner()) = None;
+        let mut cache = self.cache.lock().unwrap_or_else(|error| error.into_inner());
         cache.entries.clear();
         cache.order.clear();
         cache.bytes = 0;
@@ -138,7 +138,7 @@ impl Resources {
         let active = self
             .active
             .read()
-            .expect("resource project lock poisoned")
+            .unwrap_or_else(|error| error.into_inner())
             .clone()
             .ok_or(ResourceError::NotFound)?;
         if parsed.project != active.id || !active.allowed.contains(&parsed.blob) {
@@ -152,7 +152,7 @@ impl Resources {
         if let Some(bytes) = self
             .cache
             .lock()
-            .expect("resource cache lock poisoned")
+            .unwrap_or_else(|error| error.into_inner())
             .get(key)
         {
             return Ok(bytes.as_ref().clone());
@@ -161,7 +161,7 @@ impl Resources {
             .map_err(ResourceError::Internal)?;
         self.cache
             .lock()
-            .expect("resource cache lock poisoned")
+            .unwrap_or_else(|error| error.into_inner())
             .insert(key, Arc::new(bytes.clone()));
         Ok(bytes)
     }
@@ -211,9 +211,9 @@ fn parse_request(uri: &str) -> std::result::Result<ParsedRequest, ResourceError>
 }
 
 fn encode_thumbnail(path: &Path, blob: BlobId, width: u32) -> Result<Vec<u8>> {
-    let session = Session::open(path)
+    let session = SceneSession::open(path)
         .with_context(|| format!("failed to open resource project {}", path.display()))?;
-    let source = session.read_blob(blob)?;
+    let source = session.snapshot().read_blob(blob)?;
     let image = image::load_from_memory(&source).context("failed to decode thumbnail image")?;
     if image.width() == 0 || image.height() == 0 {
         bail!("thumbnail source is empty");
@@ -269,13 +269,17 @@ enum ResourceError {
 mod tests {
     use super::*;
 
+    fn project_id() -> ProjectId {
+        SceneSession::memory().unwrap().project_id()
+    }
+
     #[test]
     fn rejects_bad_hosts_and_widths() {
         assert!(matches!(
             parse_request("koharu-resource://files/a/blob/b"),
             Err(ResourceError::BadRequest(_))
         ));
-        let project = ProjectId::new();
+        let project = project_id();
         let blob = BlobId::for_bytes(b"image");
         assert!(matches!(
             parse_request(&format!(
@@ -300,7 +304,7 @@ mod tests {
     #[test]
     fn rejects_unreferenced_blobs_before_opening_project_storage() {
         let resources = Resources::new();
-        let project = ProjectId::new();
+        let project = project_id();
         let blob = BlobId::for_bytes(b"unreferenced");
         *resources
             .active
@@ -324,7 +328,7 @@ mod tests {
     fn cache_is_bounded_and_refreshes_recency() {
         let mut cache = Cache::default();
         let key = CacheKey {
-            project: ProjectId::new(),
+            project: project_id(),
             blob: BlobId::for_bytes(b"one"),
             width: 160,
         };

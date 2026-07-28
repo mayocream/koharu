@@ -1,35 +1,38 @@
-//! Koharu's compact, SQLite-backed manga document model.
+//! Typed, evolvable scene semantics over [`koharu_storage`].
 //!
-//! Reads borrow the committed [`Project`]. Writes are [`Commands`] committed
-//! atomically through [`Session`]; [`Edit`] is only fluent syntax over those
-//! commands.
+//! The storage crate remains ignorant of pages, hierarchy, relations, text,
+//! assets, and model provenance. This crate supplies those meanings through
+//! independently versioned components and validates them at every scene
+//! snapshot boundary.
 
-mod blob;
-mod command;
+mod change;
+mod component;
+mod components;
 mod edit;
 mod error;
-mod geometry;
 mod id;
-mod model;
+mod index;
+mod patch;
 mod session;
-mod storage;
-mod style;
+mod snapshot;
 
-pub use command::{Command, CommandParts, Commands, ElementChange};
-pub use edit::{Edit, ImageEdit, PageEdit, TextEdit};
+pub use change::{ComponentChange, EntityChange, RelationChange, SceneChangeSet};
+pub use component::{EncodedSceneComponent, SceneComponent, ValidationContext};
+pub use components::{
+    Asset, AssetInput, AssetMetadata, AssetRole, Authored, Children, DetectionAnalysis,
+    DetectionLabel, EntityOrigin, Generation, Geometry, LanguageTag, OcrAnalysis, Origin, Page,
+    PageDraft, Point, ProjectSettings, ReadingOrder, Region, RegionKind, Relation, RelationKind,
+    SourceText, TextAlignment, TextDirection, TextRole, Translation, Typography, Visibility,
+    WritingMode,
+};
+pub use edit::{At, RemovePolicy, SceneEdit};
 pub use error::{Error, Result};
-pub use geometry::{Frame, Quad, Size};
-pub use id::{BlobId, ElementId, PageId, ProjectId, Revision};
-pub use model::{
-    Element, ElementKind, ImageElement, ModelPrediction, Page, PageAsset, PageAssets, Project,
-    Region, RegionKind, SourceText, TextAnalysis, TextBlock, TextDirection, TextRole,
-};
-pub use session::{ChangeSet, GcReport, Options, Session};
-pub use style::{
-    BevelStyle, BlendMode, Color, FontSlant, GradientStop, StrokePosition, TextAlign,
-    TextDecoration, TextEffect, TextEffectKind, TextFit, TextLayout, TextOverflow, TextStyle,
-    VerticalAlign, WritingMode,
-};
+pub use id::{ComponentSlot, EntityId, ProducerId, ProjectId, RelationId};
+pub use patch::ScenePatch;
+pub use session::{SceneCommit, SceneSession};
+pub use snapshot::{EntityRef, PageRef, RelationRef, SceneSnapshot};
+
+pub use koharu_storage::{BlobBatch, BlobId, PatchId, Revision};
 
 #[cfg(test)]
 mod tests;
