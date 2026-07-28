@@ -3,7 +3,7 @@ use koharu_llama::llama_backend::LlamaBackend;
 use koharu_runtime::{
     device::{cuda::cuda_available, rocm::rocm_available, vulkan::vulkan_available},
     package::{
-        Package, PreloadablePackage, libtorch::Libtorch, llama_cpp::LlamaCpp,
+        PreloadablePackage, libtorch::Libtorch, llama_cpp::LlamaCpp,
         stable_diffusion_cpp::StableDiffusionCpp,
     },
 };
@@ -66,12 +66,6 @@ async fn init_llama() -> anyhow::Result<()> {
                 .await
                 .context("failed to initialize llama.cpp runtime")?;
             koharu_llama::send_logs_to_tracing(koharu_llama::LogOptions::default());
-            let package_dir = llama_cpp
-                .resolve()
-                .await
-                .context("failed to resolve llama.cpp runtime")?;
-            LlamaBackend::load_all_backends_from_path(package_dir)
-                .context("failed to load llama.cpp backends")?;
             let backend = LlamaBackend::init().context("failed to initialize llama.cpp backend")?;
             Ok::<LlamaBackend, anyhow::Error>(backend)
         })
@@ -89,12 +83,6 @@ async fn init_diffusion() -> anyhow::Result<()> {
                 .context("failed to initialize stable-diffusion.cpp runtime")?;
             koharu_diffusion::send_logs_to_tracing()
                 .context("failed to redirect stable-diffusion.cpp logs")?;
-            let package_dir = sd_cpp
-                .resolve()
-                .await
-                .context("failed to resolve stable-diffusion.cpp runtime")?;
-            koharu_diffusion::load_all_backends_from_path(package_dir)
-                .context("failed to load stable-diffusion.cpp backends")?;
             Ok::<(), anyhow::Error>(())
         })
         .await?;

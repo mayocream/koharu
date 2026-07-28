@@ -8,7 +8,7 @@ use koharu_bindgen::Generator;
 
 const HEADER: &str = "wrapper.h";
 const PUBLIC_HEADERS: &[&str] = &["include/stable-diffusion.h"];
-const FUNCTION_ALLOWLIST: &str = "^(sd_.*|str_to_.*|ggml_backend_load_all_from_path|new_sd_ctx|free_sd_ctx|free_sd_audio|free_sd_images|generate_image|generate_video|new_upscaler_ctx|free_upscaler_ctx|upscale|get_upscale_factor|convert|convert_with_components|preprocess_canny|load_imatrix|save_imatrix|enable_imatrix_collection|disable_imatrix_collection)$";
+const FUNCTION_ALLOWLIST: &str = "^(sd_.*|str_to_.*|new_sd_ctx|free_sd_ctx|free_sd_audio|free_sd_images|generate_image|generate_video|new_upscaler_ctx|free_upscaler_ctx|upscale|get_upscale_factor|convert|convert_with_components|preprocess_canny|load_imatrix|save_imatrix|enable_imatrix_collection|disable_imatrix_collection)$";
 const TYPE_ALLOWLIST: &str = "^(sd_.*|rng_type_t|sample_method_t|scheduler_t|prediction_t|preview_t|lora_apply_mode_t|upscaler_ctx_t|ggml_tensor)$";
 const VARIABLE_ALLOWLIST: &str = "^(STD_DEFAULT_RNG|CUDA_RNG|CPU_RNG|RNG_TYPE_COUNT|.*_SAMPLE_METHOD|SAMPLE_METHOD_COUNT|.*_SCHEDULER|SCHEDULER_COUNT|.*_PRED|PREDICTION_COUNT|SD_.*|PREVIEW_.*|LORA_.*)$";
 

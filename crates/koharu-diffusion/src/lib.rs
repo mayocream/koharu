@@ -58,10 +58,7 @@ pub use enums::*;
 pub use error::{Error, Result};
 pub use image::{Audio, RgbImageView, Video};
 pub use params::*;
-pub use system::{
-    Device, commit, list_devices, load_all_backends_from_path, physical_core_count, system_info,
-    version,
-};
+pub use system::{Device, commit, list_devices, physical_core_count, system_info, version};
 pub use upscaler::{Upscaler, UpscalerParams};
 
 /// Low-level bindings for functionality not yet represented by the safe API.
