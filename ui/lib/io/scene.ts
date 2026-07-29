@@ -11,6 +11,7 @@ import {
   getGetConfigQueryKey,
   getGetCurrentLlmQueryKey,
   getGetSceneJsonQueryKey,
+  getImportScriptUrl,
   importProject,
   patchConfig,
   putCurrentProject,
@@ -250,6 +251,24 @@ export async function exportProject(
   const blob = await res.blob()
   const filename = filenameFromContentDisposition(res.headers.get('content-disposition'))
   return { blob, filename }
+}
+
+// Script import --------------------------------------------------------------
+
+export async function importScript(
+  body: string,
+  pageId?: string,
+): Promise<void> {
+  const res = await fetch(getImportScriptUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body, pageId }),
+  })
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText)
+    throw new ApiError(res.status, msg)
+  }
+  await invalidateScene()
 }
 
 // Config ---------------------------------------------------------------------

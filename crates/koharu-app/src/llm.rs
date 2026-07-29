@@ -28,6 +28,8 @@ use koharu_runtime::RuntimeManager;
 use strum::IntoEnumIterator;
 use tokio::sync::{RwLock, broadcast};
 
+use super::utils;
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -213,7 +215,7 @@ impl Model {
         let target_language = target_language
             .and_then(Language::parse)
             .unwrap_or(Language::English);
-        let body = format_sources(sources);
+        let body = utils::format_sources(sources);
 
         let mut guard = self.state.write().await;
         let translation = match &mut *guard {
@@ -237,7 +239,7 @@ impl Model {
         }?;
 
         let translation = strip_thinking_block(&translation);
-        let out = match parse_tagged_blocks(translation, sources.len())? {
+        let out = match utils::parse_tagged_blocks(translation, sources.len())? {
             Some(blocks) => blocks,
             None => split_legacy_lines(translation, sources.len()),
         };
@@ -435,72 +437,6 @@ pub fn provider_config_from_settings(
 // ---------------------------------------------------------------------------
 // Tag formatting + response parsing
 // ---------------------------------------------------------------------------
-
-fn format_sources(sources: &[String]) -> String {
-    sources
-        .iter()
-        .enumerate()
-        .map(|(idx, text)| format!("[{}]{}", idx + 1, text))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
-    let bytes = text.as_bytes();
-    if bytes.first()? != &b'[' {
-        return None;
-    }
-    let end = text[1..].find(']')?;
-    let num_str = &text[1..1 + end];
-    let id_1based: usize = num_str.parse().ok()?;
-    if id_1based == 0 {
-        return None;
-    }
-    Some((1 + end + 1, id_1based - 1))
-}
-
-fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
-    let mut line_start = 0;
-    while line_start <= text.len() {
-        let line = &text[line_start..];
-        let indent = line
-            .as_bytes()
-            .iter()
-            .take_while(|&&byte| matches!(byte, b' ' | b'\t'))
-            .count();
-        let offset = line_start + indent;
-        if let Some((len, id)) = parse_block_tag(&text[offset..]) {
-            return Some((offset, len, id));
-        }
-        let Some(next_newline) = line.find('\n') else {
-            break;
-        };
-        line_start += next_newline + 1;
-    }
-    None
-}
-
-fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> Result<Option<Vec<String>>> {
-    if find_next_tag(translation).is_none() {
-        return Ok(None);
-    }
-    let mut blocks = vec![String::new(); expected_blocks];
-    let mut cursor = translation;
-    let mut found_any = false;
-    while let Some((offset, len, id)) = find_next_tag(cursor) {
-        found_any = true;
-        cursor = &cursor[offset + len..];
-        let content_end = find_next_tag(cursor)
-            .map(|(next_offset, _, _)| next_offset)
-            .unwrap_or(cursor.len());
-        let content = cursor[..content_end].trim().to_string();
-        if id < expected_blocks {
-            blocks[id] = content;
-        }
-        cursor = &cursor[content_end..];
-    }
-    Ok(found_any.then_some(blocks))
-}
 
 fn split_legacy_lines(translation: &str, expected_blocks: usize) -> Vec<String> {
     let mut lines: Vec<String> = translation

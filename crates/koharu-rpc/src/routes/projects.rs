@@ -14,8 +14,11 @@ use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
-use koharu_app::projects as project_dirs;
-use koharu_core::{ImageRole, PageId, ProjectSummary};
+use koharu_app::pipeline::support::text_nodes;
+use koharu_app::{projects as project_dirs, utils};
+use koharu_core::{
+    ImageRole, NodeDataPatch, NodeId, NodePatch, Op, PageId, ProjectSummary, Scene, TextDataPatch,
+};
 use serde::{Deserialize, Serialize};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -31,6 +34,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(delete_current_project))
         .routes(routes!(delete_project))
         .routes(routes!(export_current_project))
+        .routes(routes!(import_script))
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +253,8 @@ pub enum ExportFormat {
     Rendered,
     /// One `.png` per page (the Inpainted layer).
     Inpainted,
+    /// One '.txt' per page.
+    Script,
 }
 
 #[utoipa::path(
@@ -337,6 +343,7 @@ async fn export_current_project(
             )
             .await
         }
+        ExportFormat::Script => export_script(&session, req.pages.as_deref(), &project_name).await,
     }
 }
 
@@ -371,6 +378,208 @@ async fn export_image_role(
         ));
     }
     files_to_response(files, project_name, role_ext(role))
+}
+
+async fn export_script(
+    session: &std::sync::Arc<koharu_app::ProjectSession>,
+    pages: Option<&[PageId]>,
+    project_name: &str,
+) -> ApiResult<Response> {
+    let page_ids = resolve_page_ids(session, pages)?;
+    if page_ids.is_empty() {
+        return Err(ApiError::bad_request("no pages in selection"));
+    }
+
+    let scene = session.scene.read();
+
+    let mut page_blocks: Vec<(PageId, Vec<(NodeId, String)>)> = Vec::new();
+
+    for &page_id in &page_ids {
+        let targets = collect_translation_targets_from(&scene, page_id);
+        if targets.is_empty() {
+            continue;
+        }
+        page_blocks.push((page_id, targets));
+    }
+
+    if page_blocks.is_empty() {
+        return Err(ApiError::bad_request("no pages with text blocks to export"));
+    }
+
+    let single_page = page_blocks.len() == 1;
+
+    let mut body = String::new();
+
+    for (page_id, blocks) in page_blocks.iter() {
+        if !body.is_empty() {
+            body.push('\n');
+        }
+
+        if !single_page {
+            let page_index = scene
+                .pages
+                .get_index_of(page_id)
+                .map(|i| i + 1)
+                .unwrap_or(page_blocks.len());
+            body.push_str(&format!("Page {}", page_index));
+        }
+
+        if !body.is_empty() {
+            body.push('\n');
+        }
+
+        let formatted = utils::format_sources(
+            &blocks
+                .iter()
+                .map(|block| block.1.clone())
+                .collect::<Vec<String>>(),
+        );
+        body.push_str(&formatted);
+    }
+
+    let file = ("script.txt".to_string(), body.into_bytes());
+
+    files_to_response(vec![file], project_name, "txt")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportScriptRequest {
+    pub body: String,
+    #[serde(default)]
+    pub page_id: Option<PageId>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/projects/current/import-script",
+    request_body = ImportScriptRequest,
+    responses((status = 200, description = "Translations applied"),
+              (status = 400, description = "Parse error or invalid request"))
+)]
+async fn import_script(
+    State(app): State<AppState>,
+    Json(req): Json<ImportScriptRequest>,
+) -> ApiResult<()> {
+    let session = app
+        .current_session()
+        .ok_or_else(|| ApiError::bad_request("no project open"))?;
+
+    let scene = session.scene_snapshot();
+
+    let entries = parse_script_body(&req.body, req.page_id, &scene)?;
+    if entries.is_empty() {
+        return Err(ApiError::bad_request("no valid entries found in script"));
+    }
+
+    // Build UpdateNode ops for each (page, node, translation) entry
+    let mut ops = Vec::new();
+    for (page_id, node_id, translation) in entries {
+        ops.push(Op::UpdateNode {
+            page: page_id,
+            id: node_id,
+            patch: NodePatch {
+                data: Some(NodeDataPatch::Text(TextDataPatch {
+                    translation: Some(Some(translation)),
+                    ..Default::default()
+                })),
+                transform: None,
+                visible: None,
+            },
+            prev: NodePatch::default(),
+        });
+    }
+
+    let batch = Op::Batch {
+        ops,
+        label: "Import script translations".into(),
+    };
+
+    session
+        .apply(batch)
+        .map_err(|e| ApiError::internal(e.into()))?;
+
+    Ok(())
+}
+
+/// Parse the script body and produce (page_id, node_id, translation_text) tuples.
+fn parse_script_body(
+    body: &str,
+    page_id: Option<PageId>,
+    scene: &Scene,
+) -> ApiResult<Vec<(PageId, NodeId, String)>> {
+    let mut entries = Vec::new();
+
+    if let Some(page_id) = page_id {
+        let targets = collect_translation_targets_from(scene, page_id);
+        if let Some(translation_texts) = utils::parse_tagged_blocks(&body, targets.len())? {
+            for ((node_id, _), translation) in targets.into_iter().zip(translation_texts) {
+                entries.push((page_id, node_id, translation));
+            }
+        } else {
+            return Err(ApiError::bad_request(
+                "script file has no translation lines but page has text nodes",
+            ));
+        }
+    } else {
+        let sections = split_into_page_sections(body);
+        for (page_number, section_lines) in sections {
+            if page_number < 1 {
+                return Err(ApiError::bad_request("page numbers must be >= 1"));
+            }
+            let (page_id, _) = scene.pages.get_index(page_number - 1).ok_or_else(|| {
+                ApiError::bad_request(format!("page {} not found in project", page_number))
+            })?;
+
+            let targets = collect_translation_targets_from(scene, *page_id);
+            if let Some(translation_texts) =
+                utils::parse_tagged_blocks(&section_lines, targets.len())?
+            {
+                for ((node_id, _), translation) in targets.into_iter().zip(translation_texts) {
+                    entries.push((*page_id, node_id, translation));
+                }
+            }
+        }
+    }
+
+    Ok(entries)
+}
+
+/// Split multi-page script body into `(page_number, page_body)` pairs.
+/// Lines starting with "Page " and containing a page number are treated as section headers.
+fn split_into_page_sections(body: &str) -> Vec<(usize, String)> {
+    let mut sections: Vec<(usize, String)> = Vec::new();
+    let mut current_page: Option<usize> = None;
+    let mut current_lines: Vec<&str> = Vec::new();
+
+    for line in body.lines() {
+        let parsed_page = line
+            .strip_prefix("Page ")
+            .and_then(|rest| rest.trim().parse::<usize>().ok());
+
+        if let Some(page) = parsed_page {
+            if let Some(prev_page) = current_page.take() {
+                let section_body = current_lines.join("\n");
+                if !section_body.trim().is_empty() {
+                    sections.push((prev_page, section_body));
+                }
+            }
+
+            current_lines.clear();
+            current_page = Some(page);
+        } else {
+            current_lines.push(line);
+        }
+    }
+
+    if let Some(page) = current_page {
+        let section_body = current_lines.join("\n");
+        if !section_body.trim().is_empty() {
+            sections.push((page, section_body));
+        }
+    }
+
+    sections
 }
 
 fn resolve_page_ids(
@@ -411,6 +620,7 @@ fn files_to_response(
             "psd" => "image/vnd.adobe.photoshop",
             "png" => "image/png",
             "khr" => "application/octet-stream",
+            "txt" => "text/plain",
             _ => "application/octet-stream",
         };
         return Ok(bytes_response_with_filename(bytes, &fname, content_type));
@@ -455,4 +665,16 @@ fn sanitize(name: &str, fallback: &str) -> String {
     } else {
         s
     }
+}
+
+/// Collect all the non-empty text blocks from the specified page in the scene
+fn collect_translation_targets_from(scene: &Scene, page: PageId) -> Vec<(NodeId, String)> {
+    text_nodes(scene, page)
+        .into_iter()
+        .filter_map(|(id, _, text_data)| {
+            let text = text_data.text.as_ref()?;
+            let trimmed = text.trim();
+            (!trimmed.is_empty()).then(|| (id, text.clone()))
+        })
+        .collect()
 }

@@ -2,9 +2,9 @@
 
 import { getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import type { SceneSnapshot } from '@/lib/api/schemas'
-import { openImageFiles, openImageFolder, openKhrFile } from '@/lib/io/openFiles'
+import { openImageFiles, openImageFolder, openKhrFile, openTextFile } from '@/lib/io/openFiles'
 import { saveBlob } from '@/lib/io/saveBlob'
-import { exportProject, uploadKhrArchive, uploadPages, uploadPagesByPaths } from '@/lib/io/scene'
+import { exportProject, importScript, uploadKhrArchive, uploadPages, uploadPagesByPaths } from '@/lib/io/scene'
 import { queryClient } from '@/lib/queryClient'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
@@ -43,11 +43,15 @@ export async function importKhrFile(): Promise<void> {
 // Export (server returns bytes; saveBlob dispatches Tauri-dialog / web-FS)
 // ---------------------------------------------------------------------------
 
-const exportExtension: Record<'khr' | 'psd' | 'rendered' | 'inpainted', string> = {
+const exportExtension: Record<
+  'khr' | 'psd' | 'rendered' | 'inpainted' | 'script',
+  string
+> = {
   khr: 'khr',
   psd: 'zip',
   rendered: 'zip',
   inpainted: 'zip',
+  script: 'txt',
 }
 
 /** Sanitise an arbitrary project name for use as a filename stem. */
@@ -66,7 +70,7 @@ function currentProjectName(): string | undefined {
 }
 
 export async function exportCurrentProjectAs(
-  format: 'khr' | 'psd' | 'rendered' | 'inpainted',
+  format: 'khr' | 'psd' | 'rendered' | 'inpainted' | 'script',
   pages?: string[],
 ): Promise<void> {
   try {
@@ -82,4 +86,11 @@ export async function exportCurrentProjectAs(
     console.error('Export failed:', err)
     throw err
   }
+}
+
+export async function promptImportScript(pageId?: string): Promise<void> {
+  const file = await openTextFile()
+  if (!file) return
+  const body = await file.text()
+  await importScript(body, pageId)
 }

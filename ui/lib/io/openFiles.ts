@@ -84,6 +84,33 @@ export async function openImageFolder(): Promise<ImagePickerResult> {
   }
 }
 
+/** Pick a `.txt` script file. Returns `null` if cancelled. */
+export async function openTextFile(): Promise<File | null> {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: 'Text files', extensions: ['txt'] }],
+    })
+    if (!picked || typeof picked !== 'string') return null
+    const [file] = await readTauriFiles([picked])
+    return file ?? null
+  }
+
+  const { fileOpen } = await import('browser-fs-access')
+  try {
+    const result = await fileOpen({
+      multiple: false,
+      extensions: ['.txt'],
+      description: 'Text files',
+    })
+    return Array.isArray(result) ? (result[0] ?? null) : result
+  } catch (e) {
+    if (isAbort(e)) return null
+    throw e
+  }
+}
+
 /** Pick one `.khr` archive file. Returns `null` if cancelled. */
 export async function openKhrFile(): Promise<File | null> {
   if (isTauri()) {
@@ -133,6 +160,7 @@ function mimeFromName(name: string): string {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
   if (lower.endsWith('.webp')) return 'image/webp'
   if (lower.endsWith('.khr')) return 'application/zip'
+  if (lower.endsWith('.txt')) return 'text/plain'
   return 'application/octet-stream'
 }
 

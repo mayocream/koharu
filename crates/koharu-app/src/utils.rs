@@ -47,3 +47,69 @@ pub fn mime_from_ext(ext: &str) -> &'static str {
 pub fn blank_rgba(width: u32, height: u32, color: image::Rgba<u8>) -> DynamicImage {
     DynamicImage::ImageRgba8(RgbaImage::from_pixel(width, height, color))
 }
+
+pub fn format_sources(sources: &[String]) -> String {
+    sources
+        .iter()
+        .enumerate()
+        .map(|(idx, text)| format!("[{}]{}", idx + 1, text))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_block_tag(text: &str) -> Option<(usize, usize)> {
+    let bytes = text.as_bytes();
+    if bytes.first()? != &b'[' {
+        return None;
+    }
+    let end = text[1..].find(']')?;
+    let num_str = &text[1..1 + end];
+    let id_1based: usize = num_str.parse().ok()?;
+    if id_1based == 0 {
+        return None;
+    }
+    Some((1 + end + 1, id_1based - 1))
+}
+
+fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
+    let mut line_start = 0;
+    while line_start <= text.len() {
+        let line = &text[line_start..];
+        let indent = line
+            .as_bytes()
+            .iter()
+            .take_while(|&&byte| matches!(byte, b' ' | b'\t'))
+            .count();
+        let offset = line_start + indent;
+        if let Some((len, id)) = parse_block_tag(&text[offset..]) {
+            return Some((offset, len, id));
+        }
+        let Some(next_newline) = line.find('\n') else {
+            break;
+        };
+        line_start += next_newline + 1;
+    }
+    None
+}
+
+pub fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> anyhow::Result<Option<Vec<String>>> {
+    if find_next_tag(translation).is_none() {
+        return Ok(None);
+    }
+    let mut blocks = vec![String::new(); expected_blocks];
+    let mut cursor = translation;
+    let mut found_any = false;
+    while let Some((offset, len, id)) = find_next_tag(cursor) {
+        found_any = true;
+        cursor = &cursor[offset + len..];
+        let content_end = find_next_tag(cursor)
+            .map(|(next_offset, _, _)| next_offset)
+            .unwrap_or(cursor.len());
+        let content = cursor[..content_end].trim().to_string();
+        if id < expected_blocks {
+            blocks[id] = content;
+        }
+        cursor = &cursor[content_end..];
+    }
+    Ok(found_any.then_some(blocks))
+}
