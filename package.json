@@ -3,9 +3,9 @@
     "ui/"
   ],
   "scripts": {
-    "dev": "bun run --parallel dev:ui dev:native",
+    "dev": "run-p dev:ui dev:desktop",
     "dev:ui": "kill-port 3000 && bun run --cwd ui dev",
-    "dev:native": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec \"cargo run -p koharu --bin koharu --profile release-with-debug\"",
+    "dev:desktop": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec 'cargo run -p koharu --bin koharu --profile release-with-debug'",
     "build": "bun run --cwd ui build && cargo build -p koharu",
     "lint:ui": "bun run --filter ui lint",
     "test:desktop": "playwright test --config tests/integration-tests/playwright.config.ts",
@@ -22,6 +22,7 @@
     "git-cliff": "^2.13.1",
     "kill-port": "^2.0.1",
     "nodemon": "^3.1.14",
+    "npm-run-all2": "^8.0.4",
     "oxfmt": "^0.56.0",
     "typescript": "^6.0.3"
   }
