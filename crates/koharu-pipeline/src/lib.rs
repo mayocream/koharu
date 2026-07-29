@@ -25,10 +25,7 @@ pub use request::{Operation, Request, StopToken};
 pub use resources::{DeviceResources, ResourceSnapshot};
 pub use scope::{Bounds, Scope};
 pub use stage::Stage;
-pub use stages::{
-    AotInpaintingConfig, Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig,
-    LaMaHDStrategy, RoremMixedConfig,
-};
+pub use stages::{Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, RoremMixedConfig};
 
 use images::ImageCache;
 use model_cell::ModelCell;

@@ -12,9 +12,7 @@ use koharu_scene::{
 };
 
 pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
-pub use inpainting::{
-    AotInpaintingConfig, Flux2KleinConfig, LaMaConfig, LaMaHDStrategy, RoremMixedConfig,
-};
+pub use inpainting::{Flux2KleinConfig, RoremMixedConfig};
 
 use crate::{Bounds, ImageCache, ModelCell, PipelineConfig, Stage};
 

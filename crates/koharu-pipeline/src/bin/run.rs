@@ -3,9 +3,9 @@ use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc, time::Duration};
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
 use koharu_pipeline::{
-    AotInpaintingConfig, Committer, DetectionModel, Flux2KleinConfig, InpaintingModel,
-    KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, OcrModel, Operation, Pipeline, PipelineConfig,
-    Progress, Request, RoremMixedConfig, Scope, StageOutput,
+    Committer, DetectionModel, Flux2KleinConfig, InpaintingModel, KoharuLayoutRFDetrSeg2XLConfig,
+    OcrModel, Operation, Pipeline, PipelineConfig, Progress, Request, RoremMixedConfig, Scope,
+    StageOutput,
 };
 use koharu_renderer::{RenderRequest, Renderer};
 use koharu_scene::{
@@ -97,10 +97,8 @@ impl Arguments {
                 OcrChoice::BaberuOcr => OcrModel::BaberuOcr,
             },
             inpainting: match self.inpainting {
-                InpaintingChoice::LaMa => InpaintingModel::LaMa(LaMaConfig::default()),
-                InpaintingChoice::AotInpainting => {
-                    InpaintingModel::AotInpainting(AotInpaintingConfig::default())
-                }
+                InpaintingChoice::LaMa => InpaintingModel::LaMa {},
+                InpaintingChoice::AotInpainting => InpaintingModel::AotInpainting {},
                 InpaintingChoice::Flux2Klein => {
                     InpaintingModel::Flux2Klein(Flux2KleinConfig::default())
                 }

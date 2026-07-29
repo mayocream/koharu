@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::stages::{
-    AotInpaintingConfig, Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig,
-    RoremMixedConfig,
-};
+use crate::stages::{Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, RoremMixedConfig};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default, deny_unknown_fields)]
@@ -21,7 +18,7 @@ impl Default for PipelineConfig {
                 KoharuLayoutRFDetrSeg2XLConfig::default(),
             ),
             ocr: OcrModel::PaddleOcrVl1_6,
-            inpainting: InpaintingModel::LaMa(LaMaConfig::default()),
+            inpainting: InpaintingModel::LaMa {},
         }
     }
 }
@@ -48,9 +45,9 @@ pub enum OcrModel {
 #[serde(tag = "model", deny_unknown_fields)]
 pub enum InpaintingModel {
     #[serde(rename = "lama")]
-    LaMa(LaMaConfig),
+    LaMa {},
     #[serde(rename = "aot-inpainting")]
-    AotInpainting(AotInpaintingConfig),
+    AotInpainting {},
     #[serde(rename = "flux2-klein")]
     Flux2Klein(Flux2KleinConfig),
     #[serde(rename = "rorem-mixed")]
@@ -70,7 +67,7 @@ mod tests {
             DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
         ));
         assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6));
-        assert!(matches!(config.inpainting, InpaintingModel::LaMa(_)));
+        assert!(matches!(config.inpainting, InpaintingModel::LaMa {}));
     }
 
     #[test]
@@ -85,8 +82,8 @@ mod tests {
 
                 [inpainting]
                 model = "rorem-mixed"
-                resolution = 1024
-                mask_dilation = 20
+                prompt = "Remove the lettering."
+                negative_prompt = "letters, words"
             "#,
         )
         .unwrap();
@@ -99,9 +96,8 @@ mod tests {
         assert!(matches!(
             config.inpainting,
             InpaintingModel::RoremMixed(config)
-                if config.resolution == 1024
-                    && config.mask_dilation == 20
-                    && config.num_inference_steps == 30
+                if config.prompt == "Remove the lettering."
+                    && config.negative_prompt == "letters, words"
         ));
     }
 
@@ -162,10 +158,6 @@ mod tests {
                 [inpainting]
                 model = "flux2-klein"
                 prompt = "Reconstruct the illustration without text."
-                padding_mask_crop = 64
-                strength = 0.75
-                num_inference_steps = 8
-                seed = 42
             "#,
         )
         .unwrap();
@@ -181,10 +173,49 @@ mod tests {
             config.inpainting,
             InpaintingModel::Flux2Klein(config)
                 if config.prompt == "Reconstruct the illustration without text."
-                    && config.padding_mask_crop == Some(64)
-                    && config.strength == 0.75
-                    && config.num_inference_steps == 8
-                    && config.seed == 42
         ));
+    }
+
+    #[test]
+    fn rejects_removed_inpainting_options() {
+        for (name, source) in [
+            (
+                "lama",
+                r#"
+                [inpainting]
+                model = "lama"
+                hd_strategy = "resize"
+            "#,
+            ),
+            (
+                "aot-inpainting",
+                r#"
+                [inpainting]
+                model = "aot-inpainting"
+                max_side = 1024
+            "#,
+            ),
+            (
+                "flux2-klein",
+                r#"
+                [inpainting]
+                model = "flux2-klein"
+                strength = 0.5
+            "#,
+            ),
+            (
+                "rorem-mixed",
+                r#"
+                [inpainting]
+                model = "rorem-mixed"
+                resolution = 1024
+            "#,
+            ),
+        ] {
+            assert!(
+                toml::from_str::<PipelineConfig>(source).is_err(),
+                "{name} accepted a removed option"
+            );
+        }
     }
 }
