@@ -3,7 +3,6 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 use anyhow::Result;
 use criterion::Criterion;
 use koharu_ml::flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions};
-use koharu_torch::Cuda;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,9 +15,8 @@ async fn main() -> Result<()> {
     let options = Flux2KleinInpaintOptions::default();
 
     koharu_ml::init().await?;
-    let model = Flux2KleinInpaint::load(koharu_ml::Device::cuda(0)).await?;
+    let model = Flux2KleinInpaint::load(koharu_ml::Device::default()).await?;
 
-    Cuda::synchronize(0);
     let output = model.inference("Remove the masked content.", &image, None, &mask, &options)?;
     let scale = (1_048_576.0 / (f64::from(image.width()) * f64::from(image.height()))).sqrt();
     let expected_width = ((f64::from(image.width()) * scale).floor() as u32 / 16) * 16;
@@ -26,7 +24,6 @@ async fn main() -> Result<()> {
     assert_eq!(output.width(), expected_width);
     assert_eq!(output.height(), expected_height);
     black_box(output);
-    Cuda::synchronize(0);
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -35,10 +32,9 @@ async fn main() -> Result<()> {
         .configure_from_args();
 
     criterion.bench_function(
-        "flux2_klein/inpaint/cuda0/3840x2074/max_pixels_1048576",
+        "flux2_klein/inpaint/3840x2074/max_pixels_1048576",
         |bencher| {
             bencher.iter(|| {
-                Cuda::synchronize(0);
                 let output = model
                     .inference(
                         black_box("Remove the masked content."),
@@ -49,7 +45,6 @@ async fn main() -> Result<()> {
                     )
                     .expect("FLUX.2 Klein inference failed");
                 black_box(output);
-                Cuda::synchronize(0);
             });
         },
     );

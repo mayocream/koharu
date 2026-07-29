@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{speech_bubble_yolo11n::Yolo11nSpeechBubbleSegmenter, torch::Cuda};
+use koharu_ml::speech_bubble_yolo11n::Yolo11nSpeechBubbleSegmenter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -14,10 +14,9 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
     let image = image::open(&input)?;
-    let model = Yolo11nSpeechBubbleSegmenter::load(koharu_ml::Device::cuda(0)).await?;
+    let model = Yolo11nSpeechBubbleSegmenter::load(koharu_ml::Device::default()).await?;
 
     model.inference(&image)?;
-    Cuda::synchronize(0);
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -25,19 +24,14 @@ async fn main() -> Result<()> {
         .measurement_time(Duration::from_secs(10))
         .configure_from_args();
 
-    criterion.bench_function(
-        "speech_bubble_yolo11n/inference/cuda0/770x1080",
-        |bencher| {
-            bencher.iter(|| {
-                Cuda::synchronize(0);
-                let result = model
-                    .inference(black_box(&image))
-                    .expect("YOLO11n speech bubble inference failed");
-                Cuda::synchronize(0);
-                black_box(result);
-            });
-        },
-    );
+    criterion.bench_function("speech_bubble_yolo11n/inference/770x1080", |bencher| {
+        bencher.iter(|| {
+            let result = model
+                .inference(black_box(&image))
+                .expect("YOLO11n speech bubble inference failed");
+            black_box(result);
+        });
+    });
     criterion.final_summary();
     Ok(())
 }

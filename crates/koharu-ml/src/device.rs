@@ -1,6 +1,9 @@
 use std::fmt;
 
 use koharu_llama::{LlamaBackendDevice, LlamaBackendDeviceType};
+use koharu_runtime::device::{
+    cuda::cuda_available, rocm::rocm_available, vulkan::vulkan_available,
+};
 use serde::{Deserialize, Serialize};
 
 /// Compute backend used by a machine-learning device.
@@ -120,9 +123,28 @@ impl Device {
     }
 }
 
+/// Selects the universal device used by the models in this crate.
+#[must_use]
+pub fn device(cpu: bool) -> Device {
+    if cpu {
+        Device::cpu()
+    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Device::metal(0)
+    } else if cuda_available() {
+        Device::cuda(0)
+    } else if rocm_available() {
+        Device::rocm(0)
+    } else if vulkan_available() {
+        Device::vulkan(0)
+    } else {
+        tracing::warn!("GPU is not available, falling back to CPU");
+        Device::cpu()
+    }
+}
+
 impl Default for Device {
     fn default() -> Self {
-        Self::cpu()
+        device(false)
     }
 }
 

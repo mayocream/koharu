@@ -3,7 +3,6 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 use anyhow::Result;
 use criterion::Criterion;
 use koharu_ml::lama::{InpaintRequest, LaMa};
-use koharu_torch::Cuda;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -18,7 +17,7 @@ async fn main() -> Result<()> {
     let mask = image::open(&mask_path)?.to_luma8();
 
     koharu_ml::init().await?;
-    let model = LaMa::load(koharu_ml::Device::cuda(0)).await?;
+    let model = LaMa::load(koharu_ml::Device::default()).await?;
     let config = InpaintRequest::default();
 
     let mut criterion = Criterion::default()
@@ -29,12 +28,10 @@ async fn main() -> Result<()> {
 
     criterion.bench_function("lama/inference/3840x2074", |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let output = model
                 .inference(black_box(&image), black_box(&mask), black_box(&config))
                 .expect("LaMa inference failed");
             black_box(output);
-            Cuda::synchronize(0);
         });
     });
     criterion.final_summary();

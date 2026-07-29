@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{pp_ocr_v6::rec::PPOCRV6MediumRec, torch::Cuda};
+use koharu_ml::pp_ocr_v6::rec::PPOCRV6MediumRec;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,11 +15,9 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let image = image::open(&input)?;
-    let model = PPOCRV6MediumRec::load(koharu_ml::Device::cuda(0)).await?;
+    let model = PPOCRV6MediumRec::load(koharu_ml::Device::default()).await?;
 
-    Cuda::synchronize(0);
     black_box(model.inference(&image)?);
-    Cuda::synchronize(0);
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -28,17 +26,15 @@ async fn main() -> Result<()> {
         .configure_from_args();
 
     let benchmark = format!(
-        "pp_ocr_v6/rec/inference/cuda0/{}x{}",
+        "pp_ocr_v6/rec/inference/{}x{}",
         image.width(),
         image.height()
     );
     criterion.bench_function(&benchmark, |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let recognition = model
                 .inference(black_box(&image))
                 .expect("PP-OCRv6 recognizer inference failed");
-            Cuda::synchronize(0);
             black_box(recognition);
         });
     });

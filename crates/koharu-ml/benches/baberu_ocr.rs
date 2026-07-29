@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{baberu_ocr::BaberuOcr, torch::Cuda};
+use koharu_ml::baberu_ocr::BaberuOcr;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -14,11 +14,9 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
     let image = image::open(&input)?;
-    let model = BaberuOcr::load(koharu_ml::Device::cuda(0)).await?;
+    let model = BaberuOcr::load(koharu_ml::Device::default()).await?;
 
-    Cuda::synchronize(0);
     let warmup = model.inference(&image)?;
-    Cuda::synchronize(0);
     assert_eq!(warmup, "対策委員会です！");
     black_box(warmup);
 
@@ -27,19 +25,13 @@ async fn main() -> Result<()> {
         .warm_up_time(Duration::from_secs(3))
         .measurement_time(Duration::from_secs(10))
         .configure_from_args();
-    let benchmark = format!(
-        "baberu_ocr/inference/cuda0/{}x{}",
-        image.width(),
-        image.height()
-    );
+    let benchmark = format!("baberu_ocr/inference/{}x{}", image.width(), image.height());
 
     criterion.bench_function(&benchmark, |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let text = model
                 .inference(black_box(&image))
                 .expect("Baberu OCR inference failed");
-            Cuda::synchronize(0);
             black_box(text);
         });
     });

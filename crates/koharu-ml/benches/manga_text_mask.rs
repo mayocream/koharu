@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{manga_text_mask::MangaTextMaskGenerator, torch::Cuda};
+use koharu_ml::manga_text_mask::MangaTextMaskGenerator;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,10 +15,9 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let image = image::open(input)?;
-    let model = MangaTextMaskGenerator::load(koharu_ml::Device::cuda(0)).await?;
+    let model = MangaTextMaskGenerator::load(koharu_ml::Device::default()).await?;
 
     model.inference(&image)?;
-    Cuda::synchronize(0);
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -28,11 +27,9 @@ async fn main() -> Result<()> {
 
     criterion.bench_function("manga_text_mask/inference/770x1080", |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let output = model
                 .inference(black_box(&image))
                 .expect("Manga Text Segmentation inference failed");
-            Cuda::synchronize(0);
             black_box(output);
         });
     });

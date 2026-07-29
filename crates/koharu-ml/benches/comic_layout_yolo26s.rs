@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{comic_layout_yolo26s::ComicLayoutYolo26sSegmenter, torch::Cuda};
+use koharu_ml::comic_layout_yolo26s::ComicLayoutYolo26sSegmenter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -14,10 +14,9 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
     let image = image::open(&input)?;
-    let model = ComicLayoutYolo26sSegmenter::load(koharu_ml::Device::cuda(0)).await?;
+    let model = ComicLayoutYolo26sSegmenter::load(koharu_ml::Device::default()).await?;
 
     model.inference(&image)?;
-    Cuda::synchronize(0);
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -25,13 +24,11 @@ async fn main() -> Result<()> {
         .measurement_time(Duration::from_secs(10))
         .configure_from_args();
 
-    criterion.bench_function("comic_layout_yolo26s/inference/cuda0/770x1080", |bencher| {
+    criterion.bench_function("comic_layout_yolo26s/inference/770x1080", |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let result = model
                 .inference(black_box(&image))
                 .expect("comic-layout-yolo26s inference failed");
-            Cuda::synchronize(0);
             black_box(result);
         });
     });

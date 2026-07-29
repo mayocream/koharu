@@ -2,7 +2,7 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use criterion::Criterion;
-use koharu_ml::{comic_text_detector::ComicTextDetector, torch::Cuda};
+use koharu_ml::comic_text_detector::ComicTextDetector;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     koharu_ml::init().await?;
 
     let image = image::open(&input)?;
-    let model = ComicTextDetector::load(koharu_ml::Device::cuda(0)).await?;
+    let model = ComicTextDetector::load(koharu_ml::Device::default()).await?;
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -25,11 +25,9 @@ async fn main() -> Result<()> {
 
     criterion.bench_function("comic_text_detector/inference/770x1080", |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let detection = model
                 .inference(black_box(&image))
                 .expect("Comic Text Detector inference failed");
-            Cuda::synchronize(0);
             black_box(detection);
         });
     });
