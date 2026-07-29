@@ -495,9 +495,7 @@ async fn import_script(
         label: "Import script translations".into(),
     };
 
-    session
-        .apply(batch)
-        .map_err(|e| ApiError::internal(e.into()))?;
+    session.apply(batch).map_err(|e| ApiError::internal(e))?;
 
     Ok(())
 }
@@ -512,7 +510,7 @@ fn parse_script_body(
 
     if let Some(page_id) = page_id {
         let targets = collect_translation_targets_from(scene, page_id);
-        if let Some(translation_texts) = utils::parse_tagged_blocks(&body, targets.len())? {
+        if let Some(translation_texts) = utils::parse_tagged_blocks(body, targets.len())? {
             for ((node_id, _), translation) in targets.into_iter().zip(translation_texts) {
                 entries.push((page_id, node_id, translation));
             }
