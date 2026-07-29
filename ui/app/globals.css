@@ -149,3 +149,24 @@
     @apply select-text;
   }
 }
+
+@layer components {
+  .koharu-moveable {
+    --moveable-color: rgb(59 130 246);
+  }
+  .koharu-moveable-text {
+    --moveable-color: rgb(244 63 94);
+  }
+  .koharu-moveable .moveable-control {
+    pointer-events: auto;
+    width: 14px;
+    height: 14px;
+    margin-top: -7px;
+    margin-left: -7px;
+    border: 2px solid white;
+    background: var(--moveable-color);
+  }
+  .koharu-moveable .moveable-line {
+    background: var(--moveable-color);
+  }
+}

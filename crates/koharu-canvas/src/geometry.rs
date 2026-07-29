@@ -240,6 +240,7 @@ impl Camera {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn frame_corners(frame: Frame) -> [PagePoint; 4] {
     let center = PagePoint::new(
         f64::from(frame.x + frame.width * 0.5),
@@ -258,6 +259,7 @@ pub(crate) fn frame_corners(frame: Frame) -> [PagePoint; 4] {
     .map(|(x, y)| PagePoint::new(center.x + x * cos - y * sin, center.y + x * sin + y * cos))
 }
 
+#[cfg(test)]
 pub(crate) fn frame_contains(frame: Frame, point: PagePoint) -> bool {
     let center_x = f64::from(frame.x + frame.width * 0.5);
     let center_y = f64::from(frame.y + frame.height * 0.5);

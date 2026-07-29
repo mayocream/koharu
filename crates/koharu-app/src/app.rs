@@ -7,9 +7,8 @@ use std::{
 use crate::{Project, classify_error, failure};
 use anyhow::{Result, anyhow};
 use koharu_canvas::{
-    Brush, BrushCursor, Camera, DisplayState, Guide as CanvasGuide, Handle as CanvasHandle,
-    HitTarget as CanvasHitTarget, MaskOverlay as CanvasMaskOverlay, MaskPlane as CanvasMaskPlane,
-    OverlayState, PageView as NativePageView, PhysicalPoint, StrokeMode,
+    Brush, Camera, DisplayState, ElementFrame, MaskOverlay as CanvasMaskOverlay,
+    MaskPlane as CanvasMaskPlane, PageView as NativePageView, PhysicalPoint, StrokeMode,
 };
 use koharu_config::Config;
 use koharu_desktop::{
@@ -28,9 +27,9 @@ use crate::{
     jobs::{Background, ExportRequest, NativeEvent, PipelineRequest},
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
-        CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, Handle,
-        HitTarget, JobKind, JobStatus, MaskPlane, RequestId, SettingsView, SystemResourcesView,
-        TargetLanguageView, TranslationSettings,
+        CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, JobKind,
+        JobStatus, MaskPlane, RequestId, SettingsView, SystemResourcesView, TargetLanguageView,
+        TranslationSettings,
     },
     resources::Resources,
 };
@@ -623,52 +622,19 @@ impl App {
                 };
                 desktop.set_view(view);
             }
-            CanvasInteraction::SetOverlays {
-                selected,
-                hovered,
-                draft,
-                guides,
-                brush_cursor,
-            } => desktop.set_overlays(OverlayState {
-                selected,
-                hovered,
-                draft: draft.map(canvas_frame),
-                guides: guides
-                    .into_iter()
-                    .map(|guide| match guide {
-                        crate::protocol::CanvasGuide::Horizontal(position) => {
-                            CanvasGuide::Horizontal(position)
-                        }
-                        crate::protocol::CanvasGuide::Vertical(position) => {
-                            CanvasGuide::Vertical(position)
-                        }
-                    })
-                    .collect(),
-                brush_cursor: brush_cursor.map(|cursor| BrushCursor {
-                    point: PhysicalPoint::new(cursor.x, cursor.y),
-                    diameter: cursor.diameter,
-                }),
-            }),
-            CanvasInteraction::HitTest { id, x, y } => {
-                let target = desktop
-                    .canvas()
-                    .hit_test(PhysicalPoint::new(x, y))
-                    .map(hit_target);
-                desktop.emit(EVENT_NAME, AppEvent::HitTest { id, target })?;
+            CanvasInteraction::BeginTransform { elements } => {
+                desktop.canvas().begin_transform(&elements)?
             }
-            CanvasInteraction::BeginTransform {
-                elements,
-                target,
-                x,
-                y,
-            } => desktop.canvas().begin_transform(
-                &elements,
-                canvas_hit_target(target),
-                PhysicalPoint::new(x, y),
-            )?,
-            CanvasInteraction::UpdateTransform { x, y } => desktop
-                .canvas()
-                .update_transform(PhysicalPoint::new(x, y))?,
+            CanvasInteraction::UpdateTransform { frame, elements } => {
+                let elements = elements
+                    .into_iter()
+                    .map(|element| ElementFrame {
+                        element: element.element,
+                        frame: canvas_frame(element.frame),
+                    })
+                    .collect::<Vec<_>>();
+                desktop.canvas().update_transform(frame, &elements)?;
+            }
             CanvasInteraction::CancelTransform => desktop.canvas().cancel_transform(),
             CanvasInteraction::BeginMaskStroke {
                 plane,
@@ -1360,46 +1326,6 @@ const fn mask_plane(plane: MaskPlane) -> CanvasMaskPlane {
     match plane {
         MaskPlane::Text => CanvasMaskPlane::Text,
         MaskPlane::Brush => CanvasMaskPlane::Brush,
-    }
-}
-
-fn hit_target(target: CanvasHitTarget) -> HitTarget {
-    match target {
-        CanvasHitTarget::Element(element) => HitTarget::Element { element },
-        CanvasHitTarget::Handle { element, handle } => HitTarget::Handle {
-            element,
-            handle: match handle {
-                CanvasHandle::NorthWest => Handle::NorthWest,
-                CanvasHandle::North => Handle::North,
-                CanvasHandle::NorthEast => Handle::NorthEast,
-                CanvasHandle::East => Handle::East,
-                CanvasHandle::SouthEast => Handle::SouthEast,
-                CanvasHandle::South => Handle::South,
-                CanvasHandle::SouthWest => Handle::SouthWest,
-                CanvasHandle::West => Handle::West,
-                CanvasHandle::Rotate => Handle::Rotate,
-            },
-        },
-    }
-}
-
-const fn canvas_hit_target(target: HitTarget) -> CanvasHitTarget {
-    match target {
-        HitTarget::Element { element } => CanvasHitTarget::Element(element),
-        HitTarget::Handle { element, handle } => CanvasHitTarget::Handle {
-            element,
-            handle: match handle {
-                Handle::NorthWest => CanvasHandle::NorthWest,
-                Handle::North => CanvasHandle::North,
-                Handle::NorthEast => CanvasHandle::NorthEast,
-                Handle::East => CanvasHandle::East,
-                Handle::SouthEast => CanvasHandle::SouthEast,
-                Handle::South => CanvasHandle::South,
-                Handle::SouthWest => CanvasHandle::SouthWest,
-                Handle::West => CanvasHandle::West,
-                Handle::Rotate => CanvasHandle::Rotate,
-            },
-        },
     }
 }
 

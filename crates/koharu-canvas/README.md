@@ -1,10 +1,10 @@
 # koharu-canvas
 
-`koharu-canvas` is the interactive, WGPU-backed editor viewport for a
-`koharu-scene` snapshot. It draws an editable page, text and image entities,
-masks, selection chrome, and live transform previews into an offscreen texture.
-The application owns the window, surface, scene session, undo history, and
-persistence.
+`koharu-canvas` is the Vello-backed editor viewport for a `koharu-scene`
+snapshot. It draws an editable page, text and image entities, masks, and live
+transform previews into an offscreen texture. React owns hit testing and
+editor controls; the application owns the window, surface, scene session, undo
+history, and persistence.
 
 The canvas is a view and interaction engine, not another scene model. Its
 internal page representation is derived and disposable; committed data remains
@@ -34,8 +34,8 @@ An editable page uses these scene components:
 
 Descendants are drawn in subtree order. Four-point rectangular geometries keep
 their rotation in the editor; arbitrary polygons currently use their
-axis-aligned bounds for hit testing and image placement. The original polygon
-is retained and transformed on commit.
+axis-aligned bounds for React hit testing and image placement. The original
+polygon is retained and transformed on commit.
 
 Page dimensions are converted to physical-size integers for raster resources.
 The current safety ceiling is 32,768 pixels per side and 268,435,456 pixels per
@@ -81,21 +81,15 @@ that may affect the active subtree rebuild its derived page and render caches.
 
 ## Rendering
 
-The render path has three damage-tracked stages:
+The render path has two damage-tracked stages:
 
-1. Resize or recreate the viewport-sized GPU target.
-2. Compose stable page content only when scene data, decoded resources,
-   display mode, text policy, or an interactive preview changes.
-3. Compose inexpensive editor overlays when the camera, selection, handles,
-   guides, cursor, or draft bounds change.
+1. Resize or recreate the Vello GPU target.
+2. Compose page content only when scene data, decoded resources, display mode,
+   camera, text policy, masks, or an interactive preview changes.
 
-Every text block always uses fixed screen-space editor chrome: a translucent
-rose rounded rectangle and a numbered circular indicator at the top-left
-corner. The 32 px indicator is tangent to the outside of the block so it never
-covers text, and its number is antialiased with a platform sans-serif font.
-Selected bounds use the stronger primary rose treatment and expose visible
-resize and rotation handles, except that the numbered indicator owns the
-north-west corner instead of a resize handle.
+Selection outlines, text indicators, guides, cursors, and resize/rotation
+handles are transparent DOM overlays. They no longer invalidate or traverse
+the Vello scene.
 
 Image bytes are read from the snapshot and decoded off the event-loop thread.
 Decoded images use an LRU budget controlled by `CanvasOptions::max_decoded_bytes`.
@@ -113,25 +107,29 @@ overlay when a translation is missing.
 prepared text.
 
 `Canvas::render` returns a borrowed `CanvasFrame` containing an offscreen
-`TextureView`. The host presents that texture to its window surface. A zero-size
-viewport is valid, and `needs_redraw` is true only while a bounded transition is
-active.
+`TextureView`. The host presents that texture with Vello's `TextureBlitter`.
+A zero-size viewport is valid, and `needs_redraw` is true only while a bounded
+transition is active.
 
 ## Interaction and commits
 
-Coordinate conversion, rotated hit testing, handles, move/resize/rotate
-previews, mask painting, and cancellation are owned by the canvas. Persistent
-mutation is owned by the application.
+React owns rotated hit testing, selection policy, handles, and move/resize/
+rotate geometry. The canvas validates and renders absolute preview frames;
+mask painting and coordinate conversion remain native. Persistent mutation is
+owned by the application.
 
-Only text blocks and child image entities participate in editor hit testing.
+Only text blocks and child image entities participate in React editor hit testing.
 Detection-only panel, bubble, and other analysis regions remain scene data for
 pipeline and rendering decisions but cannot be selected or transformed.
 
 Element transforms follow this flow:
 
 ```rust,ignore
-canvas.begin_transform(&selection, target, pointer)?;
-canvas.update_transform(pointer)?;
+canvas.begin_transform(&selection)?;
+canvas.update_transform(
+    frame_number,
+    &[koharu_canvas::ElementFrame { element, frame }],
+)?;
 
 if let Some(commit) = canvas.finish_transform()? {
     let patch = session.snapshot().patch(|edit| {
@@ -145,9 +143,12 @@ if let Some(commit) = canvas.finish_transform()? {
 }
 ```
 
-A `TransformCommit` returns complete transformed `Geometry` values, preserving
-component origin and arbitrary polygon points. The host can include additional
-domain updates in the same atomic patch.
+Each monotonically numbered update must contain the complete selected element
+set. Stale frames are ignored, invalid or partial frames are rejected, and an
+unchanged frame does not trigger Vello work. A `TransformCommit` returns
+complete transformed `Geometry` values, preserving component origin and
+arbitrary polygon points. The host can include additional domain updates in
+the same atomic patch.
 
 Mask strokes return a `MaskCommit`. `encode_png` produces a grayscale PNG that
 the host stores using `AssetRole::new(commit.plane.slot())`. Once the scene
@@ -160,13 +161,12 @@ uncommitted local edits instead of silently discarding them.
 
 - `canvas`: public facade, revision synchronization, damage orchestration
 - `model`: immutable active-page materialization from a scene snapshot
-- `geometry`: camera and coordinate types, frames, hit-test math
-- `transform`: pure move, resize, rotate, preview, and geometry commit logic
+- `geometry`: camera, coordinate, and frame types
+- `transform`: validated absolute previews and geometry commit logic
 - `mask`: copy-on-write tiled grayscale masks and stroke state
 - `resources`: asynchronous decode and byte-budgeted image cache
 - `elements`: renderer-backed text preparation and ordered Vello composition
-- `overlay`: editor chrome geometry and composition
-- `gpu`: offscreen WGPU targets and render passes
+- `gpu`: the offscreen Vello target
 - `damage`: render-stage invalidation
 
 Most behavioral tests are GPU-independent. The real-GPU visual test is ignored

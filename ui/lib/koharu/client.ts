@@ -38,7 +38,6 @@ const EVENT_TYPES = new Set([
   'page_loaded',
   'project_changed',
   'project_closed',
-  'hit_test',
   'view_changed',
   'job_changed',
   'download_changed',
@@ -257,8 +256,6 @@ export function isUiEvent(value: unknown): value is UiEvent {
       )
     case 'project_closed':
       return true
-    case 'hit_test':
-      return typeof value.id === 'number' && (value.target === null || isHitTarget(value.target))
     case 'view_changed':
       return (
         typeof value.zoom === 'number' &&
@@ -418,12 +415,6 @@ function isNumberPair(value: unknown): value is [number, number] {
   return (
     Array.isArray(value) && value.length === 2 && value.every((item) => typeof item === 'number')
   )
-}
-
-function isHitTarget(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.element !== 'string') return false
-  if (value.type === 'element') return true
-  return value.type === 'handle' && typeof value.handle === 'string'
 }
 
 export const koharuClient = new KoharuClient()

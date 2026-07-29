@@ -51,7 +51,6 @@ import {
   useEditorStore,
   type DetectionModel,
   type InpaintingModel,
-  type LaMaHDStrategy,
   type OcrModel,
   type PipelineConfig,
   type ShortcutAction,
@@ -744,7 +743,6 @@ function PipelineModelFields({
   model: PipelineModel
   onChange: (model: PipelineModel) => void
 }) {
-  const { t } = useTranslation()
   switch (model.model) {
     case 'koharu-layout-rfdetr-seg-2xl':
       return (
@@ -778,107 +776,16 @@ function PipelineModelFields({
     case 'paddleocr-vl-1.6':
     case 'manga-ocr':
     case 'baberu-ocr':
-      return null
     case 'aot-inpainting':
-      return (
-        <div className='max-w-48'>
-          <NumberSetting
-            label={t('native.model.maxSide', { defaultValue: 'Maximum side' })}
-            value={model.max_side ?? 2048}
-            min={1}
-            step={1}
-            onChange={(max_side) => onChange({ ...model, max_side })}
-          />
-        </div>
-      )
     case 'lama':
-      return (
-        <div className='grid gap-2 sm:grid-cols-2'>
-          <label className='grid gap-0.5 text-xs'>
-            <span>HD strategy</span>
-            <Select
-              value={model.hd_strategy ?? 'crop'}
-              onValueChange={(hd_strategy) =>
-                onChange({ ...model, hd_strategy: hd_strategy as LaMaHDStrategy })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='original'>Original</SelectItem>
-                <SelectItem value='resize'>Resize</SelectItem>
-                <SelectItem value='crop'>Crop</SelectItem>
-              </SelectContent>
-            </Select>
-          </label>
-          <NumberSetting
-            label='Crop trigger size'
-            value={model.hd_strategy_crop_trigger_size ?? 800}
-            min={1}
-            step={1}
-            onChange={(hd_strategy_crop_trigger_size) =>
-              onChange({ ...model, hd_strategy_crop_trigger_size })
-            }
-          />
-          <NumberSetting
-            label='Crop margin'
-            value={model.hd_strategy_crop_margin ?? 128}
-            min={0}
-            step={1}
-            onChange={(hd_strategy_crop_margin) => onChange({ ...model, hd_strategy_crop_margin })}
-          />
-          <NumberSetting
-            label='Resize limit'
-            value={model.hd_strategy_resize_limit ?? 1280}
-            min={1}
-            step={1}
-            onChange={(hd_strategy_resize_limit) =>
-              onChange({ ...model, hd_strategy_resize_limit })
-            }
-          />
-          <BooleanSetting
-            label='Keep unmasked area'
-            value={model.keep_unmasked_area ?? true}
-            onChange={(keep_unmasked_area) => onChange({ ...model, keep_unmasked_area })}
-          />
-        </div>
-      )
+      return null
     case 'flux2-klein':
       return (
-        <div className='grid gap-2 sm:grid-cols-2'>
+        <div className='grid gap-2'>
           <TextSetting
             label='Prompt'
             value={model.prompt ?? 'Remove the text and reconstruct the background.'}
             onChange={(prompt) => onChange({ ...model, prompt })}
-          />
-          <OptionalNumberSetting
-            label='Mask crop padding'
-            value={model.padding_mask_crop ?? null}
-            min={0}
-            step={1}
-            onChange={(padding_mask_crop) => onChange({ ...model, padding_mask_crop })}
-          />
-          <NumberSetting
-            label='Strength'
-            value={model.strength ?? 0.8}
-            min={0.01}
-            max={1}
-            step={0.01}
-            onChange={(strength) => onChange({ ...model, strength })}
-          />
-          <NumberSetting
-            label='Inference steps'
-            value={model.num_inference_steps ?? 4}
-            min={1}
-            step={1}
-            onChange={(num_inference_steps) => onChange({ ...model, num_inference_steps })}
-          />
-          <NumberSetting
-            label='Seed'
-            value={model.seed ?? -1}
-            step={1}
-            onChange={(seed) => onChange({ ...model, seed })}
           />
         </div>
       )
@@ -894,50 +801,6 @@ function PipelineModelFields({
             label='Negative prompt'
             value={model.negative_prompt ?? ''}
             onChange={(negative_prompt) => onChange({ ...model, negative_prompt })}
-          />
-          <NumberSetting
-            label='Resolution'
-            value={model.resolution ?? 512}
-            min={512}
-            max={1024}
-            step={512}
-            onChange={(resolution) => onChange({ ...model, resolution })}
-          />
-          <NumberSetting
-            label='Mask dilation'
-            value={model.mask_dilation ?? 0}
-            min={0}
-            max={255}
-            step={1}
-            onChange={(mask_dilation) => onChange({ ...model, mask_dilation })}
-          />
-          <NumberSetting
-            label='Inference steps'
-            value={model.num_inference_steps ?? 30}
-            min={1}
-            step={1}
-            onChange={(num_inference_steps) => onChange({ ...model, num_inference_steps })}
-          />
-          <NumberSetting
-            label='Guidance scale'
-            value={model.guidance_scale ?? 8}
-            min={0.01}
-            step={0.1}
-            onChange={(guidance_scale) => onChange({ ...model, guidance_scale })}
-          />
-          <NumberSetting
-            label='Strength'
-            value={model.strength ?? 0.999}
-            min={0.001}
-            max={0.999}
-            step={0.001}
-            onChange={(strength) => onChange({ ...model, strength })}
-          />
-          <NumberSetting
-            label='Seed'
-            value={model.seed ?? -1}
-            step={1}
-            onChange={(seed) => onChange({ ...model, seed })}
           />
         </div>
       )
@@ -1170,39 +1033,6 @@ function TextSetting({
   )
 }
 
-function NumberSetting({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string
-  value: number
-  min?: number
-  max?: number
-  step?: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <label className='grid gap-0.5 text-xs'>
-      <span>{label}</span>
-      <Input
-        type='number'
-        value={displayNumber(value, step)}
-        min={min}
-        max={max}
-        step={step}
-        onChange={(event) => {
-          const next = Number(event.currentTarget.value)
-          if (Number.isFinite(next)) onChange(next)
-        }}
-      />
-    </label>
-  )
-}
-
 function OptionalNumberSetting({
   label,
   value,
@@ -1275,24 +1105,13 @@ function defaultPipelineModel(model: PipelineModel['model']): PipelineModel {
     case 'baberu-ocr':
       return { model }
     case 'lama':
-      return {
-        model,
-        hd_strategy: 'crop',
-        hd_strategy_crop_trigger_size: 800,
-        hd_strategy_crop_margin: 128,
-        hd_strategy_resize_limit: 1280,
-        keep_unmasked_area: true,
-      }
+      return { model }
     case 'aot-inpainting':
-      return { model, max_side: 2048 }
+      return { model }
     case 'flux2-klein':
       return {
         model,
         prompt: 'Remove the text and reconstruct the background.',
-        padding_mask_crop: null,
-        strength: 0.8,
-        num_inference_steps: 4,
-        seed: -1,
       }
     case 'rorem-mixed':
       return { model }

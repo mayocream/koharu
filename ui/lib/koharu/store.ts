@@ -282,8 +282,6 @@ export function dispatchEvent(event: UiEvent): boolean {
         return {
           notice: `Removed ${event.blobs} unused blobs (${formatBytes(event.bytes)}).`,
         }
-      case 'hit_test':
-        return {}
     }
   })
   return synchronize

@@ -207,28 +207,13 @@ pub enum CanvasInteraction {
     SetDisplay {
         display: CanvasDisplay,
     },
-    SetOverlays {
-        selected: Vec<EntityId>,
-        hovered: Option<EntityId>,
-        draft: Option<Frame>,
-        guides: Vec<CanvasGuide>,
-        brush_cursor: Option<CanvasBrushCursor>,
-    },
-    HitTest {
-        #[specta(type = f64)]
-        id: u64,
-        x: f64,
-        y: f64,
-    },
     BeginTransform {
         elements: Vec<EntityId>,
-        target: HitTarget,
-        x: f64,
-        y: f64,
     },
     UpdateTransform {
-        x: f64,
-        y: f64,
+        #[specta(type = f64)]
+        frame: u64,
+        elements: Vec<TransformFrame>,
     },
     CancelTransform,
     BeginMaskStroke {
@@ -244,6 +229,12 @@ pub enum CanvasInteraction {
     },
     FinishMaskStroke,
     CancelMaskStroke,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Type)]
+pub struct TransformFrame {
+    pub element: EntityId,
+    pub frame: Frame,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
@@ -266,20 +257,6 @@ pub enum CanvasPageView {
 pub struct CanvasMaskOverlay {
     pub tint: [u8; 4],
     pub opacity: f32,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-#[serde(tag = "axis", content = "position", rename_all = "snake_case")]
-pub enum CanvasGuide {
-    Horizontal(f64),
-    Vertical(f64),
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct CanvasBrushCursor {
-    pub x: f64,
-    pub y: f64,
-    pub diameter: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
@@ -325,11 +302,6 @@ pub enum UiEvent {
     },
     ProjectChanged(Box<ProjectDelta>),
     ProjectClosed,
-    HitTest {
-        #[specta(type = f64)]
-        id: u64,
-        target: Option<HitTarget>,
-    },
     ViewChanged {
         zoom: f64,
         translation: [f64; 2],
@@ -688,27 +660,6 @@ pub struct ProjectDelta {
     pub can_redo: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum HitTarget {
-    Element { element: EntityId },
-    Handle { element: EntityId, handle: Handle },
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum Handle {
-    NorthWest,
-    North,
-    NorthEast,
-    East,
-    SouthEast,
-    South,
-    SouthWest,
-    West,
-    Rotate,
-}
-
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum JobStatus {
@@ -848,6 +799,34 @@ mod tests {
             BridgeMessage::Interaction {
                 interaction: CanvasInteraction::FitWindow
             }
+        ));
+    }
+
+    #[test]
+    fn transform_interactions_carry_complete_numbered_frames() {
+        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
+            "type": "interaction",
+            "interaction": {
+                "type": "update_transform",
+                "frame": 7,
+                "elements": [{
+                    "element": "018f3b28-7fd8-7d5a-a833-6cb8637e6c01",
+                    "frame": {
+                        "x": 12.0,
+                        "y": 24.0,
+                        "width": 80.0,
+                        "height": 40.0,
+                        "angle_degrees": 15.0
+                    }
+                }]
+            }
+        }))
+        .unwrap();
+        assert!(matches!(
+            message,
+            BridgeMessage::Interaction {
+                interaction: CanvasInteraction::UpdateTransform { frame: 7, ref elements }
+            } if elements.len() == 1 && elements[0].frame.angle_degrees == 15.0
         ));
     }
 

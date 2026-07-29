@@ -3731,9 +3731,7 @@ dependencies = [
 name = "koharu-canvas"
 version = "0.62.0-alpha.1"
 dependencies = [
- "ab_glyph",
  "anyhow",
- "bytemuck",
  "image 0.25.10",
  "koharu-renderer",
  "koharu-scene",
@@ -3773,7 +3771,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
- "wgpu",
+ "vello",
  "winit",
  "wry",
 ]

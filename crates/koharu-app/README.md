@@ -32,7 +32,7 @@ that do not belong in a document: which page is visible, camera state, running
 jobs, pending mask encodes, settings UI, and undo grouping.
 
 `koharu-app` does not own model implementations, rendering rules, GPU resource
-policy, SQLite details, or canvas gesture algorithms.
+policy, SQLite details, or React gesture algorithms.
 
 ## Project aggregate
 
@@ -98,8 +98,10 @@ cargo run -p koharu-app --bin generate
 
 Durable commands include the UI's base `Revision`. A stale command is rejected
 with the current revision; the client discards queued edits and requests a full
-synchronization. Interactions such as hit testing, camera movement, and live
-transform previews are ephemeral and do not advance the scene revision.
+synchronization. Interactions such as camera movement and live transform
+previews are ephemeral and do not advance the scene revision. React sends
+every move, resize, and rotation sample as a monotonically numbered, complete
+set of absolute frames; Rust rejects malformed sets and ignores stale frames.
 
 The main `SceneSession` is refreshed before each command and whenever a
 background writer reports progress. Scene change sets drive three independent

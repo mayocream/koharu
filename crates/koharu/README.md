@@ -15,7 +15,7 @@ or Tauri command layer.
 
 ```text
 React UI
-    tools, gesture policy, selection, dialogs, text input, panels
+    tools, hit testing, Moveable controls, gestures, selection, dialogs, panels
        | small typed intents              ^ state/job events
        v                                  |
 koharu::App  --------------------------------------------------+
@@ -60,9 +60,9 @@ DAG, repository layer, service container, event bus, or application database.
 | Crate | How `koharu` uses it |
 | --- | --- |
 | `koharu-app` | Owns the headless desktop protocol and active-project state, including scene command batching, revision history, projections, and stable errors. |
-| `koharu-desktop` | Runs Winit/Wry, owns the canvas and shared WGPU context, and delivers native/UI events. |
+| `koharu-desktop` | Runs Winit/Wry, owns the canvas and shared Vello/WGPU context, and delivers native/UI events. |
 | `koharu-scene` | Provides the only project state, SQLite file, commands, revisions, history, and blobs. |
-| `koharu-canvas` | Handles the visible page, camera geometry, hit testing, overlays, and immediate mask editing. |
+| `koharu-canvas` | Vello-renders the visible page, validates transform previews, and handles immediate mask editing. |
 | `koharu-renderer` | Renders canvas text transitively and produces headless raster exports and thumbnails. |
 | `koharu-pipeline` | Owns model selection, scheduling, progress, cancellation, and model lifetime. |
 | `koharu-config` | Supplies live typed configuration handles. |
@@ -84,8 +84,8 @@ There is one authority for each kind of state:
 | State | Owner |
 | --- | --- |
 | Project pages, elements, images, masks, text, and history | active `Session` |
-| Visible page pixels, camera, hover, transform geometry/state, previews, and mask strokes | `koharu-canvas` |
-| Tools, pointer capture, gesture policy, selection, text-field drafts, panels, and dialogs | React |
+| Visible page pixels, camera, validated preview state, and mask strokes | `koharu-canvas` |
+| Tools, hit testing, Moveable controls, pointer capture, gesture geometry, selection, overlays, text-field drafts, panels, and dialogs | React |
 | Pipeline models and loaded weights | `koharu-pipeline` on the background runtime |
 | Runtime settings | typed `koharu-config::Config<T>` handles |
 | Credentials | platform credential store |
@@ -166,9 +166,9 @@ never sends raw `koharu_scene::Commands`, attachment maps, Revision payloads,
 SQL, or model calls.
 
 `CanvasInteraction` contains non-durable presentation operations such as view
-changes, selection/hover overlays, hit tests, transform begin/update/cancel,
-pointer samples, and mask-stroke begin/extend/finish. These do not require a
-scene revision or create history. `FinishTransform` is a revision-aware command:
+changes, numbered transform-frame begin/update/cancel, and mask-stroke
+begin/extend/finish. These do not require a scene revision or create history.
+`FinishTransform` is a revision-aware command:
 it takes the canvas-owned result and commits it through the normal application
 path.
 
@@ -206,9 +206,9 @@ across an in-process webview.
 
 Every durable interactive edit follows one path:
 
-1. React finishes or debounces a gesture and sends a typed intent with its base
-   revision. During a transform, React only forwards physical pointer positions;
-   the canvas owns the preview geometry.
+1. React computes local gesture geometry and sends every animation frame over
+   IPC as a complete, absolute, monotonically numbered transform set. Rust
+   validates and renders the preview without advancing the scene revision.
 2. `App` calls `Session::refresh` first. Any background commits are synchronized
    to the canvas and emitted to React.
 3. `App` checks the request revision and referenced page/element values.
@@ -305,9 +305,10 @@ format in this crate.
 ## Rendering, thumbnails, and export
 
 The main editor never receives rasterized text or page images in React.
-`koharu-canvas` reads the active session and renders beneath the transparent DOM
-workspace. React's old DOM image, text-sprite, and mask-canvas composition paths
-must be removed; the center workspace becomes an interaction surface only.
+`koharu-canvas` reads the active session and Vello-renders beneath the
+transparent DOM workspace. React does not compose page images, text sprites, or
+masks; the center workspace contains only transparent interaction chrome and
+Moveable controls.
 
 Small DOM images are still useful for navigator thumbnails and image pickers.
 They use a read-only Wry custom resource protocol rather than JSON or base64:
@@ -489,14 +490,14 @@ on a WebView or silently skip because no GPU adapter was found.
 - `cargo test -p koharu-desktop --lib` verifies IPC decoding, frontend routing,
   viewport conversion, and native-operation selection without creating a
   window or WebView.
-- `cargo test -p koharu-canvas --lib` verifies move, rotated resize, rotation,
-  geometry, hit testing, masks, and other CPU state. The real renderer test is
+- `cargo test -p koharu-canvas --lib` verifies absolute transform validation,
+  geometry, masks, and other CPU state. The real renderer test is
   marked ignored and probes pixels after move, resize, and rotation previews;
   run it
   explicitly with `cargo test -p koharu-canvas -- --ignored` on a machine with
   a GPU. It fails if its requested adapter cannot be created.
-- `bun run test:ui` uses a fake native client to verify React state,
-  interactions, and protocol messages without WebView2.
+- `bun run test:ui` uses a fake native client to verify React state, local hit
+  testing, interaction frames, and protocol messages without WebView2.
 - Background tests use temporary `.khr` files and fake processors to verify
   refresh ordering, partial pipeline commits, cancellation, and writer
   conflicts.

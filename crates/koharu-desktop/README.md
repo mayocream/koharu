@@ -1,9 +1,10 @@
 # koharu-desktop
 
 `koharu-desktop` is the native host for Koharu's Rust-owned editor viewport. It
-combines a Winit window, one WGPU context, a transparent Wry child webview, and
-`koharu-canvas`. React renders the application UI while Rust renders the page
-and editor chrome beneath the transparent canvas rectangle.
+combines a Winit window, one Vello/WGPU context, a transparent Wry child
+webview, and `koharu-canvas`. React renders the application UI and editor
+controls while Rust renders page content beneath the transparent canvas
+rectangle.
 
 The crate is the production version of the successful Wry viewport experiment.
 The experimental `pocs/` workspace is intentionally gone; the runnable smoke
@@ -13,16 +14,16 @@ example in this crate is now the composition test.
 
 ```text
 trusted React UI in transparent Wry child
-    tools, gesture policy, panels, keyboard and text input
+    hit testing, Moveable controls, gestures, panels, keyboard and text input
         | small JSON messages        ^ application events
         v                            |
 application implementing Application
     SceneSession, patches, pipeline and UI policy
-        | snapshot + change set      ^ hit tests / mask snapshots
+        | snapshot + change set      ^ transform / mask snapshots
         v                            |
 koharu-desktop ---------------- koharu-canvas
-    Winit loop, Wry bridge,       scene drawing, overlays,
-    shared WGPU device,           coordinate geometry, masks
+    Winit loop, Wry bridge,       Vello scene drawing,
+    shared GPU device,            preview validation, masks
     surface presentation
         |
         v
@@ -32,7 +33,7 @@ operating-system compositor
 `koharu-desktop` owns:
 
 - the native window, child webview, WGPU surface, adapter, device, and queue;
-- the final canvas-texture-to-swapchain pass;
+- the final Vello `TextureBlitter` canvas-to-swapchain pass;
 - webview sizing, device-pixel conversion, redraw coalescing, and surface
   recovery;
 - a minimal trusted JavaScript bridge;
@@ -53,17 +54,16 @@ surface below. The operating system composes both native surfaces. Browser
 pixels are not captured, copied, uploaded, or sampled by WGPU.
 
 The web UI reports the editor element's logical `getBoundingClientRect()` and
-`devicePixelRatio`. `koharu-desktop` validates them, converts them to physical
-pixels once, and gives `koharu-canvas` a target of exactly that size. The final
-pass places the canvas texture using a WGPU viewport and scissor rectangle. On
-Windows the parent disables `WS_CLIPCHILDREN`, which is required for the WGPU
-surface to remain visible beneath transparent regions of the WebView2 child.
+`devicePixelRatio`. `koharu-desktop` validates them and converts them to
+physical pixels once. Vello renders a full-window target while clipping and
+offsetting the page to that viewport; `TextureBlitter` copies the target to the
+swapchain without a custom presentation shader. On Windows the parent disables
+`WS_CLIPCHILDREN`, which is required for the GPU surface to remain visible
+beneath transparent regions of the WebView2 child.
 
 The webview and parent are always transparent; this is a composition invariant,
-not a configurable appearance option. The canvas texture contains
-display-referred sRGB in `Rgba8Unorm`. The presenter converts it to linear while
-writing an sRGB swapchain so canvas and export colors do not receive a second
-gamma transform.
+not a configurable appearance option. The Vello target uses `Rgba8Unorm`, and
+the desktop prefers a matching unorm swapchain format for the blit.
 
 ## Rust API
 
@@ -114,7 +114,7 @@ koharu_desktop::run(
 ```
 
 Common operations are directly available on `DesktopContext`: `show_page`,
-`sync`, `clear_page`, `set_view`, `set_overlays`, `submit_mask`, and `emit`.
+`sync`, `clear_page`, `set_view`, `submit_mask`, and `emit`.
 `canvas()` exposes less common `koharu-canvas` operations without duplicating
 wrappers; borrowing it also schedules a frame so a mutation is not silently
 left unpresented. `DesktopHandle` is cloneable and may be used by worker threads
@@ -175,13 +175,13 @@ that page receives the native bridge.
 
 - The desktop creates exactly one adapter, device, and queue. The same
   `Arc<Device>` and `Arc<Queue>` are given to `koharu-canvas`.
-- A frame is requested only after scene, view, overlay, resource, mask, resize,
+- A frame is requested only after scene, view, preview, resource, mask, resize,
   or bounded-transition work. Multiple requests before the next event-loop wake
   collapse into one Winit redraw.
 - The event loop uses `ControlFlow::Wait`; an idle editor consumes no render
   loop CPU.
-- The canvas target is only the physical editor rectangle, while the cheap
-  final pass renders it into the full window surface.
+- Vello draws one full-window target clipped to the physical editor rectangle;
+  the final pass is a single texture blit.
 - Presentation has no GPU readback, CPU page composition, browser-frame copy,
   HTTP image transfer, or second device.
 - Resize and a zero-sized/minimized window suspend presentation without

@@ -2,11 +2,12 @@
 //!
 //! The crate is split into three layers:
 //!
-//! - `geometry`, `transform`, and most of `mask` are pure Rust interaction
-//!   logic and should carry most behavioral tests;
+//! - `geometry`, `transform`, and most of `mask` validate UI input and carry
+//!   most behavioral tests;
 //! - `elements` and `resources` turn committed scene data into reusable Vello
 //!   drawing descriptions;
-//! - `gpu` and `overlay` contain the WGPU-specific texture and shader code.
+//! - `gpu` contains the Vello target and the small amount of unavoidable WGPU
+//!   texture management.
 //!
 //! `Canvas` is the facade connecting those layers. It owns no window or WGPU
 //! surface: [`Canvas::render`] returns an offscreen texture for the desktop host
@@ -20,7 +21,6 @@ mod geometry;
 mod gpu;
 mod mask;
 mod model;
-mod overlay;
 mod resources;
 mod state;
 mod transform;
@@ -32,16 +32,16 @@ pub use error::{Error, Result};
 pub use geometry::{Camera, Frame, PagePoint, PhysicalPoint, PhysicalSize, PixelRect, PixelSize};
 pub use mask::MaskCommit;
 pub use state::{
-    BaseImage, Brush, BrushCursor, CanvasDiagnostic, CanvasGpu, CanvasOptions, Color, DisplayState,
-    ElementId, ElementPreview, Guide, Handle, HitTarget, MaskOverlay, MaskPlane, OverlayState,
-    PageId, PageView, StrokeMode, TransformCommit, ViewState,
+    BaseImage, Brush, CanvasDiagnostic, CanvasGpu, CanvasOptions, Color, DisplayState,
+    ElementFrame, ElementId, ElementPreview, MaskOverlay, MaskPlane, PageId, PageView, StrokeMode,
+    TransformCommit, ViewState,
 };
 
 use elements::{ElementSceneContext, ElementScenes};
-use geometry::{frame_contains, frame_corners};
+#[cfg(test)]
+use geometry::frame_corners;
 use gpu::GpuRenderer;
 use mask::{ActiveStroke, MaskState};
 use model::{CanvasElement, CanvasPage};
-use overlay::{IndicatorFont, OverlayGeometry, OverlayRenderer};
 use resources::{ResourceEvent, ResourceKind, Resources};
 use transform::ActiveTransform;

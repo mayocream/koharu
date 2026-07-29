@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use koharu_renderer::RenderTheme;
 use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag};
 
-use crate::{Camera, Frame, PhysicalPoint, PhysicalSize};
+use crate::{Camera, Frame, PhysicalSize};
 
 pub type PageId = EntityId;
 pub type ElementId = EntityId;
@@ -112,12 +112,6 @@ pub struct ViewState {
     pub display: DisplayState,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Guide {
-    Horizontal(f64),
-    Vertical(f64),
-}
-
 /// One transient frame produced while an element transform is active.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElementPreview {
@@ -126,40 +120,14 @@ pub struct ElementPreview {
     pub geometry: Geometry,
 }
 
+/// Absolute page-space frame supplied by the React interaction layer.
+///
+/// Rust validates every frame and derives the corresponding scene geometry;
+/// the web UI remains responsible for hit testing and control semantics.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BrushCursor {
-    pub point: PhysicalPoint,
-    pub diameter: f32,
-}
-
-/// Editor chrome supplied by the UI. Transform previews are intentionally not
-/// included because `Canvas` owns their lifecycle and geometry.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct OverlayState {
-    pub selected: Vec<ElementId>,
-    pub hovered: Option<ElementId>,
-    pub guides: Vec<Guide>,
-    pub draft: Option<Frame>,
-    pub brush_cursor: Option<BrushCursor>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Handle {
-    NorthWest,
-    North,
-    NorthEast,
-    East,
-    SouthEast,
-    South,
-    SouthWest,
-    West,
-    Rotate,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HitTarget {
-    Handle { element: ElementId, handle: Handle },
-    Element(ElementId),
+pub struct ElementFrame {
+    pub element: ElementId,
+    pub frame: Frame,
 }
 
 /// Final transform result returned to the application for one atomic commit.
