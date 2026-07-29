@@ -15,6 +15,8 @@ use crate::{
 
 const MAX_SURFACE_DIMENSION: u32 = 32_768;
 const MAX_SURFACE_PIXELS: u64 = 268_435_456;
+const FOREGROUND_COLOR_EXTENSION: &str = "dev.koharu.typography.foreground-color";
+const ANGLE_DEGREES_EXTENSION: &str = "dev.koharu.typography.angle-degrees";
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum RenderDependency {
@@ -197,6 +199,8 @@ impl RenderPlan {
                 font_size: typography.as_ref().and_then(|value| value.size),
                 alignment,
                 writing_mode,
+                foreground_color: resolve_foreground_color(typography.as_ref()),
+                angle_degrees: resolve_angle_degrees(typography.as_ref()),
             }));
         }
 
@@ -264,6 +268,8 @@ pub(crate) struct TextLayer {
     pub font_size: Option<f32>,
     pub alignment: TextAlign,
     pub writing_mode: WritingMode,
+    pub foreground_color: Option<[u8; 4]>,
+    pub angle_degrees: f32,
 }
 
 fn validate_request(request: &RenderRequest) -> Result<()> {
@@ -340,14 +346,14 @@ fn resolve_writing_mode(
     typography: Option<&Typography>,
     analysis: Option<&OcrAnalysis>,
 ) -> WritingMode {
+    if !is_cjk_text(text) {
+        return WritingMode::Horizontal;
+    }
     if let Some(mode) = typography.and_then(|value| value.writing_mode) {
         return match mode {
             koharu_scene::WritingMode::Horizontal => WritingMode::Horizontal,
             koharu_scene::WritingMode::Vertical => WritingMode::VerticalRl,
         };
-    }
-    if !is_cjk_text(text) {
-        return WritingMode::Horizontal;
     }
     match analysis.map(|value| value.direction) {
         Some(TextDirection::Vertical) => WritingMode::VerticalRl,
@@ -355,6 +361,24 @@ fn resolve_writing_mode(
         Some(TextDirection::Auto) | None if bounds.height > bounds.width => WritingMode::VerticalRl,
         Some(TextDirection::Auto) | None => WritingMode::Horizontal,
     }
+}
+
+fn resolve_foreground_color(typography: Option<&Typography>) -> Option<[u8; 4]> {
+    let value = typography?.extensions.get(FOREGROUND_COLOR_EXTENSION)?;
+    let hex = value.strip_prefix('#')?;
+    if hex.len() != 6 {
+        return None;
+    }
+    let rgb = u32::from_str_radix(hex, 16).ok()?;
+    Some([(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, u8::MAX])
+}
+
+fn resolve_angle_degrees(typography: Option<&Typography>) -> f32 {
+    typography
+        .and_then(|value| value.extensions.get(ANGLE_DEGREES_EXTENSION))
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite())
+        .unwrap_or(0.0)
 }
 
 fn resolve_alignment(alignment: Option<TextAlignment>, rtl: bool) -> TextAlign {
@@ -436,7 +460,12 @@ mod tests {
                         size: Some(18.0),
                         alignment: Some(TextAlignment::Start),
                         writing_mode: None,
-                        extensions: Default::default(),
+                        extensions: [
+                            (FOREGROUND_COLOR_EXTENSION.to_owned(), "#123456".to_owned()),
+                            (ANGLE_DEGREES_EXTENSION.to_owned(), "12.5".to_owned()),
+                        ]
+                        .into_iter()
+                        .collect(),
                     },
                 )?;
                 let relation = edit.add_relation(
@@ -475,6 +504,8 @@ mod tests {
         assert_eq!(text.language.as_ref().unwrap().as_str(), "ar");
         assert_eq!(text.alignment, TextAlign::Right);
         assert_eq!(text.writing_mode, WritingMode::Horizontal);
+        assert_eq!(text.foreground_color, Some([0x12, 0x34, 0x56, 0xff]));
+        assert_eq!(text.angle_degrees, 12.5);
         assert!((text.bounds.x - 20.0).abs() < 1e-5);
         assert!((text.bounds.y - 30.0).abs() < 1e-5);
         assert!((text.bounds.width - 100.0).abs() < 1e-5);
@@ -523,5 +554,56 @@ mod tests {
 
         assert!(plan.layers.is_empty());
         assert!(plan.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn writing_mode_is_only_applied_to_cjk_text() {
+        let typography = Typography {
+            origin: Origin::User,
+            preferred_font: None,
+            size: None,
+            alignment: None,
+            writing_mode: Some(koharu_scene::WritingMode::Vertical),
+            extensions: Default::default(),
+        };
+        let bounds = LayoutBox {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 80.0,
+        };
+
+        assert_eq!(
+            resolve_writing_mode("Latin", bounds, Some(&typography), None),
+            WritingMode::Horizontal
+        );
+        assert_eq!(
+            resolve_writing_mode("日本語", bounds, Some(&typography), None),
+            WritingMode::VerticalRl
+        );
+        assert_eq!(
+            resolve_writing_mode("한국어", bounds, Some(&typography), None),
+            WritingMode::VerticalRl
+        );
+    }
+
+    #[test]
+    fn invalid_typography_extensions_use_renderer_defaults() {
+        let typography = Typography {
+            origin: Origin::User,
+            preferred_font: None,
+            size: None,
+            alignment: None,
+            writing_mode: None,
+            extensions: [
+                (FOREGROUND_COLOR_EXTENSION.to_owned(), "white".to_owned()),
+                (ANGLE_DEGREES_EXTENSION.to_owned(), "NaN".to_owned()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(resolve_foreground_color(Some(&typography)), None);
+        assert_eq!(resolve_angle_degrees(Some(&typography)), 0.0);
     }
 }

@@ -341,9 +341,22 @@ fn prepare_text(
     );
     x += layout.placement_offset_x();
     y += layout.placement_offset_y();
-    let transform = Affine::translate((f64::from(x), f64::from(y)));
+    let layout_rect = Rect::new(
+        f64::from(x),
+        f64::from(y),
+        f64::from(x + layout.width),
+        f64::from(y + layout.height),
+    );
+    let angle = f64::from(layer.angle_degrees).to_radians();
+    let center = layout_rect.center();
+    let rotation = Affine::rotate_about(angle, center);
+    let transform =
+        Affine::translate((f64::from(x), f64::from(y))).then_rotate_about(angle, center);
     let options = RenderOptions {
-        color: with_alpha(theme.text_color, layer.opacity),
+        color: with_alpha(
+            layer.foreground_color.unwrap_or(theme.text_color),
+            layer.opacity,
+        ),
         font_size: layout.font_size,
         stroke: None,
         ..RenderOptions::default()
@@ -351,7 +364,7 @@ fn prepare_text(
     let mut scene = Scene::new();
     scene.push_clip_layer(
         Fill::NonZero,
-        Affine::IDENTITY,
+        rotation,
         &Rect::new(
             f64::from(bounds.x),
             f64::from(bounds.y),
@@ -379,6 +392,7 @@ fn prepare_text(
         DrawStyle::Fill,
     );
     scene.pop_layer();
+    let rendered_bounds = rotation.transform_rect_bbox(layout_rect);
     let mut diagnostics = Vec::new();
     if layout.font_size + f32::EPSILON < theme.minimum_font_size {
         diagnostics.push(RenderDiagnostic::TextBelowReadableSize {
@@ -402,10 +416,10 @@ fn prepare_text(
             entity: layer.entity,
             kind: RenderedEntityKind::Text,
             bounds: RenderBounds {
-                x,
-                y,
-                width: layout.width,
-                height: layout.height,
+                x: rendered_bounds.x0 as f32,
+                y: rendered_bounds.y0 as f32,
+                width: rendered_bounds.width() as f32,
+                height: rendered_bounds.height() as f32,
             },
             font_size: Some(layout.font_size),
         },
@@ -571,5 +585,53 @@ mod tests {
                 minimum_font_size,
             } if *found == entity && *font_size == 8.0 && *minimum_font_size == 9.0
         )));
+    }
+
+    #[test]
+    fn preparation_rotates_text_and_reported_bounds() {
+        let (snapshot, plan, entity) = text_fixture(240.0, 120.0, "Rotated text", 18.0);
+        let theme = RenderTheme {
+            fit_text: false,
+            text_inset: [0.0; 4],
+            ..RenderTheme::default()
+        };
+        let resources = RenderResources::new();
+        let baseline = PreparedPage::prepare(&plan, &snapshot, &resources, &theme).unwrap();
+        let baseline_bounds = baseline
+            .entities()
+            .iter()
+            .find(|rendered| rendered.entity == entity)
+            .unwrap()
+            .bounds;
+
+        let mut rotated_plan = plan.clone();
+        let Layer::Text(layer) = &mut rotated_plan.layers[0] else {
+            panic!("expected a text layer");
+        };
+        layer.angle_degrees = 90.0;
+        let rotated = PreparedPage::prepare(&rotated_plan, &snapshot, &resources, &theme).unwrap();
+        let rotated_bounds = rotated
+            .entities()
+            .iter()
+            .find(|rendered| rendered.entity == entity)
+            .unwrap()
+            .bounds;
+
+        assert!((rotated_bounds.width - baseline_bounds.height).abs() < 1e-4);
+        assert!((rotated_bounds.height - baseline_bounds.width).abs() < 1e-4);
+        assert!(
+            (rotated_bounds.x + rotated_bounds.width * 0.5
+                - baseline_bounds.x
+                - baseline_bounds.width * 0.5)
+                .abs()
+                < 1e-4
+        );
+        assert!(
+            (rotated_bounds.y + rotated_bounds.height * 0.5
+                - baseline_bounds.y
+                - baseline_bounds.height * 0.5)
+                .abs()
+                < 1e-4
+        );
     }
 }
