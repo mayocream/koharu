@@ -15,12 +15,6 @@ fn construction_does_not_load_models() {
             .filter(|status| status.active_configuration)
             .all(|status| matches!(status.load, LoadState::Unloaded | LoadState::NotRequired))
     );
-    assert!(
-        pipeline
-            .model_status()
-            .iter()
-            .all(|status| !matches!(status.download, DownloadState::Checking))
-    );
 }
 
 #[test]
@@ -117,14 +111,6 @@ struct ConcurrentProcessor {
 impl Processor for ConcurrentProcessor {
     fn spec(&self) -> &ProcessorSpec {
         &self.spec
-    }
-
-    fn is_downloaded(&self) -> bool {
-        true
-    }
-
-    async fn ensure_downloaded(&self, _: &DownloadContext) -> Result<()> {
-        Ok(())
     }
 
     async fn ensure_loaded(&self, _: &LoadContext) -> Result<()> {

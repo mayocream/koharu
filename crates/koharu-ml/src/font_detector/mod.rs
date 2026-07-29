@@ -28,19 +28,6 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
-    #[must_use]
-    pub fn is_downloaded() -> bool {
-        [WEIGHTS, LABELS]
-            .into_iter()
-            .all(koharu_runtime::package::huggingface::is_resolved)
-    }
-
-    pub async fn download() -> Result<()> {
-        tokio::try_join!(huggingface::resolve(WEIGHTS), huggingface::resolve(LABELS),)
-            .context("failed to download YuzuMarker font detector assets")?;
-        Ok(())
-    }
-
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = huggingface::resolve(WEIGHTS)

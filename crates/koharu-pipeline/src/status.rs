@@ -16,17 +16,6 @@ pub struct ConfigRevision(pub u64);
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
-pub enum DownloadState {
-    Checking,
-    Missing,
-    Downloading { completed: u64, total: Option<u64> },
-    Downloaded,
-    Failed { message: String },
-    NotRequired,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "state", rename_all = "snake_case")]
 pub enum LoadState {
     Unloaded,
     WaitingForMemory,
@@ -44,7 +33,6 @@ pub struct ModelStatus {
     pub stage: Stage,
     pub model: String,
     pub active_configuration: bool,
-    pub download: DownloadState,
     pub load: LoadState,
 }
 
@@ -88,16 +76,6 @@ impl ModelStatusHub {
                     stage,
                     model,
                     active_configuration: true,
-                    download: retained.map_or_else(
-                        || {
-                            if local {
-                                DownloadState::Checking
-                            } else {
-                                DownloadState::NotRequired
-                            }
-                        },
-                        |status| status.download.clone(),
-                    ),
                     load: retained.map_or_else(
                         || {
                             if local {
@@ -112,10 +90,6 @@ impl ModelStatusHub {
             );
         }
         self.publish(&values);
-    }
-
-    pub(crate) fn download(&self, revision: ConfigRevision, stage: Stage, state: DownloadState) {
-        self.update(revision, stage, |status| status.download = state);
     }
 
     pub(crate) fn load(&self, revision: ConfigRevision, stage: Stage, state: LoadState) {

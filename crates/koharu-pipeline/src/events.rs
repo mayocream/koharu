@@ -63,17 +63,6 @@ pub enum PipelineEvent {
         base: Revision,
         stages: Vec<Stage>,
     },
-    ModelDownloadStarted {
-        generation: ConfigRevision,
-        stage: Stage,
-        model: String,
-    },
-    ModelDownloadFinished {
-        generation: ConfigRevision,
-        stage: Stage,
-        model: String,
-        elapsed: std::time::Duration,
-    },
     ModelLoadStarted {
         run: RunId,
         stage: Stage,

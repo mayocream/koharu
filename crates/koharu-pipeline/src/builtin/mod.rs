@@ -6,7 +6,7 @@ mod typography;
 
 use std::sync::Arc;
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use koharu_scene::{Generation, ProducerId, SceneEdit, ScenePatch};
 
@@ -16,10 +16,7 @@ pub use inpainting::{
 };
 pub use ocr::{BaberuOcrConfig, MangaOcrConfig, PaddleOcrVl1_6Config};
 
-use crate::{
-    ConfiguredNode, DownloadContext, LoadContext, NodeInput, NodeOutput, Processor, ProcessorSpec,
-    Stage,
-};
+use crate::{ConfiguredNode, LoadContext, NodeInput, NodeOutput, Processor, ProcessorSpec, Stage};
 
 pub(crate) fn build(
     node: &ConfiguredNode,
@@ -33,7 +30,6 @@ pub(crate) fn build(
         },
         node: node.clone(),
         device,
-        downloaded: tokio::sync::OnceCell::new(),
         loaded: tokio::sync::Mutex::new(None),
     }))
 }
@@ -42,7 +38,6 @@ struct BuiltinProcessor {
     spec: ProcessorSpec,
     node: ConfiguredNode,
     device: koharu_ml::Device,
-    downloaded: tokio::sync::OnceCell<()>,
     loaded: tokio::sync::Mutex<Option<Loaded>>,
 }
 
@@ -128,20 +123,6 @@ impl Processor for BuiltinProcessor {
         &self.spec
     }
 
-    fn is_downloaded(&self) -> bool {
-        is_downloaded(&self.node)
-    }
-
-    async fn ensure_downloaded(&self, context: &DownloadContext) -> Result<()> {
-        if context.cancellation.is_cancelled() {
-            bail!("model download was cancelled");
-        }
-        self.downloaded
-            .get_or_try_init(|| download(&self.node))
-            .await
-            .map(|_| ())
-    }
-
     async fn ensure_loaded(&self, context: &LoadContext) -> Result<()> {
         if context.cancellation.is_cancelled() {
             bail!("model load was cancelled");
@@ -170,82 +151,6 @@ impl Processor for BuiltinProcessor {
             return Ok(false);
         };
         Ok(loaded.take().is_some())
-    }
-}
-
-async fn download(node: &ConfiguredNode) -> Result<()> {
-    match node {
-        ConfiguredNode::Detection(_) => tokio::try_join!(
-            koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::download(),
-            koharu_ml::font_detector::FontDetector::download(),
-        )
-        .map(|_| ()),
-        ConfiguredNode::Ocr(crate::OcrModel::MangaOcr(_)) => {
-            koharu_ml::manga_ocr::MangaOcr::download().await
-        }
-        ConfiguredNode::Ocr(crate::OcrModel::BaberuOcr(_)) => {
-            koharu_ml::baberu_ocr::BaberuOcr::download().await
-        }
-        ConfiguredNode::Ocr(crate::OcrModel::PaddleOcrVl1_6(_)) => {
-            koharu_ml::paddle_ocr_vl::PaddleOCRVL::download().await
-        }
-        ConfiguredNode::Translation(koharu_translator::Providers::Local(config)) => {
-            let model = config
-                .model
-                .parse::<koharu_translator::LocalModel>()
-                .with_context(|| format!("unknown local translator '{}'", config.model))?;
-            koharu_translator::LocalTranslator::download(model)
-                .await
-                .map_err(Into::into)
-        }
-        ConfiguredNode::Translation(_) => Ok(()),
-        ConfiguredNode::Inpainting(crate::InpaintingModel::LaMa(_)) => {
-            koharu_ml::lama::LaMa::download().await
-        }
-        ConfiguredNode::Inpainting(crate::InpaintingModel::AotInpainting(_)) => {
-            koharu_ml::aot_inpainting::AotInpainting::download().await
-        }
-        ConfiguredNode::Inpainting(crate::InpaintingModel::Flux2Klein(_)) => {
-            koharu_ml::flux2_klein::Flux2KleinInpaint::download().await
-        }
-        ConfiguredNode::Inpainting(crate::InpaintingModel::RoremMixed(_)) => {
-            koharu_ml::rorem_mixed::RoremMixed::download().await
-        }
-    }
-}
-
-fn is_downloaded(node: &ConfiguredNode) -> bool {
-    match node {
-        ConfiguredNode::Detection(_) => {
-            koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::is_downloaded()
-                && koharu_ml::font_detector::FontDetector::is_downloaded()
-        }
-        ConfiguredNode::Ocr(crate::OcrModel::MangaOcr(_)) => {
-            koharu_ml::manga_ocr::MangaOcr::is_downloaded()
-        }
-        ConfiguredNode::Ocr(crate::OcrModel::BaberuOcr(_)) => {
-            koharu_ml::baberu_ocr::BaberuOcr::is_downloaded()
-        }
-        ConfiguredNode::Ocr(crate::OcrModel::PaddleOcrVl1_6(_)) => {
-            koharu_ml::paddle_ocr_vl::PaddleOCRVL::is_downloaded()
-        }
-        ConfiguredNode::Translation(koharu_translator::Providers::Local(config)) => config
-            .model
-            .parse::<koharu_translator::LocalModel>()
-            .is_ok_and(koharu_translator::LocalTranslator::is_downloaded),
-        ConfiguredNode::Translation(_) => true,
-        ConfiguredNode::Inpainting(crate::InpaintingModel::LaMa(_)) => {
-            koharu_ml::lama::LaMa::is_downloaded()
-        }
-        ConfiguredNode::Inpainting(crate::InpaintingModel::AotInpainting(_)) => {
-            koharu_ml::aot_inpainting::AotInpainting::is_downloaded()
-        }
-        ConfiguredNode::Inpainting(crate::InpaintingModel::Flux2Klein(_)) => {
-            koharu_ml::flux2_klein::Flux2KleinInpaint::is_downloaded()
-        }
-        ConfiguredNode::Inpainting(crate::InpaintingModel::RoremMixed(_)) => {
-            koharu_ml::rorem_mixed::RoremMixed::is_downloaded()
-        }
     }
 }
 

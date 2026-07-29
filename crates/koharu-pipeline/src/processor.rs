@@ -13,11 +13,6 @@ pub(crate) struct ProcessorSpec {
 }
 
 #[derive(Clone)]
-pub(crate) struct DownloadContext {
-    pub cancellation: CancellationToken,
-}
-
-#[derive(Clone)]
 pub(crate) struct LoadContext {
     pub cancellation: CancellationToken,
 }
@@ -55,10 +50,6 @@ pub(crate) struct NodeOutput {
 #[async_trait]
 pub(crate) trait Processor: Send + Sync {
     fn spec(&self) -> &ProcessorSpec;
-
-    fn is_downloaded(&self) -> bool;
-
-    async fn ensure_downloaded(&self, context: &DownloadContext) -> Result<()>;
 
     async fn ensure_loaded(&self, context: &LoadContext) -> Result<()>;
 

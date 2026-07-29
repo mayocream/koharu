@@ -33,33 +33,6 @@ pub struct BaberuOcr {
 }
 
 impl BaberuOcr {
-    #[must_use]
-    pub fn is_downloaded() -> bool {
-        [
-            CONFIG,
-            GENERATION_CONFIG,
-            WEIGHTS,
-            VOCABULARY,
-            VISION_CONFIG,
-            VISION_PROCESSOR,
-        ]
-        .into_iter()
-        .all(huggingface::is_resolved)
-    }
-
-    pub async fn download() -> Result<()> {
-        tokio::try_join!(
-            huggingface::resolve(CONFIG),
-            huggingface::resolve(GENERATION_CONFIG),
-            huggingface::resolve(WEIGHTS),
-            huggingface::resolve(VOCABULARY),
-            huggingface::resolve(VISION_CONFIG),
-            huggingface::resolve(VISION_PROCESSOR),
-        )
-        .context("failed to download Baberu OCR assets")?;
-        Ok(())
-    }
-
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let (

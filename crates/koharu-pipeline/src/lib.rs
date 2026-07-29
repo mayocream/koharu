@@ -14,7 +14,7 @@ mod scope;
 mod status;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     str::FromStr as _,
     sync::{
         Arc,
@@ -36,8 +36,7 @@ pub use graph::{Dependency, Stage, Target};
 pub use run::{NodeMeasurements, NodeReport, Run, RunError, RunReport};
 pub use scope::{Bounds, Scope};
 pub use status::{
-    ConfigRevision, DeviceResources, DownloadState, LoadState, LoadedModelResources, ModelStatus,
-    ResourceSnapshot,
+    ConfigRevision, DeviceResources, LoadState, LoadedModelResources, ModelStatus, ResourceSnapshot,
 };
 
 use cache::RunCache;
@@ -45,8 +44,7 @@ use events::EventHub;
 use graph::{PipelineGraph, Selection};
 use node::ConfiguredNode;
 use processor::{
-    AncestorArtifacts, DownloadContext, LoadContext, NodeInput, NodeOutput, Processor,
-    ProcessorSpec, RunOptions,
+    AncestorArtifacts, LoadContext, NodeInput, NodeOutput, Processor, ProcessorSpec, RunOptions,
 };
 use resources::ResourceMonitor;
 use scope::NormalizedScope;
@@ -65,11 +63,6 @@ pub(crate) struct ConfigurationGeneration {
 pub struct ConfigChange {
     pub revision: ConfigRevision,
     pub changed: Vec<Stage>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct DownloadReport {
-    pub downloaded: Vec<Stage>,
 }
 
 pub struct Pipeline {
@@ -105,7 +98,6 @@ impl Pipeline {
         });
         let model_status = Arc::new(ModelStatusHub::new());
         model_status.install(revision, status_models(&generation, None));
-        inspect_downloads(&model_status, &generation);
         let resources = ResourceMonitor::new(&device, model_status.clone());
         Ok(Self {
             current: ArcSwap::new(generation),
@@ -157,7 +149,6 @@ impl Pipeline {
         });
         self.model_status
             .install(revision, status_models(&generation, Some(&previous)));
-        inspect_downloads(&self.model_status, &generation);
         self.current.store(generation);
         self.events.emit(PipelineEvent::ConfigurationChanged {
             generation: revision,
@@ -211,28 +202,6 @@ impl Pipeline {
 
     pub fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<PipelineEvent> {
         self.events.subscribe()
-    }
-
-    pub async fn download_models(
-        &self,
-        stages: impl IntoIterator<Item = Stage>,
-    ) -> Result<DownloadReport> {
-        let generation = self.current.load_full();
-        let stages = stages.into_iter().collect::<BTreeSet<_>>();
-        if stages.is_empty() {
-            bail!("no models were selected for download");
-        }
-        self.download_selected(&generation, &stages, CancellationToken::default(), None)
-            .await
-            .map_err(|(stage, error)| error.context(format!("failed to download {stage} model")))?;
-        let downloaded = self
-            .graph
-            .canonical()
-            .iter()
-            .filter(|stage| stages.contains(stage))
-            .copied()
-            .collect();
-        Ok(DownloadReport { downloaded })
     }
 
     fn preflight(
@@ -374,22 +343,6 @@ fn status_models<'a>(
             previous.is_some_and(|generation| generation.nodes.get(&stage) == Some(node)),
         )
     })
-}
-
-fn inspect_downloads(status: &ModelStatusHub, generation: &ConfigurationGeneration) {
-    for (stage, processor) in &generation.processors {
-        if processor.spec().local {
-            status.download(
-                generation.revision,
-                *stage,
-                if processor.is_downloaded() {
-                    DownloadState::Downloaded
-                } else {
-                    DownloadState::Missing
-                },
-            );
-        }
-    }
 }
 
 #[cfg(test)]

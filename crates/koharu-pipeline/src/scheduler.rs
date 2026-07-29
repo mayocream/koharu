@@ -8,9 +8,8 @@ use anyhow::{Context as _, Result, anyhow};
 use futures::{FutureExt as _, StreamExt as _, stream::FuturesUnordered};
 
 use crate::{
-    ConfigurationGeneration, DownloadContext, DownloadState, LoadContext, LoadState, NodeInput,
-    NodeOutput, NodeReport, NormalizedScope, Pipeline, PipelineEvent, RunCache, RunError,
-    RunOptions, RunReport, Stage,
+    ConfigurationGeneration, LoadContext, LoadState, NodeInput, NodeOutput, NodeReport,
+    NormalizedScope, Pipeline, PipelineEvent, RunCache, RunError, RunOptions, RunReport, Stage,
     run::{Cancelled, RunRequest},
 };
 
@@ -126,9 +125,6 @@ impl Pipeline {
         ),
         (Option<Stage>, anyhow::Error),
     > {
-        self.download_selected(&generation, selected, cancellation.clone(), sink)
-            .await
-            .map_err(|(stage, error)| (Some(stage), error))?;
         if cancellation.is_cancelled() {
             return Err((None, Cancelled.into()));
         }
@@ -425,80 +421,6 @@ impl Pipeline {
             .filter_map(|stage| reports.remove(stage))
             .collect();
         Ok((patch, preview, nodes))
-    }
-
-    pub(crate) async fn download_selected(
-        &self,
-        generation: &ConfigurationGeneration,
-        selected: &BTreeSet<Stage>,
-        cancellation: crate::CancellationToken,
-        sink: Option<&crate::EventSink>,
-    ) -> std::result::Result<(), (Stage, anyhow::Error)> {
-        let mut downloads = FuturesUnordered::new();
-        for stage in selected {
-            let processor = generation.processors[stage].clone();
-            let revision = generation.revision;
-            let status = self.model_status.clone();
-            let events = self.events.clone();
-            let sink = sink.cloned();
-            let cancellation = cancellation.clone();
-            let stage = *stage;
-            downloads.push(async move {
-                if cancellation.is_cancelled() {
-                    return (stage, Err(Cancelled.into()));
-                }
-                let model = processor.spec().model.clone();
-                if processor.spec().local {
-                    status.download(
-                        revision,
-                        stage,
-                        DownloadState::Downloading {
-                            completed: 0,
-                            total: None,
-                        },
-                    );
-                    events.emit_to(
-                        sink.as_ref(),
-                        PipelineEvent::ModelDownloadStarted {
-                            generation: revision,
-                            stage,
-                            model: model.clone(),
-                        },
-                    );
-                }
-                let started = Instant::now();
-                let result = processor
-                    .ensure_downloaded(&DownloadContext { cancellation })
-                    .await;
-                match &result {
-                    Ok(()) if processor.spec().local => {
-                        status.download(revision, stage, DownloadState::Downloaded);
-                        events.emit_to(
-                            sink.as_ref(),
-                            PipelineEvent::ModelDownloadFinished {
-                                generation: revision,
-                                stage,
-                                model,
-                                elapsed: started.elapsed(),
-                            },
-                        );
-                    }
-                    Err(error) => status.download(
-                        revision,
-                        stage,
-                        DownloadState::Failed {
-                            message: error.to_string(),
-                        },
-                    ),
-                    _ => {}
-                }
-                (stage, result)
-            });
-        }
-        while let Some((stage, result)) = downloads.next().await {
-            result.map_err(|error| (stage, error))?;
-        }
-        Ok(())
     }
 
     fn ancestor_preview(
