@@ -27,7 +27,7 @@ has finished.
 | Runtime startup | The application opens directly into an initialization page and automatically retries the idempotent `koharu_ml::init()` barrier until it succeeds or the app exits. |
 | ML surface | `koharu-ml` exposes `init()` and the process-wide `LLAMA_BACKEND` handle. LibTorch and stable-diffusion.cpp runtime handles remain private. |
 | Runtime count | Initialize LibTorch, llama.cpp, and stable-diffusion.cpp once during application bootstrap. |
-| Model lifecycle | Download and load are separate observable phases. Loaded models are recycled automatically under memory pressure while downloaded files remain cached. |
+| Model lifecycle | Loading resolves missing assets into the package cache before constructing a model. Loaded models are recycled automatically under memory pressure while cached files remain available. |
 | Live configuration | The app may atomically replace pipeline and translation configuration. Existing runs keep their captured generation; new runs use the new one. |
 | Scheduling | Use a readiness-driven DAG scheduler. A stage starts when its own prerequisites and resource claims are satisfied. |
 | Parallelism | Independent stages run concurrently when current CPU, RAM, and VRAM pressure permits. There is no run-wide lock and no accelerator-wide mutex. |
@@ -37,7 +37,7 @@ has finished.
 | Persistence | A successful run returns one merged patch based on the input revision. The application owns the single commit. |
 | Determinism | Completion timing can affect progress events, never scene visibility, merge order, reports, or durable output. |
 | Resource policy | Ready stages overlap automatically; pressure recycling and one-shot OOM recovery are private. No public memory or concurrency limits are exposed. |
-| UI observability | The app owns runtime-initialization status and can observe model download, model residency, and later system-resource telemetry without polling model internals. |
+| UI observability | The app owns runtime-initialization status and can observe model residency and system-resource telemetry without polling model internals. |
 | Worker removal | Delete `koharu-worker`, worker mode, RPC, MessagePack frames, shared-memory arenas, child-process management, and worker lifecycle events. |
 | Compatibility | No old pipeline API, serialized configuration, or worker protocol is preserved. |
 
@@ -501,7 +501,7 @@ Allocation errors are the fallback signal when GPU telemetry is unavailable.
 If loading or inference reports an out-of-memory error, the scheduler recycles
 idle model residency and retries that operation once. A final inference failure
 also unloads its model so poisoned or partially failed native state is not
-reused. Downloaded checkpoints remain in the package cache throughout.
+reused. Resolved checkpoints remain in the package cache throughout.
 
 There is no process-wide `accelerator: Mutex<()>`. Distinct Torch, llama,
 diffusion, CPU, and remote-provider stages overlap whenever their graph
@@ -602,8 +602,6 @@ The scheduler is model-agnostic:
 #[async_trait]
 trait Processor: Send + Sync {
     fn spec(&self) -> &ProcessorSpec;
-    fn is_downloaded(&self) -> bool;
-    async fn ensure_downloaded(&self, context: &DownloadContext) -> Result<()>;
     async fn ensure_loaded(&self, context: &LoadContext) -> Result<()>;
     async fn run(&self, input: NodeInput) -> Result<NodeOutput>;
 }
@@ -630,18 +628,14 @@ other sibling outputs, renderer state, or persistence callbacks. Built-in
 processors use typed component reads and `SceneEdit`; they never construct raw
 storage patches.
 
-`ensure_downloaded` resolves every checkpoint/config/tokenizer asset into the
-durable package cache without constructing a model or allocating RAM/VRAM
-weights. `ensure_loaded` requires downloaded assets, constructs the configured
-model on the governor-selected device, and changes only process residency.
-Concurrent calls to either phase coalesce. Remote providers and stages without
-local assets report both phases as not required.
+`ensure_loaded` resolves every checkpoint/config/tokenizer asset through the
+durable package cache, then constructs the configured model on the selected
+device. Concurrent calls coalesce through the model slot. Remote providers and
+stages without local model residency report loading as not required.
 
-Every `koharu-ml` public model keeps `pub async fn load(device: Device)` and adds
-`pub async fn download() -> Result<()>`. `download()` resolves all assets used by
-`load()`. `load()` may resolve the same descriptors defensively, but after a
-successful download those resolutions are local cache lookups and cannot hide
-network transfer inside the observable loading phase.
+Every `koharu-ml` public model exposes `pub async fn load(device: Device)`.
+`load()` resolves all assets it uses, downloading only artifacts missing from
+the package cache.
 
 Processor-specific preprocessing and postprocessing that define model semantics
 remain in `koharu-ml` under the project model-interface rules. Pipeline adapters
@@ -676,20 +670,11 @@ concurrently. Failures are shared with concurrent waiters. The entire cache is
 dropped with the run, so there is no global cache limit or retained tensor
 state.
 
-## Download, load, and model status
+## Model load and status
 
-Download availability and process residency are independent state machines:
+Process residency is exposed as a single state machine:
 
 ```rust
-pub enum DownloadState {
-    Checking,
-    Missing,
-    Downloading { completed: u64, total: Option<u64> },
-    Downloaded,
-    Failed { message: String },
-    NotRequired,
-}
-
 pub enum LoadState {
     Unloaded,
     WaitingForMemory,
@@ -706,7 +691,6 @@ pub struct ModelStatus {
     pub stage: Stage,
     pub model: String,
     pub active_configuration: bool,
-    pub download: DownloadState,
     pub load: LoadState,
 }
 
@@ -714,48 +698,24 @@ impl Pipeline {
     pub fn model_status(&self) -> Arc<[ModelStatus]>;
     pub fn subscribe_model_status(&self)
         -> watch::Receiver<Arc<[ModelStatus]>>;
-    pub async fn download_models(
-        &self,
-        stages: impl IntoIterator<Item = Stage>,
-    ) -> Result<DownloadReport>;
 }
 ```
 
-The app uses this snapshot/stream for model indicators. A downloaded but
-unloaded model shows that its files are available without implying VRAM use. A
-recycled model transitions from loaded to unloaded while remaining downloaded.
-Local and remote stages with no package work use `NotRequired`; the UI can label
-them as provider-backed rather than downloaded.
+The app uses this snapshot/stream for model residency indicators. A recycled
+model transitions from loaded to unloaded while its resolved assets remain in
+the package cache. Remote stages with no local residency use `NotRequired`.
 
-When a configuration generation becomes active, each slot checks the package
-store locally and moves from `Checking` to `Missing` or `Downloaded` without
-starting network work. The indicator therefore reflects models downloaded by a
-previous application session before the first run.
-
-`download_models` is useful from settings or a download-management screen and
-does not need a scene. A run also automatically downloads missing models in its
-selected target. Download begins independently of graph readiness and consumes
-network/disk capacity but no model residency. Loading begins only when a stage
-is approaching readiness and the automatic governor considers residency useful
-and safe.
-
-Reconfiguration publishes status for the newly selected models immediately and
-reuses download/load state when the configured processor is unchanged. The
-watch snapshot is bounded to the active generation; an older captured run may
-finish, but cannot overwrite the new generation's status. Byte progress also
-uses the existing `koharu-runtime` download event stream.
-
-An already-started checkpoint download may finish after its model is
-deconfigured because the files are durable, deduplicated, and consume no VRAM.
-A deconfigured model is never newly loaded unless a captured older run still
-requires it.
+Reconfiguration publishes status for newly selected models immediately and
+reuses load state when the configured processor is unchanged. The watch
+snapshot is bounded to the active generation; an older captured run may finish,
+but cannot overwrite the new generation's status. Package byte progress remains
+owned by `koharu-runtime` while a model is loading.
 
 Each configured local model owns one slot:
 
 ```rust
 struct BuiltinProcessor {
     spec: ProcessorSpec,
-    downloaded: tokio::sync::OnceCell<()>,
     loaded: tokio::sync::Mutex<Option<Loaded>>,
 }
 
@@ -803,8 +763,8 @@ and returns an error containing run ID, stage, configured model/provider,
 optional page/entity context, and the original source chain.
 
 `spawn_blocking` join failure becomes a stage panic/join error; poisoned model
-state is not reused. Download, load, and insufficient-memory errors remain
-distinct and do not poison unrelated slots.
+state is not reused. Load and insufficient-memory errors remain distinct and do
+not poison unrelated slots.
 
 Patch conflict, invalid preview, and stale durable commit remain distinct error
 classes. The first two are pipeline execution failures; the last is returned by
@@ -818,8 +778,6 @@ Progress describes stages and models, never processes:
 pub enum PipelineEvent {
     ConfigurationChanged { generation: ConfigRevision, changed: Vec<Stage> },
     RunStarted { run: RunId, base: Revision, stages: Vec<Stage> },
-    ModelDownloadStarted { generation: ConfigRevision, stage: Stage, model: String },
-    ModelDownloadFinished { generation: ConfigRevision, stage: Stage, model: String, elapsed: Duration },
     ModelLoadStarted { run: RunId, stage: Stage, model: String },
     ModelLoadFinished { run: RunId, stage: Stage, model: String, elapsed: Duration },
     ModelUnloaded { stage: Stage, model: String, reason: UnloadReason },
@@ -839,11 +797,10 @@ lag error. Events may reflect real completion order. `NodeReport` values are
 returned in canonical stage order.
 
 `NodeMeasurements` separates time waiting for the slot usage gate, model load,
-and processor execution; `NodeReport::elapsed` is total stage time. Download
-duration remains on model-download events, while runtime/checkpoint byte
-progress continues through `koharu-runtime`'s download subscription. There are
-no worker-generation, process-startup, RPC, arena, shared-memory, or round-trip
-measurements.
+and processor execution; `NodeReport::elapsed` is total stage time. Runtime and
+checkpoint byte progress continues through `koharu-runtime`'s download
+subscription. There are no worker-generation, process-startup, RPC, arena,
+shared-memory, or round-trip measurements.
 
 ## Renderer integration
 
