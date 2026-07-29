@@ -84,7 +84,7 @@ impl Rocm {
             | Self::Gfx1151
             | Self::Gfx1152
             | Self::Gfx1153 => Some("gfx11"),
-            Self::Gfx1200 | Self::Gfx1201 => Some("gfx12-0"),
+            Self::Gfx1200 | Self::Gfx1201 => Some("gfx12_0"),
             _ => None,
         }
     }
@@ -197,7 +197,7 @@ mod tests {
     fn maps_torch_family_packages() {
         assert_eq!(Rocm::Gfx1100.torch_family(), Some("gfx11"));
         assert_eq!(Rocm::Gfx1153.torch_family(), Some("gfx11"));
-        assert_eq!(Rocm::Gfx1201.torch_family(), Some("gfx12-0"));
+        assert_eq!(Rocm::Gfx1201.torch_family(), Some("gfx12_0"));
         assert_eq!(Rocm::Gfx1036.torch_family(), None);
     }
 
