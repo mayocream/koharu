@@ -56,19 +56,27 @@ this workflow:
 - `Only(Stage)`
 
 For each page, a stage starts only after its selected prerequisite commits.
-Pages enter in project order through one execution lane per model. The
-scheduler fills every idle lane with the oldest ready page; there is no global
-wave barrier or fixed task-count limit. After page 1 detection, page 1 OCR and
-inpainting can run alongside page 2 detection. When page 1 OCR finishes, page 1
-translation can join those active lanes without waiting for page 1 inpainting
-or page 2 detection.
+Pages enter in project order and the scheduler always selects the oldest ready
+page; there is no global wave barrier. On an accelerator, ready jobs share one
+execution lane while loaded models remain resident according to the VRAM
+budget. Benchmarks on the target CUDA workload showed that overlapping every
+pair of heterogeneous models increased makespan by 2.5-4x through kernel and
+memory-bandwidth contention. Serial model execution therefore produces more
+pages per second than maximizing the activity percentage reported by the GPU.
+
+The readiness window still matters: completed detection immediately exposes
+both of that page's branches, commits remain page-local, and the next best job
+can start without waiting for an unrelated page to finish. CPU-only execution
+retains independent per-model lanes because it has no accelerator admission
+gate.
 
 ```text
-time          1           2           3           4
-detection     page 1      page 2      page 3
-OCR                       page 1      page 2
-translation                           page 1      page 2
-inpainting                page 1      page 2      page 3
+ready event               accelerator lane
+page 1 enters             detection page 1
+detection commits         OCR page 1
+page 1 image branch ready inpainting page 1
+page 2 window enters      detection page 2
+page 1 OCR commits        translation page 1
 ```
 
 Page priority prevents an upstream model from racing arbitrarily far ahead,
@@ -97,19 +105,19 @@ and commit failure. An error also leaves earlier page-stage commits intact.
 ## Model residency
 
 Models are loaded lazily and remain resident for reuse. The resource monitor
-samples the selected accelerator twice per second. A model's first measured run
-is exclusive so the residency manager can learn its resident and peak workspace
-footprint. Later runs reserve bytes from that profile before admission, so the
-number of concurrent models emerges from the current VRAM budget rather than a
-configured model count. Admission relies on observed memory rather than a
-stage-specific device-memory declaration.
+samples the selected accelerator ten times per second. On Windows, DXGI supplies
+the process-aware memory budget while NVML supplies NVIDIA compute utilization.
+A model's first measured run is isolated so the residency manager can learn its
+resident and peak workspace footprint. Later runs use that profile to decide
+whether the requested model fits or idle models must be evicted. Admission
+relies on observed memory rather than a stage-specific device-memory
+declaration.
 
-Loaded models reserve only their incremental workspace. A model that must be
-loaded reserves its measured peak footprint. The budget also retains a safety
+Loaded models require only their incremental workspace. A model that must be
+loaded requires its measured peak footprint. The budget also retains a safety
 margin for driver and non-pipeline allocations. Idle models are evicted in
-least-recently-used order when a ready lane does not fit. Missing accelerator
-telemetry falls back to one GPU model at a time. A detected out-of-memory
-failure raises the learned estimate, performs exclusive cleanup, and retries
+least-recently-used order when a ready lane does not fit. A detected
+out-of-memory failure raises the learned estimate, performs cleanup, and retries
 once.
 
 `ModelCell` serializes access to one model and prevents an active model from
@@ -169,4 +177,5 @@ src/
 ```powershell
 cargo test -p koharu-pipeline --all-targets
 cargo clippy -p koharu-pipeline --all-targets --no-deps -- -D warnings
+cargo bench --profile dev -p koharu-ml --bench pipeline_overlap
 ```

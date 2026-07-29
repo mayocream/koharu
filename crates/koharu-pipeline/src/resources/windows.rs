@@ -1,3 +1,4 @@
+use nvml_wrapper::Nvml;
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,
     DXGI_MEMORY_SEGMENT_GROUP_LOCAL, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, IDXGIAdapter1,
@@ -9,13 +10,17 @@ use super::{Sample, Vendor};
 
 pub(super) struct Monitor {
     factory: IDXGIFactory6,
+    nvml: Option<Nvml>,
 }
 
 impl Monitor {
     pub(super) fn new() -> Result<Self, String> {
         let factory = unsafe { CreateDXGIFactory1::<IDXGIFactory6>() }
             .map_err(|error| format!("failed to create DXGI factory: {error}"))?;
-        Ok(Self { factory })
+        Ok(Self {
+            factory,
+            nvml: Nvml::init().ok(),
+        })
     }
 
     pub(super) fn sample(&mut self) -> Result<Vec<Sample>, String> {
@@ -59,10 +64,51 @@ impl Monitor {
                 utilization_percent: None,
             });
         }
+        if let Some(nvml) = &self.nvml {
+            apply_nvml_utilization(&mut samples, nvml);
+        }
         (!samples.is_empty())
             .then_some(samples)
             .ok_or_else(|| "DXGI found no hardware adapters".to_owned())
     }
+}
+
+fn apply_nvml_utilization(samples: &mut [Sample], nvml: &Nvml) {
+    let Ok(count) = nvml.device_count() else {
+        return;
+    };
+    let devices = (0..count)
+        .filter_map(|index| {
+            let device = nvml.device_by_index(index).ok()?;
+            Some((
+                device.name().ok()?,
+                device.utilization_rates().ok()?.gpu as f32,
+            ))
+        })
+        .collect::<Vec<_>>();
+
+    let mut unmatched = devices.iter().collect::<Vec<_>>();
+    for sample in samples
+        .iter_mut()
+        .filter(|sample| sample.vendor == Vendor::Nvidia)
+    {
+        let position = unmatched
+            .iter()
+            .position(|(name, _)| names_match(&sample.name, name))
+            .or_else(|| (unmatched.len() == 1).then_some(0));
+        if let Some(position) = position {
+            let (_, utilization) = unmatched.remove(position);
+            sample.utilization_percent = Some(*utilization);
+        }
+    }
+}
+
+fn names_match(left: &str, right: &str) -> bool {
+    let left = left.trim().to_ascii_lowercase();
+    let right = right.trim().to_ascii_lowercase();
+    !left.is_empty()
+        && !right.is_empty()
+        && (left == right || left.contains(&right) || right.contains(&left))
 }
 
 fn utf16_name(value: &[u16]) -> String {
@@ -79,5 +125,21 @@ fn vendor(id: u32) -> Vendor {
         0x1002 | 0x1022 => Vendor::Amd,
         0x8086 => Vendor::Intel,
         _ => Vendor::Unknown,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::names_match;
+
+    #[test]
+    fn nvml_and_dxgi_names_match_without_case_sensitivity() {
+        assert!(names_match(
+            "NVIDIA GeForce RTX 5090",
+            "nvidia geforce rtx 5090"
+        ));
+        assert!(names_match("GeForce RTX 5090", "NVIDIA GeForce RTX 5090"));
+        assert!(!names_match("NVIDIA RTX 5090", "AMD Radeon"));
+        assert!(!names_match("", ""));
     }
 }

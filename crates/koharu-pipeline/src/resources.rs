@@ -72,18 +72,25 @@ impl ResourceMonitor {
             let mut vram = vram::Monitor::new(device.clone());
             let mut vram_unavailable = false;
             let pid = get_current_pid().ok();
-            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            // Most page-local model calls finish in well under 500 ms. A shorter
+            // interval keeps their VRAM peaks and utilization visible to both
+            // admission control and the UI without polling in a tight loop.
+            let mut interval = tokio::time::interval(Duration::from_millis(100));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut host_refresh_tick = 0_u8;
             loop {
                 interval.tick().await;
                 let Some(monitor) = monitor.upgrade() else {
                     return;
                 };
-                system.refresh_memory();
-                system.refresh_cpu_usage();
-                if let Some(pid) = pid {
-                    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+                if host_refresh_tick == 0 {
+                    system.refresh_memory();
+                    system.refresh_cpu_usage();
+                    if let Some(pid) = pid {
+                        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+                    }
                 }
+                host_refresh_tick = (host_refresh_tick + 1) % 5;
                 let process = pid.and_then(|pid| system.process(pid));
                 let system_memory = vram::SystemMemory {
                     total_bytes: system.total_memory(),

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -15,15 +15,17 @@ use crate::{
 
 pub(crate) struct Residency {
     resources: Arc<ResourceMonitor>,
+    // Heterogeneous CUDA model pairs took 2.5-4x longer together than
+    // back-to-back on the target workload. The fair lane protects throughput;
+    // VRAM profiles below still decide which weights remain resident.
+    lane: Arc<tokio::sync::Semaphore>,
     sequence: AtomicU64,
     state: Mutex<State>,
-    changed: tokio::sync::Notify,
 }
 
 #[derive(Default)]
 struct State {
     profiles: BTreeMap<Stage, ModelProfile>,
-    active: BTreeMap<Stage, u64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -35,99 +37,67 @@ struct ModelProfile {
 
 pub(crate) struct Admission<'a> {
     residency: Option<&'a Residency>,
-    stage: Stage,
+    _lane: Option<tokio::sync::OwnedSemaphorePermit>,
     profiling: bool,
     was_loaded: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AdmissionDecision {
-    Shared { reservation: u64 },
-    Exclusive { profiling: bool, reservation: u64 },
-    Wait,
+struct AdmissionPlan {
+    profiling: bool,
+    unload_idle: bool,
 }
 
 impl Residency {
     pub(crate) fn new(resources: Arc<ResourceMonitor>) -> Self {
         Self {
             resources,
+            lane: Arc::new(tokio::sync::Semaphore::new(1)),
             sequence: AtomicU64::new(1),
             state: Mutex::new(State::default()),
-            changed: tokio::sync::Notify::new(),
         }
     }
 
     pub(crate) async fn enter<'a>(&'a self, stage: Stage, stages: &Stages) -> Admission<'a> {
         if self.resources.snapshot().devices.is_empty() {
-            return Admission::untracked(stage, stages.loaded(stage));
+            return Admission::untracked(stages.loaded(stage));
         }
 
-        loop {
-            let notified = self.changed.notified();
-            let snapshot = self.resources.snapshot();
-            let memory = MemoryBudget::from_snapshot(&snapshot);
-            let (decision, active) = {
-                let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-                let loaded = stages.loaded(stage);
-                let active = state.active.keys().copied().collect::<BTreeSet<_>>();
-                (
-                    admission_decision(
-                        state.profiles.get(&stage).copied(),
-                        memory,
-                        loaded,
-                        &state.active,
-                    ),
-                    active,
-                )
-            };
-
-            match decision {
-                AdmissionDecision::Shared { reservation } => {
-                    self.activate(stage, reservation);
-                    return Admission::tracked(self, stage, false, stages.loaded(stage));
-                }
-                AdmissionDecision::Exclusive {
-                    profiling,
-                    reservation,
-                } => {
-                    self.activate(stage, reservation);
-                    let clean_profile = profiling && memory.is_some();
-                    if self.unload_idle(stage, stages, &BTreeSet::new(), clean_profile) {
-                        self.settle_resources().await;
-                    }
-                    return Admission::tracked(self, stage, profiling, stages.loaded(stage));
-                }
-                AdmissionDecision::Wait => {
-                    if self.unload_idle(stage, stages, &active, false) {
-                        self.settle_resources().await;
-                        continue;
-                    }
-                    notified.await;
-                }
-            }
+        let lane = self
+            .lane
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("accelerator lane is never closed");
+        let snapshot = self.resources.snapshot();
+        let memory = MemoryBudget::from_snapshot(&snapshot);
+        let loaded = stages.loaded(stage);
+        let plan = {
+            let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            admission_plan(state.profiles.get(&stage).copied(), memory, loaded)
+        };
+        let clean_profile = plan.profiling && memory.is_some();
+        if plan.unload_idle && self.unload_idle(stage, stages, clean_profile) {
+            self.settle_resources().await;
         }
+        Admission::tracked(self, lane, plan.profiling, stages.loaded(stage))
     }
 
     pub(crate) async fn recover<'a>(&'a self, stage: Stage, stages: &Stages) -> Admission<'a> {
         if self.resources.snapshot().devices.is_empty() {
-            return Admission::untracked(stage, stages.loaded(stage));
+            return Admission::untracked(stages.loaded(stage));
         }
 
-        loop {
-            let notified = self.changed.notified();
-            let ready = {
-                let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-                state.active.is_empty()
-            };
-            if ready {
-                self.activate(stage, 0);
-                if self.unload_idle(stage, stages, &BTreeSet::new(), false) {
-                    self.settle_resources().await;
-                }
-                return Admission::tracked(self, stage, false, stages.loaded(stage));
-            }
-            notified.await;
+        let lane = self
+            .lane
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("accelerator lane is never closed");
+        if self.unload_idle(stage, stages, false) {
+            self.settle_resources().await;
         }
+        Admission::tracked(self, lane, false, stages.loaded(stage))
     }
 
     pub(crate) fn observe(
@@ -181,25 +151,11 @@ impl Residency {
         stages.touch(stage, sequence);
     }
 
-    fn activate(&self, stage: Stage, reservation: u64) {
-        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-        let previous = state.active.insert(stage, reservation);
-        debug_assert!(previous.is_none(), "a model lane was admitted twice");
-    }
-
-    fn unload_idle(
-        &self,
-        requested: Stage,
-        stages: &Stages,
-        active: &BTreeSet<Stage>,
-        include_requested: bool,
-    ) -> bool {
+    fn unload_idle(&self, requested: Stage, stages: &Stages, include_requested: bool) -> bool {
         let mut loaded = Stage::ALL
             .into_iter()
             .filter(|candidate| {
-                (include_requested || *candidate != requested)
-                    && !active.contains(candidate)
-                    && stages.loaded(*candidate)
+                (include_requested || *candidate != requested) && stages.loaded(*candidate)
             })
             .collect::<Vec<_>>();
         loaded.sort_by_key(|candidate| stages.last_used(*candidate));
@@ -222,22 +178,22 @@ impl Residency {
 impl Admission<'_> {
     fn tracked(
         residency: &Residency,
-        stage: Stage,
+        lane: tokio::sync::OwnedSemaphorePermit,
         profiling: bool,
         was_loaded: bool,
     ) -> Admission<'_> {
         Admission {
             residency: Some(residency),
-            stage,
+            _lane: Some(lane),
             profiling,
             was_loaded,
         }
     }
 
-    fn untracked(stage: Stage, was_loaded: bool) -> Self {
+    fn untracked(was_loaded: bool) -> Self {
         Self {
             residency: None,
-            stage,
+            _lane: None,
             profiling: false,
             was_loaded,
         }
@@ -253,21 +209,6 @@ impl Admission<'_> {
 
     pub(crate) fn was_loaded(&self) -> bool {
         self.was_loaded
-    }
-}
-
-impl Drop for Admission<'_> {
-    fn drop(&mut self) {
-        let Some(residency) = self.residency else {
-            return;
-        };
-        let mut state = residency
-            .state
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        state.active.remove(&self.stage);
-        drop(state);
-        residency.changed.notify_waiters();
     }
 }
 
@@ -316,47 +257,36 @@ impl ModelProfile {
     }
 }
 
-fn admission_decision(
+fn admission_plan(
     profile: Option<ModelProfile>,
     memory: Option<MemoryBudget>,
     loaded: bool,
-    active: &BTreeMap<Stage, u64>,
-) -> AdmissionDecision {
+) -> AdmissionPlan {
     let Some(profile) = profile else {
-        return if active.is_empty() {
-            AdmissionDecision::Exclusive {
-                profiling: true,
-                reservation: 0,
-            }
-        } else {
-            AdmissionDecision::Wait
+        return AdmissionPlan {
+            profiling: true,
+            unload_idle: true,
         };
     };
     let Some(memory) = memory else {
-        return if active.is_empty() {
-            AdmissionDecision::Exclusive {
-                profiling: false,
-                reservation: 0,
-            }
-        } else {
-            AdmissionDecision::Wait
+        return AdmissionPlan {
+            profiling: false,
+            unload_idle: true,
         };
     };
 
     let reservation = profile.reservation(loaded, memory.budget_bytes);
-    let reserved = active.values().copied().fold(0_u64, u64::saturating_add);
-    let required = safety_reserve(memory.budget_bytes)
-        .saturating_add(reserved)
-        .saturating_add(reservation);
+    let required = safety_reserve(memory.budget_bytes).saturating_add(reservation);
     if memory.available_bytes >= required {
-        AdmissionDecision::Shared { reservation }
-    } else if active.is_empty() {
-        AdmissionDecision::Exclusive {
+        AdmissionPlan {
             profiling: false,
-            reservation,
+            unload_idle: false,
         }
     } else {
-        AdmissionDecision::Wait
+        AdmissionPlan {
+            profiling: false,
+            unload_idle: true,
+        }
     }
 }
 
@@ -404,27 +334,10 @@ mod tests {
     #[test]
     fn unknown_models_are_profiled_exclusively() {
         assert_eq!(
-            admission_decision(None, memory(6 * GIB), false, &BTreeMap::new()),
-            AdmissionDecision::Exclusive {
+            admission_plan(None, memory(6 * GIB), false),
+            AdmissionPlan {
                 profiling: true,
-                reservation: 0,
-            }
-        );
-
-        let active = BTreeMap::from([(Stage::Detection, GIB)]);
-        assert_eq!(
-            admission_decision(None, memory(6 * GIB), false, &active),
-            AdmissionDecision::Wait
-        );
-    }
-
-    #[test]
-    fn measured_models_share_vram_when_their_reservations_fit() {
-        let active = BTreeMap::from([(Stage::Translation, GIB)]);
-        assert_eq!(
-            admission_decision(Some(profile(2 * GIB, GIB)), memory(5 * GIB), false, &active,),
-            AdmissionDecision::Shared {
-                reservation: 3 * GIB,
+                unload_idle: true,
             }
         );
     }
@@ -432,37 +345,32 @@ mod tests {
     #[test]
     fn loaded_models_reserve_only_incremental_workspace() {
         assert_eq!(
-            admission_decision(
-                Some(profile(3 * GIB, GIB)),
-                memory(3 * GIB),
-                true,
-                &BTreeMap::new(),
-            ),
-            AdmissionDecision::Shared { reservation: GIB }
-        );
-    }
-
-    #[test]
-    fn capacity_is_derived_from_bytes_instead_of_a_model_count() {
-        let active = BTreeMap::from([(Stage::Detection, 2 * GIB), (Stage::Ocr, 2 * GIB)]);
-        assert_eq!(
-            admission_decision(Some(profile(2 * GIB, GIB)), memory(4 * GIB), false, &active,),
-            AdmissionDecision::Wait
-        );
-    }
-
-    #[test]
-    fn missing_telemetry_falls_back_to_one_gpu_model() {
-        let active = BTreeMap::from([(Stage::Detection, GIB)]);
-        assert_eq!(
-            admission_decision(Some(profile(GIB, GIB)), None, false, &active),
-            AdmissionDecision::Wait
-        );
-        assert!(matches!(
-            admission_decision(Some(profile(GIB, GIB)), None, false, &BTreeMap::new()),
-            AdmissionDecision::Exclusive {
+            admission_plan(Some(profile(3 * GIB, GIB)), memory(3 * GIB), true),
+            AdmissionPlan {
                 profiling: false,
-                ..
+                unload_idle: false,
+            }
+        );
+    }
+
+    #[test]
+    fn insufficient_capacity_evicts_idle_models_before_running() {
+        assert_eq!(
+            admission_plan(Some(profile(2 * GIB, GIB)), memory(3 * GIB), false),
+            AdmissionPlan {
+                profiling: false,
+                unload_idle: true,
+            }
+        );
+    }
+
+    #[test]
+    fn missing_telemetry_evicts_idle_models() {
+        assert!(matches!(
+            admission_plan(Some(profile(GIB, GIB)), None, false),
+            AdmissionPlan {
+                profiling: false,
+                unload_idle: true,
             }
         ));
     }
