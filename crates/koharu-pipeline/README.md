@@ -78,7 +78,7 @@ The pipeline owns:
 - run-local encoded-blob, decoded-image, crop, and ephemeral-artifact caches;
 - conversion from model/provider results into typed scene edits;
 - node timing, progress, cancellation propagation, and run reports;
-- model download/residency status for application indicators;
+- model residency status for application indicators;
 - resource telemetry shared with the future application UI; and
 - final patch merge and preview validation.
 
@@ -183,9 +183,9 @@ initialization loads native libraries and backend registries, not model
 checkpoints.
 
 Removing process isolation intentionally means an unrecoverable native crash
-also terminates the application. Rust errors, model download/load errors, and
-ordinary native error returns remain recoverable; a worker crash protocol is
-not retained.
+also terminates the application. Rust errors, model load errors, and ordinary
+native error returns remain recoverable; a worker crash protocol is not
+retained.
 
 ## Pipeline construction and live configuration
 
@@ -223,9 +223,9 @@ impl Pipeline {
 }
 ```
 
-Construction validates configuration and topology but performs no checkpoint
-download and allocates no model tensor. The app calls `reconfigure` after a
-settings edit. Validation and processor construction complete before one atomic
+Construction validates configuration and topology but performs no model load
+and allocates no model tensor. The app calls `reconfigure` after a settings
+edit. Validation and processor construction complete before one atomic
 generation swap; invalid settings leave the previous generation active.
 
 Every run captures one `Arc<ConfigurationGeneration>` before planning and uses
@@ -379,11 +379,11 @@ least half of its area overlaps it, so slightly imperfect detector boxes do not
 break the hierarchy. Text outside a bubble or panel falls back to the same
 spatial order.
 
-The detection slot downloads, loads, and recycles the layout and font models as
-one unit. It runs layout inference first, previews that patch, runs the font
-detector with its fixed default behavior over the new text entities, and merges
-both patches into one detection result. There is no public typography target,
-configuration field, model-status row, or independent scheduling node.
+The detection slot loads and recycles the layout and font models as one unit. It
+runs layout inference first, previews that patch, runs the font detector with
+its fixed default behavior over the new text entities, and merges both patches
+into one detection result. There is no public typography target, configuration
+field, model-status row, or independent scheduling node.
 
 Every processor creates its patch with
 `SceneSnapshot::edit_as(Generation)`. The producer is the stable responsibility
@@ -725,16 +725,15 @@ type UsageGate = Arc<tokio::sync::Mutex<()>>;
 
 The slot contract is:
 
-- concurrent downloads coalesce, while the usage gate serializes load and
-  inference for one slot;
-- a successful download remains in the package cache across unloads, config
-  changes, pipeline recreation, and application restarts;
-- a failed download or load leaves the slot retryable;
+- the usage gate serializes load and inference for one slot;
+- resolved assets remain in the package cache across unloads, config changes,
+  pipeline recreation, and application restarts;
+- a failed load leaves the slot retryable;
 - successful weights are reused across pages and runs while resident;
 - the usage gate is acquired before loading and held through inference;
 - recycling uses `try_lock`, so it unloads only an actually idle slot and never
   waits behind native work;
-- a later request transparently reloads a recycled slot from downloaded files;
+- a later request transparently reloads a recycled slot from cached files;
   and
 - dropping the pipeline eventually drops all resident models after in-flight
   runs release their `Arc`s.
@@ -747,8 +746,7 @@ coordinated by the scheduler and resource monitor, never by UI limits.
 
 Cancellation is cooperative and has one terminal outcome:
 
-1. Drop this run's interest in pending downloads and stop admitting new model
-   loads and stages. A download shared with settings or another run may continue.
+1. Stop admitting new model loads and stages.
 2. Cancel async provider requests and cancellable preprocessing.
 3. Invoke backend cancellation hooks where they are supported.
 4. Safely drain native blocking calls that cannot be interrupted.
@@ -882,12 +880,12 @@ The old path is deleted, not hidden behind a feature flag.
 
 - The app shows its initialization page while all three native runtimes
   initialize once per process.
-- Model assets download once into the durable package cache; loading them into
-  RAM/VRAM is a separate repeatable operation.
+- Model loads resolve assets into the durable package cache before constructing
+  RAM/VRAM residency.
 - A configured model loads at most once successfully per residency epoch;
   concurrent requests never duplicate a load.
-- The governor may overlap useful downloads/loads with prerequisite execution
-  when current pressure makes that beneficial.
+- The governor may overlap useful model loads with prerequisite execution when
+  current pressure makes that beneficial.
 - Idle model residency is recycled automatically before memory pressure becomes
   an avoidable allocation failure.
 - Each run reads a blob and decodes a given representation at most once.
@@ -922,8 +920,8 @@ The old path is deleted, not hidden behind a feature flag.
 - The scene session remains the only durable writer and rejects stale revisions.
 - Broadcast progress backpressure cannot stall inference; a per-run callback is
   expected to enqueue briefly and is isolated from callback panics.
-- Model download and load status always describe the selected configuration;
-  captured older runs cannot overwrite it.
+- Model load status always describes the selected configuration; captured older
+  runs cannot overwrite it.
 - No public resource limit permanently serializes otherwise independent model
   slots.
 
@@ -947,16 +945,15 @@ The implementation is complete only when automated tests prove:
    atomically; an invalid one changes nothing; old runs retain the old
    generation and new runs use the new generation.
 6. Reconfiguration reuses unchanged typed model slots, preserves their active
-   download/load state, and cannot regress revisions under concurrent calls.
-7. Model download performs no model construction or VRAM allocation, and a
-   subsequent load performs no network transfer after assets are cached.
-8. Concurrent download calls coalesce; one slot's usage gate spans load through
-   inference, and a failed phase remains retryable.
-9. Model-status snapshots correctly distinguish missing, downloading,
-   downloaded/unloaded, loading, loaded, in-use, failed, and not-required
-   states.
-10. Memory pressure recycling acquires only idle usage gates, preserves
-    downloaded files, and reloads a recycled model transparently when needed.
+   load state, and cannot regress revisions under concurrent calls.
+7. Model loading resolves missing assets through the package cache before
+   construction, and a failed load remains retryable.
+8. One slot's usage gate spans load through inference and coalesces concurrent
+   requests for the same configured model.
+9. Model-status snapshots correctly distinguish unloaded, loading, loaded,
+   in-use, failed, and not-required states.
+10. Memory pressure recycling acquires only idle usage gates, preserves cached
+    files, and reloads a recycled model transparently when needed.
 11. An active model is never unloaded; an out-of-memory load or inference
     recycles idle models and retries once rather than retrying forever.
 12. Resource snapshots distinguish unknown GPU metrics from zero, coalesce for
@@ -966,7 +963,7 @@ The implementation is complete only when automated tests prove:
     VRAM, prefetch, cache-size, or translation-request limits.
 14. The built-in graph has exactly the declared nodes, labeled edges, and no
     cycle; closure targets select the correct ancestors, exact targets select no
-    implicit stage, and missing exact-target inputs fail before download/load.
+    implicit stage, and missing exact-target inputs fail before model load.
 15. Canonical graph order is stable across construction runs and independent of
     hash-map iteration.
 16. After detection, OCR and inpainting overlap when the fake resource monitor
@@ -999,8 +996,8 @@ The implementation is complete only when automated tests prove:
     RPC transport, shared arena, or `koharu-worker` dependency.
 
 Concurrency tests use controlled barriers rather than timing-only sleeps.
-Failure tests inject initialization, download, load, out-of-memory, inference,
-provider, decode, patch-conflict, cancellation, and blocking-task-join errors.
+Failure tests inject initialization, load, out-of-memory, inference, provider,
+decode, patch-conflict, cancellation, and blocking-task-join errors.
 
 Performance validation uses the actual target device. CUDA benchmarks
 synchronize immediately before and after measured inference, keep model loading
@@ -1020,8 +1017,8 @@ baseline, concurrent result, peak memory, and structured-output equivalence.
    the readiness scheduler.
 5. Port built-in adapters to `SceneSnapshot`, `SceneEdit::edit_as`, typed
    components, stable producer IDs, and run-local artifacts.
-6. Split every local model's asset download from process load, then add status
-   streams and app indicators for both phases.
+6. Add reusable local model slots and load-status streams; each model load
+   resolves its own package assets.
 7. Add reusable model slots, automatic CPU/RAM/VRAM monitoring, adaptive
    admission, idle recycling, OOM recovery, and the coalesced image cache.
 8. Integrate application settings updates, scene commit, and renderer against
