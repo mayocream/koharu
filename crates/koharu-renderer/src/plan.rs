@@ -3,8 +3,9 @@
 use std::collections::BTreeSet;
 
 use koharu_scene::{
-    Asset, BlobId, EntityId, Geometry, LanguageTag, OcrAnalysis, Page, RelationId, Revision,
-    SceneSnapshot, SourceText, TextAlignment, TextDirection, Translation, Typography, Visibility,
+    Asset, BlobId, EntityId, Geometry, LanguageTag, OcrAnalysis, Origin, Page, RelationId,
+    Revision, SceneSnapshot, SourceText, TextAlignment, TextDirection, Translation, Typography,
+    Visibility,
 };
 
 use crate::{
@@ -186,6 +187,7 @@ impl RenderPlan {
             let rtl = direction == harfrust::Direction::RightToLeft;
             let alignment =
                 resolve_alignment(typography.as_ref().and_then(|value| value.alignment), rtl);
+            let is_bubble_text = balloon_contour.is_some();
             layers.push(Layer::Text(TextLayer {
                 entity,
                 text,
@@ -196,7 +198,11 @@ impl RenderPlan {
                 preferred_font: typography
                     .as_ref()
                     .and_then(|value| value.preferred_font.clone()),
-                font_size: typography.as_ref().and_then(|value| value.size),
+                font_size: if is_bubble_text {
+                    user_font_size(typography.as_ref())
+                } else {
+                    typography.as_ref().and_then(|value| value.size)
+                },
                 alignment,
                 writing_mode,
                 foreground_color: resolve_foreground_color(typography.as_ref()),
@@ -363,6 +369,12 @@ fn resolve_writing_mode(
     }
 }
 
+fn user_font_size(typography: Option<&Typography>) -> Option<f32> {
+    typography
+        .filter(|value| matches!(value.origin, Origin::User))
+        .and_then(|value| value.size)
+}
+
 fn resolve_foreground_color(typography: Option<&Typography>) -> Option<[u8; 4]> {
     let value = typography?.extensions.get(FOREGROUND_COLOR_EXTENSION)?;
     let hex = value.strip_prefix('#')?;
@@ -395,8 +407,8 @@ fn resolve_alignment(alignment: Option<TextAlignment>, rtl: bool) -> TextAlign {
 #[cfg(test)]
 mod tests {
     use koharu_scene::{
-        At, Authored, Geometry, Origin, PageDraft, Region, RegionKind, RelationKind, SceneSession,
-        TextAlignment, Translation, Typography,
+        At, Authored, Generation, Geometry, Origin, PageDraft, ProducerId, Region, RegionKind,
+        RelationKind, SceneSession, TextAlignment, Translation, Typography,
     };
 
     use super::*;
@@ -504,6 +516,8 @@ mod tests {
         assert_eq!(text.language.as_ref().unwrap().as_str(), "ar");
         assert_eq!(text.alignment, TextAlign::Right);
         assert_eq!(text.writing_mode, WritingMode::Horizontal);
+        assert_eq!(text.font_size, Some(18.0));
+        assert!(text.balloon_contour.is_some());
         assert_eq!(text.foreground_color, Some([0x12, 0x34, 0x56, 0xff]));
         assert_eq!(text.angle_degrees, 12.5);
         assert!((text.bounds.x - 20.0).abs() < 1e-5);
@@ -585,6 +599,42 @@ mod tests {
             resolve_writing_mode("한국어", bounds, Some(&typography), None),
             WritingMode::VerticalRl
         );
+    }
+
+    #[test]
+    fn generated_font_size_does_not_cap_balloon_fitting() {
+        let mut typography = Typography {
+            origin: Origin::User,
+            preferred_font: None,
+            size: Some(18.0),
+            alignment: None,
+            writing_mode: None,
+            extensions: Default::default(),
+        };
+        assert_eq!(user_font_size(Some(&typography)), Some(18.0));
+
+        typography.origin = Origin::Generated(Generation::new(
+            ProducerId::new("dev.koharu.pipeline.detection").unwrap(),
+        ));
+        assert_eq!(user_font_size(Some(&typography)), None);
+    }
+
+    #[test]
+    fn free_text_keeps_its_source_size_without_balloon_fitting() {
+        let fixture = fixture();
+        let mut request = RenderRequest::transparent(fixture.page);
+        request.locale = Some(LanguageTag::new("ar").unwrap());
+        request.text_region_relation =
+            RelationKind::new("dev.koharu.relation.unused-text-region").unwrap();
+
+        let plan = RenderPlan::compile(&fixture.snapshot, &request).unwrap();
+        let Layer::Text(text) = &plan.layers[0] else {
+            panic!("expected a text layer");
+        };
+
+        assert_eq!(text.font_size, Some(18.0));
+        assert!(text.balloon_contour.is_none());
+        assert_eq!(text.bounds.width, 80.0);
     }
 
     #[test]

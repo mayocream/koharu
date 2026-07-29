@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
@@ -40,7 +46,7 @@ struct Arguments {
     #[arg(long)]
     translation_instructions: Option<String>,
 
-    #[arg(long, default_value = "qwen3.5-0.8b")]
+    #[arg(long, default_value = "gemma4-12b-it")]
     llm: String,
 }
 
@@ -182,12 +188,15 @@ async fn main() -> Result<()> {
             &mut committer,
         )
         .await?;
+    eprintln!("pipeline finished in {:.2}s", report.elapsed.as_secs_f64());
 
     let renderer = Renderer::new()?;
     let mut request = RenderRequest::new(page);
     request.locale = Some(LanguageTag::new(arguments.target_language)?);
     request.theme.font_families = arguments.font_families;
+    let render_started = Instant::now();
     let rendered = renderer.render(&session.snapshot(), &request)?;
+    let render_elapsed = render_started.elapsed();
     rendered
         .image
         .save(&arguments.output)
@@ -195,7 +204,7 @@ async fn main() -> Result<()> {
     eprintln!(
         "rendered {} in {:.2}s",
         arguments.output.display(),
-        report.elapsed.as_secs_f64()
+        render_elapsed.as_secs_f64()
     );
     Ok(())
 }

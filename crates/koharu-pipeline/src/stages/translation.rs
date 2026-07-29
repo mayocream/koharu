@@ -138,16 +138,24 @@ impl Model {
             edit.observe::<SourceText>(entity, "default")?;
             edit.observe::<Translation>(entity, locale.as_str())?;
         }
-        for ((entity, _), text) in targets.into_iter().zip(segments) {
+        for ((entity, source), text) in targets.into_iter().zip(segments) {
             edit.set_translation(
                 entity,
                 &locale,
                 Translation {
-                    text: Authored::generated(text, generation.clone()),
+                    text: Authored::generated(translated_text(&source, text), generation.clone()),
                 },
             )?;
         }
         finish(edit)
+    }
+}
+
+fn translated_text(source: &str, translated: String) -> String {
+    if source.trim() == "…" {
+        "…".to_owned()
+    } else {
+        translated
     }
 }
 
@@ -211,5 +219,19 @@ fn provider_name(provider: &Providers) -> &'static str {
         Providers::DeepL(_) => "deepl",
         Providers::GoogleCloudTranslation(_) => "google-cloud-translation",
         Providers::Caiyun(_) => "caiyun",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::translated_text;
+
+    #[test]
+    fn an_ellipsis_survives_translation() {
+        assert_eq!(translated_text(" … ", "--- -->".to_owned()), "…");
+        assert_eq!(
+            translated_text("text", "translation".to_owned()),
+            "translation"
+        );
     }
 }

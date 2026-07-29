@@ -8,9 +8,15 @@ use std::{
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat, Luma, RgbImage};
-use imageproc::{distance_transform::Norm, morphology::dilate};
+use imageproc::{
+    contours::{BorderType, find_contours_with_threshold},
+    distance_transform::Norm,
+    geometry::{approximate_polygon_dp, arc_length, contour_area},
+    morphology::dilate,
+};
 use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
-    KoharuLayoutDetection, KoharuLayoutDetections, KoharuLayoutRFDetrSeg2XL, KoharuLayoutThresholds,
+    KoharuLayoutDetection, KoharuLayoutDetections, KoharuLayoutMask, KoharuLayoutRFDetrSeg2XL,
+    KoharuLayoutThresholds,
 };
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, DetectionAnalysis, DetectionLabel, EntityId,
@@ -28,9 +34,13 @@ const MODEL_NAME: &str = "koharu-layout-rfdetr-seg-2xl";
 const PRODUCER: &str = "dev.koharu.pipeline.detection";
 const FOREGROUND_COLOR_EXTENSION: &str = "dev.koharu.typography.foreground-color";
 const ANGLE_DEGREES_EXTENSION: &str = "dev.koharu.typography.angle-degrees";
-const AXIS_ANISOTROPY_MINIMUM: f64 = 0.05;
 const ANGLE_SNAP_DEGREES: f32 = 3.0;
-const COLOR_SNAP_CHANNEL: u8 = 32;
+const ANGLE_SEARCH_HALF_STEPS: i32 = 90;
+const ANGLE_SEARCH_STEP_DEGREES: f64 = 0.5;
+const COLOR_SNAP_CHROMA: u8 = 24;
+const COLOR_SNAP_DARK_LUMINANCE: u16 = 64;
+const COLOR_SNAP_LIGHT_LUMINANCE: u16 = 191;
+const NMS_CONTAINMENT_THRESHOLD: f32 = 0.9;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default, deny_unknown_fields)]
@@ -213,7 +223,11 @@ fn write_page(
         width: image_width,
         height: image_height,
     };
-    prepare_detections(&mut detections, input.region);
+    if let Some(region) = input.region {
+        detections.retain(|detection| intersects(detection.bbox, region));
+    }
+    non_maximum_suppression(&mut detections, 0.5);
+    sort_by_layout(&mut detections);
 
     let image = image.to_rgb8();
     let regions = write_regions(edit, page, &image, &detections, generation)?;
@@ -257,10 +271,11 @@ fn write_region(
     let inferred = (detection.label == "text")
         .then(|| infer_typography(image, detection))
         .flatten();
-    let geometry = inferred.as_ref().map_or_else(
-        || rectangle_geometry(detection.bbox),
-        |inferred| rotated_geometry(detection.bbox, inferred.angle_degrees),
-    );
+    let geometry = if detection.label == "bubble" {
+        mask_geometry(&detection.mask).unwrap_or_else(|| rectangle_geometry(detection.bbox))
+    } else {
+        rectangle_geometry(detection.bbox)
+    };
     edit.set(entity, "default", &geometry)?;
     edit.set(
         entity,
@@ -329,17 +344,20 @@ fn link_dialogue_regions(
 ) -> Result<()> {
     let relation = RelationKind::new("dev.koharu.relation.text-region")?;
     for text in &regions.texts {
-        let bubble = regions
-            .bubbles
-            .iter()
-            .filter(|bubble| containment(bubble.bounds, text.bounds) >= 0.5)
-            .min_by(|left, right| area(left.bounds).total_cmp(&area(right.bounds)));
+        let bubble = containing_bubble(&regions.bubbles, text.bounds);
         if let Some(bubble) = bubble {
             edit.add_relation(relation.clone(), text.entity, bubble.entity)?;
             write_text_role(edit, text.entity, "dev.koharu.text.dialogue", generation)?;
         }
     }
     Ok(())
+}
+
+fn containing_bubble(bubbles: &[DetectedRegion], bounds: [f32; 4]) -> Option<&DetectedRegion> {
+    bubbles
+        .iter()
+        .filter(|bubble| containment(bubble.bounds, bounds) >= 0.5)
+        .min_by(|left, right| area(left.bounds).total_cmp(&area(right.bounds)))
 }
 
 fn write_text_role(
@@ -376,8 +394,10 @@ struct MaskPoint {
 // BallonsTranslator defines font size as the text-line cross-axis span and
 // normalizes vertical-line angles relative to upright vertical text:
 // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/textblock.py#L576-L608
-// RF-DETR provides foreground pixels rather than line quadrilaterals, so PCA
-// supplies the line axis and a projection of the mask supplies its cross span.
+// RF-DETR provides foreground pixels rather than line quadrilaterals, so
+// projection-profile sharpness supplies the line axis and the mask projection
+// supplies its cross span. Whole-block PCA is deliberately avoided because a
+// tall multiline horizontal block otherwise looks vertical.
 fn infer_typography(
     image: &RgbImage,
     detection: &KoharuLayoutDetection,
@@ -387,21 +407,21 @@ fn infer_typography(
     let height = image.height().min(mask.height);
     let [left, top, right, bottom] = mask_window(detection.bbox, width, height)?;
     let mut points = Vec::new();
-    let mut channels = [Vec::new(), Vec::new(), Vec::new()];
+    let mut foreground = Vec::new();
+    let mut background = Vec::new();
     for y in top..bottom {
         let row = y as usize * mask.width as usize;
         for x in left..right {
+            let color = image.get_pixel(x, y).0;
             if mask.pixels.get(row + x as usize).copied().unwrap_or(0) == 0 {
+                background.push(color);
                 continue;
             }
             points.push(MaskPoint {
                 x: f64::from(x) + 0.5,
                 y: f64::from(y) + 0.5,
             });
-            let pixel = image.get_pixel(x, y);
-            for channel in 0..3 {
-                channels[channel].push(pixel[channel]);
-            }
+            foreground.push(color);
         }
     }
     if points.is_empty() {
@@ -410,7 +430,7 @@ fn infer_typography(
 
     let (angle_degrees, vertical) = mask_angle(&points, detection.bbox);
     let font_size = mask_font_size(&points, angle_degrees, vertical)?;
-    let color = normalize_text_color(channels.each_mut().map(|values| median_channel(values)));
+    let color = infer_text_color(&foreground, &background);
     Some(InferredTypography {
         font_size,
         color,
@@ -435,41 +455,57 @@ fn mask_window([left, top, right, bottom]: [f32; 4], width: u32, height: u32) ->
 }
 
 fn mask_angle(points: &[MaskPoint], [left, top, right, bottom]: [f32; 4]) -> (f32, bool) {
-    let count = points.len() as f64;
-    let mean_x = points.iter().map(|point| point.x).sum::<f64>() / count;
-    let mean_y = points.iter().map(|point| point.y).sum::<f64>() / count;
-    let (mut xx, mut xy, mut yy) = (0.0, 0.0, 0.0);
-    for point in points {
-        let x = point.x - mean_x;
-        let y = point.y - mean_y;
-        xx += x * x;
-        xy += x * y;
-        yy += y * y;
+    let mut horizontal = (f64::NEG_INFINITY, 0.0);
+    let mut vertical = (f64::NEG_INFINITY, 0.0);
+    for step in -ANGLE_SEARCH_HALF_STEPS..=ANGLE_SEARCH_HALF_STEPS {
+        let angle_degrees = f64::from(step) * ANGLE_SEARCH_STEP_DEGREES;
+        let (sin, cos) = angle_degrees.to_radians().sin_cos();
+        let horizontal_score = projection_score(points, -sin, cos);
+        if horizontal_score > horizontal.0 {
+            horizontal = (horizontal_score, angle_degrees);
+        }
+        let vertical_score = projection_score(points, cos, sin);
+        if vertical_score > vertical.0 {
+            vertical = (vertical_score, angle_degrees);
+        }
     }
-    let spread = xx + yy;
-    let anisotropy = if spread > f64::EPSILON {
-        ((xx - yy).powi(2) + 4.0 * xy.powi(2)).sqrt() / spread
+    let maximum_score = horizontal.0.max(vertical.0);
+    let scores_are_close = (horizontal.0 - vertical.0).abs() <= maximum_score * 0.02;
+    let is_vertical = if scores_are_close {
+        bottom - top > right - left
     } else {
-        0.0
+        vertical.0 > horizontal.0
     };
-    let axis = if anisotropy >= AXIS_ANISOTROPY_MINIMUM {
-        0.5 * (2.0 * xy).atan2(xx - yy)
-    } else if bottom - top > right - left {
-        std::f64::consts::FRAC_PI_2
+    let mut angle = if is_vertical {
+        vertical.1
     } else {
-        0.0
-    };
-    let vertical = axis.abs() > std::f64::consts::FRAC_PI_4;
-    let mut angle = if vertical {
-        axis - axis.signum() * std::f64::consts::FRAC_PI_2
-    } else {
-        axis
-    }
-    .to_degrees() as f32;
+        horizontal.1
+    } as f32;
     if angle.abs() < ANGLE_SNAP_DEGREES {
         angle = 0.0;
     }
-    (angle, vertical)
+    (angle, is_vertical)
+}
+
+fn projection_score(points: &[MaskPoint], axis_x: f64, axis_y: f64) -> f64 {
+    let mut minimum = f64::INFINITY;
+    let mut maximum = f64::NEG_INFINITY;
+    for point in points {
+        let projection = point.x * axis_x + point.y * axis_y;
+        minimum = minimum.min(projection);
+        maximum = maximum.max(projection);
+    }
+    let origin = minimum.floor();
+    let length = (maximum.ceil() - origin).max(0.0) as usize + 2;
+    let mut profile = vec![0.0; length];
+    for point in points {
+        let projection = point.x * axis_x + point.y * axis_y - origin;
+        let index = projection.floor() as usize;
+        let fraction = projection - index as f64;
+        profile[index] += 1.0 - fraction;
+        profile[index + 1] += fraction;
+    }
+    profile.iter().map(|value| value * value).sum::<f64>() / points.len() as f64
 }
 
 fn mask_font_size(points: &[MaskPoint], angle_degrees: f32, vertical: bool) -> Option<f32> {
@@ -550,10 +586,48 @@ fn median_channel(values: &mut [u8]) -> u8 {
     }
 }
 
+// BallonsTranslator normally receives foreground colors predicted per OCR line:
+// https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/modules/ocr/mit48px.py#L202-L210
+// This detector has only a segmentation mask, so the most background-distant
+// mask pixels approximate the solid glyph core without antialiasing bias.
+fn infer_text_color(foreground: &[[u8; 3]], background: &[[u8; 3]]) -> [u8; 3] {
+    if background.is_empty() {
+        return normalize_text_color(median_color(foreground));
+    }
+    let background = median_color(background);
+    let mut foreground = foreground.to_vec();
+    foreground.sort_unstable_by(|left, right| {
+        color_distance_squared(*right, background).cmp(&color_distance_squared(*left, background))
+    });
+    let core = foreground.len().div_ceil(4).max(1);
+    normalize_text_color(median_color(&foreground[..core]))
+}
+
+fn median_color(colors: &[[u8; 3]]) -> [u8; 3] {
+    std::array::from_fn(|channel| {
+        let mut values = colors
+            .iter()
+            .map(|color| color[channel])
+            .collect::<Vec<_>>();
+        median_channel(&mut values)
+    })
+}
+
+fn color_distance_squared(left: [u8; 3], right: [u8; 3]) -> u32 {
+    left.into_iter()
+        .zip(right)
+        .map(|(left, right)| i32::from(left) - i32::from(right))
+        .map(|difference| difference.unsigned_abs().pow(2))
+        .sum()
+}
+
 fn normalize_text_color(color: [u8; 3]) -> [u8; 3] {
-    if color.iter().copied().max().unwrap_or_default() <= COLOR_SNAP_CHANNEL {
+    let minimum = color.iter().copied().min().unwrap_or_default();
+    let maximum = color.iter().copied().max().unwrap_or_default();
+    let luminance = color.iter().copied().map(u16::from).sum::<u16>() / 3;
+    if maximum - minimum <= COLOR_SNAP_CHROMA && luminance <= COLOR_SNAP_DARK_LUMINANCE {
         [0, 0, 0]
-    } else if color.iter().copied().min().unwrap_or_default() >= u8::MAX - COLOR_SNAP_CHANNEL {
+    } else if maximum - minimum <= COLOR_SNAP_CHROMA && luminance >= COLOR_SNAP_LIGHT_LUMINANCE {
         [u8::MAX; 3]
     } else {
         color
@@ -569,24 +643,35 @@ fn rectangle_geometry([left, top, right, bottom]: [f32; 4]) -> Geometry {
     )
 }
 
-fn rotated_geometry(bounds: [f32; 4], angle_degrees: f32) -> Geometry {
-    let mut geometry = rectangle_geometry(bounds);
-    if angle_degrees == 0.0 {
-        return geometry;
+fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
+    let mask = GrayImage::from_raw(mask.width, mask.height, mask.pixels.clone())?;
+    let mut padded = GrayImage::new(mask.width() + 2, mask.height() + 2);
+    image::imageops::replace(&mut padded, &mask, 1, 1);
+    let contours = find_contours_with_threshold::<i32>(&padded, 0);
+    let contour = contours
+        .iter()
+        .filter(|contour| contour.border_type == BorderType::Outer)
+        .max_by(|left, right| {
+            contour_area(&left.points)
+                .partial_cmp(&contour_area(&right.points))
+                .unwrap_or(Ordering::Equal)
+        })?;
+    if contour.points.len() < 3 {
+        return None;
     }
-    let [left, top, right, bottom] = bounds.map(f64::from);
-    let center_x = (left + right) * 0.5;
-    let center_y = (top + bottom) * 0.5;
-    let (sin, cos) = f64::from(angle_degrees).to_radians().sin_cos();
-    for point in &mut geometry.points {
-        let x = point.x - center_x;
-        let y = point.y - center_y;
-        *point = Point {
-            x: center_x + x * cos - y * sin,
-            y: center_y + x * sin + y * cos,
-        };
-    }
-    geometry
+
+    let epsilon = (arc_length(&contour.points, true) * 0.001).max(f64::EPSILON);
+    let points = approximate_polygon_dp(&contour.points, epsilon, true)
+        .into_iter()
+        .map(|point| Point {
+            x: f64::from(point.x - 1),
+            y: f64::from(point.y - 1),
+        })
+        .collect::<Vec<_>>();
+    (points.len() >= 3).then_some(Geometry {
+        origin: Origin::User,
+        points,
+    })
 }
 
 fn write_masks(
@@ -700,7 +785,14 @@ fn region_kind(label: &str) -> Result<RegionKind> {
 
 fn mask_for(detections: &[KoharuLayoutDetection], label: &str, size: ImageSize) -> GrayImage {
     let mut mask = GrayImage::new(size.width, size.height);
-    for detection in detections.iter().filter(|value| value.label == label) {
+    for detection in detections.iter().filter(|value| {
+        value.label == label
+            || (label == "text"
+                && value.label == "onomatopoeia"
+                && detections.iter().any(|bubble| {
+                    bubble.label == "bubble" && containment(bubble.bbox, value.bbox) >= 0.5
+                }))
+    }) {
         for (target, source) in mask.as_mut().iter_mut().zip(&detection.mask.pixels) {
             if *source != 0 {
                 *target = u8::MAX;
@@ -708,14 +800,6 @@ fn mask_for(detections: &[KoharuLayoutDetection], label: &str, size: ImageSize) 
         }
     }
     mask
-}
-
-fn prepare_detections(detections: &mut Vec<KoharuLayoutDetection>, region: Option<crate::Bounds>) {
-    if let Some(region) = region {
-        detections.retain(|detection| intersects(detection.bbox, region));
-    }
-    non_maximum_suppression(detections, 0.5);
-    sort_by_layout(detections);
 }
 
 fn intersects([left, top, right, bottom]: [f32; 4], region: crate::Bounds) -> bool {
@@ -743,7 +827,9 @@ fn non_maximum_suppression(detections: &mut Vec<KoharuLayoutDetection>, threshol
     for candidate in detections.drain(..) {
         let suppressed = kept.iter().any(|existing: &KoharuLayoutDetection| {
             existing.label == candidate.label
-                && intersection_over_union(existing.bbox, candidate.bbox) > threshold
+                && (intersection_over_union(existing.bbox, candidate.bbox) >= threshold
+                    || overlap_over_smaller(existing.bbox, candidate.bbox)
+                        >= NMS_CONTAINMENT_THRESHOLD)
         });
         if !suppressed {
             kept.push(candidate);
@@ -916,6 +1002,15 @@ fn intersection_over_union(left: [f32; 4], right: [f32; 4]) -> f32 {
     }
 }
 
+fn overlap_over_smaller(left: [f32; 4], right: [f32; 4]) -> f32 {
+    let smaller = area(left).min(area(right));
+    if smaller <= 0.0 {
+        0.0
+    } else {
+        intersection_area(left, right) / smaller
+    }
+}
+
 fn intersection_area(left: [f32; 4], right: [f32; 4]) -> f32 {
     (left[2].min(right[2]) - left[0].max(right[0])).max(0.0)
         * (left[3].min(right[3]) - left[1].max(right[1])).max(0.0)
@@ -932,8 +1027,8 @@ mod tests {
     use koharu_scene::WritingMode;
 
     use super::{
-        infer_typography, layout_order, non_maximum_suppression, normalize_text_color,
-        rotated_geometry,
+        ImageSize, infer_typography, layout_order, mask_for, mask_geometry,
+        non_maximum_suppression, normalize_text_color,
     };
 
     fn detection(label: &str, score: f32, bbox: [f32; 4]) -> KoharuLayoutDetection {
@@ -949,6 +1044,41 @@ mod tests {
                 pixels: vec![0],
             },
         }
+    }
+
+    #[test]
+    fn bubble_geometry_follows_the_instance_mask_polygon() {
+        let width = 9;
+        let height = 9;
+        let mut pixels = vec![0; width * height];
+        for y in 0..height {
+            for x in 0..width {
+                if x.abs_diff(4) + y.abs_diff(4) <= 4 {
+                    pixels[y * width + x] = u8::MAX;
+                }
+            }
+        }
+
+        let geometry = mask_geometry(&KoharuLayoutMask {
+            width: width as u32,
+            height: height as u32,
+            pixels,
+        })
+        .unwrap();
+
+        assert!(geometry.points.len() >= 4);
+        assert!(
+            geometry
+                .points
+                .iter()
+                .all(|point| !(point.x == 0.0 && point.y == 0.0))
+        );
+        assert!(
+            geometry
+                .points
+                .iter()
+                .any(|point| point.x == 4.0 && point.y == 0.0)
+        );
     }
 
     fn masked_text(
@@ -999,6 +1129,7 @@ mod tests {
             detection("text", 0.8, [5.0, 5.0, 105.0, 105.0]),
             detection("bubble", 0.7, [0.0, 0.0, 100.0, 100.0]),
             detection("text", 0.9, [0.0, 0.0, 100.0, 100.0]),
+            detection("text", 0.5, [20.0, 20.0, 80.0, 80.0]),
             detection("text", 0.6, [200.0, 0.0, 250.0, 50.0]),
         ];
 
@@ -1015,6 +1146,39 @@ mod tests {
                 .iter()
                 .any(|detection| detection.label == "bubble")
         );
+    }
+
+    #[test]
+    fn text_mask_includes_only_onomatopoeia_contained_by_a_bubble() {
+        let detection = |label: &str, bbox: [f32; 4], pixels: [u8; 4]| KoharuLayoutDetection {
+            label_id: 0,
+            label: label.to_owned(),
+            score: 1.0,
+            bbox,
+            area: pixels.iter().filter(|value| **value != 0).count() as u32,
+            mask: KoharuLayoutMask {
+                width: 4,
+                height: 1,
+                pixels: pixels.to_vec(),
+            },
+        };
+        let detections = vec![
+            detection("bubble", [0.0, 0.0, 3.0, 1.0], [0, 0, 0, 0]),
+            detection("onomatopoeia", [0.0, 0.0, 1.0, 1.0], [255, 0, 0, 0]),
+            detection("text", [1.0, 0.0, 2.0, 1.0], [0, 255, 0, 0]),
+            detection("onomatopoeia", [3.0, 0.0, 4.0, 1.0], [0, 0, 0, 255]),
+        ];
+
+        let mask = mask_for(
+            &detections,
+            "text",
+            ImageSize {
+                width: 4,
+                height: 1,
+            },
+        );
+
+        assert_eq!(mask.as_raw(), &[255, 255, 0, 0]);
     }
 
     #[test]
@@ -1064,21 +1228,69 @@ mod tests {
     }
 
     #[test]
-    fn near_neutral_extremes_snap_to_full_black_or_white() {
-        assert_eq!(normalize_text_color([20, 31, 24]), [0, 0, 0]);
-        assert_eq!(normalize_text_color([230, 240, 250]), [255, 255, 255]);
-        assert_eq!(normalize_text_color([33, 33, 33]), [33, 33, 33]);
-        assert_eq!(normalize_text_color([222, 240, 250]), [222, 240, 250]);
+    fn tall_multiline_mask_uses_text_lines_instead_of_block_aspect() {
+        let width = 96;
+        let height = 96;
+        let angle_degrees = 8.0_f64;
+        let (sin, cos) = angle_degrees.to_radians().sin_cos();
+        let mut image = RgbImage::from_pixel(width, height, Rgb([240, 240, 240]));
+        let mut pixels = vec![0; width as usize * height as usize];
+        for y in 0..height {
+            for x in 0..width {
+                let dx = f64::from(x) + 0.5 - f64::from(width) * 0.5;
+                let dy = f64::from(y) + 0.5 - f64::from(height) * 0.5;
+                let local_x = dx * cos + dy * sin;
+                let local_y = -dx * sin + dy * cos;
+                let inside = [-24.0, 0.0, 24.0]
+                    .into_iter()
+                    .any(|line_y| local_x.abs() <= 15.0 && (local_y - line_y).abs() <= 2.0);
+                if inside {
+                    pixels[y as usize * width as usize + x as usize] = u8::MAX;
+                    image.put_pixel(x, y, Rgb([8, 8, 8]));
+                }
+            }
+        }
+        let detection = KoharuLayoutDetection {
+            label_id: 0,
+            label: "text".to_owned(),
+            score: 1.0,
+            bbox: [0.0, 0.0, width as f32, height as f32],
+            area: pixels.iter().filter(|value| **value != 0).count() as u32,
+            mask: KoharuLayoutMask {
+                width,
+                height,
+                pixels,
+            },
+        };
+
+        let inferred = infer_typography(&image, &detection).unwrap();
+
+        assert_eq!(inferred.writing_mode, WritingMode::Horizontal);
+        assert!((inferred.angle_degrees - 8.0).abs() < 1.0);
     }
 
     #[test]
-    fn inferred_angle_rotates_region_geometry() {
-        let geometry = rotated_geometry([10.0, 20.0, 70.0, 40.0], 15.0);
-        let top = (
-            geometry.points[1].x - geometry.points[0].x,
-            geometry.points[1].y - geometry.points[0].y,
-        );
+    fn antialiased_dark_text_uses_the_high_contrast_core() {
+        let (mut image, detection) = masked_text(52.0, 12.0, 0.0, [96, 94, 92]);
+        for (index, &mask) in detection.mask.pixels.iter().enumerate() {
+            if mask != 0 && index.is_multiple_of(3) {
+                let x = index as u32 % image.width();
+                let y = index as u32 / image.width();
+                image.put_pixel(x, y, Rgb([8, 9, 7]));
+            }
+        }
 
-        assert!((top.1.atan2(top.0).to_degrees() - 15.0).abs() < 1e-6);
+        let inferred = infer_typography(&image, &detection).unwrap();
+
+        assert_eq!(inferred.color, [0, 0, 0]);
+    }
+
+    #[test]
+    fn near_neutral_extremes_snap_to_full_black_or_white() {
+        assert_eq!(normalize_text_color([20, 31, 24]), [0, 0, 0]);
+        assert_eq!(normalize_text_color([230, 240, 250]), [255, 255, 255]);
+        assert_eq!(normalize_text_color([33, 33, 33]), [0, 0, 0]);
+        assert_eq!(normalize_text_color([205, 210, 216]), [255, 255, 255]);
+        assert_eq!(normalize_text_color([40, 70, 40]), [40, 70, 40]);
     }
 }

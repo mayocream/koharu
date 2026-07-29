@@ -16,6 +16,7 @@ use crate::{
     bubble::LayoutBox,
     plan::{ImageLayer, Layer, RenderBounds, TextLayer},
     raster::{DrawStyle, draw_layout},
+    script::is_cjk_text,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -267,7 +268,12 @@ fn prepare_text(
     resources: &RenderResources,
     theme: &RenderTheme,
 ) -> Result<PreparedLayer> {
-    let bounds = inset(layer.bounds, theme.text_inset);
+    let is_bubble_text = layer.balloon_contour.is_some();
+    let bounds = if is_bubble_text {
+        inset(layer.bounds, theme.text_inset)
+    } else {
+        layer.bounds
+    };
     if bounds.width <= 0.0 || bounds.height <= 0.0 {
         return Err(Error::invalid(format!(
             "text inset leaves no layout area for entity {}",
@@ -289,7 +295,17 @@ fn prepare_text(
             entity: layer.entity,
             source,
         })?;
-    let maximum = layer.font_size.unwrap_or(theme.font_size);
+    let maximum = layer.font_size.unwrap_or_else(|| {
+        if is_bubble_text {
+            if layer.writing_mode.is_vertical() {
+                bounds.height
+            } else {
+                bounds.width
+            }
+        } else {
+            theme.font_size
+        }
+    });
     let minimum = theme.minimum_font_size.min(maximum);
     let mut layout = crate::TextLayout::new(&fonts[0])
         .with_fallback_fonts(&fonts[1..])
@@ -298,7 +314,14 @@ fn prepare_text(
         .with_line_height(theme.line_height)
         .with_spacing(theme.letter_spacing, theme.word_spacing)
         .with_max_width(bounds.width)
-        .with_max_height(bounds.height);
+        .with_max_height(bounds.height)
+        .with_compact_emphasis_punctuation(
+            is_cjk_text(&layer.text)
+                || layer
+                    .language
+                    .as_ref()
+                    .is_some_and(|language| is_cjk_language(language.as_str())),
+        );
     if let Some(contour) = &layer.balloon_contour {
         let [top, _, _, left] = theme.text_inset;
         layout = layout.with_comic_balloon(
@@ -310,9 +333,19 @@ fn prepare_text(
                 VerticalAlignment::Center => 0.5,
                 VerticalAlignment::Bottom => 1.0,
             },
+            theme.text_inset.into_iter().fold(0.0, f32::max),
         );
     }
-    layout = if theme.fit_text {
+    if let Some(language) = &layer.language {
+        layout = layout.with_hyphenation_language_tag(language.as_str());
+        if is_bubble_text
+            && layer.writing_mode == WritingMode::Horizontal
+            && is_english(language.as_str())
+        {
+            layout = layout.with_hyphenation_policy(HyphenationPolicy::LastResort);
+        }
+    }
+    let layout = if theme.auto_fit {
         layout
             .with_max_font_size(maximum)
             .with_min_font_size(minimum)
@@ -320,15 +353,6 @@ fn prepare_text(
     } else {
         layout.with_font_size(maximum)
     };
-    if let Some(language) = &layer.language {
-        layout = layout.with_hyphenation_language_tag(language.as_str());
-        if layer.balloon_contour.is_some()
-            && layer.writing_mode == WritingMode::Horizontal
-            && is_english(language.as_str())
-        {
-            layout = layout.with_hyphenation_policy(HyphenationPolicy::LastResort);
-        }
-    }
     let layout = layout.run(&layer.text).map_err(|source| Error::Layout {
         entity: layer.entity,
         source,
@@ -432,6 +456,13 @@ fn is_english(language: &str) -> bool {
         .split(['-', '_'])
         .next()
         .is_some_and(|primary| primary.eq_ignore_ascii_case("en"))
+}
+
+fn is_cjk_language(language: &str) -> bool {
+    language
+        .split(['-', '_'])
+        .next()
+        .is_some_and(|primary| matches!(primary.to_ascii_lowercase().as_str(), "ja" | "ko" | "zh"))
 }
 
 struct ImageBytes(Arc<[u8]>);
@@ -550,7 +581,7 @@ mod tests {
     fn preparation_reports_balloon_overflow() {
         let (snapshot, plan, entity) = text_fixture(40.0, 18.0, "This dialogue cannot fit", 18.0);
         let theme = RenderTheme {
-            fit_text: false,
+            auto_fit: false,
             text_inset: [0.0; 4],
             ..RenderTheme::default()
         };
@@ -565,10 +596,67 @@ mod tests {
     }
 
     #[test]
+    fn free_text_auto_fits_the_exact_original_block_without_balloon_air() {
+        let (snapshot, mut plan, entity) =
+            text_fixture(40.0, 18.0, "This free text must shrink", 18.0);
+        let Layer::Text(layer) = &mut plan.layers[0] else {
+            panic!("expected a text layer");
+        };
+        layer.balloon_contour = None;
+        let original_bounds = layer.bounds;
+        let theme = RenderTheme {
+            minimum_font_size: 1.0,
+            text_inset: [100.0; 4],
+            ..RenderTheme::default()
+        };
+
+        let prepared =
+            PreparedPage::prepare(&plan, &snapshot, &RenderResources::new(), &theme).unwrap();
+        let rendered = prepared
+            .entities()
+            .iter()
+            .find(|rendered| rendered.entity == entity)
+            .unwrap();
+
+        assert!(rendered.font_size.unwrap() < 18.0);
+        assert!(rendered.bounds.x >= original_bounds.x - f32::EPSILON);
+        assert!(rendered.bounds.y >= original_bounds.y - f32::EPSILON);
+        assert!(rendered.bounds.width <= original_bounds.width + f32::EPSILON);
+        assert!(rendered.bounds.height <= original_bounds.height + f32::EPSILON);
+        assert!(!prepared.diagnostics().iter().any(|diagnostic| matches!(
+            diagnostic,
+            RenderDiagnostic::TextOverflow { entity: found, .. } if *found == entity
+        )));
+    }
+
+    #[test]
+    fn automatic_balloon_text_can_grow_beyond_the_theme_font_size() {
+        let (snapshot, mut plan, entity) = text_fixture(240.0, 120.0, "Hi", 18.0);
+        let Layer::Text(layer) = &mut plan.layers[0] else {
+            panic!("expected a text layer");
+        };
+        layer.font_size = None;
+        let theme = RenderTheme {
+            text_inset: [0.0; 4],
+            ..RenderTheme::default()
+        };
+
+        let prepared =
+            PreparedPage::prepare(&plan, &snapshot, &RenderResources::new(), &theme).unwrap();
+        let rendered = prepared
+            .entities()
+            .iter()
+            .find(|rendered| rendered.entity == entity)
+            .unwrap();
+
+        assert!(rendered.font_size.unwrap() > theme.font_size);
+    }
+
+    #[test]
     fn preparation_reports_text_below_the_readability_floor() {
         let (snapshot, plan, entity) = text_fixture(240.0, 120.0, "Small dialogue", 8.0);
         let theme = RenderTheme {
-            fit_text: false,
+            auto_fit: false,
             minimum_font_size: 9.0,
             text_inset: [0.0; 4],
             ..RenderTheme::default()
@@ -591,7 +679,7 @@ mod tests {
     fn preparation_rotates_text_and_reported_bounds() {
         let (snapshot, plan, entity) = text_fixture(240.0, 120.0, "Rotated text", 18.0);
         let theme = RenderTheme {
-            fit_text: false,
+            auto_fit: false,
             text_inset: [0.0; 4],
             ..RenderTheme::default()
         };

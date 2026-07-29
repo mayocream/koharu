@@ -29,7 +29,7 @@ pub struct RenderTheme {
     /// Insets in top, right, bottom, left order.
     pub text_inset: [f32; 4],
     pub vertical_alignment: VerticalAlignment,
-    pub fit_text: bool,
+    pub auto_fit: bool,
 }
 
 impl Default for RenderTheme {
@@ -45,7 +45,7 @@ impl Default for RenderTheme {
             word_spacing: 0.0,
             text_inset: [4.0; 4],
             vertical_alignment: VerticalAlignment::Center,
-            fit_text: true,
+            auto_fit: true,
         }
     }
 }

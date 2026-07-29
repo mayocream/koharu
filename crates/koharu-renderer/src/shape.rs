@@ -163,9 +163,9 @@ pub(crate) fn shape_script_runs<'a>(
         run_opts.script = crate::script::harfrust_script(script);
 
         if let Some(font) = fonts
-            .iter()
+            .first()
             .copied()
-            .find(|font| font.covers(script_run_text))
+            .filter(|font| font.covers(script_run_text))
         {
             push_font_run(shaper, script_run_text, font, &run_opts, start, &mut runs)?;
             continue;
@@ -322,6 +322,11 @@ mod tests {
             runs.iter()
                 .flat_map(|run| &run.glyphs)
                 .any(|glyph| std::ptr::eq(glyph.font, &fallback))
+        );
+        assert!(
+            runs.iter()
+                .flat_map(|run| &run.glyphs)
+                .any(|glyph| glyph.cluster == 0 && std::ptr::eq(glyph.font, &primary))
         );
 
         Ok(())

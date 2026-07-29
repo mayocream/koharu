@@ -21,7 +21,7 @@ pub struct LocalConfig {
 impl Default for LocalConfig {
     fn default() -> Self {
         Self {
-            model: "qwen3.5-0.8b".into(),
+            model: "gemma4-12b-it".into(),
         }
     }
 }

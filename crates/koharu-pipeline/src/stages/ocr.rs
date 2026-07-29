@@ -203,12 +203,35 @@ async fn infer_text<M: Send + 'static>(
         targets
             .into_iter()
             .map(|(entity, geometry, previous, image)| {
-                Ok((entity, geometry, previous, inference(&model, &image)?))
+                Ok((
+                    entity,
+                    geometry,
+                    previous,
+                    normalize_ocr_text(inference(&model, &image)?),
+                ))
             })
             .collect()
     })
     .await
     .context("OCR task panicked")?
+}
+
+// Manga OCR can emit replacement-box glyphs for an isolated Japanese ellipsis.
+// Normalize only an all-placeholder sequence so ordinary OCR output is preserved.
+fn normalize_ocr_text(text: String) -> String {
+    let visible = text
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<Vec<_>>();
+    if visible.len() >= 2
+        && visible
+            .iter()
+            .all(|character| matches!(character, '☐' | '□' | '▢' | '▣' | '�'))
+    {
+        "…".to_owned()
+    } else {
+        text
+    }
 }
 
 fn crop(source: &DynamicImage, geometry: &Geometry) -> Result<DynamicImage> {
@@ -222,4 +245,21 @@ fn crop(source: &DynamicImage, geometry: &Geometry) -> Result<DynamicImage> {
         bail!("geometry does not overlap the image");
     }
     Ok(source.crop_imm(x, y, right - x, bottom - y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_ocr_text;
+
+    #[test]
+    fn repeated_placeholder_glyphs_are_an_ellipsis() {
+        assert_eq!(normalize_ocr_text("☐ ☐ ☐".to_owned()), "…");
+        assert_eq!(normalize_ocr_text("□\n□".to_owned()), "…");
+    }
+
+    #[test]
+    fn ordinary_text_and_single_boxes_are_unchanged() {
+        assert_eq!(normalize_ocr_text("待って…".to_owned()), "待って…");
+        assert_eq!(normalize_ocr_text("☐".to_owned()), "☐");
+    }
 }

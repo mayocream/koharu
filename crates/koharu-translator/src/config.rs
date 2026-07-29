@@ -58,11 +58,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_qwen_3_5_0_8b() {
+    fn defaults_to_gemma_4_12b_it() {
         let Providers::Local(config) = TranslationConfig::default().model else {
             panic!("expected local translation configuration");
         };
-        assert_eq!(config.model, "qwen3.5-0.8b");
+        assert_eq!(config.model, "gemma4-12b-it");
     }
 
     #[test]
