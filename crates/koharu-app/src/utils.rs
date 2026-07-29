@@ -92,7 +92,10 @@ fn find_next_tag(text: &str) -> Option<(usize, usize, usize)> {
     None
 }
 
-pub fn parse_tagged_blocks(translation: &str, expected_blocks: usize) -> anyhow::Result<Option<Vec<String>>> {
+pub fn parse_tagged_blocks(
+    translation: &str,
+    expected_blocks: usize,
+) -> anyhow::Result<Option<Vec<String>>> {
     if find_next_tag(translation).is_none() {
         return Ok(None);
     }

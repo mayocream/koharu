@@ -23,11 +23,7 @@ import {
 import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
-import {
-  exportCurrentProjectAs,
-  importPages,
-  promptImportScript,
-} from '@/lib/io/pagesIo'
+import { exportCurrentProjectAs, importPages, promptImportScript } from '@/lib/io/pagesIo'
 import {
   clearSelectionOnCurrentPage,
   closeProject,

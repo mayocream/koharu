@@ -4,7 +4,13 @@ import { getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import type { SceneSnapshot } from '@/lib/api/schemas'
 import { openImageFiles, openImageFolder, openKhrFile, openTextFile } from '@/lib/io/openFiles'
 import { saveBlob } from '@/lib/io/saveBlob'
-import { exportProject, importScript, uploadKhrArchive, uploadPages, uploadPagesByPaths } from '@/lib/io/scene'
+import {
+  exportProject,
+  importScript,
+  uploadKhrArchive,
+  uploadPages,
+  uploadPagesByPaths,
+} from '@/lib/io/scene'
 import { queryClient } from '@/lib/queryClient'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
 
@@ -43,10 +49,7 @@ export async function importKhrFile(): Promise<void> {
 // Export (server returns bytes; saveBlob dispatches Tauri-dialog / web-FS)
 // ---------------------------------------------------------------------------
 
-const exportExtension: Record<
-  'khr' | 'psd' | 'rendered' | 'inpainted' | 'script',
-  string
-> = {
+const exportExtension: Record<'khr' | 'psd' | 'rendered' | 'inpainted' | 'script', string> = {
   khr: 'khr',
   psd: 'zip',
   rendered: 'zip',

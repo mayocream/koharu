@@ -255,10 +255,7 @@ export async function exportProject(
 
 // Script import --------------------------------------------------------------
 
-export async function importScript(
-  body: string,
-  pageId?: string,
-): Promise<void> {
+export async function importScript(body: string, pageId?: string): Promise<void> {
   const res = await fetch(getImportScriptUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
