@@ -40,6 +40,40 @@ impl SceneEdit {
         }
     }
 
+    /// Marks a page or entity subtree, plus its incident relations, as input
+    /// to this edit. An explicit rebase is rejected if any observed record
+    /// changed after the edit's base snapshot.
+    pub fn observe_subtree(&mut self, root: EntityId) -> Result<()> {
+        if !self.index.parents.contains_key(&root) {
+            return Err(Error::EntityNotFound(root));
+        }
+        let entities = self.index.descendants(root);
+        for entity in &entities {
+            self.storage.observe_record(entity.storage())?;
+        }
+        for (id, relation) in &self.index.relations {
+            if entities.contains(&relation.source) || entities.contains(&relation.target) {
+                self.storage.observe_record(id.storage())?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Marks one typed component, including its absence, as input to this
+    /// edit without changing it.
+    pub fn observe<T: SceneComponent>(
+        &mut self,
+        entity: EntityId,
+        slot: impl Into<ComponentSlot>,
+    ) -> Result<()> {
+        if !self.index.parents.contains_key(&entity) {
+            return Err(Error::EntityNotFound(entity));
+        }
+        self.storage
+            .observe_component(entity.storage(), &key::<T>(slot.into())?)?;
+        Ok(())
+    }
+
     pub fn add_page(&mut self, page: PageDraft, at: At) -> Result<EntityId> {
         let id = EntityId::from_storage(self.storage.insert_record()?);
         self.set_record(id.storage(), "default", &Page::from(page))?;
@@ -261,8 +295,9 @@ impl SceneEdit {
             ));
         }
         let slot = slot.into();
-        let value = self.prepare_value(self.base.storage.root(), slot.clone(), value)?;
-        self.set_record(self.base.storage.root(), slot, &value)
+        let root = self.base.storage.root();
+        let value = self.prepare_value(root, slot.clone(), value)?;
+        self.set_record(root, slot, &value)
     }
 
     pub fn remove_project<T: SceneComponent>(
@@ -278,9 +313,9 @@ impl SceneEdit {
             ));
         }
         let slot = slot.into();
-        self.validate_removal_authorship::<T>(self.base.storage.root(), slot.clone())?;
-        self.storage
-            .remove_component(self.base.storage.root(), &key::<T>(slot)?)?;
+        let root = self.base.storage.root();
+        self.validate_removal_authorship::<T>(root, slot.clone())?;
+        self.storage.remove_component(root, &key::<T>(slot)?)?;
         Ok(())
     }
 
@@ -475,7 +510,7 @@ impl SceneEdit {
     }
 
     fn prepare_value<T: SceneComponent>(
-        &self,
+        &mut self,
         record: koharu_storage::RecordId,
         slot: ComponentSlot,
         value: &T,
@@ -503,7 +538,7 @@ impl SceneEdit {
     }
 
     fn validate_removal_authorship<T: SceneComponent>(
-        &self,
+        &mut self,
         record: koharu_storage::RecordId,
         slot: ComponentSlot,
     ) -> Result<()> {
@@ -549,18 +584,22 @@ impl SceneEdit {
             .map_or(Origin::User, Origin::Generated)
     }
 
-    fn validate_lifecycle_removal(&self, entity: EntityId) -> Result<()> {
-        let Some(generation) = &self.generation else {
+    fn validate_lifecycle_removal(&mut self, entity: EntityId) -> Result<()> {
+        let Some(producer) = self
+            .generation
+            .as_ref()
+            .map(|generation| generation.producer.clone())
+        else {
             return Ok(());
         };
         let lifecycle = self
             .get::<EntityOrigin>(entity.storage(), "default")?
             .ok_or_else(|| Error::invalid("entity lifecycle origin is missing"))?;
         match lifecycle.origin {
-            Origin::Generated(owner) if owner.producer == generation.producer => Ok(()),
+            Origin::Generated(owner) if owner.producer == producer => Ok(()),
             Origin::Generated(owner) => Err(Error::Authorship(format!(
                 "producer {} owns entity {entity}, not {}",
-                owner.producer, generation.producer
+                owner.producer, producer
             ))),
             Origin::User => Err(Error::Authorship(format!(
                 "pipeline cannot remove user-owned entity {entity}"
@@ -569,11 +608,12 @@ impl SceneEdit {
     }
 
     fn get<T: SceneComponent>(
-        &self,
+        &mut self,
         record: koharu_storage::RecordId,
         slot: &str,
     ) -> Result<Option<T>> {
         let key = key::<T>(slot)?;
+        self.storage.observe_component(record, &key)?;
         let view = self.storage.view();
         let Some(raw) = view.component(record, &key)? else {
             return Ok(None);
@@ -588,7 +628,7 @@ impl SceneEdit {
         .map(Some)
     }
 
-    fn read_children(&self, record: koharu_storage::RecordId) -> Result<Children> {
+    fn read_children(&mut self, record: koharu_storage::RecordId) -> Result<Children> {
         Ok(self.get::<Children>(record, "default")?.unwrap_or_default())
     }
 

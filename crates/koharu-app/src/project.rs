@@ -298,7 +298,7 @@ impl Project {
             | AppCommand::Undo
             | AppCommand::Redo
             | AppCommand::RunPipeline { .. }
-            | AppCommand::CancelJob { .. }
+            | AppCommand::StopJob { .. }
             | AppCommand::ExportPages { .. }
             | AppCommand::GetSettings
             | AppCommand::SetSettings { .. }

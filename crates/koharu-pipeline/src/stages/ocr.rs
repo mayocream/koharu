@@ -1,6 +1,9 @@
 use std::sync::{Arc, Mutex};
 
+use super::{ModelRef, StageInput, StageProcessor, finish, generation, observe_page_hierarchy};
+use crate::{ModelCell, OcrModel, scope::geometry_extents};
 use anyhow::{Context as _, Result, anyhow, bail};
+use async_trait::async_trait;
 use image::DynamicImage;
 use koharu_ml::{
     baberu_ocr::BaberuOcr,
@@ -8,86 +11,114 @@ use koharu_ml::{
     paddle_ocr_vl::{PaddleOCRVL, PaddleOCRVLTask},
 };
 use koharu_scene::{
-    Authored, Geometry, LanguageTag, OcrAnalysis, Origin, Region, SourceText, TextDirection,
+    Asset, Authored, Geometry, LanguageTag, OcrAnalysis, Origin, Region, SourceText, TextDirection,
 };
-use serde::{Deserialize, Serialize};
-use specta::Type;
 
-use super::{finish, generation, producer};
-use crate::{NodeInput, NodeOutput, OcrModel, Stage, scope::geometry_extents};
+const PRODUCER: &str = "dev.koharu.pipeline.ocr";
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct MangaOcrConfig {}
+pub(super) struct Processor {
+    config: OcrModel,
+    device: koharu_ml::Device,
+    model: ModelCell<Model>,
+}
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct BaberuOcrConfig {}
+impl Processor {
+    pub(super) fn new(config: OcrModel, device: koharu_ml::Device) -> Self {
+        Self {
+            config,
+            device,
+            model: ModelCell::new(),
+        }
+    }
+}
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct PaddleOcrVl1_6Config {}
+#[async_trait]
+impl StageProcessor for Processor {
+    fn model(&self) -> ModelRef<'_> {
+        let name = match self.config {
+            OcrModel::MangaOcr => "manga-ocr",
+            OcrModel::BaberuOcr => "baberu-ocr",
+            OcrModel::PaddleOcrVl1_6 => "paddleocr-vl-1.6",
+        };
+        ModelRef::new(name, &self.model)
+    }
 
-pub(super) enum Model {
+    async fn load(&self) -> Result<()> {
+        self.model
+            .ensure(|| Model::load(self.device.clone(), &self.config))
+            .await
+    }
+
+    async fn process(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
+        self.model
+            .lock()
+            .await
+            .as_ref()
+            .ok_or_else(|| anyhow!("OCR model is not loaded"))?
+            .run(input)
+            .await
+    }
+}
+
+enum Model {
     Manga(Arc<Mutex<MangaOcr>>),
     Baberu(Arc<Mutex<BaberuOcr>>),
     Paddle(Arc<Mutex<PaddleOCRVL>>),
 }
 
 impl Model {
-    pub(super) async fn load(device: koharu_ml::Device, config: &OcrModel) -> Result<Self> {
+    async fn load(device: koharu_ml::Device, config: &OcrModel) -> Result<Self> {
         match config {
-            OcrModel::MangaOcr(_) => Ok(Self::Manga(Arc::new(Mutex::new(
+            OcrModel::MangaOcr => Ok(Self::Manga(Arc::new(Mutex::new(
                 MangaOcr::load(device).await?,
             )))),
-            OcrModel::BaberuOcr(_) => Ok(Self::Baberu(Arc::new(Mutex::new(
+            OcrModel::BaberuOcr => Ok(Self::Baberu(Arc::new(Mutex::new(
                 BaberuOcr::load(device).await?,
             )))),
-            OcrModel::PaddleOcrVl1_6(_) => Ok(Self::Paddle(Arc::new(Mutex::new(
+            OcrModel::PaddleOcrVl1_6 => Ok(Self::Paddle(Arc::new(Mutex::new(
                 PaddleOCRVL::load(device).await?,
             )))),
         }
     }
 
-    pub(super) async fn run(&self, input: NodeInput) -> Result<NodeOutput> {
+    async fn run(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
         let model_name = match self {
             Self::Manga(_) => "manga-ocr",
             Self::Baberu(_) => "baberu-ocr",
             Self::Paddle(_) => "paddleocr-vl-1.6",
         };
+        let page = input.page;
         let mut targets = Vec::new();
-        for page in input.scope.pages() {
-            let source = input
-                .cache
-                .image(&input.scene, *page, "source")?
-                .ok_or_else(|| anyhow!("page {page} has no source image"))?;
-            for entity in input.scene.descendants(*page)? {
-                let id = entity.id();
-                if !input.scope.contains_entity(&input.scene, id)? {
-                    continue;
-                }
-                let source_text = input.scene.component::<SourceText>(id, "default")?;
-                if source_text
-                    .as_ref()
-                    .is_some_and(|value| matches!(value.text.origin, Origin::User))
-                {
-                    continue;
-                }
-                let is_text_region = input
-                    .scene
-                    .component::<Region>(id, "default")?
-                    .is_some_and(|region| region.kind.as_str() == "dev.koharu.region.text");
-                if !is_text_region && source_text.is_none() {
-                    continue;
-                }
-                let geometry = input
-                    .scene
-                    .component::<Geometry>(id, "default")?
-                    .ok_or_else(|| anyhow!("text entity {id} has no geometry"))?;
-                let crop = crop(&source, &geometry)
-                    .with_context(|| format!("text entity {id} is outside its source image"))?;
-                targets.push((id, geometry, source_text, crop));
+        let source = input
+            .images
+            .get(&input.scene, page, "source")?
+            .ok_or_else(|| anyhow!("page {page} has no source image"))?;
+        for entity in input.scene.descendants(page)? {
+            let id = entity.id();
+            if !input.contains_entity(id)? {
+                continue;
             }
+            let source_text = input.scene.component::<SourceText>(id, "default")?;
+            if source_text
+                .as_ref()
+                .is_some_and(|value| matches!(value.text.origin, Origin::User))
+            {
+                continue;
+            }
+            let is_text_region = input
+                .scene
+                .component::<Region>(id, "default")?
+                .is_some_and(|region| region.kind.as_str() == "dev.koharu.region.text");
+            if !is_text_region && source_text.is_none() {
+                continue;
+            }
+            let geometry = input
+                .scene
+                .component::<Geometry>(id, "default")?
+                .ok_or_else(|| anyhow!("text entity {id} has no geometry"))?;
+            let crop = crop(&source, &geometry)
+                .with_context(|| format!("text entity {id} is outside its source image"))?;
+            targets.push((id, geometry, source_text, crop));
         }
 
         let results = match self {
@@ -111,11 +142,14 @@ impl Model {
             }
         };
 
-        if input.cancellation.is_cancelled() {
-            bail!("OCR was cancelled");
-        }
-        let generation = generation(producer(Stage::Ocr), model_name)?;
+        let generation = generation(PRODUCER, model_name)?;
         let mut edit = input.scene.edit_as(generation.clone());
+        edit.observe::<Asset>(page, "source")?;
+        for entity in observe_page_hierarchy(&mut edit, &input.scene, page)? {
+            edit.observe::<Region>(entity, "default")?;
+            edit.observe::<SourceText>(entity, "default")?;
+            edit.observe::<Geometry>(entity, "default")?;
+        }
         for (entity, geometry, previous, text) in results {
             let language = previous
                 .and_then(|value| value.language)

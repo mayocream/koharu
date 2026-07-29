@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use koharu_pipeline::{Scope, Target};
+use koharu_pipeline::{Operation, Scope};
 use koharu_scene::{EntityId, ProjectId, Revision, TextAlignment, WritingMode};
 use koharu_secrets::{ExposeSecret, SecretString};
 use koharu_translator::{Providers, TranslationConfig, TranslationCredentials};
@@ -138,9 +138,9 @@ pub enum UiCommand {
     Redo,
     RunPipeline {
         scope: Scope,
-        target: Target,
+        operation: Operation,
     },
-    CancelJob {
+    StopJob {
         job: RequestId,
     },
     ExportPages {
@@ -719,6 +719,7 @@ pub enum JobStatus {
         completed: usize,
         #[specta(type = f64)]
         total: usize,
+        page: Option<EntityId>,
         phase: Option<koharu_pipeline::Stage>,
         model: Option<String>,
     },
@@ -729,7 +730,7 @@ pub enum JobStatus {
         id: RequestId,
         error: String,
     },
-    Cancelled {
+    Stopped {
         id: RequestId,
     },
 }

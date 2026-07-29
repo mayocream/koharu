@@ -258,13 +258,13 @@ describe('native editor components', () => {
     expect(fire).toHaveBeenLastCalledWith({
       type: 'run_pipeline',
       scope: { scope: 'pages', value: ['page'] },
-      target: { target: 'exact', stages: ['detection'] },
+      operation: { operation: 'only', stage: 'detection' },
     })
     fireEvent.click(screen.getByTestId('toolbar-translation'))
     expect(fire).toHaveBeenLastCalledWith({
       type: 'run_pipeline',
       scope: { scope: 'entities', value: ['element'] },
-      target: { target: 'exact', stages: ['translation'] },
+      operation: { operation: 'only', stage: 'translation' },
     })
 
     fireEvent.click(screen.getByTestId('llm-trigger'))
@@ -356,6 +356,7 @@ describe('native editor components', () => {
           kind: 'pipeline',
           completed: 1,
           total: 4,
+          page: 'page',
           phase: 'ocr',
           model: 'manga-ocr',
         },
@@ -398,6 +399,7 @@ describe('native editor components', () => {
         fonts: [],
       },
     })
+    const fire = vi.spyOn(koharuClient, 'fire').mockImplementation(() => undefined)
     render(
       <ThemeProvider attribute='class'>
         <ActivityBubble />
@@ -405,6 +407,8 @@ describe('native editor components', () => {
       </ThemeProvider>,
     )
     expect(screen.getByText('25%')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop', hidden: true }))
+    expect(fire).toHaveBeenCalledWith({ type: 'stop_job', job: 'job' })
     fireEvent.click(screen.getByRole('button', { name: /pipeline/i }))
     expect(screen.getByRole('heading', { level: 2, name: 'Pipeline' })).toBeInTheDocument()
     expect(

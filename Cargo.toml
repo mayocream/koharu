@@ -74,7 +74,6 @@ rayon = "1.12"
 rust-embed = { version = "8.12", features = ["interpolate-folder-path"] }
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
-petgraph = "0.8"
 strum = { version = "0.28", features = ["derive"] }
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
@@ -90,7 +89,6 @@ reqwest-retry = "0.9"
 toml = "1.1"
 inventory = "0.3"
 url = { version = "2.5", features = ["serde"] }
-arc-swap = "1.7"
 camino = { version = "1.1", features = ["serde1"] }
 indexmap = { version = "2.13", features = ["serde"] }
 indextree = "4.8.1"

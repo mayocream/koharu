@@ -9,13 +9,6 @@ pub struct ScenePatch {
 }
 
 impl ScenePatch {
-    pub fn merge<'a>(patches: impl IntoIterator<Item = &'a ScenePatch>) -> Result<Self> {
-        Ok(Self {
-            storage: koharu_storage::Patch::merge(patches.into_iter().map(|patch| &patch.storage))?,
-            result_index: None,
-        })
-    }
-
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.storage.is_empty()
@@ -44,5 +37,12 @@ impl ScenePatch {
 
     pub fn validate_on(&self, snapshot: &SceneSnapshot) -> Result<()> {
         snapshot.preview([self]).map(|_| ())
+    }
+
+    pub fn rebase_on(&self, snapshot: &SceneSnapshot) -> Result<Self> {
+        Ok(Self {
+            storage: self.storage.rebase_on(&snapshot.storage)?,
+            result_index: None,
+        })
     }
 }

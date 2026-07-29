@@ -1,10 +1,9 @@
-use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::builtin::{
-    AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig,
-    LaMaConfig, MangaOcrConfig, PaddleOcrVl1_6Config, RoremMixedConfig,
+use crate::stages::{
+    AotInpaintingConfig, Flux2KleinConfig, KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig,
+    RoremMixedConfig,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
@@ -21,91 +20,9 @@ impl Default for PipelineConfig {
             detection: DetectionModel::KoharuLayoutRFDetrSeg2XL(
                 KoharuLayoutRFDetrSeg2XLConfig::default(),
             ),
-            ocr: OcrModel::PaddleOcrVl1_6(PaddleOcrVl1_6Config::default()),
+            ocr: OcrModel::PaddleOcrVl1_6,
             inpainting: InpaintingModel::LaMa(LaMaConfig::default()),
         }
-    }
-}
-
-impl PipelineConfig {
-    pub(crate) fn validate(&self) -> Result<()> {
-        let DetectionModel::KoharuLayoutRFDetrSeg2XL(detection) = &self.detection;
-        for (name, value) in [
-            ("text", detection.text_threshold),
-            ("bubble", detection.bubble_threshold),
-            ("panel", detection.panel_threshold),
-        ] {
-            if let Some(value) = value {
-                ensure!(
-                    value.is_finite() && (0.0..=1.0).contains(&value),
-                    "{name} confidence threshold must be finite and between zero and one"
-                );
-            }
-        }
-        match &self.inpainting {
-            InpaintingModel::LaMa(config) => {
-                ensure!(
-                    config.hd_strategy_crop_trigger_size > 0,
-                    "LaMa crop trigger must be positive"
-                );
-                ensure!(
-                    config.hd_strategy_resize_limit > 0,
-                    "LaMa resize limit must be positive"
-                );
-            }
-            InpaintingModel::AotInpainting(config) => {
-                ensure!(
-                    config.max_side > 0,
-                    "AOT max_side must be greater than zero"
-                );
-            }
-            InpaintingModel::Flux2Klein(config) => {
-                ensure!(!config.prompt.contains('\0'), "FLUX.2 prompt contains NUL");
-                ensure!(
-                    config.strength.is_finite() && config.strength > 0.0 && config.strength <= 1.0,
-                    "FLUX.2 strength must be finite and in (0, 1]"
-                );
-                ensure!(
-                    config.num_inference_steps > 0,
-                    "FLUX.2 inference steps must be positive"
-                );
-            }
-            InpaintingModel::RoremMixed(config) => {
-                ensure!(
-                    matches!(config.resolution, 512 | 1024),
-                    "RORem resolution must be 512 or 1024"
-                );
-                ensure!(
-                    config.num_inference_steps > 0,
-                    "RORem inference steps must be positive"
-                );
-                ensure!(
-                    config.guidance_scale.is_finite() && config.guidance_scale > 0.0,
-                    "RORem guidance must be finite and positive"
-                );
-                ensure!(
-                    config.strength.is_finite() && config.strength > 0.0 && config.strength < 1.0,
-                    "RORem strength must be finite and in (0, 1)"
-                );
-                ensure!(
-                    !config.prompt.contains('\0') && !config.negative_prompt.contains('\0'),
-                    "RORem prompt contains NUL"
-                );
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn nodes(
-        &self,
-        translation: &koharu_translator::TranslationConfig,
-    ) -> [crate::ConfiguredNode; 4] {
-        [
-            crate::ConfiguredNode::Detection(self.detection.clone()),
-            crate::ConfiguredNode::Ocr(self.ocr.clone()),
-            crate::ConfiguredNode::Translation(translation.model.clone()),
-            crate::ConfiguredNode::Inpainting(self.inpainting.clone()),
-        ]
     }
 }
 
@@ -120,11 +37,11 @@ pub enum DetectionModel {
 #[serde(tag = "model", deny_unknown_fields)]
 pub enum OcrModel {
     #[serde(rename = "paddleocr-vl-1.6")]
-    PaddleOcrVl1_6(PaddleOcrVl1_6Config),
+    PaddleOcrVl1_6,
     #[serde(rename = "manga-ocr")]
-    MangaOcr(MangaOcrConfig),
+    MangaOcr,
     #[serde(rename = "baberu-ocr")]
-    BaberuOcr(BaberuOcrConfig),
+    BaberuOcr,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
@@ -152,7 +69,7 @@ mod tests {
             config.detection,
             DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
         ));
-        assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6(_)));
+        assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6));
         assert!(matches!(config.inpainting, InpaintingModel::LaMa(_)));
     }
 
@@ -178,7 +95,7 @@ mod tests {
             config.detection,
             DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
         ));
-        assert!(matches!(config.ocr, OcrModel::BaberuOcr(_)));
+        assert!(matches!(config.ocr, OcrModel::BaberuOcr));
         assert!(matches!(
             config.inpainting,
             InpaintingModel::RoremMixed(config)

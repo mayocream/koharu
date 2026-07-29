@@ -66,7 +66,7 @@ function WorkflowButtons() {
     koharuClient.fire({
       type: 'run_pipeline',
       scope: pipelineScope(stage, page.id, selectedPages, selectedElements),
-      target: { target: 'exact', stages: [stage] },
+      operation: { operation: 'only', stage },
     })
   }
 

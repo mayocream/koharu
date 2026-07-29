@@ -278,7 +278,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
         )
       }
       if (value.state === 'failed') return typeof value.error === 'string'
-      return value.state === 'finished' || value.state === 'cancelled'
+      return value.state === 'finished' || value.state === 'stopped'
     }
     case 'download_changed': {
       if (typeof value.id !== 'number') return false

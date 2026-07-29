@@ -16,8 +16,6 @@ export type AssetView = {
 	brush_mask: string | null,
 };
 
-export type BaberuOcrConfig = Record<string, never>;
-
 export type Bounds = {
 	x: number,
 	y: number,
@@ -179,7 +177,7 @@ export type InpaintingModel = {
 
 export type JobKind = "pipeline" | "import" | "export";
 
-export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; phase: Stage | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "cancelled"; id: RequestId };
+export type JobStatus = { state: "running"; id: RequestId; kind: JobKind; completed: number; total: number; page: EntityId | null; phase: Stage | null; model: string | null } | { state: "finished"; id: RequestId } | { state: "failed"; id: RequestId; error: string } | { state: "stopped"; id: RequestId };
 
 export type KoharuLayoutRFDetrSeg2XLConfig = {
 	text_threshold?: number | null,
@@ -209,8 +207,6 @@ export type LocalConfig = {
 	model: string,
 };
 
-export type MangaOcrConfig = Record<string, never>;
-
 export type MaskPlane = "text" | "brush";
 
 export type OcrModel = { model: "paddleocr-vl-1.6" } | { model: "manga-ocr" } | { model: "baberu-ocr" };
@@ -236,7 +232,7 @@ export type OpenRouterConfig = {
 	thinking: boolean,
 };
 
-export type PaddleOcrVl1_6Config = Record<string, never>;
+export type Operation = { operation: "full" } | { operation: "through"; stage: Stage } | { operation: "only"; stage: Stage };
 
 export type PageSize = {
 	width: number,
@@ -364,8 +360,6 @@ export type SystemResourcesView = {
 	devices: DeviceResourcesView[],
 };
 
-export type Target = { target: "all" } | { target: "stage"; stages: Stage } | { target: "stages"; stages: Stage[] } | { target: "exact"; stages: Stage[] };
-
 export type TargetLanguageView = {
 	tag: string,
 	name: string,
@@ -405,7 +399,7 @@ export type TypographyIntent = {
 	writing_mode: WritingMode | null,
 };
 
-export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: EntityId; label: string } | { type: "delete_pages"; pages: EntityId[] } | { type: "move_page"; page: EntityId; index: number } | { type: "add_text"; page: EntityId; frame: Frame } | { type: "set_source_text"; entity: EntityId; text: string } | { type: "set_translation"; entity: EntityId; locale: string; text: string | null } | { type: "set_typography"; entities: EntityTypography[] } | { type: "set_geometry"; entities: EntityGeometry[] } | { type: "set_visibility"; entities: EntityId[]; visible: boolean | null; opacity: number | null } | { type: "delete_entities"; entities: EntityId[] } | { type: "move_entity"; entity: EntityId; parent: EntityId; index: number } | { type: "finish_transform" } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; target: Target } | { type: "cancel_job"; job: RequestId } | { type: "export_pages"; pages: EntityId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
+export type UiCommand = { type: "synchronize" } | { type: "create_project" } | { type: "open_project" } | { type: "close_project" } | { type: "import_pages" } | { type: "rename_page"; page: EntityId; label: string } | { type: "delete_pages"; pages: EntityId[] } | { type: "move_page"; page: EntityId; index: number } | { type: "add_text"; page: EntityId; frame: Frame } | { type: "set_source_text"; entity: EntityId; text: string } | { type: "set_translation"; entity: EntityId; locale: string; text: string | null } | { type: "set_typography"; entities: EntityTypography[] } | { type: "set_geometry"; entities: EntityGeometry[] } | { type: "set_visibility"; entities: EntityId[]; visible: boolean | null; opacity: number | null } | { type: "delete_entities"; entities: EntityId[] } | { type: "move_entity"; entity: EntityId; parent: EntityId; index: number } | { type: "finish_transform" } | { type: "undo" } | { type: "redo" } | { type: "run_pipeline"; scope: Scope; operation: Operation } | { type: "stop_job"; job: RequestId } | { type: "export_pages"; pages: EntityId[]; format: ExportFormat } | { type: "get_settings" } | { type: "set_settings"; pipeline: PipelineConfig; translation: TranslationSettings } | { type: "collect_garbage" };
 
 export type UiError = {
 	code: UiErrorCode,

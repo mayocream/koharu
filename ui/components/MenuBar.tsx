@@ -78,7 +78,7 @@ export function MenuBar() {
     koharuClient.fire({
       type: 'run_pipeline',
       scope,
-      target: stage ? { target: 'stage', stages: stage } : { target: 'all' },
+      operation: stage ? { operation: 'through', stage } : { operation: 'full' },
     })
 
   const updateDisplay = (next: typeof display) => {

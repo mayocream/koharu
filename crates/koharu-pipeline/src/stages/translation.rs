@@ -1,14 +1,77 @@
 use anyhow::{Context as _, Result, bail};
+use async_trait::async_trait;
 use koharu_scene::{Authored, LanguageTag, Origin, SourceText, Translation};
 use koharu_translator::{
     Language, LocalModel, LocalTranslator, Providers, RemoteProvider, RemoteTranslator,
     TranslationRequest, Translator,
 };
 
-use super::{finish, generation, producer};
-use crate::{NodeInput, NodeOutput, Stage};
+use super::{ModelRef, StageInput, StageProcessor, finish, generation, observe_page_hierarchy};
+use crate::ModelCell;
 
-pub(super) struct Model {
+const PRODUCER: &str = "dev.koharu.pipeline.translation";
+
+pub(super) struct Processor {
+    config: koharu_translator::TranslationConfig,
+    device: koharu_ml::Device,
+    model: ModelCell<Model>,
+}
+
+impl Processor {
+    pub(super) fn new(
+        config: koharu_translator::TranslationConfig,
+        device: koharu_ml::Device,
+    ) -> Result<Self> {
+        config
+            .target_language
+            .parse::<Language>()
+            .with_context(|| format!("unsupported target language {}", config.target_language))?;
+        if let Providers::Local(local) = &config.model {
+            local
+                .model
+                .parse::<LocalModel>()
+                .with_context(|| format!("unknown local translator '{}'", local.model))?;
+        }
+        if config
+            .instructions
+            .as_ref()
+            .is_some_and(|value| value.contains('\0') || value.len() > 1024 * 1024)
+        {
+            bail!("translation instructions are too large or contain NUL");
+        }
+
+        Ok(Self {
+            config,
+            device,
+            model: ModelCell::new(),
+        })
+    }
+}
+
+#[async_trait]
+impl StageProcessor for Processor {
+    fn model(&self) -> ModelRef<'_> {
+        ModelRef::new(provider_name(&self.config.model), &self.model)
+    }
+
+    async fn load(&self) -> Result<()> {
+        self.model
+            .ensure(|| Model::load(self.device.clone(), &self.config.model))
+            .await
+    }
+
+    async fn process(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
+        self.model
+            .lock()
+            .await
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("translation model is not loaded"))?
+            .run(input, &self.config)
+            .await
+    }
+}
+
+struct Model {
     backend: Backend,
 }
 
@@ -21,7 +84,7 @@ enum Backend {
 }
 
 impl Model {
-    pub(super) async fn load(device: koharu_ml::Device, config: &Providers) -> Result<Self> {
+    async fn load(device: koharu_ml::Device, config: &Providers) -> Result<Self> {
         let backend = match config {
             Providers::Local(config) => {
                 let model = config
@@ -38,41 +101,24 @@ impl Model {
         Ok(Self { backend })
     }
 
-    pub(super) async fn run(&self, input: NodeInput) -> Result<NodeOutput> {
-        let locale = LanguageTag::new(input.options.target_language.clone())?;
-        let target = input
-            .options
+    async fn run(
+        &self,
+        input: StageInput,
+        options: &koharu_translator::TranslationConfig,
+    ) -> Result<koharu_scene::ScenePatch> {
+        let locale = LanguageTag::new(options.target_language.clone())?;
+        let target = options
             .target_language
             .parse::<Language>()
             .context("invalid translation target language")?;
-        let mut targets = Vec::new();
-        for entity in input.scene.entities_with::<SourceText>("default")? {
-            let id = entity.id();
-            if !input.scope.contains_entity(&input.scene, id)? {
-                continue;
-            }
-            let source = entity
-                .component::<SourceText>("default")?
-                .expect("entities_with returned an entity with source text");
-            if source.text.value.trim().is_empty() {
-                continue;
-            }
-            if input
-                .scene
-                .component::<Translation>(id, locale.as_str())?
-                .is_some_and(|value| matches!(value.text.origin, Origin::User))
-            {
-                continue;
-            }
-            targets.push((id, source.text.value));
-        }
+        let targets = targets(&input, &locale)?;
 
         let segments = if targets.is_empty() {
             Vec::new()
         } else {
             let mut request =
                 TranslationRequest::new(targets.iter().map(|(_, source)| source.as_str()), target);
-            if let Some(instructions) = &input.options.translation_instructions {
+            if let Some(instructions) = &options.instructions {
                 request = request.with_instructions(instructions);
             }
             match &self.backend {
@@ -82,15 +128,16 @@ impl Model {
                 }
             }
         };
-        if input.cancellation.is_cancelled() {
-            bail!("translation was cancelled");
-        }
         let model_name = match &self.backend {
             Backend::Local(_) => "local-translation",
             Backend::Remote { provider, .. } => provider_name(provider),
         };
-        let generation = generation(producer(Stage::Translation), model_name)?;
+        let generation = generation(PRODUCER, model_name)?;
         let mut edit = input.scene.edit_as(generation.clone());
+        for entity in observe_page_hierarchy(&mut edit, &input.scene, input.page)? {
+            edit.observe::<SourceText>(entity, "default")?;
+            edit.observe::<Translation>(entity, locale.as_str())?;
+        }
         for ((entity, _), text) in targets.into_iter().zip(segments) {
             edit.set_translation(
                 entity,
@@ -102,6 +149,34 @@ impl Model {
         }
         finish(edit)
     }
+}
+
+fn targets(
+    input: &StageInput,
+    locale: &LanguageTag,
+) -> Result<Vec<(koharu_scene::EntityId, String)>> {
+    let mut targets = Vec::new();
+    for entity in input.scene.subtree(input.page)? {
+        let id = entity.id();
+        if !input.contains_entity(id)? {
+            continue;
+        }
+        let Some(source) = entity.component::<SourceText>("default")? else {
+            continue;
+        };
+        if source.text.value.trim().is_empty() {
+            continue;
+        }
+        if input
+            .scene
+            .component::<Translation>(id, locale.as_str())?
+            .is_some_and(|value| matches!(value.text.origin, Origin::User))
+        {
+            continue;
+        }
+        targets.push((id, source.text.value));
+    }
+    Ok(targets)
 }
 
 fn remote(provider: &Providers, client: &reqwest::Client) -> Result<RemoteTranslator> {

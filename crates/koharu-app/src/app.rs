@@ -15,7 +15,7 @@ use koharu_config::Config;
 use koharu_desktop::{
     Application, DesktopContext, Frontend, MaskEncodingResult, Options as DesktopOptions,
 };
-use koharu_pipeline::{CancellationToken, PipelineConfig};
+use koharu_pipeline::{PipelineConfig, StopToken};
 use koharu_scene::{
     Asset, AssetMetadata, BlobId, EntityId, LanguageTag, Revision, SceneChangeSet, SceneComponent,
     SceneSession,
@@ -117,7 +117,7 @@ pub struct App {
 }
 
 struct RunningJob {
-    cancellation: CancellationToken,
+    stop: StopToken,
     status: JobStatus,
 }
 
@@ -174,7 +174,7 @@ impl App {
         desktop: &mut DesktopContext<'_, NativeEvent>,
     ) -> Result<()> {
         for job in self.jobs.values() {
-            job.cancellation.cancel();
+            job.stop.stop();
         }
         self.jobs.clear();
         self.pending_masks.clear();
@@ -188,7 +188,7 @@ impl App {
 
     fn close(&mut self, desktop: &mut DesktopContext<'_, NativeEvent>) -> Result<()> {
         for job in self.jobs.values() {
-            job.cancellation.cancel();
+            job.stop.stop();
         }
         self.jobs.clear();
         self.pending_masks.clear();
@@ -254,7 +254,7 @@ impl App {
             && !matches!(
                 &command,
                 AppCommand::Synchronize
-                    | AppCommand::CancelJob { .. }
+                    | AppCommand::StopJob { .. }
                     | AppCommand::GetSettings
                     | AppCommand::SetSettings { .. }
             )
@@ -310,19 +310,20 @@ impl App {
                 self.ensure_free_job(id)?;
                 self.ensure_job_kind_available(JobKind::Import)?;
                 let path = self.project_path()?.to_owned();
-                let cancellation = self.background.import(id, path, files, desktop.handle())?;
+                let stop = self.background.import(id, path, files, desktop.handle())?;
                 let status = JobStatus::Running {
                     id,
                     kind: JobKind::Import,
                     completed: 0,
                     total: 0,
+                    page: None,
                     phase: None,
                     model: None,
                 };
                 self.jobs.insert(
                     id,
                     RunningJob {
-                        cancellation,
+                        stop,
                         status: status.clone(),
                     },
                 );
@@ -335,16 +336,16 @@ impl App {
             AppCommand::Redo => {
                 return self.redo(desktop, base).map(CommandOutcome::Accepted);
             }
-            AppCommand::RunPipeline { scope, target } => {
+            AppCommand::RunPipeline { scope, operation } => {
                 self.require_base(base)?;
                 self.ensure_free_job(id)?;
                 self.ensure_job_kind_available(JobKind::Pipeline)?;
-                let cancellation = self.background.run_pipeline(
+                let stop = self.background.run_pipeline(
                     PipelineRequest {
                         id,
                         path: self.project_path()?.to_owned(),
                         scope,
-                        target,
+                        operation,
                     },
                     desktop.handle(),
                 )?;
@@ -353,28 +354,29 @@ impl App {
                     kind: JobKind::Pipeline,
                     completed: 0,
                     total: 0,
+                    page: None,
                     phase: None,
                     model: None,
                 };
                 self.jobs.insert(
                     id,
                     RunningJob {
-                        cancellation,
+                        stop,
                         status: status.clone(),
                     },
                 );
                 desktop.emit(EVENT_NAME, AppEvent::JobChanged(status))?;
                 return Ok(CommandOutcome::Accepted(base));
             }
-            AppCommand::CancelJob { job } => {
+            AppCommand::StopJob { job } => {
                 self.require_base(base)?;
                 self.jobs
                     .get(&job)
                     .ok_or_else(|| {
                         app_failure(AppErrorCode::NotFound, format!("job {job} is not running"))
                     })?
-                    .cancellation
-                    .cancel();
+                    .stop
+                    .stop();
                 return Ok(CommandOutcome::Accepted(base));
             }
             AppCommand::ExportPages { pages, format } => {
@@ -399,7 +401,7 @@ impl App {
                         "there are no pages to export",
                     ));
                 }
-                let cancellation = self.background.export(
+                let stop = self.background.export(
                     ExportRequest {
                         id,
                         snapshot: self.session()?.snapshot(),
@@ -415,13 +417,14 @@ impl App {
                     kind: JobKind::Export,
                     completed: 0,
                     total: 0,
+                    page: None,
                     phase: None,
                     model: None,
                 };
                 self.jobs.insert(
                     id,
                     RunningJob {
-                        cancellation,
+                        stop,
                         status: status.clone(),
                     },
                 );
@@ -1147,6 +1150,7 @@ impl Application for App {
                 job,
                 completed,
                 total,
+                page,
                 stage,
                 model,
             } => {
@@ -1158,6 +1162,7 @@ impl Application for App {
                     kind: JobKind::Pipeline,
                     completed,
                     total,
+                    page,
                     phase: stage,
                     model,
                 };
@@ -1177,6 +1182,7 @@ impl Application for App {
                     kind: JobKind::Import,
                     completed,
                     total,
+                    page: None,
                     phase: None,
                     model: None,
                 };
@@ -1196,6 +1202,7 @@ impl Application for App {
                     kind: JobKind::Export,
                     completed,
                     total,
+                    page: None,
                     phase: None,
                     model: None,
                 };
@@ -1206,7 +1213,7 @@ impl Application for App {
                 job,
                 revisions,
                 pages: _,
-                cancelled,
+                stopped,
                 error,
             } => {
                 if self.jobs.remove(&job).is_none() {
@@ -1218,8 +1225,8 @@ impl Application for App {
                     let delta = self.project()?.history_delta();
                     desktop.emit(EVENT_NAME, AppEvent::ProjectChanged(Box::new(delta)))?;
                 }
-                let status = if cancelled {
-                    JobStatus::Cancelled { id: job }
+                let status = if stopped {
+                    JobStatus::Stopped { id: job }
                 } else if let Some(error) = error {
                     JobStatus::Failed { id: job, error }
                 } else {
@@ -1277,7 +1284,7 @@ impl Application for App {
 
     fn close_requested(&mut self, _desktop: &mut DesktopContext<'_, Self::Event>) -> Result<bool> {
         for job in self.jobs.values() {
-            job.cancellation.cancel();
+            job.stop.stop();
         }
         Ok(self.pending_masks.is_empty())
     }

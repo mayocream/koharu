@@ -13,7 +13,7 @@ use crate::{
     BlobId, ChangeSet, DocumentId, Error, Patch, Result, Revision, Snapshot,
     blob::BlobStore,
     history::{Checkpoint, StoredCommit},
-    patch::{BaseRevision, Operation},
+    patch::Operation,
     state::State,
     storage,
 };
@@ -203,17 +203,12 @@ impl Session {
             let revision = self.revision();
             return Ok(CommitResult {
                 revision,
-                changes: ChangeSet::between(&self.state, &self.state, []),
+                changes: ChangeSet::empty(revision),
                 snapshot: self.snapshot(),
             });
         }
 
-        let (mut next, _, patch_attachments) = patch.apply(&self.state, &BTreeSet::new())?;
-        let attachments = patch
-            .attachments()
-            .map(|attachment| (attachment.id(), attachment.bytes()))
-            .chain(patch_attachments)
-            .collect::<BTreeMap<_, _>>();
+        let (mut next, attachments) = patch.apply(&self.state)?;
         validate_attachments(&attachments, self.options.max_blob_bytes)?;
         let operations = patch.operations().cloned().collect::<Vec<_>>();
         let operation_blobs = operation_blob_ids(&operations);
@@ -319,19 +314,21 @@ impl Session {
         let before = self.state.clone();
         let head = storage::head(&self.connection)?;
         if head == before.revision {
-            return Ok(ChangeSet::between(&before, &before, []));
+            return Ok(ChangeSet::empty(before.revision));
         }
         if head < before.revision {
             return Err(Error::NotADocument);
         }
         let meta = storage::meta(&self.connection)?;
-        let next = if let Some(next) = load_tail(&self.connection, &before, meta.head)? {
-            next
+        let (next, changes) = if let Some(result) = load_tail(&self.connection, &before, meta.head)?
+        {
+            result
         } else {
-            load_state(&self.connection)?
+            let next = load_state(&self.connection)?;
+            let changes = ChangeSet::between(&before, &next, []);
+            (next, changes)
         };
         validate_blob_references(&self.connection, &next, &BTreeMap::new())?;
-        let changes = ChangeSet::between(&before, &next, []);
         let state_lease = self.blobs.lease(next.referenced_blobs());
         self.state = Arc::new(next);
         self._state_lease = state_lease;
@@ -371,14 +368,7 @@ impl Session {
         } else {
             format!("Undo {} revisions", revisions.len()).into()
         };
-        let patch = Patch::from_operations(
-            BaseRevision {
-                document: self.document_id(),
-                revision: self.revision(),
-            },
-            operations,
-            Some(label),
-        )?;
+        let patch = Patch::from_operations(self.state.clone(), operations, Some(label))?;
         self.commit(patch)
     }
 
@@ -490,7 +480,11 @@ fn load_state(connection: &Connection) -> Result<State> {
     Ok(state)
 }
 
-fn load_tail(connection: &Connection, current: &State, head: Revision) -> Result<Option<State>> {
+fn load_tail(
+    connection: &Connection,
+    current: &State,
+    head: Revision,
+) -> Result<Option<(State, ChangeSet)>> {
     let mut statement = connection.prepare(
         "SELECT revision, parent_revision, payload FROM commits
          WHERE revision > ?1 AND revision <= ?2 ORDER BY revision",
@@ -502,6 +496,7 @@ fn load_tail(connection: &Connection, current: &State, head: Revision) -> Result
     let mut next = current.clone();
     let mut expected_parent = current.revision;
     let mut saw_commit = false;
+    let mut operations = Vec::new();
     while let Some(row) = rows.next()? {
         saw_commit = true;
         let revision = storage::revision_from_sql(row.get(0)?)?;
@@ -517,12 +512,14 @@ fn load_tail(connection: &Connection, current: &State, head: Revision) -> Result
                 .apply(&mut next)
                 .map_err(|error| Error::HistoryConflict(format!("revision {revision}: {error}")))?;
         }
+        operations.extend(commit.operations);
         next.revision = revision;
         expected_parent = revision;
     }
     if saw_commit && next.revision == head {
         next.validate()?;
-        Ok(Some(next))
+        let changes = ChangeSet::from_operations(current.revision, head, operations.iter(), []);
+        Ok(Some((next, changes)))
     } else {
         Ok(None)
     }

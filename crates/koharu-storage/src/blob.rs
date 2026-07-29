@@ -25,10 +25,6 @@ impl BlobAttachment {
         Self { id, bytes }
     }
 
-    pub(crate) fn from_parts(id: BlobId, bytes: Arc<[u8]>) -> Self {
-        Self { id, bytes }
-    }
-
     #[must_use]
     pub const fn id(&self) -> BlobId {
         self.id

@@ -84,7 +84,10 @@ impl SceneSession {
         let after = if changes.from == changes.to {
             before.clone()
         } else {
-            SceneSnapshot::from_storage(self.storage.snapshot())?
+            let storage = self.storage.snapshot();
+            let effects = koharu_storage::PatchEffects::from_changes(&changes);
+            let index = before.index.after_patch(&storage, &effects)?;
+            SceneSnapshot::from_parts(storage, std::sync::Arc::new(index))
         };
         self.current = after.clone();
         Ok(SceneChangeSet::from_storage(&changes, &before, &after))

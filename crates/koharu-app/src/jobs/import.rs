@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{Context as _, Result};
 use koharu_desktop::DesktopHandle;
-use koharu_pipeline::CancellationToken;
+use koharu_pipeline::StopToken;
 use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft, SceneSession};
 
 use super::{JobOutcome, NativeEvent, finish_job};
@@ -12,7 +12,7 @@ pub(super) fn run(
     id: RequestId,
     path: PathBuf,
     files: Vec<PathBuf>,
-    cancellation: CancellationToken,
+    stop: StopToken,
     desktop: DesktopHandle<NativeEvent>,
 ) {
     let total = files.len();
@@ -22,7 +22,7 @@ pub(super) fn run(
         let mut session = SceneSession::open(&path)
             .with_context(|| format!("failed to open {}", path.display()))?;
         for (index, file) in files.into_iter().enumerate() {
-            if cancellation.is_cancelled() {
+            if stop.stopped() {
                 break;
             }
             let bytes =
@@ -74,10 +74,10 @@ pub(super) fn run(
     finish_job(
         &desktop,
         id,
-        &cancellation,
         JobOutcome {
             revisions,
             pages,
+            stopped: stop.stopped(),
             error: result.err().map(|error| error.to_string()),
         },
     );

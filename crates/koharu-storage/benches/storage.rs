@@ -1,7 +1,7 @@
 use std::{hint::black_box, sync::Arc};
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use koharu_storage::{ComponentKey, ComponentRecord, Patch, RecordId, Session};
+use koharu_storage::{ComponentKey, ComponentRecord, RecordId, Session};
 
 const RECORDS: usize = 2_048;
 
@@ -68,18 +68,18 @@ fn storage_benchmarks(criterion: &mut Criterion) {
 
     let mut commit = criterion.benchmark_group("storage/commit");
     commit.sample_size(10);
-    commit.bench_function("independent_segments", |bencher| {
+    commit.bench_function("independent_components", |bencher| {
         bencher.iter_batched(
             || {
                 let (session, selected) = populated();
                 let snapshot = session.snapshot();
-                let left = snapshot
-                    .patch(|edit| edit.set_component(selected, key("left"), value(&b"left"[..])))
+                let patch = snapshot
+                    .patch(|edit| {
+                        edit.set_component(selected, key("left"), value(&b"left"[..]))?;
+                        edit.set_component(selected, key("right"), value(&b"right"[..]))
+                    })
                     .unwrap();
-                let right = snapshot
-                    .patch(|edit| edit.set_component(selected, key("right"), value(&b"right"[..])))
-                    .unwrap();
-                (session, Patch::merge([&left, &right]).unwrap())
+                (session, patch)
             },
             |(mut session, patch)| {
                 black_box(session.commit(patch).unwrap());
