@@ -118,6 +118,13 @@ pub struct ProviderConfig {
     pub max_tokens: Option<u32>,
 }
 
+const ATLASCLOUD_BASE_URL: &str = "https://api.atlascloud.ai/v1";
+
+const ATLASCLOUD_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
+    id: "deepseek-ai/deepseek-v4-pro",
+    name: "DeepSeek V4 Pro",
+}];
+
 const OPENAI_MODELS: &[ProviderModelDescriptor] = &[
     ProviderModelDescriptor {
         id: "gpt-5.5",
@@ -357,6 +364,15 @@ const MT_MODELS: &[ProviderModelDescriptor] = &[ProviderModelDescriptor {
 
 const PROVIDERS: &[ProviderDescriptor] = &[
     ProviderDescriptor {
+        id: "atlascloud",
+        name: "Atlas Cloud",
+        requires_api_key: true,
+        requires_base_url: false,
+        supported_languages: ProviderSupportedLanguages::All,
+        models: ProviderCatalogModels::Static(ATLASCLOUD_MODELS),
+        build: build_atlascloud_provider,
+    },
+    ProviderDescriptor {
         id: "openai",
         name: "OpenAI",
         requires_api_key: true,
@@ -511,6 +527,16 @@ fn required_base_url(config: &ProviderConfig, provider_id: &str) -> anyhow::Resu
         .ok_or_else(|| anyhow::anyhow!("base_url is required for {provider_id}"))
 }
 
+fn build_atlascloud_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
+    Ok(Box::new(openai_compatible::OpenAiCompatibleProvider {
+        http_client: Arc::clone(&config.http_client),
+        base_url: ATLASCLOUD_BASE_URL.to_string(),
+        api_key: Some(required_api_key(&config, "atlascloud")?),
+        temperature: config.temperature,
+        max_tokens: config.max_tokens,
+    }))
+}
+
 fn build_openai_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyProvider>> {
     Ok(Box::new(openai::OpenAiProvider {
         http_client: Arc::clone(&config.http_client),
@@ -615,6 +641,11 @@ mod tests {
     #[test]
     fn static_llm_provider_catalogs_cover_current_model_families() {
         assert_contains_all(
+            "atlascloud",
+            ATLASCLOUD_MODELS,
+            &["deepseek-ai/deepseek-v4-pro"],
+        );
+        assert_contains_all(
             "openai",
             OPENAI_MODELS,
             &[
@@ -651,5 +682,16 @@ mod tests {
                 "deepseek-reasoner",
             ],
         );
+    }
+
+    #[test]
+    fn atlascloud_provider_uses_managed_endpoint_and_api_key() {
+        let descriptor =
+            find_provider_descriptor("atlascloud").expect("Atlas Cloud provider should exist");
+
+        assert_eq!(descriptor.name, "Atlas Cloud");
+        assert!(descriptor.requires_api_key);
+        assert!(!descriptor.requires_base_url);
+        assert_eq!(ATLASCLOUD_BASE_URL, "https://api.atlascloud.ai/v1");
     }
 }
