@@ -28,6 +28,19 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
+    #[must_use]
+    pub fn is_downloaded() -> bool {
+        [WEIGHTS, LABELS]
+            .into_iter()
+            .all(koharu_runtime::package::huggingface::is_resolved)
+    }
+
+    pub async fn download() -> Result<()> {
+        tokio::try_join!(huggingface::resolve(WEIGHTS), huggingface::resolve(LABELS),)
+            .context("failed to download YuzuMarker font detector assets")?;
+        Ok(())
+    }
+
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = huggingface::resolve(WEIGHTS)
@@ -72,7 +85,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch runtime"]
     async fn checkpoint_matches_upstream_structured_output() -> anyhow::Result<()> {
-        crate::init_torch().await?;
+        crate::init().await?;
         let model = FontDetector::load(crate::Device::cpu()).await?;
         let input =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png");

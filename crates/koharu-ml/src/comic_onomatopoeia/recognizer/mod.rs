@@ -68,7 +68,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "downloads the checkpoint and requires the LibTorch CUDA runtime"]
     async fn checkpoint_inference_smoke_test() -> Result<()> {
-        crate::init_torch().await?;
+        crate::init().await?;
         let model = ComicOnomatopoeiaRecognizer::load(crate::Device::cuda(0)).await?;
         let image = image::open(
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/ocr/title.png"),

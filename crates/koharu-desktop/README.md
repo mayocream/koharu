@@ -17,8 +17,8 @@ trusted React UI in transparent Wry child
         | small JSON messages        ^ application events
         v                            |
 application implementing Application
-    Session, scene Commands, pipeline and UI policy
-        | committed scene            ^ hit tests / mask snapshots
+    SceneSession, patches, pipeline and UI policy
+        | snapshot + change set      ^ hit tests / mask snapshots
         v                            |
 koharu-desktop ---------------- koharu-canvas
     Winit loop, Wry bridge,       scene drawing, overlays,
@@ -38,7 +38,7 @@ operating-system compositor
 - a minimal trusted JavaScript bridge;
 - ordered background encoding of completed mask strokes.
 
-It does not own the `koharu-scene::Session`, application commands, tools,
+It does not own the `koharu-scene::SceneSession`, application patches, tools,
 selection policy, pipeline, model lifetime, project tabs, or a domain-specific
 web protocol. Those belong to the executable's `Application` implementation.
 The desktop crate never mirrors the scene in JavaScript and never transfers a
@@ -73,26 +73,28 @@ An executable supplies trusted HTML or a trusted URL and implements
 ```rust,no_run
 use anyhow::Result;
 use koharu_desktop::{Application, DesktopContext, Frontend, Options};
-use koharu_scene::{PageId, Session};
+use koharu_scene::{EntityId, SceneSession};
 
 struct App {
-    session: Session,
-    page: PageId,
+    session: SceneSession,
+    page: EntityId,
 }
 
 impl Application for App {
-    fn started(&mut self, desktop: &mut DesktopContext<'_>) -> Result<()> {
-        desktop.show_page(&self.session, self.page)?;
+    type Event = ();
+
+    fn started(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
+        desktop.show_page(&self.session.snapshot(), self.page)?;
         Ok(())
     }
 
     fn message(
         &mut self,
-        desktop: &mut DesktopContext<'_>,
+        desktop: &mut DesktopContext<'_, Self::Event>,
         message: serde_json::Value,
     ) -> Result<()> {
-        // Deserialize the application's own command enum and update Session.
-        // Then call desktop.sync(&self.session, &changes).
+        // Deserialize the application's command, commit a ScenePatch, then call:
+        // desktop.sync(&committed.snapshot, &committed.changes).
         let _ = (desktop, message);
         Ok(())
     }
@@ -190,11 +192,11 @@ that page receives the native bridge.
   the desktop host.
 
 Completed mask strokes are immutable snapshots. `submit_mask` encodes them on
-Rayon, serializes work for the same `(PageId, MaskPlane)`, and permits different
+Rayon, serializes work for the same `(EntityId, MaskPlane)`, and permits different
 pages or planes to encode in parallel. `Application::mask_encoded` receives the
 single-channel PNG or an error on the event-loop thread. The application then
-stores it with scene commands, acknowledges its generation in the canvas, and
-syncs the resulting `ChangeSet`. Encoding never blocks presentation, and FIFO
+stores it with a scene patch, acknowledges its generation in the canvas, and
+syncs the resulting `SceneChangeSet`. Encoding never blocks presentation, and FIFO
 ordering prevents an older result from overtaking a newer stroke on the same
 plane.
 

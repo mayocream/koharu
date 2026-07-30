@@ -19,6 +19,20 @@ use crate::{
 const HYPHENATION_MIN_WORD_LEN: usize = 8;
 const LINE_BREAK_HYPHEN_PENALTY: f32 = 2_000.0;
 const LINE_BREAK_OVERFLOW_MULTIPLIER: f32 = 10_000.0;
+const COMIC_BALLOON_AIR_FALLBACK_EM: f32 = 0.5;
+const COMIC_LINE_OVERFLOW_PENALTY: f32 = 1_000_000.0;
+const COMIC_MAX_LINES: usize = 64;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum HyphenationPolicy {
+    /// Do not introduce discretionary hyphenation opportunities.
+    Disabled,
+    /// Use a discretionary hyphen only when the unhyphenated text overflows.
+    LastResort,
+    /// Consider discretionary hyphens during normal line optimization.
+    #[default]
+    Normal,
+}
 
 /// Writing mode for text layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -65,6 +79,24 @@ pub struct LayoutRun<'a> {
     pub height: f32,
     /// Font size used to generate this layout.
     pub font_size: f32,
+    overflowed: bool,
+    placement_offset_x: f32,
+    placement_offset_y: f32,
+}
+
+impl LayoutRun<'_> {
+    #[must_use]
+    pub const fn overflowed(&self) -> bool {
+        self.overflowed
+    }
+
+    pub(crate) const fn placement_offset_x(&self) -> f32 {
+        self.placement_offset_x
+    }
+
+    pub(crate) const fn placement_offset_y(&self) -> f32 {
+        self.placement_offset_y
+    }
 }
 
 #[derive(Clone)]
@@ -86,6 +118,7 @@ struct ShapedSegment<'a> {
     is_mandatory: bool,
     runs: Vec<LineRun<'a>>,
     advance: f32,
+    break_penalty: f32,
     break_suffix: Option<ShapedBreakSuffix<'a>>,
 }
 
@@ -93,6 +126,30 @@ struct ShapedSegment<'a> {
 struct LineBreakMeasure {
     advance: f32,
     break_suffix_advance: f32,
+    break_penalty: f32,
+    is_mandatory: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LineProfile {
+    width: f32,
+    center_offset: f32,
+}
+
+#[derive(Debug)]
+struct LineBreakResult {
+    breaks: Vec<usize>,
+    profiles: Vec<LineProfile>,
+    overflowed: bool,
+    cost: f32,
+}
+
+#[derive(Clone, Debug)]
+struct ComicBalloon {
+    width: f32,
+    height: f32,
+    contour: Vec<(f32, f32)>,
+    vertical_alignment: f32,
 }
 
 #[derive(Clone)]
@@ -100,6 +157,8 @@ pub struct TextLayout<'a> {
     writing_mode: WritingMode,
     center_vertical_punctuation: bool,
     hyphenation_lang: Option<Lang>,
+    hyphenation_policy: HyphenationPolicy,
+    comic_balloon: Option<ComicBalloon>,
     font: &'a Font,
     fallback_fonts: &'a [Font],
     font_size: Option<f32>,
@@ -121,6 +180,8 @@ impl<'a> TextLayout<'a> {
             writing_mode: WritingMode::Horizontal,
             center_vertical_punctuation: true,
             hyphenation_lang: Some(Lang::English),
+            hyphenation_policy: HyphenationPolicy::Normal,
+            comic_balloon: None,
             font,
             fallback_fonts: &[],
             font_size: None,
@@ -187,6 +248,29 @@ impl<'a> TextLayout<'a> {
     #[must_use]
     pub fn without_hyphenation(mut self) -> Self {
         self.hyphenation_lang = None;
+        self.hyphenation_policy = HyphenationPolicy::Disabled;
+        self
+    }
+
+    #[must_use]
+    pub fn with_hyphenation_policy(mut self, policy: HyphenationPolicy) -> Self {
+        self.hyphenation_policy = policy;
+        self
+    }
+
+    pub(crate) fn with_comic_balloon(
+        mut self,
+        width: f32,
+        height: f32,
+        contour: Vec<(f32, f32)>,
+        vertical_alignment: f32,
+    ) -> Self {
+        self.comic_balloon = Some(ComicBalloon {
+            width,
+            height,
+            contour,
+            vertical_alignment: vertical_alignment.clamp(0.0, 1.0),
+        });
         self
     }
 
@@ -253,7 +337,9 @@ impl<'a> TextLayout<'a> {
             .max(0.5)
             .min(maximum);
         let fits = |layout: &LayoutRun<'_>| {
-            layout.width <= max_width + f32::EPSILON && layout.height <= max_height + f32::EPSILON
+            !layout.overflowed()
+                && layout.width <= max_width + f32::EPSILON
+                && layout.height <= max_height + f32::EPSILON
         };
 
         let maximum_layout = self.run_with_size(text, maximum)?;
@@ -329,10 +415,13 @@ impl<'a> TextLayout<'a> {
         let shaper = TextShaper::new();
         let mut line_breaker = LineBreaker::new().with_chinese_word_segmentation();
         if !self.writing_mode.is_vertical()
+            && self.hyphenation_policy != HyphenationPolicy::Disabled
             && let Some(lang) = self.hyphenation_lang
         {
             line_breaker = line_breaker.with_hyphenation(lang, HYPHENATION_MIN_WORD_LEN);
         }
+        let normalized_text = normalize_emphasis_punctuation(text);
+        let text = normalized_text.as_str();
         // Use real font metrics for consistent line sizing across modes.
         let font_ref = self.font.skrifa_ref()?;
         let metrics = font_ref.metrics(Size::new(font_size), self.font.location());
@@ -359,13 +448,25 @@ impl<'a> TextLayout<'a> {
                 &[]
             },
         };
+        let balloon_air = if self.comic_balloon.is_some() {
+            shaper
+                .shape("o", self.font, &options)?
+                .x_advance
+                .abs()
+                .max(font_size * COMIC_BALLOON_AIR_FALLBACK_EM)
+        } else {
+            0.0
+        };
 
-        let max_extent = if self.writing_mode.is_vertical() {
+        let mut max_extent = if self.writing_mode.is_vertical() {
             self.max_height
         } else {
             self.max_width
         }
         .unwrap_or(f32::INFINITY);
+        if self.comic_balloon.is_some() && self.writing_mode.is_vertical() {
+            max_extent = (max_extent - balloon_air * 2.0).max(1.0);
+        }
         let max_extent_finite = max_extent.is_finite() && max_extent > 0.0;
 
         let mut fonts: Vec<&Font> = Vec::with_capacity(1 + self.fallback_fonts.len());
@@ -472,38 +573,66 @@ impl<'a> TextLayout<'a> {
                 is_mandatory: segment.is_mandatory,
                 runs: segment_runs,
                 advance: segment_advance,
+                break_penalty: if self.comic_balloon.is_some() && !self.writing_mode.is_vertical() {
+                    comic_break_penalty(text, segment.next_offset)
+                } else {
+                    0.0
+                },
                 break_suffix: segment_break_suffix,
             });
         }
 
         let mut lines: Vec<LayoutLine<'a>> = Vec::new();
+        let mut line_profiles = Vec::new();
+        let mut contour_overflowed = false;
         let mut line_offset = 0usize;
-        let mut paragraph_start = 0usize;
-        for (index, segment) in shaped_segments.iter().enumerate() {
-            if !segment.is_mandatory {
-                continue;
-            }
-            self.append_balanced_segment_lines(
-                &shaped_segments[paragraph_start..=index],
-                &mut line_offset,
-                segment.next_offset,
-                true,
-                max_extent,
-                &bidi_info,
-                &mut lines,
-            );
-            paragraph_start = index + 1;
-        }
-        if paragraph_start < shaped_segments.len() {
-            self.append_balanced_segment_lines(
-                &shaped_segments[paragraph_start..],
+        if self.comic_balloon.is_some() && !self.writing_mode.is_vertical() {
+            contour_overflowed = self.append_balanced_segment_lines(
+                &shaped_segments,
                 &mut line_offset,
                 text.len(),
                 false,
                 max_extent,
+                line_height,
+                balloon_air,
                 &bidi_info,
                 &mut lines,
+                &mut line_profiles,
             );
+        } else {
+            let mut paragraph_start = 0usize;
+            for (index, segment) in shaped_segments.iter().enumerate() {
+                if !segment.is_mandatory {
+                    continue;
+                }
+                contour_overflowed |= self.append_balanced_segment_lines(
+                    &shaped_segments[paragraph_start..=index],
+                    &mut line_offset,
+                    segment.next_offset,
+                    true,
+                    max_extent,
+                    line_height,
+                    balloon_air,
+                    &bidi_info,
+                    &mut lines,
+                    &mut line_profiles,
+                );
+                paragraph_start = index + 1;
+            }
+            if paragraph_start < shaped_segments.len() {
+                contour_overflowed |= self.append_balanced_segment_lines(
+                    &shaped_segments[paragraph_start..],
+                    &mut line_offset,
+                    text.len(),
+                    false,
+                    max_extent,
+                    line_height,
+                    balloon_air,
+                    &bidi_info,
+                    &mut lines,
+                    &mut line_profiles,
+                );
+            }
         }
 
         // Baselines depend only on line index and metrics. For vertical text we compute absolute X
@@ -519,18 +648,39 @@ impl<'a> TextLayout<'a> {
                     ascent,
                 ),
                 WritingMode::VerticalLr => (i as f32 * line_height + line_height * 0.5, ascent),
-                WritingMode::Horizontal => (0.0, ascent + i as f32 * line_height),
+                WritingMode::Horizontal => {
+                    let x = if self.comic_balloon.is_some() {
+                        let profile = line_profiles.get(i).copied().unwrap_or(LineProfile {
+                            width: line.advance,
+                            center_offset: 0.0,
+                        });
+                        match effective_alignment {
+                            TextAlign::Left | TextAlign::Justify => {
+                                profile.center_offset - profile.width * 0.5
+                            }
+                            TextAlign::Center => profile.center_offset - line.advance * 0.5,
+                            TextAlign::Right => {
+                                profile.center_offset + profile.width * 0.5 - line.advance
+                            }
+                        }
+                    } else {
+                        0.0
+                    };
+                    (x, ascent + i as f32 * line_height)
+                }
             };
         }
 
         if effective_alignment == TextAlign::Justify && !self.writing_mode.is_vertical() {
-            justify_lines(text, &mut lines, max_extent);
+            justify_lines(text, &mut lines, max_extent, &line_profiles);
         }
 
         // Compute a tight ink bounding box using per-glyph bounds from the font tables (via skrifa),
         // then translate baselines so the top-left ink origin is (0, 0). This avoids clipping without
         // having to measure glyph outlines in the renderer.
         let (mut width, mut height) = (0.0, 0.0);
+        let mut placement_offset_x = 0.0;
+        let mut placement_offset_y = 0.0;
         if let Some((mut min_x, mut min_y, mut max_x, mut max_y)) =
             self.ink_bounds(font_size, &lines)
         {
@@ -540,6 +690,22 @@ impl<'a> TextLayout<'a> {
             min_y -= PAD;
             max_x += PAD;
             max_y += PAD;
+
+            if self.comic_balloon.is_some() && !self.writing_mode.is_vertical() {
+                placement_offset_x = (min_x + max_x) * 0.5;
+            }
+
+            if let Some(balloon) = &self.comic_balloon {
+                let ink_height = (max_y - min_y).max(0.0);
+                if self.writing_mode.is_vertical() {
+                    placement_offset_y = balloon_air * (1.0 - 2.0 * balloon.vertical_alignment);
+                } else {
+                    let block_height = lines.len() as f32 * line_height;
+                    let desired_top = balloon.block_top(block_height, balloon_air);
+                    let default_top = (balloon.height - ink_height) * balloon.vertical_alignment;
+                    placement_offset_y = desired_top + min_y - default_top;
+                }
+            }
 
             for line in &mut lines {
                 line.baseline.0 -= min_x;
@@ -595,6 +761,7 @@ impl<'a> TextLayout<'a> {
             if !self.writing_mode.is_vertical()
                 && max_extent_finite
                 && !matches!(effective_alignment, TextAlign::Left | TextAlign::Justify)
+                && self.comic_balloon.is_none()
             {
                 // Anchor to the run width. If Center, this is a tight width.
                 // If Right, this is the container width.
@@ -614,11 +781,35 @@ impl<'a> TextLayout<'a> {
             }
         }
 
+        for line in &mut lines {
+            line.range.start = normalized_text.original_offset(line.range.start);
+            line.range.end = normalized_text.original_offset(line.range.end);
+            for glyph in &mut line.glyphs {
+                glyph.cluster = normalized_text.original_offset(glyph.cluster as usize) as u32;
+            }
+        }
+
+        let balloon_air_overflowed = self.comic_balloon.as_ref().is_some_and(|balloon| {
+            width + balloon_air * 2.0 > balloon.width + f32::EPSILON
+                || height + balloon_air * 2.0 > balloon.height + f32::EPSILON
+        });
+        let overflowed = contour_overflowed
+            || balloon_air_overflowed
+            || self
+                .max_width
+                .is_some_and(|maximum| width > maximum + f32::EPSILON)
+            || self
+                .max_height
+                .is_some_and(|maximum| height > maximum + f32::EPSILON);
+
         Ok(LayoutRun {
             lines,
             width,
             height,
             font_size,
+            overflowed,
+            placement_offset_x,
+            placement_offset_y,
         })
     }
 
@@ -630,9 +821,12 @@ impl<'a> TextLayout<'a> {
         final_next_offset: usize,
         force_final_line: bool,
         max_extent: f32,
+        line_height: f32,
+        balloon_air: f32,
         bidi_info: &BidiInfo<'_>,
         lines: &mut Vec<LayoutLine<'a>>,
-    ) {
+        line_profiles: &mut Vec<LineProfile>,
+    ) -> bool {
         if segments.is_empty() {
             if force_final_line {
                 *line_offset = self.push_layout_line(
@@ -645,39 +839,68 @@ impl<'a> TextLayout<'a> {
                     bidi_info,
                     lines,
                 );
+                line_profiles.push(LineProfile {
+                    width: max_extent,
+                    center_offset: 0.0,
+                });
             }
-            return;
+            return false;
         }
 
-        let break_indices = if max_extent.is_finite() && max_extent > 0.0 {
-            let measures = segments
-                .iter()
-                .map(|segment| LineBreakMeasure {
-                    advance: segment.advance,
-                    break_suffix_advance: segment
-                        .break_suffix
-                        .as_ref()
-                        .map_or(0.0, |suffix| suffix.advance),
-                })
-                .collect::<Vec<_>>();
-            optimal_line_breaks(&measures, max_extent)
+        let measures = segments
+            .iter()
+            .map(|segment| LineBreakMeasure {
+                advance: segment.advance,
+                break_suffix_advance: segment
+                    .break_suffix
+                    .as_ref()
+                    .map_or(0.0, |suffix| suffix.advance),
+                break_penalty: segment.break_penalty,
+                is_mandatory: segment.is_mandatory,
+            })
+            .collect::<Vec<_>>();
+        let result = if let Some(balloon) = self
+            .comic_balloon
+            .as_ref()
+            .filter(|_| !self.writing_mode.is_vertical())
+        {
+            comic_line_breaks(
+                &measures,
+                balloon,
+                line_height,
+                balloon_air,
+                self.hyphenation_policy,
+            )
+        } else if max_extent.is_finite() && max_extent > 0.0 {
+            line_breaks_with_policy(&measures, max_extent, self.hyphenation_policy)
         } else {
-            vec![segments.len()]
+            LineBreakResult {
+                breaks: vec![segments.len()],
+                profiles: vec![LineProfile {
+                    width: measures.iter().map(|measure| measure.advance).sum(),
+                    center_offset: 0.0,
+                }],
+                overflowed: false,
+                cost: 0.0,
+            }
         };
 
         let mut start = 0usize;
-        for end in break_indices {
+        for (line_index, end) in result.breaks.iter().copied().enumerate() {
             if end <= start || end > segments.len() {
                 continue;
             }
             let final_line = end == segments.len();
+            let mandatory_line = segments[end - 1].is_mandatory;
             let visible_end = segments[end - 1].range.end;
-            let next_offset = if final_line {
+            let next_offset = if mandatory_line {
+                segments[end - 1].next_offset
+            } else if final_line {
                 final_next_offset
             } else {
                 segments[end].range.start
             };
-            let break_suffix = if final_line {
+            let break_suffix = if final_line || mandatory_line {
                 None
             } else {
                 segments[end - 1].break_suffix.clone()
@@ -692,12 +915,23 @@ impl<'a> TextLayout<'a> {
                 visible_end,
                 next_offset,
                 break_suffix,
-                force_final_line && final_line,
+                mandatory_line || (force_final_line && final_line),
                 bidi_info,
                 lines,
             );
+            line_profiles.push(
+                result
+                    .profiles
+                    .get(line_index)
+                    .copied()
+                    .unwrap_or(LineProfile {
+                        width: max_extent,
+                        center_offset: 0.0,
+                    }),
+            );
             start = end;
         }
+        result.overflowed
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -899,8 +1133,13 @@ fn extend_advance(advance: f32, extra: f32) -> f32 {
     }
 }
 
-fn justify_lines(text: &str, lines: &mut [LayoutLine<'_>], max_width: f32) {
-    if !max_width.is_finite() || max_width <= 0.0 {
+fn justify_lines(
+    text: &str,
+    lines: &mut [LayoutLine<'_>],
+    max_width: f32,
+    profiles: &[LineProfile],
+) {
+    if profiles.is_empty() && (!max_width.is_finite() || max_width <= 0.0) {
         return;
     }
     let last = lines.len().saturating_sub(1);
@@ -908,8 +1147,20 @@ fn justify_lines(text: &str, lines: &mut [LayoutLine<'_>], max_width: f32) {
         if index == last
             || text
                 .get(line.range.end..)
-                .is_some_and(|tail| tail.starts_with('\n'))
+                .and_then(|tail| tail.chars().next())
+                .is_some_and(|character| {
+                    matches!(
+                        character,
+                        '\n' | '\r' | '\u{0085}' | '\u{2028}' | '\u{2029}'
+                    )
+                })
         {
+            continue;
+        }
+        let target_width = profiles
+            .get(index)
+            .map_or(max_width, |profile| profile.width);
+        if !target_width.is_finite() || target_width <= 0.0 {
             continue;
         }
         let is_space = |glyph: &PositionedGlyph<'_>| {
@@ -918,26 +1169,62 @@ fn justify_lines(text: &str, lines: &mut [LayoutLine<'_>], max_width: f32) {
                 .is_some_and(char::is_whitespace)
         };
         let spaces = line.glyphs.iter().filter(|glyph| is_space(glyph)).count();
-        if spaces == 0 || line.advance >= max_width {
+        if spaces == 0 || line.advance >= target_width {
             continue;
         }
-        let extra = (max_width - line.advance) / spaces as f32;
+        let extra = (target_width - line.advance) / spaces as f32;
         for glyph in &mut line.glyphs {
             if is_space(glyph) {
                 glyph.x_advance = extend_advance(glyph.x_advance, extra);
             }
         }
-        line.advance = max_width;
+        line.advance = target_width;
     }
 }
 
+fn line_breaks_with_policy(
+    segments: &[LineBreakMeasure],
+    max_extent: f32,
+    policy: HyphenationPolicy,
+) -> LineBreakResult {
+    if policy == HyphenationPolicy::LastResort {
+        let without_hyphens = optimal_uniform_line_breaks(segments, max_extent, false);
+        if !without_hyphens.overflowed {
+            return without_hyphens;
+        }
+    }
+    optimal_uniform_line_breaks(segments, max_extent, policy != HyphenationPolicy::Disabled)
+}
+
+#[cfg(test)]
 fn optimal_line_breaks(segments: &[LineBreakMeasure], max_extent: f32) -> Vec<usize> {
+    optimal_uniform_line_breaks(segments, max_extent, true).breaks
+}
+
+fn optimal_uniform_line_breaks(
+    segments: &[LineBreakMeasure],
+    max_extent: f32,
+    allow_hyphenation: bool,
+) -> LineBreakResult {
     let len = segments.len();
     if len == 0 {
-        return Vec::new();
+        return LineBreakResult {
+            breaks: Vec::new(),
+            profiles: Vec::new(),
+            overflowed: false,
+            cost: 0.0,
+        };
     }
     if !max_extent.is_finite() || max_extent <= 0.0 {
-        return vec![len];
+        return LineBreakResult {
+            breaks: vec![len],
+            profiles: vec![LineProfile {
+                width: max_extent,
+                center_offset: 0.0,
+            }],
+            overflowed: false,
+            cost: 0.0,
+        };
     }
 
     let mut dp = vec![f32::INFINITY; len + 1];
@@ -957,25 +1244,38 @@ fn optimal_line_breaks(segments: &[LineBreakMeasure], max_extent: f32) -> Vec<us
                 0.0
             };
             let line_advance = advance + suffix_advance;
-            let is_single_segment = end == start + 1;
-            if line_advance > max_extent && !is_single_segment {
-                break;
+            let hyphenated_break = end < len && suffix_advance > 0.0;
+            if hyphenated_break && !allow_hyphenation {
+                continue;
             }
-
             let mut cost = dp[start] + line_break_badness(line_advance, max_extent);
             if end < len && suffix_advance > 0.0 {
                 cost += LINE_BREAK_HYPHEN_PENALTY;
+            }
+            if end < len {
+                cost += segments[end - 1].break_penalty;
             }
 
             if cost < dp[end] {
                 dp[end] = cost;
                 prev[end] = Some(start);
             }
+            if segments[end - 1].is_mandatory || advance > max_extent {
+                break;
+            }
         }
     }
 
     if !dp[len].is_finite() {
-        return vec![len];
+        return LineBreakResult {
+            breaks: vec![len],
+            profiles: vec![LineProfile {
+                width: max_extent,
+                center_offset: 0.0,
+            }],
+            overflowed: segments.iter().map(|segment| segment.advance).sum::<f32>() > max_extent,
+            cost: f32::INFINITY,
+        };
     }
 
     let mut breaks = Vec::new();
@@ -983,12 +1283,285 @@ fn optimal_line_breaks(segments: &[LineBreakMeasure], max_extent: f32) -> Vec<us
     while index > 0 {
         breaks.push(index);
         let Some(previous) = prev[index] else {
-            return vec![len];
+            return LineBreakResult {
+                breaks: vec![len],
+                profiles: vec![LineProfile {
+                    width: max_extent,
+                    center_offset: 0.0,
+                }],
+                overflowed: true,
+                cost: f32::INFINITY,
+            };
         };
         index = previous;
     }
     breaks.reverse();
-    breaks
+    let overflowed = breaks_overflow(segments, &breaks, &[max_extent; 1]);
+    let profiles = vec![
+        LineProfile {
+            width: max_extent,
+            center_offset: 0.0,
+        };
+        breaks.len()
+    ];
+    LineBreakResult {
+        breaks,
+        profiles,
+        overflowed,
+        cost: dp[len],
+    }
+}
+
+fn comic_line_breaks(
+    segments: &[LineBreakMeasure],
+    balloon: &ComicBalloon,
+    line_height: f32,
+    air: f32,
+    policy: HyphenationPolicy,
+) -> LineBreakResult {
+    let available_height = (balloon.height - air * 2.0).max(0.0);
+    let maximum_lines = ((available_height / line_height).floor() as usize)
+        .min(COMIC_MAX_LINES)
+        .min(segments.len());
+    if maximum_lines == 0 {
+        let mut fallback =
+            line_breaks_with_policy(segments, (balloon.width - air * 2.0).max(1.0), policy);
+        fallback.overflowed = true;
+        return fallback;
+    }
+
+    let select = |allow_hyphenation| {
+        (1..=maximum_lines)
+            .filter_map(|line_count| {
+                let profiles = balloon.line_profiles(line_count, line_height, air)?;
+                exact_profiled_line_breaks(segments, profiles, allow_hyphenation)
+            })
+            .min_by(|left, right| {
+                left.overflowed
+                    .cmp(&right.overflowed)
+                    .then_with(|| left.cost.total_cmp(&right.cost))
+            })
+    };
+
+    if policy == HyphenationPolicy::LastResort
+        && let Some(without_hyphens) = select(false)
+        && !without_hyphens.overflowed
+    {
+        return without_hyphens;
+    }
+
+    select(policy != HyphenationPolicy::Disabled).unwrap_or_else(|| {
+        let mut fallback =
+            line_breaks_with_policy(segments, (balloon.width - air * 2.0).max(1.0), policy);
+        fallback.overflowed = true;
+        fallback
+    })
+}
+
+fn exact_profiled_line_breaks(
+    segments: &[LineBreakMeasure],
+    profiles: Vec<LineProfile>,
+    allow_hyphenation: bool,
+) -> Option<LineBreakResult> {
+    let len = segments.len();
+    let line_count = profiles.len();
+    if line_count == 0 || line_count > len {
+        return None;
+    }
+    let mut dp = vec![vec![f32::INFINITY; len + 1]; line_count + 1];
+    let mut previous = vec![vec![None; len + 1]; line_count + 1];
+    dp[0][0] = 0.0;
+
+    for line in 0..line_count {
+        let remaining_lines = line_count - line - 1;
+        for start in line..len {
+            if !dp[line][start].is_finite() {
+                continue;
+            }
+            let mut advance = 0.0f32;
+            let last_end = len - remaining_lines;
+            for end in start + 1..=last_end {
+                advance += segments[end - 1].advance;
+                let suffix = if end < len {
+                    segments[end - 1].break_suffix_advance
+                } else {
+                    0.0
+                };
+                let hyphenated_break = end < len && suffix > 0.0;
+                if hyphenated_break && !allow_hyphenation {
+                    continue;
+                }
+                let line_advance = advance + suffix;
+                let width = profiles[line].width.max(1.0);
+                let overflow = (line_advance - width).max(0.0) / width;
+                let slack = (width - line_advance).max(0.0) / width;
+                let mut cost = dp[line][start]
+                    + slack * slack * 1_000.0
+                    + overflow * overflow * COMIC_LINE_OVERFLOW_PENALTY;
+                if hyphenated_break {
+                    cost += LINE_BREAK_HYPHEN_PENALTY;
+                }
+                if end < len {
+                    cost += segments[end - 1].break_penalty;
+                }
+                if cost < dp[line + 1][end] {
+                    dp[line + 1][end] = cost;
+                    previous[line + 1][end] = Some(start);
+                }
+                if segments[end - 1].is_mandatory || advance > width {
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut cost = dp[line_count][len];
+    if !cost.is_finite() {
+        return None;
+    }
+    cost = cost / line_count as f32 + line_count as f32 * 8.0;
+    let mut breaks = Vec::with_capacity(line_count);
+    let mut end = len;
+    for line in (1..=line_count).rev() {
+        breaks.push(end);
+        end = previous[line][end]?;
+    }
+    if end != 0 {
+        return None;
+    }
+    breaks.reverse();
+    let widths = profiles
+        .iter()
+        .map(|profile| profile.width)
+        .collect::<Vec<_>>();
+    let overflowed = breaks_overflow(segments, &breaks, &widths);
+    Some(LineBreakResult {
+        breaks,
+        profiles,
+        overflowed,
+        cost,
+    })
+}
+
+fn breaks_overflow(segments: &[LineBreakMeasure], breaks: &[usize], widths: &[f32]) -> bool {
+    let mut start = 0usize;
+    for (line, end) in breaks.iter().copied().enumerate() {
+        let mut advance = segments[start..end]
+            .iter()
+            .map(|segment| segment.advance)
+            .sum::<f32>();
+        if end < segments.len() {
+            advance += segments[end - 1].break_suffix_advance;
+        }
+        let Some(width) = widths
+            .get(line)
+            .copied()
+            .or_else(|| widths.first().copied())
+        else {
+            return true;
+        };
+        if advance > width + f32::EPSILON {
+            return true;
+        }
+        start = end;
+    }
+    false
+}
+
+impl ComicBalloon {
+    fn block_top(&self, block_height: f32, air: f32) -> f32 {
+        let available_height = (self.height - air * 2.0).max(0.0);
+        air + (available_height - block_height).max(0.0) * self.vertical_alignment
+    }
+
+    fn line_profiles(
+        &self,
+        line_count: usize,
+        line_height: f32,
+        air: f32,
+    ) -> Option<Vec<LineProfile>> {
+        let rx = self.width * 0.5 - air;
+        let ry = self.height * 0.5 - air;
+        let block_height = line_count as f32 * line_height;
+        if rx <= 0.0 || ry <= 0.0 || block_height > ry * 2.0 + f32::EPSILON {
+            return None;
+        }
+        let top = self.block_top(block_height, air);
+        let center_x = self.width * 0.5;
+        let mut profiles = Vec::with_capacity(line_count);
+        for line in 0..line_count {
+            let y = top + (line as f32 + 0.5) * line_height;
+            let normalized_y = ((y - self.height * 0.5) / ry).clamp(-1.0, 1.0);
+            let ellipse_half_width = rx * (1.0 - normalized_y * normalized_y).sqrt();
+            let mut left = center_x - ellipse_half_width;
+            let mut right = center_x + ellipse_half_width;
+            if let Some((contour_left, contour_right)) = self.contour_span(y) {
+                left = left.max(contour_left + air);
+                right = right.min(contour_right - air);
+            }
+            if right <= left {
+                return None;
+            }
+            profiles.push(LineProfile {
+                width: right - left,
+                center_offset: (left + right) * 0.5 - center_x,
+            });
+        }
+        Some(profiles)
+    }
+
+    fn contour_span(&self, y: f32) -> Option<(f32, f32)> {
+        if self.contour.len() < 3 {
+            return None;
+        }
+        let mut intersections = Vec::new();
+        for index in 0..self.contour.len() {
+            let first = self.contour[index];
+            let second = self.contour[(index + 1) % self.contour.len()];
+            if (first.1 <= y && second.1 > y) || (second.1 <= y && first.1 > y) {
+                let fraction = (y - first.1) / (second.1 - first.1);
+                intersections.push(first.0 + (second.0 - first.0) * fraction);
+            }
+        }
+        intersections.sort_by(f32::total_cmp);
+        intersections
+            .chunks_exact(2)
+            .map(|pair| (pair[0], pair[1]))
+            .max_by(|left, right| (left.1 - left.0).total_cmp(&(right.1 - right.0)))
+    }
+}
+
+fn comic_break_penalty(text: &str, boundary: usize) -> f32 {
+    let boundary = boundary.min(text.len());
+    let before = text[..boundary].trim_end();
+    let after = text[boundary..].trim_start();
+    match before.chars().next_back() {
+        Some('.' | '!' | '?' | '…' | '‼' | '⁇' | '⁈' | '⁉') => return 0.0,
+        Some(',' | ';' | ':' | '—' | '–') => return 20.0,
+        _ => {}
+    }
+    let next_word = after
+        .split(|character: char| !character.is_ascii_alphabetic())
+        .next()
+        .unwrap_or_default();
+    if matches!(
+        next_word.to_ascii_lowercase().as_str(),
+        "and" | "but" | "or" | "so" | "because" | "although" | "while" | "then"
+    ) {
+        return 40.0;
+    }
+    let previous_word = before
+        .rsplit(|character: char| !character.is_ascii_alphabetic())
+        .next()
+        .unwrap_or_default();
+    if matches!(
+        previous_word.to_ascii_lowercase().as_str(),
+        "a" | "an" | "the" | "to" | "of" | "for" | "in" | "on" | "at" | "with" | "from"
+    ) {
+        300.0
+    } else {
+        100.0
+    }
 }
 
 fn line_break_badness(line_advance: f32, max_extent: f32) -> f32 {
@@ -1003,10 +1576,175 @@ fn centered_x_offset(x_min: f32, x_max: f32) -> f32 {
     -((x_min + x_max) * 0.5)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EmphasisMark {
+    Bang,
+    Question,
+}
+
+fn emphasis_mark_kind(ch: char) -> Option<EmphasisMark> {
+    match ch {
+        '!' | '！' => Some(EmphasisMark::Bang),
+        '?' | '？' => Some(EmphasisMark::Question),
+        _ => None,
+    }
+}
+
+fn emphasis_pair_symbol(left: EmphasisMark, right: EmphasisMark) -> char {
+    match (left, right) {
+        (EmphasisMark::Bang, EmphasisMark::Bang) => '‼',
+        (EmphasisMark::Question, EmphasisMark::Question) => '⁇',
+        (EmphasisMark::Bang, EmphasisMark::Question) => '⁉',
+        (EmphasisMark::Question, EmphasisMark::Bang) => '⁈',
+    }
+}
+
+#[derive(Debug)]
+enum NormalizedText<'a> {
+    Borrowed(&'a str),
+    Owned {
+        text: String,
+        original_offsets: Vec<usize>,
+    },
+}
+
+impl NormalizedText<'_> {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::Borrowed(text) => text,
+            Self::Owned { text, .. } => text,
+        }
+    }
+
+    fn original_offset(&self, normalized_offset: usize) -> usize {
+        match self {
+            Self::Borrowed(_) => normalized_offset,
+            Self::Owned {
+                original_offsets, ..
+            } => original_offsets
+                .get(normalized_offset)
+                .copied()
+                .unwrap_or_else(|| *original_offsets.last().unwrap_or(&0)),
+        }
+    }
+}
+
+fn normalize_emphasis_punctuation(text: &str) -> NormalizedText<'_> {
+    let chars = text.char_indices().collect::<Vec<_>>();
+    if !chars.windows(2).any(|pair| {
+        emphasis_mark_kind(pair[0].1).is_some() && emphasis_mark_kind(pair[1].1).is_some()
+    }) {
+        return NormalizedText::Borrowed(text);
+    }
+
+    let mut normalized_text = String::with_capacity(text.len());
+    let mut original_offsets = vec![0];
+    let mut index = 0usize;
+
+    while index < chars.len() {
+        let (start, ch) = chars[index];
+        let Some(kind) = emphasis_mark_kind(ch) else {
+            push_normalized_character(
+                &mut normalized_text,
+                &mut original_offsets,
+                ch,
+                start,
+                character_end(text, &chars, index),
+            );
+            index += 1;
+            continue;
+        };
+
+        let Some(&(_, next_ch)) = chars.get(index + 1) else {
+            push_normalized_character(
+                &mut normalized_text,
+                &mut original_offsets,
+                ch,
+                start,
+                text.len(),
+            );
+            break;
+        };
+        let Some(next_kind) = emphasis_mark_kind(next_ch) else {
+            push_normalized_character(
+                &mut normalized_text,
+                &mut original_offsets,
+                ch,
+                start,
+                character_end(text, &chars, index),
+            );
+            index += 1;
+            continue;
+        };
+
+        if kind == next_kind {
+            push_normalized_character(
+                &mut normalized_text,
+                &mut original_offsets,
+                emphasis_pair_symbol(kind, next_kind),
+                start,
+                character_end(text, &chars, index + 1),
+            );
+            index += 2;
+            continue;
+        }
+
+        if chars
+            .get(index + 2)
+            .and_then(|(_, lookahead)| emphasis_mark_kind(*lookahead))
+            == Some(next_kind)
+        {
+            push_normalized_character(
+                &mut normalized_text,
+                &mut original_offsets,
+                ch,
+                start,
+                character_end(text, &chars, index),
+            );
+            index += 1;
+            continue;
+        }
+
+        push_normalized_character(
+            &mut normalized_text,
+            &mut original_offsets,
+            emphasis_pair_symbol(kind, next_kind),
+            start,
+            character_end(text, &chars, index + 1),
+        );
+        index += 2;
+    }
+
+    NormalizedText::Owned {
+        text: normalized_text,
+        original_offsets,
+    }
+}
+
+fn character_end(text: &str, chars: &[(usize, char)], index: usize) -> usize {
+    chars.get(index + 1).map_or(text.len(), |(start, _)| *start)
+}
+
+fn push_normalized_character(
+    normalized_text: &mut String,
+    original_offsets: &mut Vec<usize>,
+    character: char,
+    original_start: usize,
+    original_end: usize,
+) {
+    let normalized_start = normalized_text.len();
+    normalized_text.push(character);
+    original_offsets.resize(normalized_text.len() + 1, original_start);
+    original_offsets[normalized_start] = original_start;
+    original_offsets[normalized_text.len()] = original_end;
+}
+
 fn is_fullwidth_punctuation(ch: char) -> bool {
     matches!(
         ch,
-        '\u{3001}' // Ideographic comma
+        '\u{203C}' // Double exclamation mark
+            | '\u{2047}'..='\u{2049}' // Double/mixed question and exclamation marks
+            | '\u{3001}' // Ideographic comma
             | '\u{3002}' // Ideographic full stop
             | '\u{3008}'..='\u{3011}' // Angle/corner brackets
             | '\u{3014}'..='\u{301F}' // Tortoise shell/white brackets and marks
@@ -1187,11 +1925,209 @@ mod tests {
             LineBreakMeasure {
                 advance: 30.0,
                 break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
             };
             7
         ];
 
         assert_eq!(optimal_line_breaks(&segments, 100.0), vec![2, 4, 7]);
+    }
+
+    #[test]
+    fn comic_profiles_are_widest_in_the_middle() {
+        let balloon = ComicBalloon {
+            width: 200.0,
+            height: 120.0,
+            contour: vec![(0.0, 0.0), (200.0, 0.0), (200.0, 120.0), (0.0, 120.0)],
+            vertical_alignment: 0.5,
+        };
+        let profiles = balloon.line_profiles(5, 16.0, 10.0).unwrap();
+
+        assert!(profiles[0].width < profiles[1].width);
+        assert!(profiles[1].width < profiles[2].width);
+        assert!((profiles[0].width - profiles[4].width).abs() < 0.001);
+        assert!((profiles[1].width - profiles[3].width).abs() < 0.001);
+    }
+
+    #[test]
+    fn comic_profiles_respect_asymmetric_contours() {
+        let balloon = ComicBalloon {
+            width: 200.0,
+            height: 120.0,
+            contour: vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
+            vertical_alignment: 0.5,
+        };
+        let profile = balloon.line_profiles(1, 16.0, 10.0).unwrap()[0];
+
+        assert!(profile.center_offset < -20.0);
+        assert!(profile.width < 130.0);
+    }
+
+    #[test]
+    fn comic_layout_preserves_the_contour_center_during_final_placement() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_alignment(TextAlign::Center)
+            .with_max_width(200.0)
+            .with_max_height(120.0)
+            .with_comic_balloon(
+                200.0,
+                120.0,
+                vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
+                0.5,
+            )
+            .run("Hello")?;
+
+        assert!(layout.placement_offset_x() < -10.0);
+        Ok(())
+    }
+
+    #[test]
+    fn comic_breaks_prefer_natural_pauses() {
+        let mut segments = vec![
+            LineBreakMeasure {
+                advance: 30.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            };
+            5
+        ];
+        segments[2].break_penalty = 500.0;
+
+        assert_eq!(optimal_line_breaks(&segments, 90.0), vec![2, 5]);
+        assert!(comic_break_penalty("Stop! Now", 6) < comic_break_penalty("go and", 3));
+        assert!(comic_break_penalty("go and", 3) < comic_break_penalty("hello world", 6));
+        assert!(comic_break_penalty("hello world", 6) < comic_break_penalty("the word", 4));
+    }
+
+    #[test]
+    fn last_resort_hyphenation_is_used_only_to_avoid_overflow() {
+        let fits_without_hyphen = [
+            LineBreakMeasure {
+                advance: 30.0,
+                break_suffix_advance: 5.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+            LineBreakMeasure {
+                advance: 30.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+        ];
+        let unbroken =
+            line_breaks_with_policy(&fits_without_hyphen, 70.0, HyphenationPolicy::LastResort);
+        assert_eq!(unbroken.breaks, [2]);
+        assert!(!unbroken.overflowed);
+
+        let needs_hyphen = [
+            LineBreakMeasure {
+                advance: 55.0,
+                break_suffix_advance: 10.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+            LineBreakMeasure {
+                advance: 55.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+        ];
+        let hyphenated =
+            line_breaks_with_policy(&needs_hyphen, 70.0, HyphenationPolicy::LastResort);
+        assert_eq!(hyphenated.breaks, [1, 2]);
+        assert!(!hyphenated.overflowed);
+    }
+
+    #[test]
+    fn mandatory_breaks_are_respected_by_the_global_balloon_profile() {
+        let segments = [
+            LineBreakMeasure {
+                advance: 20.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: true,
+            },
+            LineBreakMeasure {
+                advance: 20.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+            LineBreakMeasure {
+                advance: 5.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+        ];
+        let profiles = vec![
+            LineProfile {
+                width: 50.0,
+                center_offset: 0.0,
+            },
+            LineProfile {
+                width: 25.0,
+                center_offset: 0.0,
+            },
+        ];
+
+        let result = exact_profiled_line_breaks(&segments, profiles, true).unwrap();
+
+        assert_eq!(result.breaks, [1, 3]);
+    }
+
+    #[test]
+    fn a_discretionary_suffix_does_not_hide_a_later_unbroken_fit() {
+        let segments = [
+            LineBreakMeasure {
+                advance: 30.0,
+                break_suffix_advance: 5.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+            LineBreakMeasure {
+                advance: 25.0,
+                break_suffix_advance: 20.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+            LineBreakMeasure {
+                advance: 5.0,
+                break_suffix_advance: 0.0,
+                break_penalty: 0.0,
+                is_mandatory: false,
+            },
+        ];
+
+        let result = line_breaks_with_policy(&segments, 65.0, HyphenationPolicy::Normal);
+
+        assert_eq!(result.breaks, [3]);
+        assert!(!result.overflowed);
+    }
+
+    #[test]
+    fn comic_balloon_reports_when_font_relative_air_cannot_fit() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_max_width(100.0)
+            .with_max_height(10.0)
+            .with_comic_balloon(
+                100.0,
+                10.0,
+                vec![(0.0, 0.0), (100.0, 0.0), (100.0, 10.0), (0.0, 10.0)],
+                0.5,
+            )
+            .run("Hi")?;
+
+        assert!(layout.overflowed());
+        Ok(())
     }
 
     #[test]
@@ -1438,8 +2374,58 @@ mod tests {
         assert!(is_fullwidth_punctuation('。'));
         assert!(is_fullwidth_punctuation('（'));
         assert!(is_fullwidth_punctuation('！'));
+        assert!(is_fullwidth_punctuation('‼'));
+        assert!(is_fullwidth_punctuation('⁇'));
+        assert!(is_fullwidth_punctuation('⁈'));
+        assert!(is_fullwidth_punctuation('⁉'));
         assert!(!is_fullwidth_punctuation('A'));
         assert!(!is_fullwidth_punctuation('中'));
+    }
+
+    #[test]
+    fn emphasis_pairs_are_single_symbols() {
+        for (source, expected) in [
+            ("！！", "‼"),
+            ("!!", "‼"),
+            ("??", "⁇"),
+            ("!!?", "‼?"),
+            ("?!!", "?‼"),
+            ("!?!", "⁉!"),
+            ("！？", "⁉"),
+            ("？！", "⁈"),
+            ("Hello!?!", "Hello⁉!"),
+        ] {
+            assert_eq!(normalize_emphasis_punctuation(source).as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn emphasis_normalization_preserves_original_offsets() {
+        let normalized = normalize_emphasis_punctuation("?!!後");
+
+        assert_eq!(normalized.as_str(), "?‼後");
+        assert_eq!(normalized.original_offset(0), 0);
+        assert_eq!(normalized.original_offset(1), 1);
+        assert_eq!(normalized.original_offset(4), 3);
+        assert_eq!(normalized.original_offset(normalized.as_str().len()), 6);
+    }
+
+    #[test]
+    fn horizontal_layout_applies_emphasis_normalization() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "?!!";
+        let layout = TextLayout::new(&font).with_font_size(16.0).run(text)?;
+        let clusters = layout.lines[0]
+            .glyphs
+            .iter()
+            .map(|glyph| glyph.cluster)
+            .collect::<Vec<_>>();
+
+        assert_eq!(layout.lines[0].range, 0..text.len());
+        assert!(clusters.contains(&0));
+        assert!(clusters.contains(&1));
+        assert!(!clusters.contains(&2));
+        Ok(())
     }
 
     #[test]

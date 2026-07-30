@@ -20,9 +20,12 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use koharu_canvas::{
-    Camera, Canvas, CanvasGpu, HitTarget, OverlayState, PhysicalPoint, PhysicalSize, ViewState,
+    Camera, Canvas, CanvasGpu, ElementId, Frame, HitTarget, OverlayState, PageId, PhysicalPoint,
+    PhysicalSize, ViewState,
 };
-use koharu_scene::{ElementId, Frame, PageId, Session};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, Point, SceneSession,
+};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -196,7 +199,7 @@ impl ApplicationHandler<UserEvent> for Playground {
     }
 }
 
-/// Owns the demo Session, the real canvas, and the minimal fullscreen presenter.
+/// Owns the demo scene, the real canvas, and the minimal fullscreen presenter.
 struct PlaygroundState {
     _instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
@@ -208,8 +211,7 @@ struct PlaygroundState {
     sampler: wgpu::Sampler,
     bind_group: Option<wgpu::BindGroup>,
     canvas: Canvas,
-    session: Session,
-    page: PageId,
+    session: SceneSession,
     view: ViewState,
     overlays: OverlayState,
     cursor: PhysicalPoint,
@@ -279,11 +281,11 @@ impl PlaygroundState {
         canvas.set_workspace_color([29, 32, 40, 255]);
         let view = ViewState {
             size: viewport,
-            camera: Camera::contain(viewport, session.page(page)?.size),
+            camera: Camera::contain(viewport, PhysicalSize::new(PAGE_WIDTH, PAGE_HEIGHT)),
             ..ViewState::default()
         };
         canvas.set_view(view.clone());
-        canvas.show_page(&session, page)?;
+        canvas.show_page(&session.snapshot(), page)?;
         let overlays = OverlayState {
             selected: vec![nodes[0]],
             ..OverlayState::default()
@@ -304,7 +306,6 @@ impl PlaygroundState {
             bind_group: None,
             canvas,
             session,
-            page,
             view,
             overlays,
             cursor: PhysicalPoint::default(),
@@ -370,14 +371,14 @@ impl PlaygroundState {
                 let Some(commit) = self.canvas.finish_transform()? else {
                     return Ok(true);
                 };
-                let mut edit = self.session.edit();
-                for element in commit.elements {
-                    edit.page(commit.page)?
-                        .image(element.element)?
-                        .set_frame(element.frame);
-                }
-                let changes = edit.commit()?;
-                self.canvas.sync(&self.session, &changes)?;
+                let patch = self.session.snapshot().patch(|edit| {
+                    for element in &commit.elements {
+                        edit.set(element.element, "default", &element.geometry)?;
+                    }
+                    Ok(())
+                })?;
+                let committed = self.session.commit(patch)?;
+                self.canvas.sync(&committed.snapshot, &committed.changes)?;
                 Ok(true)
             }
             (MouseButton::Middle, ElementState::Pressed) => {
@@ -404,7 +405,8 @@ impl PlaygroundState {
     }
 
     fn fit_page(&mut self) -> Result<()> {
-        self.view.camera = Camera::contain(self.view.size, self.session.page(self.page)?.size);
+        self.view.camera =
+            Camera::contain(self.view.size, PhysicalSize::new(PAGE_WIDTH, PAGE_HEIGHT));
         self.canvas.set_view(self.view.clone());
         Ok(())
     }
@@ -570,41 +572,104 @@ fn presentation_pipeline(
     (pipeline, sampler)
 }
 
-fn demo_scene() -> Result<(Session, PageId, Vec<ElementId>)> {
-    let mut session = Session::memory()?;
-    let mut commands = session.commands();
-    let page = commands.add_page("canvas-playground", page_image())?;
-    let nodes = vec![
-        commands.add_image(
-            page,
+fn demo_scene() -> Result<(SceneSession, PageId, Vec<ElementId>)> {
+    let mut session = SceneSession::memory()?;
+    let mut result = None;
+    let nodes = [
+        (
             Frame {
                 angle_degrees: -7.0,
                 ..Frame::new(120.0, 130.0, 280.0, 175.0)
             },
-            "coral card",
-            node_image((560, 350), [236, 96, 92], [255, 202, 122]),
-        )?,
-        commands.add_image(
-            page,
+            (560, 350),
+            [236, 96, 92],
+            [255, 202, 122],
+        ),
+        (
             Frame {
                 angle_degrees: 10.0,
                 ..Frame::new(445.0, 275.0, 330.0, 205.0)
             },
-            "violet card",
-            node_image((660, 410), [116, 92, 214], [205, 176, 255]),
-        )?,
-        commands.add_image(
-            page,
+            (660, 410),
+            [116, 92, 214],
+            [205, 176, 255],
+        ),
+        (
             Frame {
                 angle_degrees: -3.0,
                 ..Frame::new(820.0, 120.0, 230.0, 285.0)
             },
-            "teal card",
-            node_image((460, 570), [38, 160, 145], [146, 232, 211]),
-        )?,
+            (460, 570),
+            [38, 160, 145],
+            [146, 232, 211],
+        ),
     ];
-    session.apply(commands)?;
+    let patch = session.snapshot().patch(|edit| {
+        let page = edit.add_page(
+            PageDraft::new(
+                "canvas-playground",
+                f64::from(PAGE_WIDTH),
+                f64::from(PAGE_HEIGHT),
+            ),
+            At::End,
+        )?;
+        edit.set_asset(
+            page,
+            &AssetRole::new("source")?,
+            image_asset(page_image(), PAGE_WIDTH, PAGE_HEIGHT),
+        )?;
+        let mut ids = Vec::new();
+        for (frame, size, base, accent) in nodes {
+            let id = edit.add_entity(page, At::End)?;
+            edit.set(id, "default", &frame_geometry(frame))?;
+            edit.set_asset(
+                id,
+                &AssetRole::new("source")?,
+                image_asset(node_image(size, base, accent), size.0, size.1),
+            )?;
+            ids.push(id);
+        }
+        result = Some((page, ids));
+        Ok(())
+    })?;
+    session.commit(patch)?;
+    let (page, nodes) = result.expect("scene IDs were captured");
     Ok((session, page, nodes))
+}
+
+fn image_asset(bytes: Vec<u8>, width: u32, height: u32) -> AssetInput {
+    AssetInput::new(
+        Arc::<[u8]>::from(bytes),
+        "image/png",
+        AssetMetadata {
+            width: Some(width),
+            height: Some(height),
+            attributes: Default::default(),
+        },
+    )
+}
+
+fn frame_geometry(frame: Frame) -> Geometry {
+    let center_x = f64::from(frame.x + frame.width * 0.5);
+    let center_y = f64::from(frame.y + frame.height * 0.5);
+    let half_width = f64::from(frame.width) * 0.5;
+    let half_height = f64::from(frame.height) * 0.5;
+    let angle = f64::from(frame.angle_degrees).to_radians();
+    let (sin, cos) = angle.sin_cos();
+    Geometry {
+        origin: koharu_scene::Origin::User,
+        points: [
+            (-half_width, -half_height),
+            (half_width, -half_height),
+            (half_width, half_height),
+            (-half_width, half_height),
+        ]
+        .map(|(x, y)| Point {
+            x: center_x + x * cos - y * sin,
+            y: center_y + x * sin + y * cos,
+        })
+        .into(),
+    }
 }
 
 fn page_image() -> Vec<u8> {

@@ -1,226 +1,398 @@
-//! Scene-native model orchestration for Koharu.
+//! In-process, scene-native model orchestration for Koharu.
 
 mod builtin;
+mod cache;
 mod config;
-mod context;
 mod events;
-mod execute;
+mod graph;
 mod node;
-mod plan;
+mod processor;
+mod resources;
 mod run;
-mod worker;
+mod scheduler;
+mod scope;
+mod status;
 
-use std::{collections::BTreeMap, fmt, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr as _,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
-use anyhow::Result;
-use async_trait::async_trait;
-use koharu_config::Config;
-use koharu_ml::Device;
-use koharu_scene::{Commands, ElementId, Frame, PageId, Session};
-use koharu_translator::TranslationConfig;
-use serde::{Deserialize, Serialize};
-use specta::Type;
-use tokio::sync::Mutex as AsyncMutex;
+use anyhow::{Context as _, Result, bail};
+use arc_swap::ArcSwap;
+use koharu_scene::{Asset, Geometry, SceneComponent, SceneSnapshot, SourceText};
 
 pub use builtin::{
     AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, FontDetectorConfig,
     KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, LaMaHDStrategy, MangaOcrConfig,
     PaddleOcrVl1_6Config, RoremMixedConfig,
 };
-pub use config::*;
-pub use context::{BlobBytes, Context};
-pub use events::*;
-pub use run::{Run, RunError, RunReport, RunTarget};
-pub use worker::serve_worker;
+pub use config::{DetectionModel, InpaintingModel, OcrModel, PipelineConfig, TypographyModel};
+pub use events::{CancellationToken, EventSink, PipelineEvent, RunId, UnloadReason};
+pub use graph::{Dependency, Stage, Target};
+pub use run::{NodeMeasurements, NodeReport, Run, RunError, RunReport};
+pub use scope::{Bounds, Scope};
+pub use status::{
+    ConfigRevision, DeviceResources, DownloadState, LoadState, LoadedModelResources, ModelStatus,
+    ResourceSnapshot,
+};
 
-use node::{ConfiguredNode, ModelRuntime};
-use plan::Plan;
-use run::RunRequest;
-use worker::WorkerFactory;
+use cache::RunCache;
+use events::EventHub;
+use graph::{PipelineGraph, Selection};
+use node::ConfiguredNode;
+use processor::{
+    AncestorArtifacts, DownloadContext, LoadContext, NodeInput, NodeOutput, Processor,
+    ProcessorSpec, RunOptions,
+};
+use resources::ResourceMonitor;
+use scope::NormalizedScope;
+use status::ModelStatusHub;
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Type,
-    strum::Display,
-    strum::EnumIter,
-    strum::EnumString,
-)]
-#[serde(rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case", ascii_case_insensitive)]
-pub enum Phase {
-    #[strum(to_string = "detection", serialize = "detect")]
-    Detection,
-    Ocr,
-    #[strum(to_string = "translation", serialize = "translate")]
-    Translation,
-    #[strum(to_string = "typography", serialize = "type")]
-    Typography,
-    #[strum(to_string = "inpainting", serialize = "inpaint")]
-    Inpainting,
+pub(crate) struct ConfigurationGeneration {
+    revision: ConfigRevision,
+    pipeline: Arc<PipelineConfig>,
+    translation: Arc<koharu_translator::TranslationConfig>,
+    nodes: BTreeMap<Stage, ConfiguredNode>,
+    processors: BTreeMap<Stage, Arc<dyn Processor>>,
+    usage: BTreeMap<Stage, Arc<tokio::sync::Mutex<()>>>,
 }
 
-#[derive(
-    Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type,
-)]
-#[serde(rename_all = "kebab-case")]
-pub enum ProcessorId {
-    #[serde(rename = "koharu-layout-rfdetr-seg-2xl")]
-    KoharuLayoutRFDetrSeg2XL,
-    #[serde(rename = "paddleocr-vl-1.6")]
-    PaddleOcrVl1_6,
-    MangaOcr,
-    BaberuOcr,
-    Translation,
-    FontDetector,
-    #[serde(rename = "lama")]
-    LaMa,
-    AotInpainting,
-    Flux2Klein,
-    RoremMixed,
+#[derive(Clone, Debug)]
+pub struct ConfigChange {
+    pub revision: ConfigRevision,
+    pub changed: Vec<Stage>,
 }
 
-impl fmt::Display for ProcessorId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::KoharuLayoutRFDetrSeg2XL => "koharu-layout-rfdetr-seg-2xl",
-            Self::PaddleOcrVl1_6 => "paddleocr-vl-1.6",
-            Self::MangaOcr => "manga-ocr",
-            Self::BaberuOcr => "baberu-ocr",
-            Self::Translation => "translation",
-            Self::FontDetector => "font-detector",
-            Self::LaMa => "lama",
-            Self::AotInpainting => "aot-inpainting",
-            Self::Flux2Klein => "flux2-klein",
-            Self::RoremMixed => "rorem-mixed",
-        })
-    }
-}
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
-#[serde(tag = "scope", rename_all = "snake_case")]
-pub enum Scope {
-    #[default]
-    Project,
-    Pages {
-        pages: Vec<PageId>,
-    },
-    Region {
-        page: PageId,
-        frame: Frame,
-    },
-    Elements {
-        elements: Vec<ElementId>,
-    },
-}
-
-#[async_trait]
-pub trait Processor: Send {
-    async fn shutdown(&mut self) {}
-    async fn run(&mut self, context: &Context) -> Result<Commands>;
-}
-
-#[async_trait]
-trait ProcessorFactory: Send + Sync {
-    async fn create(&self, node: &ConfiguredNode, device: Device) -> Result<Box<dyn Processor>>;
-}
-
-struct ProcessorEntry {
-    node: ConfiguredNode,
-    processor: Arc<AsyncMutex<Box<dyn Processor>>>,
+#[derive(Clone, Debug, Default)]
+pub struct DownloadReport {
+    pub downloaded: Vec<Stage>,
 }
 
 pub struct Pipeline {
-    config: Config<PipelineConfig>,
-    translation: Config<TranslationConfig>,
-    device: Device,
-    factory: Arc<dyn ProcessorFactory>,
-    processors: AsyncMutex<BTreeMap<ProcessorId, ProcessorEntry>>,
-    accelerator: AsyncMutex<()>,
-    run_lock: AsyncMutex<()>,
+    current: ArcSwap<ConfigurationGeneration>,
+    reconfiguration: std::sync::Mutex<()>,
+    next_revision: AtomicU64,
+    graph: PipelineGraph,
+    device: koharu_ml::Device,
+    model_status: Arc<ModelStatusHub>,
+    events: Arc<EventHub>,
+    resources: Arc<ResourceMonitor>,
 }
 
 impl Pipeline {
-    #[must_use]
     pub fn new(
-        config: impl Into<Config<PipelineConfig>>,
-        translation: impl Into<Config<TranslationConfig>>,
-    ) -> Self {
-        Self::with_factory(
-            config.into(),
-            translation.into(),
-            Arc::new(WorkerFactory::default()),
-        )
+        config: PipelineConfig,
+        translation: koharu_translator::TranslationConfig,
+    ) -> Result<Self> {
+        validate_configuration(&config, &translation)?;
+        let graph = PipelineGraph::new()?;
+        let device = koharu_ml::device(false);
+        let nodes = configured_nodes(&config, &translation);
+        let processors = build_processors(&nodes, &device, None)?;
+        let usage = build_usage(&nodes, None);
+        let revision = ConfigRevision(1);
+        let generation = Arc::new(ConfigurationGeneration {
+            revision,
+            pipeline: Arc::new(config),
+            translation: Arc::new(translation),
+            nodes,
+            processors,
+            usage,
+        });
+        let model_status = Arc::new(ModelStatusHub::new());
+        model_status.install(revision, status_models(&generation, None));
+        inspect_downloads(&model_status, &generation);
+        let resources = ResourceMonitor::new(&device, model_status.clone());
+        Ok(Self {
+            current: ArcSwap::new(generation),
+            reconfiguration: std::sync::Mutex::new(()),
+            next_revision: AtomicU64::new(2),
+            graph,
+            device,
+            model_status,
+            events: Arc::new(EventHub::new()),
+            resources,
+        })
     }
 
-    #[must_use]
-    pub fn with_worker_executable(
-        config: impl Into<Config<PipelineConfig>>,
-        translation: impl Into<Config<TranslationConfig>>,
-        executable: impl Into<std::path::PathBuf>,
-    ) -> Self {
-        Self::with_factory(
-            config.into(),
-            translation.into(),
-            Arc::new(WorkerFactory::with_executable(executable.into())),
-        )
-    }
-
-    fn with_factory(
-        config: Config<PipelineConfig>,
-        translation: Config<TranslationConfig>,
-        factory: Arc<dyn ProcessorFactory>,
-    ) -> Self {
-        Self {
-            config,
-            translation,
-            device: koharu_ml::device(false),
-            factory,
-            processors: AsyncMutex::new(BTreeMap::new()),
-            accelerator: AsyncMutex::new(()),
-            run_lock: AsyncMutex::new(()),
+    pub fn reconfigure(
+        &self,
+        config: PipelineConfig,
+        translation: koharu_translator::TranslationConfig,
+    ) -> Result<ConfigChange> {
+        validate_configuration(&config, &translation)?;
+        let _reconfiguration = self
+            .reconfiguration
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let previous = self.current.load_full();
+        let nodes = configured_nodes(&config, &translation);
+        let changed = Stage::ALL
+            .into_iter()
+            .filter(|stage| previous.nodes.get(stage) != nodes.get(stage))
+            .collect::<Vec<_>>();
+        if changed.is_empty()
+            && previous.translation.target_language == translation.target_language
+            && previous.translation.instructions == translation.instructions
+        {
+            return Ok(ConfigChange {
+                revision: previous.revision,
+                changed,
+            });
         }
-    }
-
-    pub fn check(&self) -> Result<()> {
-        self.build_plan().map(|_| ())
-    }
-
-    pub fn graph(&self) -> Result<String> {
-        Ok(self.build_plan()?.dot())
-    }
-
-    fn build_plan(&self) -> Result<Plan> {
-        let config = self.config.read()?.clone();
-        let translation = self.translation.read()?.clone();
-        Plan::build(&config, &translation.model)
+        let revision = ConfigRevision(self.next_revision.fetch_add(1, Ordering::Relaxed));
+        let processors = build_processors(&nodes, &self.device, Some(&previous))?;
+        let usage = build_usage(&nodes, Some(&previous));
+        let generation = Arc::new(ConfigurationGeneration {
+            revision,
+            pipeline: Arc::new(config),
+            translation: Arc::new(translation),
+            nodes,
+            processors,
+            usage,
+        });
+        self.model_status
+            .install(revision, status_models(&generation, Some(&previous)));
+        inspect_downloads(&self.model_status, &generation);
+        self.current.store(generation);
+        self.events.emit(PipelineEvent::ConfigurationChanged {
+            generation: revision,
+            changed: changed.clone(),
+        });
+        Ok(ConfigChange { revision, changed })
     }
 
     #[must_use]
-    pub fn run<'pipeline, 'session>(
-        &'pipeline self,
-        session: &'session mut Session,
-    ) -> Run<'pipeline, 'session> {
+    pub fn configuration(
+        &self,
+    ) -> (
+        ConfigRevision,
+        Arc<PipelineConfig>,
+        Arc<koharu_translator::TranslationConfig>,
+    ) {
+        let generation = self.current.load_full();
+        (
+            generation.revision,
+            generation.pipeline.clone(),
+            generation.translation.clone(),
+        )
+    }
+
+    pub fn graph(&self) -> String {
+        self.graph.dot()
+    }
+
+    #[must_use]
+    pub fn run(&self, snapshot: SceneSnapshot) -> Run<'_> {
         Run {
             pipeline: self,
-            session,
-            request: RunRequest::default(),
+            snapshot,
+            request: Default::default(),
         }
     }
 
-    pub async fn unload_all(&self) -> Result<()> {
-        let _run = self.run_lock.lock().await;
-        let removed = std::mem::take(&mut *self.processors.lock().await);
-        Self::shutdown_loaded(removed.into_values()).await;
+    #[must_use]
+    pub fn model_status(&self) -> Arc<[ModelStatus]> {
+        self.model_status.snapshot()
+    }
+
+    pub fn subscribe_model_status(&self) -> tokio::sync::watch::Receiver<Arc<[ModelStatus]>> {
+        self.model_status.subscribe()
+    }
+
+    pub fn subscribe_resources(&self) -> tokio::sync::watch::Receiver<ResourceSnapshot> {
+        self.resources.start();
+        self.resources.subscribe()
+    }
+
+    pub fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<PipelineEvent> {
+        self.events.subscribe()
+    }
+
+    pub async fn download_models(
+        &self,
+        stages: impl IntoIterator<Item = Stage>,
+    ) -> Result<DownloadReport> {
+        let generation = self.current.load_full();
+        let stages = stages.into_iter().collect::<BTreeSet<_>>();
+        if stages.is_empty() {
+            bail!("no models were selected for download");
+        }
+        self.download_selected(&generation, &stages, CancellationToken::default(), None)
+            .await
+            .map_err(|(stage, error)| error.context(format!("failed to download {stage} model")))?;
+        let downloaded = self
+            .graph
+            .canonical()
+            .iter()
+            .filter(|stage| stages.contains(stage))
+            .copied()
+            .collect();
+        Ok(DownloadReport { downloaded })
+    }
+
+    fn preflight(
+        &self,
+        snapshot: &SceneSnapshot,
+        selection: &Selection,
+        scope: &NormalizedScope,
+    ) -> Result<()> {
+        for page in scope.pages() {
+            if selection.stages.contains(&Stage::Detection)
+                && snapshot.component::<Asset>(*page, "source")?.is_none()
+            {
+                bail!("page {page} has no source asset");
+            }
+        }
+        if !selection.exact {
+            return Ok(());
+        }
+        if selection.stages.contains(&Stage::Translation)
+            && !selection.stages.contains(&Stage::Ocr)
+            && !scope_has::<SourceText>(snapshot, scope, "default")?
+        {
+            bail!("exact translation requires existing source text");
+        }
+        if selection
+            .stages
+            .iter()
+            .any(|stage| matches!(stage, Stage::Ocr | Stage::Typography))
+            && !selection.stages.contains(&Stage::Detection)
+            && !scope_has::<Geometry>(snapshot, scope, "default")?
+        {
+            bail!("exact OCR or typography requires existing detected geometry");
+        }
+        if selection.stages.contains(&Stage::Inpainting)
+            && !selection.stages.contains(&Stage::Detection)
+            && !scope.pages().iter().any(|page| {
+                snapshot
+                    .component::<Asset>(*page, "text-mask")
+                    .ok()
+                    .flatten()
+                    .is_some()
+            })
+        {
+            bail!("exact inpainting requires an existing text-mask asset");
+        }
         Ok(())
+    }
+}
+
+fn scope_has<T: SceneComponent>(
+    snapshot: &SceneSnapshot,
+    scope: &NormalizedScope,
+    slot: &str,
+) -> Result<bool> {
+    for entity in snapshot.entities_with::<T>(slot)? {
+        if scope.contains_entity(snapshot, entity.id())? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn validate_configuration(
+    config: &PipelineConfig,
+    translation: &koharu_translator::TranslationConfig,
+) -> Result<()> {
+    config.validate()?;
+    koharu_translator::Language::from_str(&translation.target_language).with_context(|| {
+        format!(
+            "unsupported target language {}",
+            translation.target_language
+        )
+    })?;
+    if let koharu_translator::Providers::Local(config) = &translation.model {
+        koharu_translator::LocalModel::from_str(&config.model)
+            .with_context(|| format!("unknown local translator '{}'", config.model))?;
+    }
+    if translation
+        .instructions
+        .as_ref()
+        .is_some_and(|value| value.contains('\0') || value.len() > 1024 * 1024)
+    {
+        bail!("translation instructions are too large or contain NUL");
+    }
+    Ok(())
+}
+
+fn configured_nodes(
+    config: &PipelineConfig,
+    translation: &koharu_translator::TranslationConfig,
+) -> BTreeMap<Stage, ConfiguredNode> {
+    config
+        .nodes(translation)
+        .into_iter()
+        .map(|node| (node.stage(), node))
+        .collect()
+}
+
+fn build_processors(
+    nodes: &BTreeMap<Stage, ConfiguredNode>,
+    device: &koharu_ml::Device,
+    previous: Option<&ConfigurationGeneration>,
+) -> Result<BTreeMap<Stage, Arc<dyn Processor>>> {
+    nodes
+        .iter()
+        .map(|(stage, node)| {
+            let processor = previous
+                .filter(|generation| generation.nodes.get(stage) == Some(node))
+                .and_then(|generation| generation.processors.get(stage).cloned())
+                .map_or_else(|| builtin::build(node, device.clone()), Ok)?;
+            Ok((*stage, processor))
+        })
+        .collect()
+}
+
+fn build_usage(
+    nodes: &BTreeMap<Stage, ConfiguredNode>,
+    previous: Option<&ConfigurationGeneration>,
+) -> BTreeMap<Stage, Arc<tokio::sync::Mutex<()>>> {
+    nodes
+        .iter()
+        .map(|(stage, node)| {
+            let usage = previous
+                .filter(|generation| generation.nodes.get(stage) == Some(node))
+                .and_then(|generation| generation.usage.get(stage).cloned())
+                .unwrap_or_else(|| Arc::new(tokio::sync::Mutex::new(())));
+            (*stage, usage)
+        })
+        .collect()
+}
+
+fn status_models<'a>(
+    generation: &'a ConfigurationGeneration,
+    previous: Option<&'a ConfigurationGeneration>,
+) -> impl Iterator<Item = (Stage, String, bool, bool)> + 'a {
+    generation.nodes.values().map(move |node| {
+        let stage = node.stage();
+        (
+            stage,
+            node.model(),
+            node.local(),
+            previous.is_some_and(|generation| generation.nodes.get(&stage) == Some(node)),
+        )
+    })
+}
+
+fn inspect_downloads(status: &ModelStatusHub, generation: &ConfigurationGeneration) {
+    for (stage, processor) in &generation.processors {
+        if processor.spec().local {
+            status.download(
+                generation.revision,
+                *stage,
+                if processor.is_downloaded() {
+                    DownloadState::Downloaded
+                } else {
+                    DownloadState::Missing
+                },
+            );
+        }
     }
 }
 

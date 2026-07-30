@@ -44,19 +44,19 @@ describe('projection reducer', () => {
       pages: [
         {
           id: 'page',
-          name: 'Page',
+          label: 'Page',
           size: { width: 100, height: 100 },
           source: 'blob',
           clean: null,
-          elements: 1,
+          entities: 1,
         },
       ],
       page: {
         id: 'page',
-        name: 'Page',
+        label: 'Page',
         size: { width: 100, height: 100 },
-        source: 'blob',
         assets: {
+          source: 'blob',
           clean: null,
           rendered: null,
           text_mask: null,
@@ -64,7 +64,7 @@ describe('projection reducer', () => {
           bubble_mask: null,
           brush_mask: null,
         },
-        elements: [],
+        entities: [],
       },
       selectedElements: ['gone'],
       selectedPages: ['page'],

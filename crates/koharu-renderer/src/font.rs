@@ -190,6 +190,7 @@ pub struct FontSystem {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ResolveKey {
     families: Vec<String>,
+    fallback_families: Vec<String>,
     width: u32,
     weight: u32,
     style: (u8, u32),
@@ -238,6 +239,17 @@ impl FontSystem {
         scripts: &[Script],
         language: Option<&str>,
     ) -> Result<Vec<Font>> {
+        self.resolve_with_fallback_families(families, &[], attributes, scripts, language)
+    }
+
+    pub(crate) fn resolve_with_fallback_families(
+        &mut self,
+        families: &[String],
+        fallback_families: &[String],
+        attributes: Attributes,
+        scripts: &[Script],
+        language: Option<&str>,
+    ) -> Result<Vec<Font>> {
         let language = language.and_then(|tag| Language::parse(tag).ok());
         let scripts = if scripts.is_empty() {
             &[Script::from_bytes(*b"Latn")][..]
@@ -251,6 +263,7 @@ impl FontSystem {
         };
         let key = ResolveKey {
             families: families.to_vec(),
+            fallback_families: fallback_families.to_vec(),
             width: attributes.width.percentage().to_bits(),
             weight: attributes.weight.value().to_bits(),
             style,
@@ -285,6 +298,31 @@ impl FontSystem {
                     QueryStatus::Continue
                 });
             }
+            // Explicit symbol families are a final safety net, not body-font
+            // candidates. Query them separately so a missing requested family
+            // still falls back to the platform's script-appropriate text font.
+            if fallback_families.iter().any(|fallback| {
+                !families
+                    .iter()
+                    .any(|family| family.eq_ignore_ascii_case(fallback))
+            }) {
+                let mut query = self.collection.query(&mut self.sources);
+                query.set_families(
+                    fallback_families
+                        .iter()
+                        .filter(|fallback| {
+                            !families
+                                .iter()
+                                .any(|family| family.eq_ignore_ascii_case(fallback))
+                        })
+                        .map(|family| QueryFamily::Named(family.as_str())),
+                );
+                query.set_attributes(attributes);
+                query.matches_with(|font| {
+                    candidates.push(font.clone());
+                    QueryStatus::Continue
+                });
+            }
 
             for candidate in candidates {
                 if !seen.insert((candidate.blob.id(), candidate.index)) {
@@ -300,8 +338,9 @@ impl FontSystem {
         }
 
         if resolved.is_empty() && !families.is_empty() {
-            resolved = self.resolve(
+            resolved = self.resolve_with_fallback_families(
                 &[],
+                fallback_families,
                 attributes,
                 scripts,
                 language.as_ref().map(Language::as_str),

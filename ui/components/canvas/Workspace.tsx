@@ -200,7 +200,7 @@ export function Workspace() {
         koharuClient.fire({ type: event.shiftKey ? 'redo' : 'undo' })
       } else if (command && event.key.toLowerCase() === 'a' && state.page) {
         event.preventDefault()
-        state.selectElements(state.page.elements.map((element) => element.id))
+        state.selectElements(state.page.entities.map((entity) => entity.id))
       } else if (
         (event.key === 'Delete' || event.key === 'Backspace') &&
         state.page &&
@@ -208,9 +208,8 @@ export function Workspace() {
       ) {
         event.preventDefault()
         koharuClient.fire({
-          type: 'delete_elements',
-          page: state.page.id,
-          elements: state.selectedElements,
+          type: 'delete_entities',
+          entities: state.selectedElements,
         })
       } else if (event.key.toLowerCase() === state.shortcuts.fit) {
         koharuClient.interact({ type: 'fit_window' })
@@ -420,8 +419,8 @@ export function Workspace() {
   }
 
   const textCursor = tool === 'text' ? 'crosshair' : tool === 'pan' ? 'grab' : undefined
-  const hasSelectedText = page?.elements.some(
-    (element) => selectedElements.includes(element.id) && isTextElement(element),
+  const hasSelectedText = page?.entities.some(
+    (entity) => selectedElements.includes(entity.id) && isTextElement(entity),
   )
 
   return (

@@ -197,6 +197,7 @@ impl Package for Libtorch {
             globs.extend([
                 "torch/include/**/*".to_owned(),
                 "torch/share/cmake/**/*".to_owned(),
+                "torch/lib/*.lib".to_owned(),
             ]);
         }
         let globs = globs.iter().map(String::as_str).collect::<Vec<_>>();

@@ -1,89 +1,236 @@
-mod aot_inpainting;
-mod baberu_ocr;
-mod flux2_klein;
-mod font_detector;
-mod koharu_layout_rfdetr_seg_2xl;
-mod lama;
-mod manga_ocr;
-mod paddle_ocr_vl_1_6;
-mod rorem_mixed;
+mod detection;
+mod inpainting;
+mod ocr;
 mod translation;
+mod typography;
 
-pub use aot_inpainting::AotInpaintingConfig;
-pub use baberu_ocr::BaberuOcrConfig;
-pub use flux2_klein::Flux2KleinConfig;
-pub use font_detector::FontDetectorConfig;
-pub use koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XLConfig;
-pub use lama::{LaMaConfig, LaMaHDStrategy};
-pub use manga_ocr::MangaOcrConfig;
-pub use paddle_ocr_vl_1_6::PaddleOcrVl1_6Config;
-pub use rorem_mixed::RoremMixedConfig;
+use std::sync::Arc;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use async_trait::async_trait;
+use koharu_scene::{Generation, ProducerId, SceneEdit};
+
+pub use detection::KoharuLayoutRFDetrSeg2XLConfig;
+pub use inpainting::{
+    AotInpaintingConfig, Flux2KleinConfig, LaMaConfig, LaMaHDStrategy, RoremMixedConfig,
+};
+pub use ocr::{BaberuOcrConfig, MangaOcrConfig, PaddleOcrVl1_6Config};
+pub use typography::FontDetectorConfig;
 
 use crate::{
-    ConfiguredNode, DetectionModel, InpaintingModel, ModelRuntime, OcrModel, Processor,
-    ProcessorFactory, TypographyModel,
+    ConfiguredNode, DownloadContext, LoadContext, NodeInput, NodeOutput, Processor, ProcessorSpec,
+    Stage,
 };
 
-pub(crate) struct BuiltinFactory;
+pub(crate) fn build(
+    node: &ConfiguredNode,
+    device: koharu_ml::Device,
+) -> Result<Arc<dyn Processor>> {
+    Ok(Arc::new(BuiltinProcessor {
+        spec: ProcessorSpec {
+            stage: node.stage(),
+            model: node.model(),
+            local: node.local(),
+        },
+        node: node.clone(),
+        device,
+        downloaded: tokio::sync::OnceCell::new(),
+        loaded: tokio::sync::Mutex::new(None),
+    }))
+}
+
+struct BuiltinProcessor {
+    spec: ProcessorSpec,
+    node: ConfiguredNode,
+    device: koharu_ml::Device,
+    downloaded: tokio::sync::OnceCell<()>,
+    loaded: tokio::sync::Mutex<Option<Loaded>>,
+}
+
+enum Loaded {
+    Detection(detection::Model),
+    Ocr(ocr::Model),
+    Translation(translation::Model),
+    Typography(typography::Model),
+    Inpainting(inpainting::Model),
+}
+
+impl Loaded {
+    async fn load(node: &ConfiguredNode, device: koharu_ml::Device) -> Result<Self> {
+        match node {
+            ConfiguredNode::Detection(config) => detection::Model::load(device, config)
+                .await
+                .map(Self::Detection),
+            ConfiguredNode::Ocr(config) => ocr::Model::load(device, config).await.map(Self::Ocr),
+            ConfiguredNode::Translation(config) => translation::Model::load(device, config)
+                .await
+                .map(Self::Translation),
+            ConfiguredNode::Typography(config) => typography::Model::load(device, config)
+                .await
+                .map(Self::Typography),
+            ConfiguredNode::Inpainting(config) => inpainting::Model::load(device, config)
+                .await
+                .map(Self::Inpainting),
+        }
+    }
+
+    async fn run(&self, input: NodeInput) -> Result<NodeOutput> {
+        match self {
+            Self::Detection(model) => model.run(input).await,
+            Self::Ocr(model) => model.run(input).await,
+            Self::Translation(model) => model.run(input).await,
+            Self::Typography(model) => model.run(input).await,
+            Self::Inpainting(model) => model.run(input).await,
+        }
+    }
+}
 
 #[async_trait]
-impl ProcessorFactory for BuiltinFactory {
-    async fn create(
-        &self,
-        node: &ConfiguredNode,
-        device: koharu_ml::Device,
-    ) -> Result<Box<dyn Processor>> {
-        match node.spec().runtime {
-            ModelRuntime::None => {}
-            ModelRuntime::Diffusion => koharu_ml::init_diffusion()
-                .await
-                .context("failed to initialize the stable-diffusion.cpp runtime")?,
-            ModelRuntime::Torch => koharu_ml::init_torch()
-                .await
-                .context("failed to initialize the LibTorch runtime")?,
-            ModelRuntime::Llama => koharu_ml::init_llama()
-                .await
-                .context("failed to initialize the llama.cpp runtime")?,
+impl Processor for BuiltinProcessor {
+    fn spec(&self) -> &ProcessorSpec {
+        &self.spec
+    }
+
+    fn is_downloaded(&self) -> bool {
+        is_downloaded(&self.node)
+    }
+
+    async fn ensure_downloaded(&self, context: &DownloadContext) -> Result<()> {
+        if context.cancellation.is_cancelled() {
+            bail!("model download was cancelled");
         }
-        Ok(match node {
-            ConfiguredNode::Detection(DetectionModel::KoharuLayoutRFDetrSeg2XL(config)) => {
-                Box::new(
-                    koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XLProcessor::load(
-                        device, config,
-                    )
-                    .await?,
-                )
-            }
-            ConfiguredNode::Ocr(OcrModel::MangaOcr(config)) => {
-                Box::new(manga_ocr::MangaOcrProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Ocr(OcrModel::BaberuOcr(config)) => {
-                Box::new(baberu_ocr::BaberuOcrProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Ocr(OcrModel::PaddleOcrVl1_6(config)) => {
-                Box::new(paddle_ocr_vl_1_6::PaddleOcrVl1_6Processor::load(device, config).await?)
-            }
-            ConfiguredNode::Translation(config) => {
-                Box::new(translation::TranslationProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Typography(TypographyModel::FontDetector(config)) => {
-                Box::new(font_detector::FontDetectorProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Inpainting(InpaintingModel::LaMa(config)) => {
-                Box::new(lama::LaMaProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Inpainting(InpaintingModel::AotInpainting(config)) => {
-                Box::new(aot_inpainting::AotInpaintingProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Inpainting(InpaintingModel::Flux2Klein(config)) => {
-                Box::new(flux2_klein::Flux2KleinProcessor::load(device, config).await?)
-            }
-            ConfiguredNode::Inpainting(InpaintingModel::RoremMixed(config)) => {
-                Box::new(rorem_mixed::RoremMixedProcessor::load(device, config).await?)
-            }
-        })
+        self.downloaded
+            .get_or_try_init(|| download(&self.node))
+            .await
+            .map(|_| ())
+    }
+
+    async fn ensure_loaded(&self, context: &LoadContext) -> Result<()> {
+        if context.cancellation.is_cancelled() {
+            bail!("model load was cancelled");
+        }
+        let mut loaded = self.loaded.lock().await;
+        if loaded.is_none() {
+            *loaded = Some(Loaded::load(&self.node, self.device.clone()).await?);
+        }
+        Ok(())
+    }
+
+    async fn run(&self, input: NodeInput) -> Result<NodeOutput> {
+        if input.cancellation.is_cancelled() {
+            bail!("stage was cancelled");
+        }
+        let loaded = self.loaded.lock().await;
+        loaded
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("model was not loaded"))?
+            .run(input)
+            .await
+    }
+
+    fn try_unload(&self) -> Result<bool> {
+        let Ok(mut loaded) = self.loaded.try_lock() else {
+            return Ok(false);
+        };
+        Ok(loaded.take().is_some())
+    }
+}
+
+async fn download(node: &ConfiguredNode) -> Result<()> {
+    match node {
+        ConfiguredNode::Detection(_) => {
+            koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::download().await
+        }
+        ConfiguredNode::Ocr(crate::OcrModel::MangaOcr(_)) => {
+            koharu_ml::manga_ocr::MangaOcr::download().await
+        }
+        ConfiguredNode::Ocr(crate::OcrModel::BaberuOcr(_)) => {
+            koharu_ml::baberu_ocr::BaberuOcr::download().await
+        }
+        ConfiguredNode::Ocr(crate::OcrModel::PaddleOcrVl1_6(_)) => {
+            koharu_ml::paddle_ocr_vl::PaddleOCRVL::download().await
+        }
+        ConfiguredNode::Translation(koharu_translator::Providers::Local(config)) => {
+            let model = config
+                .model
+                .parse::<koharu_translator::LocalModel>()
+                .with_context(|| format!("unknown local translator '{}'", config.model))?;
+            koharu_translator::LocalTranslator::download(model)
+                .await
+                .map_err(Into::into)
+        }
+        ConfiguredNode::Translation(_) => Ok(()),
+        ConfiguredNode::Typography(_) => koharu_ml::font_detector::FontDetector::download().await,
+        ConfiguredNode::Inpainting(crate::InpaintingModel::LaMa(_)) => {
+            koharu_ml::lama::LaMa::download().await
+        }
+        ConfiguredNode::Inpainting(crate::InpaintingModel::AotInpainting(_)) => {
+            koharu_ml::aot_inpainting::AotInpainting::download().await
+        }
+        ConfiguredNode::Inpainting(crate::InpaintingModel::Flux2Klein(_)) => {
+            koharu_ml::flux2_klein::Flux2KleinInpaint::download().await
+        }
+        ConfiguredNode::Inpainting(crate::InpaintingModel::RoremMixed(_)) => {
+            koharu_ml::rorem_mixed::RoremMixed::download().await
+        }
+    }
+}
+
+fn is_downloaded(node: &ConfiguredNode) -> bool {
+    match node {
+        ConfiguredNode::Detection(_) => {
+            koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL::is_downloaded()
+        }
+        ConfiguredNode::Ocr(crate::OcrModel::MangaOcr(_)) => {
+            koharu_ml::manga_ocr::MangaOcr::is_downloaded()
+        }
+        ConfiguredNode::Ocr(crate::OcrModel::BaberuOcr(_)) => {
+            koharu_ml::baberu_ocr::BaberuOcr::is_downloaded()
+        }
+        ConfiguredNode::Ocr(crate::OcrModel::PaddleOcrVl1_6(_)) => {
+            koharu_ml::paddle_ocr_vl::PaddleOCRVL::is_downloaded()
+        }
+        ConfiguredNode::Translation(koharu_translator::Providers::Local(config)) => config
+            .model
+            .parse::<koharu_translator::LocalModel>()
+            .is_ok_and(koharu_translator::LocalTranslator::is_downloaded),
+        ConfiguredNode::Translation(_) => true,
+        ConfiguredNode::Typography(_) => koharu_ml::font_detector::FontDetector::is_downloaded(),
+        ConfiguredNode::Inpainting(crate::InpaintingModel::LaMa(_)) => {
+            koharu_ml::lama::LaMa::is_downloaded()
+        }
+        ConfiguredNode::Inpainting(crate::InpaintingModel::AotInpainting(_)) => {
+            koharu_ml::aot_inpainting::AotInpainting::is_downloaded()
+        }
+        ConfiguredNode::Inpainting(crate::InpaintingModel::Flux2Klein(_)) => {
+            koharu_ml::flux2_klein::Flux2KleinInpaint::is_downloaded()
+        }
+        ConfiguredNode::Inpainting(crate::InpaintingModel::RoremMixed(_)) => {
+            koharu_ml::rorem_mixed::RoremMixed::is_downloaded()
+        }
+    }
+}
+
+fn generation(producer: &str, model: &str) -> Result<Generation> {
+    let mut generation = Generation::new(ProducerId::new(producer)?);
+    generation.model = Some(model.to_owned());
+    Ok(generation)
+}
+
+fn finish(edit: SceneEdit) -> Result<NodeOutput> {
+    Ok(NodeOutput {
+        patch: edit.finish()?,
+        artifacts: Default::default(),
+        measurements: Default::default(),
+    })
+}
+
+fn producer(stage: Stage) -> &'static str {
+    match stage {
+        Stage::Detection => "dev.koharu.pipeline.detection",
+        Stage::Ocr => "dev.koharu.pipeline.ocr",
+        Stage::Translation => "dev.koharu.pipeline.translation",
+        Stage::Typography => "dev.koharu.pipeline.typography",
+        Stage::Inpainting => "dev.koharu.pipeline.inpainting",
     }
 }

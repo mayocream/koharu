@@ -4,10 +4,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use koharu_renderer::PageRenderOptions;
-use koharu_scene::{
-    BlobId, ChangeSet, Element, ElementId, Frame, Page, PageAsset, PageId, Revision, Session,
-};
+use koharu_renderer::RenderTheme;
+use koharu_scene::{BlobId, EntityChange, Revision, SceneChangeSet, SceneSnapshot};
 use vello::{
     Scene,
     kurbo::{Affine, Rect, Vec2},
@@ -16,11 +14,11 @@ use vello::{
 
 use crate::damage::RenderDamage;
 use crate::{
-    ActiveStroke, ActiveTransform, Brush, Camera, CanvasDiagnostic, CanvasGpu, CanvasOptions,
-    ElementSceneContext, ElementScenes, Error, GpuRenderer, Guide, Handle, HitTarget, MaskCommit,
-    MaskPlane, MaskState, OverlayGeometry, OverlayState, PagePoint, PageView, PhysicalPoint,
-    PhysicalSize, ResourceEvent, ResourceKind, Resources, Result, TransformCommit, frame_contains,
-    frame_corners,
+    ActiveStroke, ActiveTransform, Brush, Camera, CanvasDiagnostic, CanvasElement, CanvasGpu,
+    CanvasOptions, CanvasPage, ElementId, ElementSceneContext, ElementScenes, Error, Frame,
+    GpuRenderer, Guide, Handle, HitTarget, MaskCommit, MaskPlane, MaskState, OverlayGeometry,
+    OverlayState, PageId, PagePoint, PageView, PhysicalPoint, PhysicalSize, ResourceEvent,
+    ResourceKind, Resources, Result, TransformCommit, frame_contains, frame_corners,
 };
 
 // Handles are editor controls, so they remain a fixed physical-pixel size
@@ -59,10 +57,11 @@ pub struct Canvas {
     resources: Resources,
     view: crate::ViewState,
     overlays: OverlayState,
-    page: Option<Page>,
+    snapshot: Option<SceneSnapshot>,
+    page: Option<CanvasPage>,
     revision: Revision,
 
-    // Derived data that may be rebuilt without mutating the Session.
+    // Derived data that may be rebuilt without mutating the scene snapshot.
     masks: HashMap<MaskPlane, MaskState>,
     element_scenes: ElementScenes,
     displayed_base: Option<BlobId>,
@@ -98,6 +97,7 @@ impl Canvas {
             resources,
             view,
             overlays: OverlayState::default(),
+            snapshot: None,
             page: None,
             revision: Revision::ZERO,
             masks: HashMap::new(),
@@ -113,12 +113,17 @@ impl Canvas {
         })
     }
 
-    pub fn show_page(&mut self, session: &Session, page: PageId) -> Result<()> {
-        let next = session.page(page)?.clone();
-        let source = session.read_blob(next.source)?;
+    pub fn show_page(&mut self, snapshot: &SceneSnapshot, page: PageId) -> Result<()> {
+        let next = CanvasPage::load(snapshot, page)?;
+        let source_id = next
+            .assets
+            .source
+            .expect("CanvasPage requires a source asset");
+        let source = snapshot.read_blob(source_id)?;
 
+        self.snapshot = Some(snapshot.clone());
         self.page = Some(next);
-        self.revision = session.revision();
+        self.revision = snapshot.revision();
         self.stroke = None;
         self.transform = None;
         self.masks.clear();
@@ -134,18 +139,16 @@ impl Canvas {
             MaskPlane::Brush,
             MaskState::empty(self.page.as_ref().expect("page was set").size),
         );
-        self.resources.request(
-            self.page.as_ref().expect("page was set").source,
-            ResourceKind::Color,
-            source,
-        );
-        self.request_page_resources(session);
+        self.resources
+            .request(source_id, ResourceKind::Color, source);
+        self.request_page_resources(snapshot);
         self.sync_ready_masks()?;
         self.damage.content();
         Ok(())
     }
 
     pub fn clear_page(&mut self) {
+        self.snapshot = None;
         self.page = None;
         self.revision = Revision::ZERO;
         self.masks.clear();
@@ -158,41 +161,52 @@ impl Canvas {
         self.damage.content();
     }
 
-    pub fn sync(&mut self, session: &Session, changes: &ChangeSet) -> Result<()> {
+    pub fn sync(&mut self, snapshot: &SceneSnapshot, changes: &SceneChangeSet) -> Result<()> {
         let Some(current) = self.page.as_ref().map(|page| page.id) else {
-            self.revision = session.revision();
+            self.snapshot = Some(snapshot.clone());
+            self.revision = snapshot.revision();
             return Ok(());
         };
-        if changes.from != self.revision || changes.to != session.revision() {
+        if changes.from != self.revision || changes.to != snapshot.revision() {
             return Err(Error::RevisionConflict {
                 page: current,
                 expected: self.revision,
                 actual: if changes.from != self.revision {
                     changes.from
                 } else {
-                    session.revision()
+                    snapshot.revision()
                 },
             });
         }
 
-        let affected = changes.pages.contains(&current)
-            || changes.elements.iter().any(|id| {
+        if changes.entities.contains(&EntityChange::Removed(current)) {
+            self.clear_page();
+            self.snapshot = Some(snapshot.clone());
+            self.revision = changes.to;
+            return Ok(());
+        }
+
+        let affected = changes.pages_changed
+            || !changes.entities.is_empty()
+            || !changes.relations.is_empty()
+            || changes.components.iter().any(|change| {
                 self.page
                     .as_ref()
-                    .is_some_and(|page| page.element(*id).is_some())
+                    .is_some_and(|page| page.contains(change.entity))
             });
+        self.snapshot = Some(snapshot.clone());
         self.revision = changes.to;
         if !affected {
             return Ok(());
         }
 
         self.transform = None;
-        let next = session.page(current)?.clone();
+        let next = CanvasPage::load(snapshot, current)?;
         self.verify_mask_replacement(&next)?;
         self.page = Some(next);
         self.element_scenes
             .retain_page(self.page.as_ref().expect("active page was refreshed"));
-        self.request_page_resources(session);
+        self.request_page_resources(snapshot);
         self.sync_ready_masks()?;
         self.damage.content();
         Ok(())
@@ -237,9 +251,16 @@ impl Canvas {
         }
     }
 
-    pub fn set_text_options(&mut self, options: PageRenderOptions) {
+    pub fn set_text_options(&mut self, options: RenderTheme) {
         self.options.text = options;
         self.invalidate_text_scenes();
+    }
+
+    pub fn set_locale(&mut self, locale: Option<koharu_scene::LanguageTag>) {
+        if self.options.locale != locale {
+            self.options.locale = locale;
+            self.invalidate_text_scenes();
+        }
     }
 
     /// Call after the host installs or removes fonts used by the active project.
@@ -378,9 +399,7 @@ impl Canvas {
             .masks
             .entry(plane)
             .or_insert_with(|| MaskState::empty(page.size));
-        if page.assets.get(plane.asset()).is_some()
-            && state.source != page.assets.get(plane.asset())
-        {
+        if page.assets.mask(plane).is_some() && state.source != page.assets.mask(plane) {
             return Err(Error::Invalid(format!(
                 "{} mask is still loading",
                 plane.name()
@@ -504,38 +523,43 @@ impl Canvas {
         self.gpu.read_output()
     }
 
-    fn request_page_resources(&mut self, session: &Session) {
+    fn request_page_resources(&mut self, snapshot: &SceneSnapshot) {
         let Some(page) = self.page.as_ref() else {
             return;
         };
         let id = page.id;
         // Blob reads are cheap database/storage operations here; image decoding
         // is delegated to Resources and completes asynchronously.
-        let mut resources = vec![(page.source, ResourceKind::Color)];
+        let mut resources = vec![(
+            page.assets
+                .source
+                .expect("CanvasPage requires a source asset"),
+            ResourceKind::Color,
+        )];
         resources.extend(
-            [PageAsset::Clean, PageAsset::Rendered]
+            [page.assets.clean, page.assets.rendered]
                 .into_iter()
-                .filter_map(|asset| page.assets.get(asset))
+                .flatten()
                 .map(|blob| (blob, ResourceKind::Color)),
         );
         resources.extend(
-            [PageAsset::TextMask, PageAsset::BrushMask]
+            [page.assets.text_mask, page.assets.brush_mask]
                 .into_iter()
-                .filter_map(|asset| page.assets.get(asset))
+                .flatten()
                 .map(|blob| (blob, ResourceKind::Gray)),
         );
-        resources.extend(page.elements.iter().filter_map(|element| {
-            element
-                .image_data()
-                .map(|image| (image.blob, ResourceKind::Color))
-        }));
+        resources.extend(
+            page.elements
+                .iter()
+                .filter_map(|element| element.image.map(|blob| (blob, ResourceKind::Color))),
+        );
         resources.sort_unstable_by_key(|(blob, kind)| (*blob, *kind as u8));
         resources.dedup();
         for (blob, kind) in resources {
             if self.resources.contains(blob, kind) {
                 continue;
             }
-            match session.read_blob(blob) {
+            match snapshot.read_blob(blob) {
                 Ok(bytes) => self.resources.request(blob, kind, bytes),
                 Err(error) => self.diagnostics.push(CanvasDiagnostic::resource(
                     Some(id),
@@ -551,7 +575,11 @@ impl Canvas {
         let Some(page) = self.page.as_ref() else {
             return active;
         };
-        active.insert(page.source);
+        active.insert(
+            page.assets
+                .source
+                .expect("CanvasPage requires a source asset"),
+        );
         active.extend(
             [
                 page.assets.clean,
@@ -562,11 +590,7 @@ impl Canvas {
             .into_iter()
             .flatten(),
         );
-        active.extend(
-            page.elements
-                .iter()
-                .filter_map(|element| element.image_data().map(|image| image.blob)),
-        );
+        active.extend(page.elements.iter().filter_map(|element| element.image));
         active
     }
 
@@ -608,7 +632,7 @@ impl Canvas {
         };
         let image = self.resources.gray(id);
         for plane in [MaskPlane::Text, MaskPlane::Brush] {
-            if page.assets.get(plane.asset()) != Some(id) {
+            if page.assets.mask(plane) != Some(id) {
                 continue;
             }
             let state = self
@@ -629,13 +653,13 @@ impl Canvas {
         Ok(())
     }
 
-    fn verify_mask_replacement(&self, next: &Page) -> Result<()> {
+    fn verify_mask_replacement(&self, next: &CanvasPage) -> Result<()> {
         let Some(current) = self.page.as_ref() else {
             return Ok(());
         };
         for plane in [MaskPlane::Text, MaskPlane::Brush] {
-            let before = current.assets.get(plane.asset());
-            let after = next.assets.get(plane.asset());
+            let before = current.assets.mask(plane);
+            let after = next.assets.mask(plane);
             if before != after
                 && self
                     .masks
@@ -670,7 +694,7 @@ impl Canvas {
         let size = page.size;
         let id = page.id;
         for plane in [MaskPlane::Text, MaskPlane::Brush] {
-            let desired = page.assets.get(plane.asset());
+            let desired = page.assets.mask(plane);
             let state = self
                 .masks
                 .entry(plane)
@@ -705,14 +729,19 @@ impl Canvas {
         let Some(page) = self.page.clone() else {
             return scene;
         };
+        let Some(snapshot) = self.snapshot.clone() else {
+            return scene;
+        };
         let mut page_scene = Scene::new();
         self.draw_base(&mut page_scene, &page, now);
         if self.view.display.page.is_editable() {
             self.draw_masks(&mut page_scene);
             let elements = self.element_scenes.scene(ElementSceneContext {
+                snapshot: &snapshot,
                 page: &page,
                 resources: &mut self.resources,
                 text: &self.options.text,
+                locale: self.options.locale.as_ref(),
                 transform: self.transform.as_ref(),
                 show_text: self.view.display.show_text,
                 diagnostics: &mut self.diagnostics,
@@ -731,7 +760,7 @@ impl Canvas {
         scene
     }
 
-    fn draw_base(&mut self, scene: &mut Scene, page: &Page, now: Instant) {
+    fn draw_base(&mut self, scene: &mut Scene, page: &CanvasPage, now: Instant) {
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
@@ -757,7 +786,13 @@ impl Canvas {
         }
     }
 
-    fn draw_page_image(&mut self, scene: &mut Scene, page: &Page, blob: BlobId, opacity: f32) {
+    fn draw_page_image(
+        &mut self,
+        scene: &mut Scene,
+        page: &CanvasPage,
+        blob: BlobId,
+        opacity: f32,
+    ) {
         let Some(image) = self.resources.color(blob) else {
             return;
         };
@@ -848,7 +883,7 @@ impl Canvas {
     fn resolved_base(&mut self) -> BlobId {
         let page = self.page.as_ref().expect("resolved base requires a page");
         let (optional, view) = match self.view.display.page {
-            PageView::EditableSource => (Some(page.source), None),
+            PageView::EditableSource => (page.assets.source, None),
             PageView::EditableClean => (page.assets.clean, Some(PageView::EditableClean)),
             PageView::Rendered => (page.assets.rendered, Some(PageView::Rendered)),
         };
@@ -870,7 +905,9 @@ impl Canvas {
                 self.reported_fallback = Some(key);
             }
         }
-        page.source
+        page.assets
+            .source
+            .expect("CanvasPage requires a source asset")
     }
 
     fn build_overlay_geometry(&self) -> OverlayGeometry {
@@ -903,9 +940,7 @@ impl Canvas {
             for (index, element) in page
                 .elements
                 .iter()
-                .filter(|element| {
-                    element.text().is_some() && element.visible && element.opacity > 0.0
-                })
+                .filter(|element| element.has_text && element.visible && element.opacity > 0.0)
                 .enumerate()
             {
                 let corners = screen_corners(self.preview_frame(element), camera);
@@ -970,7 +1005,7 @@ impl Canvas {
         geometry
     }
 
-    fn preview_frame(&self, element: &Element) -> Frame {
+    fn preview_frame(&self, element: &CanvasElement) -> Frame {
         self.transform
             .as_ref()
             .and_then(|transform| transform.preview(element.id))

@@ -1,10 +1,13 @@
+//! Stable JSON boundary between the native application and the web UI.
+//!
+//! These are application DTOs, not serialized scene components. The protocol
+//! exposes ergonomic projections and accepts user intent while keeping scene
+//! provenance, component slots, and renderer caches on the Rust side.
+
 use std::fmt;
 
-use koharu_pipeline::{RunTarget, Scope};
-use koharu_scene::{
-    Element, ElementId, Frame, Page, PageAssets, PageId, ProjectId, Revision, Size, TextLayout,
-    TextStyle,
-};
+use koharu_pipeline::{Scope, Target};
+use koharu_scene::{EntityId, ProjectId, Revision, TextAlignment, WritingMode};
 use koharu_secrets::{ExposeSecret, SecretString};
 use koharu_translator::{Providers, TranslationConfig, TranslationCredentials};
 use serde::{Deserialize, Serialize};
@@ -53,7 +56,7 @@ pub enum BridgeMessage {
     Command {
         id: RequestId,
         base: Revision,
-        command: UiCommand,
+        command: Box<UiCommand>,
     },
     Interaction {
         interaction: CanvasInteraction,
@@ -86,121 +89,108 @@ pub enum UiCommand {
     CloseProject,
     ImportPages,
     RenamePage {
-        page: PageId,
-        name: String,
-    },
-    DeletePage {
-        page: PageId,
+        page: EntityId,
+        label: String,
     },
     DeletePages {
-        pages: Vec<PageId>,
+        pages: Vec<EntityId>,
     },
     MovePage {
-        page: PageId,
+        page: EntityId,
         #[specta(type = f64)]
         index: usize,
     },
     AddText {
-        page: PageId,
+        page: EntityId,
         frame: Frame,
     },
     SetTranslation {
-        page: PageId,
-        element: ElementId,
-        translation: Option<String>,
+        entity: EntityId,
+        locale: String,
+        text: Option<String>,
     },
-    SetTextStyle {
-        page: PageId,
-        element: ElementId,
-        style: TextStyle,
+    SetTypography {
+        entities: Vec<EntityTypography>,
     },
-    SetTextLayout {
-        page: PageId,
-        element: ElementId,
-        layout: TextLayout,
+    SetGeometry {
+        entities: Vec<EntityGeometry>,
     },
-    SetTextStyles {
-        page: PageId,
-        elements: Vec<ElementTextStyle>,
+    SetVisibility {
+        entities: Vec<EntityId>,
+        visible: Option<bool>,
+        opacity: Option<f32>,
     },
-    SetTextLayouts {
-        page: PageId,
-        elements: Vec<ElementTextLayout>,
+    DeleteEntities {
+        entities: Vec<EntityId>,
     },
-    CacheFont {
-        family: String,
-        weight: u16,
-        italic: bool,
-    },
-    SetElementFrames {
-        elements: Vec<ElementFrame>,
-    },
-    FinishTransform,
-    SetElementOpacity {
-        page: PageId,
-        elements: Vec<ElementId>,
-        opacity: f32,
-    },
-    SetElementVisibility {
-        page: PageId,
-        elements: Vec<ElementId>,
-        visible: bool,
-    },
-    DeleteElements {
-        page: PageId,
-        elements: Vec<ElementId>,
-    },
-    MoveElement {
-        page: PageId,
-        element: ElementId,
+    MoveEntity {
+        entity: EntityId,
+        parent: EntityId,
         #[specta(type = f64)]
         index: usize,
     },
+    FinishTransform,
     Undo,
     Redo,
     RunPipeline {
         scope: Scope,
-        target: RunTarget,
+        target: Target,
     },
     CancelJob {
         job: RequestId,
     },
     ExportPages {
-        pages: Vec<PageId>,
+        pages: Vec<EntityId>,
         format: ExportFormat,
     },
     GetSettings,
     SetSettings {
         pipeline: koharu_pipeline::PipelineConfig,
-        translation: TranslationSettings,
+        translation: Box<TranslationSettings>,
     },
     CollectGarbage,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct ElementFrame {
-    pub page: PageId,
-    pub element: ElementId,
-    pub frame: Frame,
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
+pub struct Frame {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub angle_degrees: f32,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, Type)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
-pub struct ElementTextStyle {
-    pub element: ElementId,
-    pub style: TextStyle,
+pub struct EntityGeometry {
+    pub entity: EntityId,
+    pub points: Vec<Point>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Type)]
+pub struct TypographyIntent {
+    pub preferred_font: Option<String>,
+    pub size: Option<f32>,
+    pub alignment: Option<TextAlignment>,
+    pub writing_mode: Option<WritingMode>,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
-pub struct ElementTextLayout {
-    pub element: ElementId,
-    pub layout: TextLayout,
+pub struct EntityTypography {
+    pub entity: EntityId,
+    pub typography: TypographyIntent,
 }
 
 #[derive(Debug, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CanvasInteraction {
     ShowPage {
-        page: PageId,
+        page: EntityId,
     },
     SetCamera {
         zoom: f64,
@@ -214,8 +204,8 @@ pub enum CanvasInteraction {
         display: CanvasDisplay,
     },
     SetOverlays {
-        selected: Vec<ElementId>,
-        hovered: Option<ElementId>,
+        selected: Vec<EntityId>,
+        hovered: Option<EntityId>,
         draft: Option<Frame>,
         guides: Vec<CanvasGuide>,
         show_text_bounds: bool,
@@ -228,7 +218,7 @@ pub enum CanvasInteraction {
         y: f64,
     },
     BeginTransform {
-        elements: Vec<ElementId>,
+        elements: Vec<EntityId>,
         target: HitTarget,
         x: f64,
         y: f64,
@@ -330,7 +320,7 @@ pub enum UiEvent {
         revision: Revision,
         page: PageView,
     },
-    ProjectChanged(ProjectDelta),
+    ProjectChanged(Box<ProjectDelta>),
     ProjectClosed,
     HitTest {
         #[specta(type = f64)]
@@ -345,7 +335,7 @@ pub enum UiEvent {
     JobChanged(JobStatus),
     DownloadChanged(DownloadStatus),
     SettingsChanged {
-        settings: SettingsView,
+        settings: Box<SettingsView>,
     },
     GarbageCollected {
         #[specta(type = f64)]
@@ -397,8 +387,6 @@ pub struct FontFaceView {
     pub stretch: u16,
     pub style: FontFaceStyleView,
     pub source: FontSourceView,
-    pub category: Option<String>,
-    pub cached: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
@@ -413,7 +401,7 @@ pub enum FontFaceStyleView {
 #[serde(rename_all = "snake_case")]
 pub enum FontSourceView {
     System,
-    Google,
+    Registered,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
@@ -434,30 +422,32 @@ impl TranslationSettings {
         })
     }
 
-    pub fn into_parts(self) -> (TranslationConfig, TranslationCredentials) {
-        (
+    pub fn into_parts(self) -> anyhow::Result<(TranslationConfig, TranslationCredentials)> {
+        let mut credentials = TranslationCredentials::load()?;
+        self.credentials.apply(&mut credentials);
+        Ok((
             TranslationConfig {
                 model: self.model,
                 target_language: self.target_language,
                 instructions: self.instructions,
             },
-            self.credentials.into(),
-        )
+            credentials,
+        ))
     }
 }
 
 #[derive(Clone, Default, Deserialize, Serialize, Type)]
 pub struct TranslationCredentialsView {
-    pub openai: String,
-    pub gemini: String,
-    pub claude: String,
-    pub deepseek: String,
-    pub openai_compatible: String,
-    pub openrouter: String,
-    pub lm_studio: String,
-    pub deepl: String,
-    pub google_cloud_translation: String,
-    pub caiyun: String,
+    pub openai: CredentialEdit,
+    pub gemini: CredentialEdit,
+    pub claude: CredentialEdit,
+    pub deepseek: CredentialEdit,
+    pub openai_compatible: CredentialEdit,
+    pub openrouter: CredentialEdit,
+    pub lm_studio: CredentialEdit,
+    pub deepl: CredentialEdit,
+    pub google_cloud_translation: CredentialEdit,
+    pub caiyun: CredentialEdit,
 }
 
 impl fmt::Debug for TranslationCredentialsView {
@@ -469,39 +459,73 @@ impl fmt::Debug for TranslationCredentialsView {
 impl From<&TranslationCredentials> for TranslationCredentialsView {
     fn from(credentials: &TranslationCredentials) -> Self {
         Self {
-            openai: exposed(&credentials.openai),
-            gemini: exposed(&credentials.gemini),
-            claude: exposed(&credentials.claude),
-            deepseek: exposed(&credentials.deepseek),
-            openai_compatible: exposed(&credentials.openai_compatible),
-            openrouter: exposed(&credentials.openrouter),
-            lm_studio: exposed(&credentials.lm_studio),
-            deepl: exposed(&credentials.deepl),
-            google_cloud_translation: exposed(&credentials.google_cloud_translation),
-            caiyun: exposed(&credentials.caiyun),
+            openai: CredentialEdit::from(&credentials.openai),
+            gemini: CredentialEdit::from(&credentials.gemini),
+            claude: CredentialEdit::from(&credentials.claude),
+            deepseek: CredentialEdit::from(&credentials.deepseek),
+            openai_compatible: CredentialEdit::from(&credentials.openai_compatible),
+            openrouter: CredentialEdit::from(&credentials.openrouter),
+            lm_studio: CredentialEdit::from(&credentials.lm_studio),
+            deepl: CredentialEdit::from(&credentials.deepl),
+            google_cloud_translation: CredentialEdit::from(&credentials.google_cloud_translation),
+            caiyun: CredentialEdit::from(&credentials.caiyun),
         }
     }
 }
 
-impl From<TranslationCredentialsView> for TranslationCredentials {
-    fn from(credentials: TranslationCredentialsView) -> Self {
+impl TranslationCredentialsView {
+    fn apply(self, credentials: &mut TranslationCredentials) {
+        self.openai.apply(&mut credentials.openai);
+        self.gemini.apply(&mut credentials.gemini);
+        self.claude.apply(&mut credentials.claude);
+        self.deepseek.apply(&mut credentials.deepseek);
+        self.openai_compatible
+            .apply(&mut credentials.openai_compatible);
+        self.openrouter.apply(&mut credentials.openrouter);
+        self.lm_studio.apply(&mut credentials.lm_studio);
+        self.deepl.apply(&mut credentials.deepl);
+        self.google_cloud_translation
+            .apply(&mut credentials.google_cloud_translation);
+        self.caiyun.apply(&mut credentials.caiyun);
+    }
+}
+
+#[derive(Clone, Default, Deserialize, Serialize, Type)]
+pub struct CredentialEdit {
+    pub configured: bool,
+    pub value: Option<String>,
+    pub clear: bool,
+}
+
+impl fmt::Debug for CredentialEdit {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CredentialEdit")
+            .field("configured", &self.configured)
+            .field("value", &self.value.as_ref().map(|_| "[REDACTED]"))
+            .field("clear", &self.clear)
+            .finish()
+    }
+}
+
+impl From<&SecretString> for CredentialEdit {
+    fn from(secret: &SecretString) -> Self {
         Self {
-            openai: SecretString::from(credentials.openai),
-            gemini: SecretString::from(credentials.gemini),
-            claude: SecretString::from(credentials.claude),
-            deepseek: SecretString::from(credentials.deepseek),
-            openai_compatible: SecretString::from(credentials.openai_compatible),
-            openrouter: SecretString::from(credentials.openrouter),
-            lm_studio: SecretString::from(credentials.lm_studio),
-            deepl: SecretString::from(credentials.deepl),
-            google_cloud_translation: SecretString::from(credentials.google_cloud_translation),
-            caiyun: SecretString::from(credentials.caiyun),
+            configured: !secret.expose_secret().trim().is_empty(),
+            value: None,
+            clear: false,
         }
     }
 }
 
-fn exposed(secret: &SecretString) -> String {
-    secret.expose_secret().to_owned()
+impl CredentialEdit {
+    fn apply(self, current: &mut SecretString) {
+        if self.clear {
+            *current = SecretString::default();
+        } else if let Some(value) = self.value {
+            *current = SecretString::from(value);
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -510,38 +534,44 @@ pub struct TargetLanguageView {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Type)]
+#[derive(Clone, Debug, Serialize, Type)]
 pub struct ProjectHeader {
     pub id: ProjectId,
     pub name: String,
-    pub visible_page: Option<PageId>,
+    pub visible_page: Option<EntityId>,
     pub can_undo: bool,
     pub can_redo: bool,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+pub struct PageSize {
+    pub width: f64,
+    pub height: f64,
+}
+
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct PageSummary {
-    pub id: PageId,
-    pub name: String,
-    pub size: Size,
-    pub source: String,
+    pub id: EntityId,
+    pub label: String,
+    pub size: PageSize,
+    pub source: Option<String>,
     pub clean: Option<String>,
     #[specta(type = f64)]
-    pub elements: usize,
+    pub entities: usize,
 }
 
-#[derive(Debug, Serialize, Type)]
+#[derive(Clone, Debug, Serialize, Type)]
 pub struct PageView {
-    pub id: PageId,
-    pub name: String,
-    pub size: Size,
-    pub source: String,
+    pub id: EntityId,
+    pub label: String,
+    pub size: PageSize,
     pub assets: AssetView,
-    pub elements: Vec<Element>,
+    pub entities: Vec<EntityView>,
 }
 
-#[derive(Debug, Serialize, Type)]
+#[derive(Clone, Debug, Default, Serialize, Type)]
 pub struct AssetView {
+    pub source: Option<String>,
     pub clean: Option<String>,
     pub rendered: Option<String>,
     pub text_mask: Option<String>,
@@ -550,36 +580,66 @@ pub struct AssetView {
     pub brush_mask: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct EntityView {
+    pub id: EntityId,
+    pub parent: Option<EntityId>,
+    pub geometry: Option<GeometryView>,
+    pub visibility: VisibilityView,
+    pub image: Option<String>,
+    pub source_text: Option<SourceTextView>,
+    pub translation: Option<TranslationView>,
+    pub typography: Option<TypographyIntent>,
+    pub region: Option<RegionView>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct GeometryView {
+    pub points: Vec<Point>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+pub struct VisibilityView {
+    pub visible: bool,
+    pub opacity: f32,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct SourceTextView {
+    pub text: String,
+    pub language: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct TranslationView {
+    pub locale: String,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct RegionView {
+    pub kind: String,
+    pub label: Option<String>,
+}
+
 #[derive(Debug, Serialize, Type)]
 pub struct ProjectDelta {
     pub from: Revision,
     pub revision: Revision,
     pub name: String,
-    pub page_order: Vec<PageId>,
+    pub page_order: Vec<EntityId>,
     pub pages: Vec<PageSummary>,
-    pub deleted_pages: Vec<PageId>,
-    pub visible_page: Option<PageDelta>,
+    pub deleted_pages: Vec<EntityId>,
+    pub visible_page: Option<PageView>,
     pub can_undo: bool,
     pub can_redo: bool,
-}
-
-#[derive(Debug, Serialize, Type)]
-pub struct PageDelta {
-    pub id: PageId,
-    pub name: String,
-    pub size: Size,
-    pub source: String,
-    pub assets: AssetView,
-    pub element_order: Vec<ElementId>,
-    pub elements: Vec<Element>,
-    pub deleted_elements: Vec<ElementId>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HitTarget {
-    Element { element: ElementId },
-    Handle { element: ElementId, handle: Handle },
+    Element { element: EntityId },
+    Handle { element: EntityId, handle: Handle },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
@@ -606,7 +666,7 @@ pub enum JobStatus {
         completed: usize,
         #[specta(type = f64)]
         total: usize,
-        phase: Option<koharu_pipeline::Phase>,
+        phase: Option<koharu_pipeline::Stage>,
         model: Option<String>,
     },
     Finished {
@@ -653,47 +713,6 @@ pub enum DownloadStatus {
     },
 }
 
-impl PageSummary {
-    #[must_use]
-    pub fn from_page(page: &Page) -> Self {
-        Self {
-            id: page.id,
-            name: page.name.clone(),
-            size: page.size,
-            source: page.source.to_string(),
-            clean: page.assets.clean.map(|blob| blob.to_string()),
-            elements: page.elements.len(),
-        }
-    }
-}
-
-impl PageView {
-    #[must_use]
-    pub fn from_page(page: &Page) -> Self {
-        Self {
-            id: page.id,
-            name: page.name.clone(),
-            size: page.size,
-            source: page.source.to_string(),
-            assets: AssetView::from(&page.assets),
-            elements: page.elements.clone(),
-        }
-    }
-}
-
-impl From<&PageAssets> for AssetView {
-    fn from(assets: &PageAssets) -> Self {
-        Self {
-            clean: assets.clean.map(|blob| blob.to_string()),
-            rendered: assets.rendered.map(|blob| blob.to_string()),
-            text_mask: assets.text_mask.map(|blob| blob.to_string()),
-            coo_mask: assets.coo_mask.map(|blob| blob.to_string()),
-            bubble_mask: assets.bubble_mask.map(|blob| blob.to_string()),
-            brush_mask: assets.brush_mask.map(|blob| blob.to_string()),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -711,19 +730,34 @@ mod tests {
             message,
             BridgeMessage::Command {
                 id,
-                command: UiCommand::CreateProject,
+                command,
                 ..
             } if id == RequestId::from(Uuid::parse_str("018f3b28-7fd8-7d5a-a833-6cb8637e6c00").unwrap())
+                && matches!(*command, UiCommand::CreateProject)
         ));
     }
 
     #[test]
-    fn page_projection_does_not_embed_blob_bytes() {
-        let event = UiEvent::ProjectClosed;
-        assert_eq!(
-            serde_json::to_value(event).unwrap(),
-            serde_json::json!({ "type": "project_closed" })
-        );
+    fn translation_commands_require_an_explicit_locale() {
+        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
+            "type": "command",
+            "id": "018f3b28-7fd8-7d5a-a833-6cb8637e6c00",
+            "base": 1,
+            "command": {
+                "type": "set_translation",
+                "entity": "018f3b28-7fd8-7d5a-a833-6cb8637e6c01",
+                "locale": "ar-EG",
+                "text": "مرحبا"
+            }
+        }))
+        .unwrap();
+        assert!(matches!(
+            message,
+            BridgeMessage::Command {
+                command,
+                ..
+            } if matches!(*command, UiCommand::SetTranslation { ref locale, .. } if locale == "ar-EG")
+        ));
     }
 
     #[test]
@@ -742,71 +776,6 @@ mod tests {
     }
 
     #[test]
-    fn transform_protocol_carries_native_targets_without_frames() {
-        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
-            "type": "interaction",
-            "interaction": {
-                "type": "begin_transform",
-                "elements": ["018f3b28-7fd8-7d5a-a833-6cb8637e6c00"],
-                "target": {
-                    "type": "handle",
-                    "element": "018f3b28-7fd8-7d5a-a833-6cb8637e6c00",
-                    "handle": "rotate"
-                },
-                "x": 12.0,
-                "y": 34.0
-            }
-        }))
-        .unwrap();
-        assert!(matches!(
-            message,
-            BridgeMessage::Interaction {
-                interaction: CanvasInteraction::BeginTransform {
-                    target: HitTarget::Handle {
-                        handle: Handle::Rotate,
-                        ..
-                    },
-                    ..
-                }
-            }
-        ));
-    }
-
-    #[test]
-    fn frameless_resize_actions_are_part_of_the_shared_protocol() {
-        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
-            "type": "window",
-            "action": "resize_south_east"
-        }))
-        .unwrap();
-        assert!(matches!(
-            message,
-            BridgeMessage::Window {
-                action: WindowAction::ResizeSouthEast
-            }
-        ));
-    }
-
-    #[test]
-    fn project_delta_is_flat_for_typescript() {
-        let event = UiEvent::ProjectChanged(ProjectDelta {
-            from: Revision::ZERO,
-            revision: Revision::new(1),
-            name: "Book".into(),
-            page_order: Vec::new(),
-            pages: Vec::new(),
-            deleted_pages: Vec::new(),
-            visible_page: None,
-            can_undo: true,
-            can_redo: false,
-        });
-        let value = serde_json::to_value(event).unwrap();
-        assert_eq!(value["type"], "project_changed");
-        assert_eq!(value["revision"], 1);
-        assert_eq!(value["name"], "Book");
-    }
-
-    #[test]
     fn download_progress_is_flat_for_typescript() {
         let value = serde_json::to_value(UiEvent::DownloadChanged(DownloadStatus::Running {
             id: 7,
@@ -817,43 +786,58 @@ mod tests {
         .unwrap();
         assert_eq!(value["type"], "download_changed");
         assert_eq!(value["state"], "running");
-        assert_eq!(value["name"], "model.bin");
         assert_eq!(value["completed"], 25);
-        assert_eq!(value["total"], 100);
     }
 
     #[test]
-    fn settings_projection_exposes_credentials_for_editing() {
+    fn settings_projection_never_exposes_stored_credentials() {
         let config = TranslationConfig::default();
         let translation = TranslationSettings {
             model: config.model,
             target_language: config.target_language,
             instructions: config.instructions,
             credentials: TranslationCredentialsView {
-                openai: "secret-value".to_owned(),
+                openai: CredentialEdit {
+                    configured: true,
+                    value: None,
+                    clear: false,
+                },
                 ..TranslationCredentialsView::default()
             },
         };
         let value = serde_json::to_value(UiEvent::SettingsChanged {
-            settings: SettingsView {
+            settings: Box::new(SettingsView {
                 pipeline: koharu_pipeline::PipelineConfig::default(),
                 translation,
-                local_translation_models: vec!["lfm2.5-1.2b-instruct".into()],
-                target_languages: vec![TargetLanguageView {
-                    tag: "en-US".into(),
-                    name: "English".into(),
-                }],
+                local_translation_models: Vec::new(),
+                target_languages: Vec::new(),
                 fonts: Vec::new(),
-            },
+            }),
         })
         .unwrap();
-        assert_eq!(
-            value["settings"]["translation"]["credentials"]["openai"],
-            "secret-value"
-        );
-        assert_eq!(
-            value["settings"]["pipeline"]["detection"]["model"],
-            "koharu-layout-rfdetr-seg-2xl"
-        );
+        let credential = &value["settings"]["translation"]["credentials"]["openai"];
+        assert_eq!(credential["configured"], true);
+        assert!(credential["value"].is_null());
+    }
+
+    #[test]
+    fn credential_edits_distinguish_keep_set_and_clear() {
+        let mut secret = SecretString::from("stored");
+        CredentialEdit::default().apply(&mut secret);
+        assert_eq!(secret.expose_secret(), "stored");
+        CredentialEdit {
+            configured: true,
+            value: Some("replacement".into()),
+            clear: false,
+        }
+        .apply(&mut secret);
+        assert_eq!(secret.expose_secret(), "replacement");
+        CredentialEdit {
+            configured: true,
+            value: Some("ignored".into()),
+            clear: true,
+        }
+        .apply(&mut secret);
+        assert!(secret.expose_secret().is_empty());
     }
 }

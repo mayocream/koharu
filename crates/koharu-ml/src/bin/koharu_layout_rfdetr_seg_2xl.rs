@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let image = image::open(&cli.input)?;
 
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
     let model = KoharuLayoutRFDetrSeg2XL::load(koharu_ml::device(cli.cpu)).await?;
     let mut thresholds = model.recommended_thresholds();
     if let Some(threshold) = cli.text_threshold {

@@ -29,7 +29,7 @@ import {
   type OcrModel,
   type PipelineConfig,
   type ShortcutAction,
-  type Phase,
+  type Stage,
   type TypographyModel,
   type TargetLanguageView,
   type TranslationCredentialsView,
@@ -45,7 +45,7 @@ const settingsTabs = [
 type SettingsTab = (typeof settingsTabs)[number]['id']
 
 type PipelineModel = DetectionModel | OcrModel | TypographyModel | InpaintingModel
-type ModelPhase = Exclude<Phase, 'translation'>
+type ModelPhase = Exclude<Stage, 'translation'>
 type ModelName = PipelineModel['model'] | Providers['provider']
 const phases: ModelPhase[] = ['detection', 'ocr', 'typography', 'inpainting']
 const modelOptions = {
@@ -89,7 +89,7 @@ const modelLabels: Record<ModelName, string> = {
   'flux2-klein': 'FLUX.2 Klein',
   'rorem-mixed': 'RORem Mixed',
 }
-const phaseDescriptions: Record<Phase, string> = {
+const phaseDescriptions: Record<Stage, string> = {
   detection: 'Locate page regions and produce cleanup masks.',
   ocr: 'Read the text inside each region.',
   translation: 'Convert source text to the target language.',
@@ -306,6 +306,7 @@ function PhaseEditor({
   onChange: (config: PipelineConfig) => void
 }) {
   const { t } = useTranslation()
+  const current = config[phase] ?? defaultPipelineModel(modelOptions[phase][0]!)
   return (
     <article className='py-5 first:pt-0 last:pb-0'>
       <div className='mb-3 flex min-w-0 items-baseline gap-3'>
@@ -324,9 +325,11 @@ function PhaseEditor({
         aria-describedby={`pipeline-${phase}-description`}
       >
         <Select
-          value={config[phase].model}
+          value={current.model}
           onValueChange={(model) =>
-            onChange(setPhaseModel(config, phase, defaultPipelineModel(model as PipelineModel['model'])))
+            onChange(
+              setPhaseModel(config, phase, defaultPipelineModel(model as PipelineModel['model'])),
+            )
           }
         >
           <SelectTrigger className='w-full bg-background'>
@@ -340,10 +343,10 @@ function PhaseEditor({
             ))}
           </SelectContent>
         </Select>
-        {hasPipelineModelOptions(config[phase]) && (
+        {hasPipelineModelOptions(current) && (
           <div className='border-t border-border pt-2'>
             <PipelineModelFields
-              model={config[phase]}
+              model={current}
               onChange={(model) => onChange(setPhaseModel(config, phase, model))}
             />
           </div>
@@ -367,8 +370,9 @@ function TranslationEditor({
   const { t } = useTranslation()
   const replace = (model: Providers) => onChange({ ...config, model })
   const credential = credentialField(config.model.provider)
-  const value = credential ? config.credentials[credential] : null
-  const configured = Boolean(value)
+  const edit = credential ? config.credentials[credential] : null
+  const value = edit?.value ?? ''
+  const configured = edit ? !edit.clear && (edit.configured || value.length > 0) : false
   const [revealCredential, setRevealCredential] = useState(false)
 
   useEffect(() => setRevealCredential(false), [credential])
@@ -423,7 +427,7 @@ function TranslationEditor({
                 type={revealCredential ? 'text' : 'password'}
                 autoComplete='new-password'
                 className='[&::-ms-reveal]:hidden'
-                value={value ?? ''}
+                value={value}
                 placeholder={
                   configured
                     ? t('native.settings.configured', { defaultValue: 'Configured' })
@@ -434,7 +438,11 @@ function TranslationEditor({
                     ...config,
                     credentials: {
                       ...config.credentials,
-                      [credential]: event.currentTarget.value,
+                      [credential]: {
+                        configured: config.credentials[credential].configured,
+                        value: event.currentTarget.value || null,
+                        clear: false,
+                      },
                     },
                   })
                 }
@@ -443,7 +451,7 @@ function TranslationEditor({
                 type='button'
                 size='icon-sm'
                 variant='outline'
-                disabled={!configured}
+                disabled={!value}
                 aria-label={
                   revealCredential
                     ? t('native.settings.hideCredential', { defaultValue: 'Hide credential' })
@@ -460,7 +468,10 @@ function TranslationEditor({
                   onClick={() =>
                     onChange({
                       ...config,
-                      credentials: { ...config.credentials, [credential]: '' },
+                      credentials: {
+                        ...config.credentials,
+                        [credential]: { configured: false, value: null, clear: true },
+                      },
                     })
                   }
                 >
@@ -662,9 +673,7 @@ function PipelineModelFields({
             value={model.hd_strategy_crop_margin ?? 128}
             min={0}
             step={1}
-            onChange={(hd_strategy_crop_margin) =>
-              onChange({ ...model, hd_strategy_crop_margin })
-            }
+            onChange={(hd_strategy_crop_margin) => onChange({ ...model, hd_strategy_crop_margin })}
           />
           <NumberSetting
             label='Resize limit'

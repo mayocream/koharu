@@ -10,7 +10,7 @@ async fn main() -> Result<()> {
     let input =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures/object_detection/1.jpg");
 
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
     let image = image::open(input)?;
     let model = KoharuLayoutRFDetrSeg2XL::load(koharu_ml::Device::cuda(0)).await?;
 

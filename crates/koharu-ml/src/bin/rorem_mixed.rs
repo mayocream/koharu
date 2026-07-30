@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     let image = image::open(cli.input)?;
     let mask = image::open(cli.mask)?.to_luma8();
 
-    koharu_ml::init_diffusion().await?;
+    koharu_ml::init().await?;
     let model = RoremMixed::load(koharu_ml::device(cli.cpu)).await?;
     let output = model.inference(
         &image,

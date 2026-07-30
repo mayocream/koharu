@@ -19,6 +19,7 @@ image = { workspace = true }
 koharu-canvas = { workspace = true }
 koharu-config = { workspace = true }
 koharu-desktop = { workspace = true }
+koharu-ml = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }

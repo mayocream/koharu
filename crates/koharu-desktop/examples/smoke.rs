@@ -1,10 +1,10 @@
-use std::{io::Cursor, time::Duration};
+use std::{io::Cursor, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
-use koharu_canvas::Camera;
+use koharu_canvas::{Camera, PhysicalSize};
 use koharu_desktop::{Application, DesktopContext, Frontend, Options};
-use koharu_scene::{PageId, Session};
+use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, EntityId, PageDraft, SceneSession};
 use serde_json::Value;
 
 const HTML: &str = r#"<!doctype html>
@@ -51,8 +51,8 @@ const HTML: &str = r#"<!doctype html>
 </html>"#;
 
 struct Smoke {
-    session: Session,
-    page: PageId,
+    session: SceneSession,
+    page: EntityId,
     auto_exit: bool,
 }
 
@@ -60,7 +60,7 @@ impl Application for Smoke {
     type Event = ();
 
     fn started(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
-        desktop.show_page(&self.session, self.page)?;
+        desktop.show_page(&self.session.snapshot(), self.page)?;
         Ok(())
     }
 
@@ -87,10 +87,10 @@ impl Application for Smoke {
 
     fn viewport_changed(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
         let mut view = desktop.view().clone();
-        view.camera = Camera::contain(
-            desktop.viewport().size(),
-            self.session.page(self.page)?.size,
-        );
+        let snapshot = self.session.snapshot();
+        let page = snapshot.page(self.page)?.page()?;
+        let page_size = PhysicalSize::new(page.width.ceil() as u32, page.height.ceil() as u32);
+        view.camera = Camera::contain(desktop.viewport().size(), page_size);
         desktop.set_view(view);
         Ok(())
     }
@@ -109,10 +109,28 @@ impl Application for Smoke {
 
 fn main() -> Result<()> {
     let auto_exit = std::env::args().any(|argument| argument == "--auto-exit");
-    let mut session = Session::memory()?;
-    let mut commands = session.commands();
-    let page = commands.add_page("smoke.png", page_image())?;
-    session.apply(commands)?;
+    let mut session = SceneSession::memory()?;
+    let mut page = None;
+    let patch = session.snapshot().patch(|edit| {
+        let id = edit.add_page(PageDraft::new("smoke.png", 720.0, 960.0), At::End)?;
+        edit.set_asset(
+            id,
+            &AssetRole::new("source")?,
+            AssetInput::new(
+                Arc::<[u8]>::from(page_image()),
+                "image/png",
+                AssetMetadata {
+                    width: Some(720),
+                    height: Some(960),
+                    attributes: Default::default(),
+                },
+            ),
+        )?;
+        page = Some(id);
+        Ok(())
+    })?;
+    session.commit(patch)?;
+    let page = page.expect("smoke page ID was captured");
 
     koharu_desktop::run(
         Options {

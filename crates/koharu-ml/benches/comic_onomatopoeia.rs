@@ -10,7 +10,7 @@ use koharu_ml::{
 #[tokio::main]
 async fn main() -> Result<()> {
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("benches/fixtures");
-    koharu_ml::init_torch().await?;
+    koharu_ml::init().await?;
     let detector_image = image::open(fixtures.join("object_detection/1.jpg"))?;
     let recognizer_image = image::open(fixtures.join("ocr/title.png"))?;
     let detector = ComicOnomatopoeiaDetector::load(koharu_ml::Device::cuda(0)).await?;

@@ -57,6 +57,17 @@ pub struct LocalTranslator {
 }
 
 impl LocalTranslator {
+    #[must_use]
+    pub fn is_downloaded(model: LocalModel) -> bool {
+        model.is_downloaded()
+    }
+
+    /// Downloads a catalog artifact without constructing a llama context.
+    pub async fn download(model: LocalModel) -> Result<()> {
+        model.resolve().await?;
+        Ok(())
+    }
+
     /// Resolves the catalog artifact and loads it on `device`.
     pub async fn load(device: Device, model: LocalModel) -> Result<Self> {
         Self::load_with_options(device, model, LocalTranslatorOptions::default()).await

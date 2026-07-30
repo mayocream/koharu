@@ -3,16 +3,17 @@ use std::{
     sync::{Arc, mpsc},
 };
 
-use koharu_canvas::{MaskCommit, MaskPlane, PixelRect};
-use koharu_scene::PageId;
+use koharu_canvas::{MaskCommit, MaskPlane, PixelRect, PixelSize};
+use koharu_scene::EntityId;
 
-type Key = (PageId, MaskPlane);
+type Key = (EntityId, MaskPlane);
 
 #[derive(Debug)]
 pub struct EncodedMask {
-    pub page: PageId,
+    pub page: EntityId,
     pub plane: MaskPlane,
     pub dirty: PixelRect,
+    pub size: PixelSize,
     pub generation: u64,
     pub bytes: Vec<u8>,
 }
@@ -20,7 +21,7 @@ pub struct EncodedMask {
 #[derive(Debug, thiserror::Error)]
 #[error("failed to encode {plane:?} mask generation {generation} for page {page}: {message}")]
 pub struct MaskEncodingError {
-    pub page: PageId,
+    pub page: EntityId,
     pub plane: MaskPlane,
     pub generation: u64,
     pub message: String,
@@ -79,11 +80,13 @@ impl MaskEncoder {
         let sender = self.sender.clone();
         let wake = Arc::clone(&self.wake);
         rayon::spawn(move || {
+            let size = commit.size();
             let result = match commit.encode_png() {
                 Ok(bytes) => MaskEncodingResult::Ready(EncodedMask {
                     page: commit.page,
                     plane: commit.plane,
                     dirty: commit.dirty,
+                    size,
                     generation: commit.generation,
                     bytes,
                 }),

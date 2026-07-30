@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { KoharuClient, useEditorStore } from '@/lib/koharu'
 import { FakeBridge } from '@/tests/helpers'
 
+const emptyCredential = () => ({ configured: false, value: null, clear: false })
+
 function connected() {
   const bridge = new FakeBridge()
   Object.defineProperty(window, 'koharu', { value: bridge, configurable: true, writable: true })
@@ -14,6 +16,18 @@ function connected() {
 }
 
 describe('KoharuClient', () => {
+  it('stays on the initializing route until native project state arrives', () => {
+    const bridge = new FakeBridge()
+    Object.defineProperty(window, 'koharu', { value: bridge, configurable: true, writable: true })
+    const client = new KoharuClient()
+    client.connect()
+
+    expect(useEditorStore.getState().connection).toBe('connecting')
+    bridge.emit({ type: 'project_closed' })
+    expect(useEditorStore.getState().connection).toBe('connected')
+    client.disconnect()
+  })
+
   it('synchronizes on connection and serializes durable commands at accepted revisions', async () => {
     const { bridge, client } = connected()
     expect(bridge.sent[0]).toMatchObject({ type: 'ready' })
@@ -120,16 +134,16 @@ describe('KoharuClient', () => {
           target_language: 'en-US',
           instructions: null,
           credentials: {
-            openai: '',
-            gemini: '',
-            claude: '',
-            deepseek: '',
-            openai_compatible: '',
-            openrouter: '',
-            lm_studio: '',
-            deepl: '',
-            google_cloud_translation: '',
-            caiyun: '',
+            openai: emptyCredential(),
+            gemini: emptyCredential(),
+            claude: emptyCredential(),
+            deepseek: emptyCredential(),
+            openai_compatible: emptyCredential(),
+            openrouter: emptyCredential(),
+            lm_studio: emptyCredential(),
+            deepl: emptyCredential(),
+            google_cloud_translation: emptyCredential(),
+            caiyun: emptyCredential(),
           },
         },
         local_translation_models: ['lfm2.5-1.2b-instruct'],
@@ -145,8 +159,6 @@ describe('KoharuClient', () => {
             stretch: 100,
             style: 'normal',
             source: 'system',
-            category: null,
-            cached: true,
           },
         ],
       },

@@ -16,7 +16,10 @@ use koharu_desktop::{
     Application, DesktopContext, Frontend, MaskEncodingResult, Options as DesktopOptions,
 };
 use koharu_pipeline::{CancellationToken, PipelineConfig};
-use koharu_scene::{ChangeSet, PageAsset, PageId, Revision, Session};
+use koharu_scene::{
+    Asset, AssetMetadata, BlobId, EntityId, LanguageTag, Revision, SceneChangeSet, SceneComponent,
+    SceneSession,
+};
 use koharu_translator::TranslationConfig;
 use rust_embed::Embed;
 use serde_json::Value;
@@ -26,8 +29,8 @@ use crate::{
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
         CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, Handle,
-        HitTarget, JobKind, JobStatus, MaskPlane, PageSummary, PageView, RequestId, SettingsView,
-        TargetLanguageView, TranslationSettings,
+        HitTarget, JobKind, JobStatus, MaskPlane, RequestId, SettingsView, TargetLanguageView,
+        TranslationSettings,
     },
     resources::Resources,
 };
@@ -42,11 +45,12 @@ struct Assets;
 pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
     let pipeline = koharu_config::load::<PipelineConfig>("pipeline")?;
     let translation = TranslationConfig::load()?;
-    let background = Background::new(pipeline.clone(), translation.clone());
+    let background = Background::new(pipeline.clone(), translation.clone())?;
     let resources = Resources::new();
-    let font_renderer = koharu_renderer::SceneRenderer::new()?;
-    let fonts = font_renderer
-        .available_fonts()?
+    let render_resources = koharu_renderer::RenderResources::new();
+    let fonts = render_resources
+        .fonts()
+        .available_fonts()
         .into_iter()
         .map(font_face_view)
         .collect();
@@ -62,7 +66,6 @@ pub fn run(initial_path: Option<PathBuf>) -> Result<()> {
             pipeline,
             translation,
             resources,
-            font_renderer,
             fonts,
             initial_path,
         ),
@@ -90,10 +93,8 @@ fn font_face_view(value: koharu_renderer::FontFaceInfo) -> FontFaceView {
         },
         source: match value.source {
             koharu_renderer::FontSource::System => FontSourceView::System,
-            koharu_renderer::FontSource::Google => FontSourceView::Google,
+            koharu_renderer::FontSource::Registered => FontSourceView::Registered,
         },
-        category: value.category,
-        cached: value.cached,
     }
 }
 
@@ -103,12 +104,14 @@ pub struct App {
     pipeline: Config<PipelineConfig>,
     translation: Config<TranslationConfig>,
     resources: Resources,
-    font_renderer: koharu_renderer::SceneRenderer,
     fonts: Vec<FontFaceView>,
     jobs: HashMap<RequestId, RunningJob>,
     downloads: HashMap<u64, DownloadStatus>,
-    pending_masks: HashSet<(PageId, CanvasMaskPlane, u64)>,
+    pending_masks: HashSet<(EntityId, CanvasMaskPlane, u64)>,
     initial_path: Option<PathBuf>,
+    initialization_error: Option<String>,
+    initialized: bool,
+    frontend_ready: bool,
     auto_fit: bool,
 }
 
@@ -128,7 +131,6 @@ impl App {
         pipeline: Config<PipelineConfig>,
         translation: Config<TranslationConfig>,
         resources: Resources,
-        font_renderer: koharu_renderer::SceneRenderer,
         fonts: Vec<FontFaceView>,
         initial_path: Option<PathBuf>,
     ) -> Self {
@@ -138,12 +140,14 @@ impl App {
             pipeline,
             translation,
             resources,
-            font_renderer,
             fonts,
             jobs: HashMap::new(),
             downloads: HashMap::new(),
             pending_masks: HashSet::new(),
             initial_path,
+            initialization_error: None,
+            initialized: false,
+            frontend_ready: false,
             auto_fit: true,
         }
     }
@@ -172,7 +176,8 @@ impl App {
         }
         self.jobs.clear();
         self.pending_masks.clear();
-        self.resources.install(project.session(), project.path());
+        self.resources
+            .install(&project.snapshot(), project.path())?;
         self.project = Some(project);
         self.auto_fit = true;
         self.show_visible_page(desktop)?;
@@ -210,7 +215,7 @@ impl App {
                     self.reject(desktop, id, error)?;
                     return Ok(());
                 }
-                match self.command(desktop, id, base, command) {
+                match self.command(desktop, id, base, *command) {
                     Ok(CommandOutcome::Accepted(revision)) => {
                         desktop.emit(EVENT_NAME, AppEvent::Accepted { id, revision })
                     }
@@ -237,9 +242,31 @@ impl App {
         base: Revision,
         command: AppCommand,
     ) -> Result<CommandOutcome> {
+        if !self.initialized && !matches!(&command, AppCommand::Synchronize) {
+            return Err(app_failure(
+                AppErrorCode::Busy,
+                "native runtimes are still initializing",
+            ));
+        }
+        if !self.pending_masks.is_empty()
+            && !matches!(
+                &command,
+                AppCommand::Synchronize
+                    | AppCommand::CancelJob { .. }
+                    | AppCommand::GetSettings
+                    | AppCommand::SetSettings { .. }
+            )
+        {
+            return Err(app_failure(
+                AppErrorCode::Busy,
+                "mask changes are still being committed",
+            ));
+        }
         match command {
             AppCommand::Synchronize => {
-                self.emit_state(desktop)?;
+                if self.initialized {
+                    self.emit_state(desktop)?;
+                }
                 return Ok(CommandOutcome::Accepted(self.current_revision()));
             }
             AppCommand::CreateProject => {
@@ -253,7 +280,7 @@ impl App {
                 }
                 self.create(path, desktop)?;
                 self.emit_project(desktop)?;
-                return Ok(CommandOutcome::Accepted(Revision::ZERO));
+                return Ok(CommandOutcome::Accepted(self.current_revision()));
             }
             AppCommand::OpenProject => {
                 self.ensure_masks_committed()?;
@@ -357,10 +384,9 @@ impl App {
                 };
                 let pages = if pages.is_empty() {
                     self.session()?
-                        .project()
-                        .pages
-                        .iter()
-                        .map(|page| page.id)
+                        .snapshot()
+                        .pages()
+                        .map(|page| page.id())
                         .collect()
                 } else {
                     pages
@@ -374,10 +400,11 @@ impl App {
                 let cancellation = self.background.export(
                     ExportRequest {
                         id,
-                        path: self.project_path()?.to_owned(),
+                        snapshot: self.session()?.snapshot(),
                         directory,
                         pages,
                         format,
+                        locale: Some(self.target_locale()?),
                     },
                     desktop.handle(),
                 )?;
@@ -425,41 +452,32 @@ impl App {
                 pipeline,
                 translation,
             } => {
-                let (translation, credentials) = translation.into_parts();
+                let (translation, credentials) = (*translation).into_parts()?;
+                koharu_pipeline::Pipeline::new(pipeline.clone(), translation.clone())?;
+                let locale = LanguageTag::new(translation.target_language.clone())?;
                 {
                     let mut current = self.pipeline.write()?;
-                    *current = pipeline;
+                    *current = pipeline.clone();
                     current.save()?;
                 }
                 {
                     credentials.save()?;
                     let mut current = self.translation.write()?;
-                    *current = translation;
+                    *current = translation.clone();
                     current.save()?;
                 }
+                self.background.reconfigure(pipeline, translation)?;
+                desktop.canvas().set_locale(Some(locale.clone()));
                 self.emit_settings(desktop)?;
-                return Ok(CommandOutcome::Accepted(self.current_revision()));
-            }
-            AppCommand::CacheFont {
-                family,
-                weight,
-                italic,
-            } => {
-                let renderer = self.font_renderer.clone();
-                let handle = desktop.handle();
-                tokio::spawn(async move {
-                    let error = renderer
-                        .fetch_google_font(&family, weight, italic)
-                        .await
-                        .err()
-                        .map(|error| error.to_string());
-                    let _ = handle.send_event(NativeEvent::FontCached {
-                        family,
-                        weight,
-                        italic,
-                        error,
-                    });
-                });
+                if let Some(page) = self.project.as_ref().and_then(Project::visible_page) {
+                    desktop.emit(
+                        EVENT_NAME,
+                        AppEvent::PageLoaded {
+                            revision: self.current_revision(),
+                            page: self.project()?.page_view(page, Some(&locale))?,
+                        },
+                    )?;
+                }
                 return Ok(CommandOutcome::Accepted(self.current_revision()));
             }
             AppCommand::FinishTransform => {
@@ -470,17 +488,12 @@ impl App {
                 let Some(commit) = desktop.canvas().finish_transform()? else {
                     return Ok(CommandOutcome::Accepted(base));
                 };
-                let changes = self.project_mut()?.apply(AppCommand::SetElementFrames {
-                    elements: commit
+                let changes = self.project_mut()?.set_geometries(
+                    commit
                         .elements
                         .into_iter()
-                        .map(|element| crate::protocol::ElementFrame {
-                            page: commit.page,
-                            element: element.element,
-                            frame: element.frame,
-                        })
-                        .collect(),
-                })?;
+                        .map(|element| (element.element, element.geometry)),
+                )?;
                 self.present_changes(desktop, &changes)?;
                 return Ok(CommandOutcome::Accepted(changes.to));
             }
@@ -488,8 +501,7 @@ impl App {
         }
 
         self.require_base(base)?;
-        if matches!(&command, AppCommand::DeletePage { page } if self.pending_masks.iter().any(|(pending, _, _)| pending == page))
-            || matches!(&command, AppCommand::DeletePages { pages } if pages.iter().any(|page| self.pending_masks.iter().any(|(pending, _, _)| pending == page)))
+        if matches!(&command, AppCommand::DeletePages { pages } if pages.iter().any(|page| self.pending_masks.iter().any(|(pending, _, _)| pending == page)))
         {
             return Err(app_failure(
                 AppErrorCode::Busy,
@@ -530,14 +542,16 @@ impl App {
             CanvasInteraction::ShowPage { page } => {
                 self.ensure_masks_committed()?;
                 self.project_mut()?.show_page(page)?;
-                desktop.show_page(self.session()?, page)?;
+                desktop.show_page(&self.session()?.snapshot(), page)?;
+                desktop.canvas().set_locale(Some(self.target_locale()?));
                 self.auto_fit = true;
                 self.fit_window(desktop)?;
+                let locale = self.target_locale()?;
                 desktop.emit(
                     EVENT_NAME,
                     AppEvent::PageLoaded {
-                        revision: self.session()?.revision(),
-                        page: PageView::from_page(self.session()?.page(page)?),
+                        revision: self.current_revision(),
+                        page: self.project()?.page_view(page, Some(&locale))?,
                     },
                 )?;
             }
@@ -610,7 +624,7 @@ impl App {
             } => desktop.set_overlays(OverlayState {
                 selected,
                 hovered,
-                draft,
+                draft: draft.map(canvas_frame),
                 guides: guides
                     .into_iter()
                     .map(|guide| match guide {
@@ -696,12 +710,18 @@ impl App {
     fn present_changes(
         &mut self,
         desktop: &mut DesktopContext<'_, NativeEvent>,
-        changes: &ChangeSet,
+        changes: &SceneChangeSet,
     ) -> Result<()> {
         let previous_page = self.project()?.visible_page();
+        if !changes.entities.is_empty()
+            || changes
+                .components
+                .iter()
+                .any(|change| change.kind == Asset::KIND)
         {
             let project = self.project()?;
-            self.resources.install(project.session(), project.path());
+            self.resources
+                .install(&project.snapshot(), project.path())?;
         }
         self.project_mut()?.reconcile_visible_page();
         let visible_page = self.project()?.visible_page();
@@ -710,18 +730,20 @@ impl App {
             self.auto_fit = true;
             self.fit_window(desktop)?;
         } else {
-            desktop.sync(self.session()?, changes)?;
+            desktop.sync(&self.session()?.snapshot(), changes)?;
         }
-        let delta = self.project()?.delta(changes)?;
-        desktop.emit(EVENT_NAME, AppEvent::ProjectChanged(delta))?;
+        let locale = self.target_locale()?;
+        let delta = self.project_mut()?.delta(changes, Some(&locale))?;
+        desktop.emit(EVENT_NAME, AppEvent::ProjectChanged(Box::new(delta)))?;
         if visible_page != previous_page
             && let Some(page) = visible_page
         {
+            let locale = self.target_locale()?;
             desktop.emit(
                 EVENT_NAME,
                 AppEvent::PageLoaded {
-                    revision: self.session()?.revision(),
-                    page: PageView::from_page(self.session()?.page(page)?),
+                    revision: self.current_revision(),
+                    page: self.project()?.page_view(page, Some(&locale))?,
                 },
             )?;
         }
@@ -732,7 +754,8 @@ impl App {
         if let Some(project) = &self.project
             && let Some(page) = project.visible_page()
         {
-            desktop.show_page(project.session(), page)?;
+            desktop.show_page(&project.snapshot(), page)?;
+            desktop.canvas().set_locale(Some(self.target_locale()?));
         } else {
             desktop.clear_page();
         }
@@ -743,7 +766,9 @@ impl App {
         let Some(page) = self.project.as_ref().and_then(Project::visible_page) else {
             return Ok(());
         };
-        let size = self.session()?.page(page)?.size;
+        let page = self.session()?.snapshot().page(page)?.page()?;
+        let size =
+            koharu_canvas::PhysicalSize::new(page.width.ceil() as u32, page.height.ceil() as u32);
         let mut view = desktop.view().clone();
         view.camera = Camera::contain(desktop.viewport().size(), size);
         self.auto_fit = true;
@@ -769,25 +794,22 @@ impl App {
             return desktop.emit(EVENT_NAME, AppEvent::ProjectClosed);
         };
         let session = project.session();
+        let snapshot = session.snapshot();
         desktop.emit(
             EVENT_NAME,
             AppEvent::ProjectOpened {
-                revision: session.revision(),
+                revision: snapshot.revision(),
                 project: project.header(),
-                pages: session
-                    .project()
-                    .pages
-                    .iter()
-                    .map(PageSummary::from_page)
-                    .collect(),
+                pages: project.page_summaries()?,
             },
         )?;
         if let Some(page) = project.visible_page() {
+            let locale = self.target_locale()?;
             desktop.emit(
                 EVENT_NAME,
                 AppEvent::PageLoaded {
-                    revision: session.revision(),
-                    page: PageView::from_page(session.page(page)?),
+                    revision: snapshot.revision(),
+                    page: project.page_view(page, Some(&locale))?,
                 },
             )?;
         }
@@ -798,7 +820,7 @@ impl App {
         desktop.emit(
             EVENT_NAME,
             AppEvent::SettingsChanged {
-                settings: SettingsView {
+                settings: Box::new(SettingsView {
                     pipeline: self.pipeline.read()?.clone(),
                     translation: TranslationSettings::from_config(&*self.translation.read()?)?,
                     local_translation_models: koharu_translator::local_models()
@@ -813,7 +835,7 @@ impl App {
                         })
                         .collect(),
                     fonts: self.fonts.clone(),
-                },
+                }),
             },
         )
     }
@@ -884,8 +906,11 @@ impl App {
     }
 
     fn ensure_job_kind_available(&self, kind: JobKind) -> Result<()> {
+        if kind == JobKind::Export {
+            return Ok(());
+        }
         if let Some(running) = self.jobs.values().find_map(|job| match &job.status {
-            JobStatus::Running { kind, .. } => Some(*kind),
+            JobStatus::Running { kind, .. } if *kind != JobKind::Export => Some(*kind),
             _ => None,
         }) {
             return Err(app_failure(
@@ -918,12 +943,16 @@ impl App {
             .ok_or_else(|| app_failure(AppErrorCode::NoProject, "no project is open"))
     }
 
-    fn session(&self) -> Result<&Session> {
+    fn session(&self) -> Result<&SceneSession> {
         Ok(self.project()?.session())
     }
 
-    fn session_mut(&mut self) -> Result<&mut Session> {
+    fn session_mut(&mut self) -> Result<&mut SceneSession> {
         Ok(self.project_mut()?.session_mut())
+    }
+
+    fn target_locale(&self) -> Result<LanguageTag> {
+        LanguageTag::new(self.translation.read()?.target_language.clone()).map_err(Into::into)
     }
 
     fn project_path(&self) -> Result<&Path> {
@@ -948,11 +977,7 @@ impl Application for App {
 
     fn started(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
         self.background.subscribe_downloads(desktop.handle());
-        if let Some(path) = self.initial_path.take()
-            && let Err(error) = self.open(path, desktop)
-        {
-            self.problem(desktop, AppErrorCode::IoFailed, error)?;
-        }
+        start_runtime_initialization(desktop.handle());
         Ok(())
     }
 
@@ -963,6 +988,22 @@ impl Application for App {
         _width: f64,
         _height: f64,
     ) -> Result<()> {
+        self.frontend_ready = true;
+        if !self.initialized {
+            if let Some(message) = &self.initialization_error {
+                desktop.emit(
+                    EVENT_NAME,
+                    AppEvent::Problem {
+                        error: AppError {
+                            code: AppErrorCode::Internal,
+                            message: message.clone(),
+                            current_revision: self.revision(),
+                        },
+                    },
+                )?;
+            }
+            return Ok(());
+        }
         if self.auto_fit {
             self.fit_window(desktop)?;
         }
@@ -987,6 +1028,45 @@ impl Application for App {
         event: Self::Event,
     ) -> Result<()> {
         match event {
+            NativeEvent::RuntimeInitialized => {
+                if self.initialized {
+                    return Ok(());
+                }
+                self.initialized = true;
+                self.initialization_error = None;
+                if let Some(path) = self.initial_path.take()
+                    && let Err(error) = self.open(path, desktop)
+                {
+                    self.problem(desktop, AppErrorCode::IoFailed, error)?;
+                }
+                if self.frontend_ready {
+                    self.emit_state(desktop)?;
+                }
+                Ok(())
+            }
+            NativeEvent::RuntimeInitializationFailed {
+                error,
+                retry_after_ms,
+            } => {
+                let message = format!(
+                    "Native runtime initialization failed: {error}. Retrying in {:.1}s.",
+                    retry_after_ms as f64 / 1000.0
+                );
+                self.initialization_error = Some(message.clone());
+                if self.frontend_ready {
+                    desktop.emit(
+                        EVENT_NAME,
+                        AppEvent::Problem {
+                            error: AppError {
+                                code: AppErrorCode::Internal,
+                                message,
+                                current_revision: self.revision(),
+                            },
+                        },
+                    )?;
+                }
+                Ok(())
+            }
             NativeEvent::Download(event) => {
                 let status = match event {
                     koharu_runtime::download::Event::Started { id, name } => {
@@ -1040,38 +1120,23 @@ impl Application for App {
                 }
                 Ok(())
             }
-            NativeEvent::FontCached {
-                family,
-                weight,
-                italic,
-                error,
+            NativeEvent::PipelineProgress {
+                job,
+                completed,
+                total,
+                stage,
+                model,
             } => {
-                if let Some(error) = error {
-                    return self.problem(desktop, AppErrorCode::IoFailed, anyhow!(error));
-                }
-                for face in &mut self.fonts {
-                    if face.family_name == family
-                        && face.weight == weight
-                        && matches!(face.style, crate::protocol::FontFaceStyleView::Italic)
-                            == italic
-                    {
-                        face.cached = true;
-                    }
-                }
-                desktop.canvas().invalidate_fonts();
-                self.emit_settings(desktop)
-            }
-            NativeEvent::PipelineProgress { job, progress } => {
                 let Some(running) = self.jobs.get_mut(&job) else {
                     return Ok(());
                 };
                 let status = JobStatus::Running {
                     id: job,
                     kind: JobKind::Pipeline,
-                    completed: progress.completed,
-                    total: progress.total,
-                    phase: Some(progress.phase),
-                    model: Some(progress.model),
+                    completed,
+                    total,
+                    phase: stage,
+                    model,
                 };
                 running.status = status.clone();
                 desktop.emit(EVENT_NAME, AppEvent::JobChanged(status))
@@ -1127,15 +1192,8 @@ impl Application for App {
                 self.refresh(desktop)?;
                 if !revisions.is_empty() {
                     self.project_mut()?.record_revisions(revisions);
-                    let revision = self.session()?.revision();
-                    self.present_changes(
-                        desktop,
-                        &ChangeSet {
-                            from: revision,
-                            to: revision,
-                            ..ChangeSet::default()
-                        },
-                    )?;
+                    let delta = self.project()?.history_delta();
+                    desktop.emit(EVENT_NAME, AppEvent::ProjectChanged(Box::new(delta)))?;
                 }
                 let status = if cancelled {
                     JobStatus::Cancelled { id: job }
@@ -1165,15 +1223,19 @@ impl Application for App {
             MaskEncodingResult::Ready(mask) => {
                 self.pending_masks
                     .remove(&(mask.page, mask.plane, mask.generation));
-                let asset = match mask.plane {
-                    CanvasMaskPlane::Text => PageAsset::TextMask,
-                    CanvasMaskPlane::Brush => PageAsset::BrushMask,
-                };
-                let mut commands = self.session()?.commands();
-                let blob = commands
-                    .set_asset(mask.page, asset, Some(mask.bytes))?
-                    .expect("a supplied mask creates a blob");
-                let changes = self.project_mut()?.apply_commands(commands)?;
+                let role = mask.plane.slot();
+                let blob = BlobId::for_bytes(&mask.bytes);
+                let changes = self.project_mut()?.set_asset(
+                    mask.page,
+                    role,
+                    mask.bytes,
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(mask.size.width),
+                        height: Some(mask.size.height),
+                        attributes: Default::default(),
+                    },
+                )?;
                 desktop.canvas().acknowledge_mask_commit(
                     mask.page,
                     mask.plane,
@@ -1198,6 +1260,45 @@ impl Application for App {
     }
 }
 
+fn start_runtime_initialization(handle: koharu_desktop::DesktopHandle<NativeEvent>) {
+    tokio::spawn(async move {
+        let mut attempt = 1_u64;
+        let mut delay = std::time::Duration::from_secs(1);
+        loop {
+            match koharu_ml::init().await {
+                Ok(()) => {
+                    let _ = handle.send_event(NativeEvent::RuntimeInitialized);
+                    return;
+                }
+                Err(error) => {
+                    let jitter = std::time::Duration::from_millis(attempt.wrapping_mul(137) % 251);
+                    let wait = delay + jitter;
+                    tracing::error!(
+                        attempt,
+                        retry_after_ms = wait.as_millis(),
+                        %error,
+                        "runtime initialization failed; retrying automatically"
+                    );
+                    if handle
+                        .send_event(NativeEvent::RuntimeInitializationFailed {
+                            error: error.to_string(),
+                            retry_after_ms: u64::try_from(wait.as_millis()).unwrap_or(u64::MAX),
+                        })
+                        .is_err()
+                    {
+                        return;
+                    }
+                    tokio::time::sleep(wait).await;
+                    attempt = attempt.saturating_add(1);
+                    delay = delay
+                        .saturating_mul(2)
+                        .min(std::time::Duration::from_secs(30));
+                }
+            }
+        }
+    });
+}
+
 fn project_dialog() -> rfd::FileDialog {
     let dialog = rfd::FileDialog::new().add_filter("Koharu project", &["khr"]);
     let Some(directory) = project_directory() else {
@@ -1213,6 +1314,16 @@ fn project_directory() -> Option<PathBuf> {
         return None;
     }
     Some(directory)
+}
+
+const fn canvas_frame(frame: crate::protocol::Frame) -> koharu_canvas::Frame {
+    koharu_canvas::Frame {
+        x: frame.x,
+        y: frame.y,
+        width: frame.width,
+        height: frame.height,
+        angle_degrees: frame.angle_degrees,
+    }
 }
 
 const fn mask_plane(plane: MaskPlane) -> CanvasMaskPlane {

@@ -125,8 +125,8 @@ export function FontSelect({
                     {selected && <CheckIcon className='size-3' />}
                   </span>
                   <span className='min-w-0 flex-1 truncate'>{font.family_name}</span>
-                  {font.source === 'google' && (
-                    <span className='shrink-0 text-[9px] text-muted-foreground'>Google</span>
+                  {font.source === 'registered' && (
+                    <span className='shrink-0 text-[9px] text-muted-foreground'>Registered</span>
                   )}
                 </button>
               )

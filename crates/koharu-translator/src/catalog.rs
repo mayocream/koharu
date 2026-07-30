@@ -288,6 +288,16 @@ impl LocalModel {
     }
 
     #[must_use]
+    pub fn is_downloaded(self) -> bool {
+        let descriptor = self.descriptor();
+        koharu_runtime::package::huggingface::is_resolved((
+            descriptor.repository,
+            descriptor.revision,
+            descriptor.filename,
+        ))
+    }
+
+    #[must_use]
     pub fn generation_options(self) -> GenerationOptions {
         use LocalModel::*;
 

@@ -1197,7 +1197,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires the dynamically loaded LibTorch runtime"]
     async fn complete_checkpoint_tree_has_600_tensors() {
-        crate::init_torch().await.unwrap();
+        crate::init().await.unwrap();
         let model = Model::new(Device::Cpu);
         assert_eq!(model.var_store.variables().len(), 600);
     }

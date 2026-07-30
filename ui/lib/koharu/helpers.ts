@@ -1,9 +1,9 @@
-import type { Element, ProjectId, TextBlock } from './protocol'
+import type { EntityView, ProjectId } from './protocol'
 
 export function isTextElement(
-  element: Element,
-): element is Element & { kind: { Text: TextBlock } } {
-  return 'Text' in element.kind
+  entity: EntityView,
+): entity is EntityView & { source_text: NonNullable<EntityView['source_text']> } {
+  return entity.source_text !== null
 }
 
 export function thumbnailUrl(project: ProjectId, blob: string, width = 160): string {

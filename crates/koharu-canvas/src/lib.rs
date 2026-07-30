@@ -19,6 +19,7 @@ mod error;
 mod geometry;
 mod gpu;
 mod mask;
+mod model;
 mod overlay;
 mod resources;
 mod state;
@@ -28,18 +29,19 @@ mod visual_tests;
 
 pub use canvas::{Canvas, CanvasFrame};
 pub use error::{Error, Result};
-pub use geometry::{Camera, PagePoint, PhysicalPoint, PhysicalSize, PixelRect, PixelSize};
+pub use geometry::{Camera, Frame, PagePoint, PhysicalPoint, PhysicalSize, PixelRect, PixelSize};
 pub use mask::MaskCommit;
 pub use state::{
     BaseImage, Brush, BrushCursor, CanvasDiagnostic, CanvasGpu, CanvasOptions, Color, DisplayState,
-    ElementPreview, Guide, Handle, HitTarget, MaskOverlay, MaskPlane, OverlayState, PageView,
-    StrokeMode, TransformCommit, ViewState,
+    ElementId, ElementPreview, Guide, Handle, HitTarget, MaskOverlay, MaskPlane, OverlayState,
+    PageId, PageView, StrokeMode, TransformCommit, ViewState,
 };
 
 use elements::{ElementSceneContext, ElementScenes};
 use geometry::{frame_contains, frame_corners};
 use gpu::GpuRenderer;
 use mask::{ActiveStroke, MaskState};
+use model::{CanvasElement, CanvasPage};
 use overlay::{OverlayGeometry, OverlayRenderer};
 use resources::{ResourceEvent, ResourceKind, Resources};
 use transform::ActiveTransform;

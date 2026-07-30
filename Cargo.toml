@@ -23,6 +23,7 @@ publish = false
 [workspace.dependencies]
 koharu-bindgen = { path = "crates/koharu-bindgen", version = "0.62.0-alpha.1", default-features = false }
 koharu-config = { path = "crates/koharu-config", version = "0.62.0-alpha.1", default-features = false }
+koharu-storage = { path = "crates/koharu-storage", version = "0.62.0-alpha.1", default-features = false }
 koharu-scene = { path = "crates/koharu-scene", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion = { path = "crates/koharu-diffusion", version = "0.62.0-alpha.1", default-features = false }
 koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", version = "0.62.0-alpha.1", default-features = false }
@@ -36,7 +37,6 @@ koharu-ai = { path = "crates/koharu-ai", version = "0.62.0-alpha.1", default-fea
 koharu-app = { path = "crates/koharu-app", version = "0.62.0-alpha.1", default-features = false }
 koharu-ml = { path = "crates/koharu-ml", version = "0.62.0-alpha.1", default-features = false }
 koharu-pipeline = { path = "crates/koharu-pipeline", version = "0.62.0-alpha.1", default-features = false }
-koharu-worker = { path = "crates/koharu-worker", version = "0.62.0-alpha.1", default-features = false }
 koharu-translator = { path = "crates/koharu-translator", version = "0.62.0-alpha.1", default-features = false }
 koharu-psd = { path = "crates/koharu-psd", version = "0.62.0-alpha.1", default-features = false }
 koharu-renderer = { path = "crates/koharu-renderer", version = "0.62.0-alpha.1", default-features = false }
@@ -76,6 +76,7 @@ rust-embed = { version = "8.12", features = ["interpolate-folder-path"] }
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
 petgraph = "0.8"
 strum = { version = "0.28", features = ["derive"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
 dirs = "6.0"
 futures = "0.3"
@@ -93,6 +94,7 @@ arc-swap = "1.7"
 camino = { version = "1.1", features = ["serde1"] }
 indexmap = { version = "2.13", features = ["serde"] }
 indextree = "4.8.1"
+imbl = "7.0.1"
 rusqlite = { version = "0.40.1", default-features = false, features = [
     "backup",
     "bundled",
@@ -106,6 +108,7 @@ csv = "1.3"
 tempfile = "3.24"
 once_cell = "1.21"
 libloading = "0.8.9"
+nvml-wrapper = "0.12.1"
 num_cpus = "1.17"
 cudarc = { version = "0.19.8", default-features = false, features = [
     "cuda-version-from-build-system",

@@ -21,6 +21,18 @@ pub struct AotInpainting {
 }
 
 impl AotInpainting {
+    #[must_use]
+    pub fn is_downloaded() -> bool {
+        koharu_runtime::package::huggingface::is_resolved(WEIGHTS)
+    }
+
+    pub async fn download() -> Result<()> {
+        huggingface::resolve(WEIGHTS)
+            .await
+            .context("failed to download AOT inpainting weights")?;
+        Ok(())
+    }
+
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = huggingface::resolve(WEIGHTS)

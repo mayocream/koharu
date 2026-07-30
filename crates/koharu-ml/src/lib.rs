@@ -36,13 +36,29 @@ pub use koharu_diffusion as diffusion;
 pub use koharu_llama as llama;
 pub use koharu_torch as torch;
 
-static LLAMA_BACKEND: OnceCell<LlamaBackend> = OnceCell::const_new();
-static DIFFUSION_RUNTIME: OnceCell<()> = OnceCell::const_new();
-static TORCH_RUNTIME: OnceCell<()> = OnceCell::const_new();
+static LLAMA: OnceCell<LlamaBackend> = OnceCell::const_new();
+static DIFFUSION: OnceCell<()> = OnceCell::const_new();
+static TORCH: OnceCell<()> = OnceCell::const_new();
+static READY: OnceCell<()> = OnceCell::const_new();
 
-/// Initializes the process-wide llama.cpp runtime and backend.
-pub async fn init_llama() -> anyhow::Result<()> {
-    LLAMA_BACKEND
+/// Initializes every process-wide native runtime used by Koharu.
+///
+/// Concurrent callers share one attempt. A failed attempt may be retried; any
+/// backend that completed successfully is retained and is not initialized
+/// again. Retry timing belongs to the application bootstrap rather than this
+/// deterministic, single-attempt API.
+pub async fn init() -> anyhow::Result<()> {
+    READY
+        .get_or_try_init(|| async {
+            tokio::try_join!(init_torch(), init_llama(), init_diffusion())?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await?;
+    Ok(())
+}
+
+async fn init_llama() -> anyhow::Result<()> {
+    LLAMA
         .get_or_try_init(|| async {
             let llama_cpp = LlamaCpp::for_current_target()?;
             llama_cpp
@@ -63,9 +79,8 @@ pub async fn init_llama() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Initializes stable-diffusion.cpp and its shared GGML backend support.
-pub async fn init_diffusion() -> anyhow::Result<()> {
-    DIFFUSION_RUNTIME
+async fn init_diffusion() -> anyhow::Result<()> {
+    DIFFUSION
         .get_or_try_init(|| async {
             let sd_cpp = StableDiffusionCpp::for_current_target()?;
             sd_cpp
@@ -86,9 +101,8 @@ pub async fn init_diffusion() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Initializes the process-wide LibTorch runtime.
-pub async fn init_torch() -> anyhow::Result<()> {
-    TORCH_RUNTIME
+async fn init_torch() -> anyhow::Result<()> {
+    TORCH
         .get_or_try_init(|| async {
             Libtorch::for_current_target()?
                 .preload()
@@ -103,7 +117,7 @@ pub async fn init_torch() -> anyhow::Result<()> {
 /// Returns the initialized process-wide llama.cpp backend.
 #[must_use]
 pub fn llama_backend() -> Option<&'static LlamaBackend> {
-    LLAMA_BACKEND.get()
+    LLAMA.get()
 }
 
 /// Selects the universal device used by the Torch models in this crate.
