@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: sponsors
@@ -32,11 +33,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run sponsors
 
-      - name: Commit updated graph
-        run: |
-          git add .github/sponsorkit/sponsors.svg
-          git diff --cached --quiet && exit 0
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git commit -m "chore: update sponsors [skip ci]"
-          git push
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          add-paths: .github/sponsorkit/sponsors.svg
+          branch: automation/sponsors
+          commit-message: 'chore: update sponsors [skip ci]'
+          title: 'chore: update sponsors'
+          body: Automated SponsorKit graph update.
