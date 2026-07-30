@@ -53,3 +53,6 @@ site/
 
 # integration-tests shared runtime cache
 .cache/
+
+# SponsorKit runtime cache (the generated SVG is tracked)
+.cache.json
