@@ -55,6 +55,10 @@ export function ColorPicker({
     if (!dragging.current) setLocalColor(value)
   }, [value])
 
+  const handlePointerDown = (event: React.PointerEvent) => {
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
   const handlePointerUp = useCallback(() => {
     if (dragging.current) {
       dragging.current = false
@@ -105,7 +109,11 @@ export function ColorPicker({
       <PopoverContent className='w-64 p-3' sideOffset={8}>
         <div className='space-y-3'>
           {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
-          <div data-testid={pickerTestId} onPointerUp={handlePointerUp}>
+          <div
+            data-testid={pickerTestId}
+            onPointerUp={handlePointerUp}
+            onPointerDown={handlePointerDown}
+          >
             <HexColorPicker
               color={localColor}
               onChange={(color) => {
