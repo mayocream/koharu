@@ -15,14 +15,6 @@ const PUBLIC_HEADERS: &[&str] = &[
     "include/mtmd.h",
     "include/mtmd-helper.h",
 ];
-const DYNAMIC_LIBRARIES: &[&str] = &[
-    "llama",
-    "ggml",
-    "ggml-base",
-    "ggml-cpu",
-    "ggml-cpu-x64",
-    "mtmd",
-];
 const FUNCTION_ALLOWLIST: &str = "^(ggml|gguf|llama|mtmd)_.*";
 const TYPE_ALLOWLIST: &str = "^(ggml|gguf|llama|mtmd)_.*";
 const VARIABLE_ALLOWLIST: &str = "^(GGML|GGUF|LLAMA|MTMD)_.*";
@@ -36,8 +28,8 @@ fn main() -> Result<()> {
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let include_dir = manifest_dir.join("include");
-    Generator::from_header(manifest_dir.join(HEADER), "koharu-llama")
-        .with_libraries(DYNAMIC_LIBRARIES)
+    Generator::from_header(manifest_dir.join(HEADER), "llama")
+        .with_libraries(["llama", "mtmd"])
         .with_bindgen(|builder| {
             builder
                 .clang_arg(format!("-I{}", manifest_dir.display()))

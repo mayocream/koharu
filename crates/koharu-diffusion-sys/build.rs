@@ -29,7 +29,6 @@ fn main() -> Result<()> {
 fn generate_bindings(manifest_dir: &Path, out_dir: &Path) -> Result<()> {
     let include_dir = manifest_dir.join("include");
     Generator::from_header(manifest_dir.join(HEADER), "stable-diffusion")
-        .with_libraries(["stable-diffusion", "fb5e", "7487"])
         .with_bindgen(|builder| {
             builder
                 .clang_arg(format!("-I{}", include_dir.display()))

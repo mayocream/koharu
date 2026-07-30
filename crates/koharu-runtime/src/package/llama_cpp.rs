@@ -1,13 +1,11 @@
 use std::{
-    ffi::OsStr,
-    fs::{create_dir_all, rename},
+    fs::{create_dir_all, remove_dir_all, rename},
     path::PathBuf,
     sync::LazyLock,
 };
 
-use anyhow::Context;
+use anyhow::bail;
 use strum::EnumProperty;
-use walkdir::WalkDir;
 
 use crate::{
     device::{
@@ -19,8 +17,9 @@ use crate::{
     package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload, rocm::Rocm},
 };
 
-const REPO: &str = "ggml-org/llama.cpp";
-const TAG: &str = "b9982";
+// https://github.com/mayocream/koharu/releases/tag/llama.cpp-b9982
+const REPO: &str = "mayocream/koharu";
+const TAG: &str = "llama.cpp-b9982";
 
 static LLAMA_CPP_ROOT: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("llama.cpp").join(TAG));
 
@@ -28,120 +27,76 @@ static LLAMA_CPP_ROOT: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("llam
 #[strum(serialize_all = "kebab-case")]
 pub enum LlamaCpp {
     #[strum(props(
-        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,llama.dll,mtmd.dll"
+        asset = "llama-cuda-windows-2022.tar.gz",
+        dylibs = "llama.dll,mtmd.dll"
     ))]
-    WindowsX64Cpu,
-    #[strum(props(
-        dylibs = "libomp140.aarch64.dll,ggml-base.dll,ggml.dll,ggml-cpu.dll,llama.dll,mtmd.dll"
-    ))]
-    WindowsArm64Cpu,
-    #[strum(
-        serialize = "windows-x64-cuda-12.4",
-        props(
-            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,mtmd.dll"
-        )
-    )]
-    WindowsX64Cuda124,
-    #[strum(
-        serialize = "windows-x64-cuda-13.3",
-        props(
-            dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,llama.dll,mtmd.dll"
-        )
-    )]
-    WindowsX64Cuda133,
-    #[strum(props(
-        dylibs = "libomp140.x86_64.dll,libhipblas.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-hip.dll,llama.dll,mtmd.dll"
-    ))]
+    WindowsX64Cuda,
+    #[strum(props(asset = "llama-hip-windows-2022.tar.gz", dylibs = "llama.dll,mtmd.dll"))]
     WindowsX64Hip,
     #[strum(props(
-        dylibs = "libomp140.x86_64.dll,ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-vulkan.dll,llama.dll,mtmd.dll"
+        asset = "llama-vulkan-windows-2022.tar.gz",
+        dylibs = "llama.dll,mtmd.dll"
     ))]
     WindowsX64Vulkan,
     #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libllama.so,libmtmd.so"
-    ))]
-    LinuxX64Cpu,
-    #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libllama.so,libmtmd.so"
-    ))]
-    LinuxArm64Cpu,
-    #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-vulkan.so,libllama.so,libmtmd.so"
+        asset = "llama-vulkan-ubuntu-24.04.tar.gz",
+        dylibs = "libllama.so,libmtmd.so"
     ))]
     LinuxX64Vulkan,
     #[strum(props(
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-armv8.0_1.so,libggml-vulkan.so,libllama.so,libmtmd.so"
-    ))]
-    LinuxArm64Vulkan,
-    #[strum(props(
-        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libmtmd.dylib"
-    ))]
-    MacosX64,
-    #[strum(props(
-        dylibs = "libggml-base.dylib,libggml.dylib,libggml-cpu.dylib,libggml-blas.dylib,libggml-metal.dylib,libllama.dylib,libmtmd.dylib"
+        asset = "llama-metal-macos-latest.tar.gz",
+        dylibs = "libllama.dylib,libmtmd.dylib"
     ))]
     MacosArm64,
 }
 
 impl LlamaCpp {
-    pub fn for_current_target() -> Self {
+    pub fn for_current_target() -> anyhow::Result<Self> {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             if cuda_available() {
                 match driver_version() {
-                    Ok(version) if version >= 13030 => Self::WindowsX64Cuda133,
-                    Ok(version) if version >= 12040 => Self::WindowsX64Cuda124,
-                    _ if vulkan_available() => Self::WindowsX64Vulkan,
-                    _ => Self::WindowsX64Cpu,
+                    Ok(version) if version >= 13000 => return Ok(Self::WindowsX64Cuda),
+                    Ok(version) if vulkan_available() => {
+                        tracing::warn!(
+                            driver_version = version,
+                            minimum_driver_version = 13000,
+                            "CUDA driver does not support CUDA 13.0; falling back to Vulkan llama.cpp"
+                        );
+                        return Ok(Self::WindowsX64Vulkan);
+                    }
+                    Err(error) if vulkan_available() => {
+                        tracing::warn!(
+                            %error,
+                            "failed to determine CUDA driver version; falling back to Vulkan llama.cpp"
+                        );
+                        return Ok(Self::WindowsX64Vulkan);
+                    }
+                    Ok(_) | Err(_) => {}
                 }
             } else if rocm_available() {
-                Self::WindowsX64Hip
+                return Ok(Self::WindowsX64Hip);
             } else if vulkan_available() {
-                Self::WindowsX64Vulkan
-            } else {
-                Self::WindowsX64Cpu
+                return Ok(Self::WindowsX64Vulkan);
             }
-        } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
-            Self::WindowsArm64Cpu
+
+            bail!("llama.cpp requires CUDA 13, HIP, or Vulkan on Windows x86_64")
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             if vulkan_available() {
-                Self::LinuxX64Vulkan
+                Ok(Self::LinuxX64Vulkan)
             } else {
-                Self::LinuxX64Cpu
+                bail!("llama.cpp requires Vulkan on Linux x86_64")
             }
-        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            if vulkan_available() {
-                Self::LinuxArm64Vulkan
-            } else {
-                Self::LinuxArm64Cpu
-            }
-        } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-            Self::MacosX64
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            Self::MacosArm64
+            Ok(Self::MacosArm64)
         } else {
-            Self::LinuxX64Cpu
+            bail!("unsupported llama.cpp runtime for this target")
         }
     }
 
     pub fn asset(&self) -> String {
-        match self {
-            LlamaCpp::WindowsX64Cpu => format!("llama-{TAG}-bin-win-cpu-x64.zip"),
-            LlamaCpp::WindowsArm64Cpu => format!("llama-{TAG}-bin-win-cpu-arm64.zip"),
-            LlamaCpp::WindowsX64Cuda124 => format!("llama-{TAG}-bin-win-cuda-12.4-x64.zip"),
-            LlamaCpp::WindowsX64Cuda133 => format!("llama-{TAG}-bin-win-cuda-13.3-x64.zip"),
-            LlamaCpp::WindowsX64Hip => format!("llama-{TAG}-bin-win-hip-radeon-x64.zip"),
-            LlamaCpp::WindowsX64Vulkan => format!("llama-{TAG}-bin-win-vulkan-x64.zip"),
-            LlamaCpp::LinuxX64Cpu => format!("llama-{TAG}-bin-ubuntu-x64.tar.gz"),
-            LlamaCpp::LinuxArm64Cpu => format!("llama-{TAG}-bin-ubuntu-arm64.tar.gz"),
-            LlamaCpp::LinuxX64Vulkan => {
-                format!("llama-{TAG}-bin-ubuntu-vulkan-x64.tar.gz")
-            }
-            LlamaCpp::LinuxArm64Vulkan => {
-                format!("llama-{TAG}-bin-ubuntu-vulkan-arm64.tar.gz")
-            }
-            LlamaCpp::MacosX64 => format!("llama-{TAG}-bin-macos-x64.tar.gz"),
-            LlamaCpp::MacosArm64 => format!("llama-{TAG}-bin-macos-arm64.tar.gz"),
-        }
+        self.get_str("asset")
+            .expect("llama.cpp property 'asset' not found")
+            .to_owned()
     }
 
     #[inline]
@@ -155,9 +110,9 @@ impl LlamaCpp {
 #[async_trait::async_trait]
 impl Package for LlamaCpp {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
-        let asset = self.asset();
         let path = LLAMA_CPP_ROOT.join(self.to_string());
-        if !path.exists() {
+        if !self.dylibs().all(|dylib| path.join(dylib).is_file()) {
+            let asset = self.asset();
             let url = github_release(REPO, TAG, &asset);
             let file = tempfile::Builder::new().suffix(&asset).tempfile()?;
             let archive = Client::new()?
@@ -174,15 +129,19 @@ impl Package for LlamaCpp {
                 temporary.path().to_path_buf(),
                 &["**/*.dll", "**/*.dylib", "**/*.so", "**/*.so.*"],
             )?;
+            if path.exists() {
+                remove_dir_all(&path)?;
+            }
             rename(temporary.path(), &path)?;
         }
 
-        let nested_path = path.join(format!("llama-{TAG}"));
-        Ok(if nested_path.is_dir() {
-            nested_path
-        } else {
-            path
-        })
+        for dylib in self.dylibs() {
+            if !path.join(dylib).is_file() {
+                anyhow::bail!("llama.cpp dynamic library not found: {dylib}");
+            }
+        }
+
+        Ok(path)
     }
 }
 
@@ -190,41 +149,18 @@ impl Package for LlamaCpp {
 impl PreloadablePackage for LlamaCpp {
     async fn preload(&self) -> anyhow::Result<()> {
         match self {
-            Self::WindowsX64Cuda124 => {
-                Cuda::Runtime12.preload().await?;
-                Cuda::Cublas12.preload().await?;
-            }
-            Self::WindowsX64Cuda133 => {
-                Cuda::Runtime.preload().await?;
-                Cuda::Cublas.preload().await?;
+            Self::WindowsX64Cuda => {
+                Cuda::Runtime130.preload().await?;
+                Cuda::Cublas130.preload().await?;
             }
             Self::WindowsX64Hip => Rocm::for_current_target()?.preload().await?,
             _ => {}
         }
 
-        let package_dir = self.resolve().await?;
-
+        let directory = self.resolve().await?;
         for dylib in self.dylibs() {
-            let mut dylib_path = None;
-            for entry in WalkDir::new(&package_dir) {
-                let entry = entry.with_context(|| {
-                    format!("failed to walk llama.cpp package {}", package_dir.display())
-                })?;
-                if entry.file_name() == OsStr::new(dylib) && entry.path().is_file() {
-                    dylib_path = Some(entry.into_path());
-                    break;
-                }
-            }
-
-            let dylib_path = dylib_path.ok_or_else(|| {
-                anyhow::anyhow!(
-                    "llama.cpp dynamic library not found: {}",
-                    package_dir.join(dylib).display()
-                )
-            })?;
-            preload(dylib_path)?;
+            preload(directory.join(dylib))?;
         }
-
         Ok(())
     }
 }

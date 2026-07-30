@@ -17,8 +17,9 @@ use crate::{
     package::{Package, PreloadablePackage, STORE_DIR, cuda::Cuda, loading::preload, rocm::Rocm},
 };
 
-const REPO: &str = "leejet/stable-diffusion.cpp";
-const TAG: &str = "master-769-cc73429";
+// https://github.com/mayocream/koharu/releases/tag/stable-diffusion.cpp-master-769-cc73429
+const REPO: &str = "mayocream/koharu";
+const TAG: &str = "stable-diffusion.cpp-master-769-cc73429";
 
 static STABLE_DIFFUSION_CPP_ROOT: LazyLock<PathBuf> =
     LazyLock::new(|| STORE_DIR.join("stable-diffusion.cpp").join(TAG));
@@ -27,53 +28,28 @@ static STABLE_DIFFUSION_CPP_ROOT: LazyLock<PathBuf> =
 #[strum(serialize_all = "kebab-case")]
 pub enum StableDiffusionCpp {
     #[strum(props(
-        asset = "sd-master-cc73429-bin-win-cpu-x64.zip",
-        dylibs = "ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,stable-diffusion.dll"
+        asset = "stable-diffusion-cuda-windows-2022.tar.gz",
+        dylib = "stable-diffusion.dll"
     ))]
-    WindowsX64Cpu,
+    WindowsX64Cuda,
     #[strum(props(
-        asset = "sd-master-cc73429-bin-win-cuda12-x64.zip",
-        dylibs = "ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-cuda.dll,stable-diffusion.dll"
+        asset = "stable-diffusion-hip-windows-2022.tar.gz",
+        dylib = "stable-diffusion.dll"
     ))]
-    WindowsX64Cuda12,
+    WindowsX64Hip,
     #[strum(props(
-        asset = "sd-master-cc73429-bin-win-vulkan-x64.zip",
-        dylibs = "ggml-base.dll,ggml.dll,ggml-cpu-x64.dll,ggml-vulkan.dll,stable-diffusion.dll"
+        asset = "stable-diffusion-vulkan-windows-2022.tar.gz",
+        dylib = "stable-diffusion.dll"
     ))]
     WindowsX64Vulkan,
     #[strum(props(
-        asset = "sd-master-cc73429-bin-win-rocm-7.1.1-x64.zip",
-        dylibs = "libhipblas.dll,stable-diffusion.dll"
-    ))]
-    WindowsX64Rocm711,
-    #[strum(props(
-        asset = "sd-master-cc73429-bin-win-rocm-7.13.0-x64.zip",
-        dylibs = "stable-diffusion.dll"
-    ))]
-    WindowsX64Rocm7130,
-    #[strum(props(
-        asset = "sd-master-cc73429-bin-Linux-Ubuntu-24.04-x86_64.zip",
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libstable-diffusion.so"
-    ))]
-    LinuxX64Cpu,
-    #[strum(props(
-        asset = "sd-master-cc73429-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip",
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-vulkan.so,libstable-diffusion.so"
+        asset = "stable-diffusion-vulkan-ubuntu-24.04.tar.gz",
+        dylib = "libstable-diffusion.so"
     ))]
     LinuxX64Vulkan,
     #[strum(props(
-        asset = "sd-master-cc73429-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.2.1.zip",
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-hip.so,libstable-diffusion.so"
-    ))]
-    LinuxX64Rocm721,
-    #[strum(props(
-        asset = "sd-master-cc73429-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.13.0.zip",
-        dylibs = "libggml-base.so,libggml.so,libggml-cpu-x64.so,libggml-hip.so,libstable-diffusion.so"
-    ))]
-    LinuxX64Rocm7130,
-    #[strum(props(
-        asset = "sd-master-cc73429-bin-Darwin-macOS-26.4-arm64.zip",
-        dylibs = "libstable-diffusion.dylib"
+        asset = "stable-diffusion-metal-macos-latest.tar.gz",
+        dylib = "libstable-diffusion.dylib"
     ))]
     MacosArm64,
 }
@@ -81,20 +57,38 @@ pub enum StableDiffusionCpp {
 impl StableDiffusionCpp {
     pub fn for_current_target() -> anyhow::Result<Self> {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            if cuda_available() && matches!(driver_version(), Ok(version) if version >= 12000) {
-                Ok(Self::WindowsX64Cuda12)
+            if cuda_available() {
+                match driver_version() {
+                    Ok(version) if version >= 13000 => return Ok(Self::WindowsX64Cuda),
+                    Ok(version) if vulkan_available() => {
+                        tracing::warn!(
+                            driver_version = version,
+                            minimum_driver_version = 13000,
+                            "CUDA driver does not support CUDA 13.0; falling back to Vulkan stable-diffusion.cpp"
+                        );
+                        return Ok(Self::WindowsX64Vulkan);
+                    }
+                    Err(error) if vulkan_available() => {
+                        tracing::warn!(
+                            %error,
+                            "failed to determine CUDA driver version; falling back to Vulkan stable-diffusion.cpp"
+                        );
+                        return Ok(Self::WindowsX64Vulkan);
+                    }
+                    Ok(_) | Err(_) => {}
+                }
             } else if rocm_available() {
-                Ok(Self::WindowsX64Rocm7130)
+                return Ok(Self::WindowsX64Hip);
             } else if vulkan_available() {
-                Ok(Self::WindowsX64Vulkan)
-            } else {
-                Ok(Self::WindowsX64Cpu)
+                return Ok(Self::WindowsX64Vulkan);
             }
+
+            bail!("stable-diffusion.cpp requires CUDA 13, HIP, or Vulkan on Windows x86_64")
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
             if vulkan_available() {
                 Ok(Self::LinuxX64Vulkan)
             } else {
-                Ok(Self::LinuxX64Cpu)
+                bail!("stable-diffusion.cpp requires Vulkan on Linux x86_64")
             }
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
             Ok(Self::MacosArm64)
@@ -111,10 +105,9 @@ impl StableDiffusionCpp {
     }
 
     #[inline]
-    fn dylibs(&self) -> impl Iterator<Item = &str> {
-        self.get_str("dylibs")
-            .expect("stable-diffusion.cpp property 'dylibs' not found")
-            .split(',')
+    fn dylib(&self) -> &'static str {
+        self.get_str("dylib")
+            .expect("stable-diffusion.cpp property 'dylib' not found")
     }
 }
 
@@ -122,7 +115,7 @@ impl StableDiffusionCpp {
 impl Package for StableDiffusionCpp {
     async fn resolve(&self) -> anyhow::Result<PathBuf> {
         let path = STABLE_DIFFUSION_CPP_ROOT.join(self.to_string());
-        if !self.dylibs().all(|dylib| path.join(dylib).is_file()) {
+        if !path.join(self.dylib()).is_file() {
             let asset = self.asset();
             let url = github_release(REPO, TAG, &asset);
             let file = tempfile::Builder::new().suffix(&asset).tempfile()?;
@@ -153,17 +146,16 @@ impl Package for StableDiffusionCpp {
 #[async_trait::async_trait]
 impl PreloadablePackage for StableDiffusionCpp {
     async fn preload(&self) -> anyhow::Result<()> {
-        if matches!(self, Self::WindowsX64Cuda12) {
-            Cuda::Runtime12.preload().await?;
-            Cuda::Cublas12.preload().await?;
-        } else if matches!(self, Self::WindowsX64Rocm711 | Self::WindowsX64Rocm7130) {
-            Rocm::for_current_target()?.preload().await?;
+        match self {
+            Self::WindowsX64Cuda => {
+                Cuda::Runtime130.preload().await?;
+                Cuda::Cublas130.preload().await?;
+            }
+            Self::WindowsX64Hip => Rocm::for_current_target()?.preload().await?,
+            _ => {}
         }
 
         let directory = self.resolve().await?;
-        for name in self.dylibs() {
-            preload(directory.join(name))?;
-        }
-        Ok(())
+        preload(directory.join(self.dylib()))
     }
 }
