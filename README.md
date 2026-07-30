@@ -70,7 +70,7 @@ koharu --cpu
 koharu.exe --cpu
 ```
 
-## ML Models
+## Machine Learning Models
 
 Koharu uses a staged stack of vision and language models instead of trying to solve the entire page with a single network.
 
@@ -88,7 +88,7 @@ Koharu uses object detection to find text regions, speech bubbles, and segmentat
 
 These models recognize source text after detection.
 
-- [PaddleOCR-VL-1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6)
+- [PaddleOCR VL 1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6)
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr)
 - [Baberu OCR](https://huggingface.co/genshiai-daichi/baberu-ocr)
 
@@ -96,19 +96,14 @@ These models recognize source text after detection.
 
 These models remove source lettering before translated text is rendered back onto the page.
 
-- [FLUX.2 Klein 4B](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
-- [lama-manga](https://huggingface.co/mayocream/lama-manga)
-- [aot-inpainting](https://huggingface.co/mayocream/aot-inpainting)
-
-#### Font Analysis
-
-This model helps infer source font and color characteristics for rendering.
-
-- [YuzuMarker.FontDetection](https://huggingface.co/fffonion/yuzumarker-font-detection)
+- [FLUX.2 Klein](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
+- [RORem mixed](https://huggingface.co/mayocream/RORem-mixed-GGUF)
+- [LaMa](https://huggingface.co/mayocream/lama-manga)
+- [AOT GAN](https://huggingface.co/mayocream/aot-inpainting)
 
 ### Large Language Models
 
-Koharu supports both local and remote LLM backends. Local models run through [llama.cpp](https://github.com/ggml-org/llama.cpp) and are downloaded on demand. Hosted and self-hosted APIs are also supported when you want to use a provider instead of a downloaded model.
+Koharu has a flexible LLM backend that can run locally or connect to a remote API.
 
 #### General-Purpose Local Models
 
