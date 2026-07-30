@@ -5,6 +5,7 @@ use crate::RemoteProviderKind;
 
 #[derive(Clone, Debug, Default)]
 pub struct TranslationCredentials {
+    pub atlas_cloud: SecretString,
     pub openai: SecretString,
     pub gemini: SecretString,
     pub claude: SecretString,
@@ -37,8 +38,9 @@ impl TranslationCredentials {
         Ok(())
     }
 
-    fn values(&self) -> [&SecretString; 10] {
+    fn values(&self) -> [&SecretString; 11] {
         [
+            &self.atlas_cloud,
             &self.openai,
             &self.gemini,
             &self.claude,
@@ -52,8 +54,9 @@ impl TranslationCredentials {
         ]
     }
 
-    fn values_mut(&mut self) -> [&mut SecretString; 10] {
+    fn values_mut(&mut self) -> [&mut SecretString; 11] {
         [
+            &mut self.atlas_cloud,
             &mut self.openai,
             &mut self.gemini,
             &mut self.claude,
@@ -68,7 +71,8 @@ impl TranslationCredentials {
     }
 }
 
-const PROVIDERS: [RemoteProviderKind; 10] = [
+const PROVIDERS: [RemoteProviderKind; 11] = [
+    RemoteProviderKind::AtlasCloud,
     RemoteProviderKind::OpenAi,
     RemoteProviderKind::Gemini,
     RemoteProviderKind::Claude,

@@ -4,10 +4,10 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use koharu_secrets::{ExposeSecret, SecretString};
 use koharu_translator::{
-    CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig, GoogleCloudConfig,
-    Language, LmStudioConfig, LocalModel, LocalTranslator, OpenAiCompatibleConfig, OpenAiConfig,
-    OpenRouterConfig, RemoteProvider, RemoteProviderKind, RemoteTranslator, TranslationContext,
-    TranslationRequest, Translator,
+    AtlasCloudConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
+    GoogleCloudConfig, Language, LmStudioConfig, LocalModel, LocalTranslator,
+    OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig, RemoteProvider, RemoteProviderKind,
+    RemoteTranslator, TranslationContext, TranslationRequest, Translator,
 };
 use url::Url;
 
@@ -63,6 +63,7 @@ struct Args {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Provider {
     Local,
+    AtlasCloud,
     #[value(name = "openai")]
     OpenAi,
     Gemini,
@@ -129,6 +130,15 @@ async fn main() -> Result<()> {
 
 fn remote_provider(provider: Provider, args: &Args) -> Result<RemoteProvider> {
     Ok(match provider {
+        Provider::AtlasCloud => {
+            prepare_secret(
+                args,
+                RemoteProviderKind::AtlasCloud,
+                "ATLASCLOUD_API_KEY",
+                true,
+            )?;
+            RemoteProvider::AtlasCloud(AtlasCloudConfig::new(required_model(args)?))
+        }
         Provider::OpenAi => {
             prepare_secret(args, RemoteProviderKind::OpenAi, "OPENAI_API_KEY", true)?;
             RemoteProvider::OpenAi(OpenAiConfig::new(required_model(args)?))

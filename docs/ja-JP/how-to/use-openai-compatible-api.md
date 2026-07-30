@@ -6,7 +6,7 @@ title: OpenAI 互換 API を使う
 
 Koharu は、OpenAI Chat Completions の形に従う API を使って翻訳できます。vLLM や llama-server のようなローカルサーバーも対象です。
 
-このページで扱うのは、Koharu に現在実装されている `OpenAI Compatible` プロバイダです。これは、Koharu に組み込まれている OpenAI、Gemini、Claude、DeepSeek、OpenRouter、LM Studio、DeepL、Google Cloud Translation、Caiyun の各プロバイダ (それぞれ独立した設定エントリを持ちます) とは別物です。
+このページで扱うのは、Koharu に現在実装されている `OpenAI Compatible` プロバイダです。これは、Koharu に組み込まれている Atlas Cloud、OpenAI、Gemini、Claude、DeepSeek、OpenRouter、LM Studio、DeepL、Google Cloud Translation、Caiyun の各プロバイダ (それぞれ独立した設定エントリを持ちます) とは別物です。
 
 ## 互換エンドポイントに対して Koharu が期待しているもの
 
@@ -36,7 +36,7 @@ Koharu は、OpenAI Chat Completions の形に従う API を使って翻訳で�
 - `Base URL` — 必須。API ルートを指す (例: `http://127.0.0.1:1234/v1`)
 - `API Key` — 任意。入力されたときだけ送られる
 
-`OpenAI Compatible` プロバイダの設定は 1 つだけです。互換サーバーを切り替える場合は base URL と必要に応じて API キーを書き換えます。OpenRouter と LM Studio は専用プロバイダとして別に設定します。
+`OpenAI Compatible` プロバイダの設定は 1 つだけです。互換サーバーを切り替える場合は base URL と必要に応じて API キーを書き換えます。Atlas Cloud、OpenRouter、LM Studio は専用プロバイダとして別に設定します。
 
 ステータスドットは discovery 状態を表します。
 
@@ -87,6 +87,22 @@ OpenRouter には専用のプロバイダ設定があり、汎用互換プロバ
 - [OpenRouter authentication](https://openrouter.ai/docs/api/reference/authentication)
 - [OpenRouter models](https://openrouter.ai/models)
 
+## Atlas Cloud
+
+Atlas Cloud には固定 API ベース URL を使う専用プロバイダがあります。
+
+1. Atlas Cloud で API キーを作成します。
+2. Koharu の翻訳プロバイダで `Atlas Cloud` を選択します。
+3. 認証情報フィールドに API キーを保存します。
+4. `qwen/qwen3.5-flash` のようなプロバイダプレフィックス付きモデル ID を選びます。
+
+Koharu は `GET https://api.atlascloud.ai/v1/models` から現在のチャットモデルを取得し、`POST https://api.atlascloud.ai/v1/chat/completions` で翻訳します。
+
+公式リファレンス:
+
+- [Atlas Cloud LLM API](https://www.atlascloud.ai/docs/models/llm)
+- [Atlas Cloud model library](https://www.atlascloud.ai/models/llm)
+
 ## その他の互換エンドポイント
 
 他のセルフホスト API やルーティング型 API を使う場合も、確認項目は同じです。
@@ -100,9 +116,9 @@ OpenRouter には専用のプロバイダ設定があり、汎用互換プロバ
 
 ## エンドポイントを切り替える
 
-`OpenAI Compatible` プロバイダは 1 つしかないため、設定できるカスタム base URL も同時には 1 つです。OpenRouter と LM Studio は専用プロバイダとして独立して設定されます。
+`OpenAI Compatible` プロバイダは 1 つしかないため、設定できるカスタム base URL も同時には 1 つです。Atlas Cloud、OpenRouter、LM Studio は専用プロバイダとして独立して設定されます。
 
-OpenAI 互換サーバーと、Koharu の組み込みプロバイダ (`OpenAI`、`Claude`、`Gemini`、`DeepSeek`、`OpenRouter`、`LM Studio`) を常に両方使いたい場合は、それぞれを別個に設定してください。両者は LLM ピッカー上で共存し、ワンクリックで切り替えられます。
+OpenAI 互換サーバーと、Koharu の組み込みプロバイダ (`Atlas Cloud`、`OpenAI`、`Claude`、`Gemini`、`DeepSeek`、`OpenRouter`、`LM Studio`) を常に両方使いたい場合は、それぞれを別個に設定してください。両者は LLM ピッカー上で共存し、ワンクリックで切り替えられます。
 
 ## よくある間違い
 

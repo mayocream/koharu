@@ -45,6 +45,7 @@ Esses valores são armazenados na config compartilhada do app e salvos imediatam
 A aba `API Keys` cobre atualmente estes provedores embutidos:
 
 - `OpenAI`
+- `Atlas Cloud`
 - `Gemini`
 - `Claude`
 - `DeepSeek`

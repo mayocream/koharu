@@ -50,6 +50,7 @@ const fontSettings: SettingsView = {
     target_language: 'en-US',
     instructions: null,
     credentials: {
+      atlas_cloud: emptyCredential(),
       openai: emptyCredential(),
       gemini: emptyCredential(),
       claude: emptyCredential(),
@@ -379,6 +380,7 @@ describe('native editor components', () => {
           target_language: 'en-US',
           instructions: null,
           credentials: {
+            atlas_cloud: emptyCredential(),
             openai: { configured: true, value: null, clear: false },
             gemini: emptyCredential(),
             claude: emptyCredential(),

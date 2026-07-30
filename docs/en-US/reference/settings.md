@@ -45,6 +45,7 @@ These values are stored in the shared app config and save immediately when chang
 The `API Keys` tab currently covers these built-in providers:
 
 - `OpenAI`
+- `Atlas Cloud`
 - `Gemini`
 - `Claude`
 - `DeepSeek`
@@ -69,6 +70,7 @@ Current behavior:
 - on Linux, provider API keys are stored in Koharu's local filesystem credential store under the app data directory with owner-only file permissions
 - provider base URLs are stored in the app config
 - `OpenAI Compatible` requires a custom `Base URL`; models are discovered dynamically by calling `GET /v1/models` against that URL
+- `Atlas Cloud` uses its fixed hosted endpoint and discovers the current provider-prefixed model IDs from `GET https://api.atlascloud.ai/v1/models`
 - machine-translation providers (`DeepL`, `Google Cloud Translation`, `Caiyun`) only need an API key; `Caiyun` supports a limited set of target languages
 - clearing a key removes it from credential storage
 

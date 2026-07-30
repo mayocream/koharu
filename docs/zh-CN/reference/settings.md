@@ -45,6 +45,7 @@ title: 设置参考
 `API Keys` 标签页当前覆盖以下内置提供方：
 
 - `OpenAI`
+- `Atlas Cloud`
 - `Gemini`
 - `Claude`
 - `DeepSeek`

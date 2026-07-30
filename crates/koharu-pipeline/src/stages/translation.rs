@@ -189,6 +189,7 @@ fn targets(
 
 fn remote(provider: &Providers, client: &reqwest::Client) -> Result<RemoteTranslator> {
     let provider = match provider {
+        Providers::AtlasCloud(config) => RemoteProvider::AtlasCloud(config.clone()),
         Providers::OpenAi(config) => RemoteProvider::OpenAi(config.clone()),
         Providers::Gemini(config) => RemoteProvider::Gemini(config.clone()),
         Providers::Claude(config) => RemoteProvider::Claude(config.clone()),
@@ -209,6 +210,7 @@ fn remote(provider: &Providers, client: &reqwest::Client) -> Result<RemoteTransl
 fn provider_name(provider: &Providers) -> &'static str {
     match provider {
         Providers::Local(_) => "local-translation",
+        Providers::AtlasCloud(_) => "atlas-cloud",
         Providers::OpenAi(_) => "openai",
         Providers::Gemini(_) => "gemini",
         Providers::Claude(_) => "claude",

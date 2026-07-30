@@ -76,7 +76,7 @@ Koharu can also translate through remote or self-hosted APIs instead of download
 
 Supported provider families are:
 
-- LLM-backed: `OpenAI`, `Gemini`, `Claude`, `DeepSeek`, `OpenRouter`, `LM Studio`, plus any `OpenAI-compatible` endpoint that exposes `/v1/models` and `/v1/chat/completions` (vLLM, llama-server, etc.)
+- LLM-backed: `Atlas Cloud`, `OpenAI`, `Gemini`, `Claude`, `DeepSeek`, `OpenRouter`, `LM Studio`, plus any `OpenAI-compatible` endpoint that exposes `/v1/models` and `/v1/chat/completions` (vLLM, llama-server, etc.)
 - Machine-translation: `DeepL`, `Google Cloud Translation`, `Caiyun`
 
 Machine-translation providers are pure translation services rather than chat models. They take source text and a target language, and return a translation; there is no system prompt and no model picker.
@@ -89,6 +89,7 @@ The built-in catalog for LLM-backed providers includes:
 - Gemini: Gemini 3.5 Flash, Gemini 3.1 Pro and Flash-Lite, Gemini 3 Flash, and Gemini 2.5 text-output models
 - Claude: Claude Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5, and selected earlier Claude 4 models
 - DeepSeek: DeepSeek V4 Flash and DeepSeek V4 Pro
+- Atlas Cloud: current chat models are discovered dynamically from Atlas Cloud's OpenAI-compatible catalog; IDs include the provider prefix, such as `qwen/qwen3.5-flash`
 - OpenRouter: text-output models are discovered dynamically from OpenRouter
 - LM Studio: local LLMs are discovered through its native v1 REST API
 - OpenAI-compatible APIs: models are discovered dynamically from the configured endpoint
@@ -105,7 +106,7 @@ Chat-provider settings also include temperature, maximum output tokens, and a mo
 
 Remote providers are configured in **Settings > API Keys**.
 
-For a step-by-step setup guide for LM Studio, OpenRouter, and similar endpoints, see [Use OpenAI-Compatible APIs](../how-to/use-openai-compatible-api.md).
+For a step-by-step setup guide for Atlas Cloud, LM Studio, OpenRouter, and similar endpoints, see [Use OpenAI-Compatible APIs](../how-to/use-openai-compatible-api.md).
 
 ### Codex image generation
 

@@ -371,6 +371,8 @@ pub fn local_models() -> Vec<LocalModelDescriptor> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, EnumString, EnumIter)]
 pub enum RemoteProviderKind {
+    #[strum(serialize = "atlas-cloud")]
+    AtlasCloud,
     #[strum(serialize = "openai")]
     OpenAi,
     #[strum(serialize = "gemini")]
@@ -410,6 +412,7 @@ impl RemoteProviderKind {
     #[must_use]
     pub fn id(self) -> &'static str {
         match self {
+            Self::AtlasCloud => "atlas-cloud",
             Self::OpenAi => "openai",
             Self::Gemini => "gemini",
             Self::Claude => "claude",
@@ -433,6 +436,14 @@ impl RemoteProviderKind {
             supports_context,
             discovers_models,
         ) = match self {
+            Self::AtlasCloud => (
+                "Atlas Cloud",
+                true,
+                false,
+                SupportedLanguages::All,
+                true,
+                true,
+            ),
             Self::OpenAi => ("OpenAI", true, false, SupportedLanguages::All, true, false),
             Self::Gemini => ("Gemini", true, false, SupportedLanguages::All, true, false),
             Self::Claude => ("Claude", true, false, SupportedLanguages::All, true, false),
@@ -540,6 +551,7 @@ macro_rules! remote_models {
 #[must_use]
 pub fn remote_models(provider: RemoteProviderKind) -> Option<&'static [RemoteModelDescriptor]> {
     match provider {
+        RemoteProviderKind::AtlasCloud => None,
         RemoteProviderKind::OpenAi => Some(remote_models![
             "gpt-5.6" => "GPT-5.6 (Sol)", "gpt-5.6-sol" => "GPT-5.6 Sol",
             "gpt-5.6-terra" => "GPT-5.6 Terra", "gpt-5.6-luna" => "GPT-5.6 Luna",
@@ -628,7 +640,8 @@ mod tests {
 
     #[test]
     fn catalogs_cover_main_branch_provider_families() {
-        assert_eq!(remote_providers().len(), 10);
+        assert_eq!(remote_providers().len(), 11);
+        assert!(RemoteProviderKind::AtlasCloud.descriptor().discovers_models);
         assert!(
             RemoteProviderKind::OpenAiCompatible
                 .descriptor()
@@ -688,6 +701,7 @@ mod tests {
                 .all(|model| !model.id.starts_with("gemini-2.0"))
         );
         assert!(remote_models(RemoteProviderKind::OpenAiCompatible).is_none());
+        assert!(remote_models(RemoteProviderKind::AtlasCloud).is_none());
         assert!(remote_models(RemoteProviderKind::OpenRouter).is_none());
         assert!(remote_models(RemoteProviderKind::LmStudio).is_none());
     }

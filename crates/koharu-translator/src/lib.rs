@@ -46,10 +46,10 @@ pub use koharu_ml::llm::GenerationOptions as LocalGenerationOptions;
 pub use language::Language;
 pub use local::{LocalConfig, LocalTranslator, LocalTranslatorOptions};
 pub use remote::{
-    CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig, GoogleCloudConfig,
-    LmStudioConfig, OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig,
-    RemoteGenerationOptions, RemoteProvider, RemoteTranslator, discover_lm_studio_models,
-    discover_openai_compatible_models, discover_openrouter_models,
+    AtlasCloudConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
+    GoogleCloudConfig, LmStudioConfig, OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig,
+    RemoteGenerationOptions, RemoteProvider, RemoteTranslator, discover_atlas_cloud_models,
+    discover_lm_studio_models, discover_openai_compatible_models, discover_openrouter_models,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;

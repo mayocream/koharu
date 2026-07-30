@@ -76,7 +76,7 @@ O Koharu também pode traduzir através de APIs remotas ou auto-hospedadas em ve
 
 As famílias de provedores suportados são:
 
-- baseados em LLM: `OpenAI`, `Gemini`, `Claude`, `DeepSeek`, `OpenRouter`, `LM Studio`, mais qualquer endpoint `OpenAI-compatible` que exponha `/v1/models` e `/v1/chat/completions` (vLLM, llama-server, etc.)
+- baseados em LLM: `Atlas Cloud`, `OpenAI`, `Gemini`, `Claude`, `DeepSeek`, `OpenRouter`, `LM Studio`, mais qualquer endpoint `OpenAI-compatible` que exponha `/v1/models` e `/v1/chat/completions` (vLLM, llama-server, etc.)
 - tradução automática: `DeepL`, `Google Cloud Translation`, `Caiyun`
 
 Provedores de tradução automática são serviços de tradução puros, não modelos de chat. Eles recebem o texto fonte e um idioma de destino e devolvem uma tradução; não há system prompt nem seletor de modelo.
@@ -89,6 +89,7 @@ O catálogo interno dos provedores baseados em LLM inclui:
 - Gemini: modelos de saída de texto Gemini 3.5 Flash, Gemini 3.1 Pro e Flash-Lite, Gemini 3 Flash e Gemini 2.5
 - Claude: Claude Fable 5, Opus 4.8, Sonnet 5, Haiku 4.5 e alguns modelos Claude 4 anteriores
 - DeepSeek: DeepSeek V4 Flash e DeepSeek V4 Pro
+- Atlas Cloud: os modelos de chat atuais são descobertos dinamicamente no Atlas Cloud
 - OpenRouter: os modelos de saída de texto são descobertos dinamicamente no OpenRouter
 - LM Studio: os LLMs locais são descobertos pela API REST v1 nativa
 - APIs compatíveis com OpenAI: os modelos são descobertos dinamicamente a partir do endpoint configurado

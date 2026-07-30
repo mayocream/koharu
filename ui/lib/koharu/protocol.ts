@@ -12,6 +12,12 @@ export type AssetView = {
 	brush_mask: string | null,
 };
 
+export type AtlasCloudConfig = {
+	model: string,
+	temperature: number | null,
+	max_tokens: number | null,
+};
+
 export type Bounds = {
 	x: number,
 	y: number,
@@ -258,6 +264,8 @@ export type ProjectId = DocumentId;
 export type Providers = {
 	provider: "local",
 } & LocalConfig | {
+	provider: "atlas_cloud",
+} & AtlasCloudConfig | {
 	provider: "openai",
 } & OpenAiConfig | {
 	provider: "gemini",
@@ -333,6 +341,7 @@ export type TransformFrame = {
 };
 
 export type TranslationCredentialsView = {
+	atlas_cloud: CredentialEdit,
 	openai: CredentialEdit,
 	gemini: CredentialEdit,
 	claude: CredentialEdit,

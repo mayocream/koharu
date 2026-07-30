@@ -851,6 +851,8 @@ function ProviderFields({
     case 'deepseek':
     case 'openrouter':
       return <ChatFields model={model} onChange={onChange} />
+    case 'atlas_cloud':
+      return <CompatibleChatFields model={model} onChange={onChange} />
     case 'lm_studio':
       return (
         <div className='grid gap-2 sm:grid-cols-2'>
@@ -962,6 +964,38 @@ function ChatFields({
         label={t('native.model.thinking', { defaultValue: 'Thinking' })}
         value={model.thinking}
         onChange={(thinking) => onChange({ ...model, thinking })}
+      />
+    </div>
+  )
+}
+
+function CompatibleChatFields({
+  model,
+  onChange,
+}: {
+  model: Extract<Providers, { provider: 'atlas_cloud' }>
+  onChange: (model: Providers) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className='grid gap-2 sm:grid-cols-2'>
+      <TextSetting
+        label={t('native.model.remoteModel', { defaultValue: 'Remote model' })}
+        value={model.model}
+        onChange={(value) => onChange({ ...model, model: value })}
+      />
+      <OptionalNumberSetting
+        label={t('native.model.temperature', { defaultValue: 'Temperature' })}
+        value={model.temperature}
+        min={0}
+        max={2}
+        onChange={(temperature) => onChange({ ...model, temperature })}
+      />
+      <OptionalNumberSetting
+        label={t('native.model.maxTokens', { defaultValue: 'Maximum tokens' })}
+        value={model.max_tokens}
+        min={1}
+        onChange={(max_tokens) => onChange({ ...model, max_tokens })}
       />
     </div>
   )

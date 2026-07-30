@@ -60,9 +60,9 @@ Pick either:
 - a local GGUF model if you want everything to stay on your machine
 - a remote provider if you want to avoid local model downloads or heavy local inference
 
-Koharu can use OpenAI, Gemini, Claude, DeepSeek, OpenRouter, LM Studio, and other OpenAI-compatible endpoints.
+Koharu can use Atlas Cloud, OpenAI, Gemini, Claude, DeepSeek, OpenRouter, LM Studio, and other OpenAI-compatible endpoints.
 
-If you want to wire up LM Studio, OpenRouter, or another OpenAI-style endpoint, follow [Use OpenAI-Compatible APIs](../how-to/use-openai-compatible-api.md).
+If you want to wire up Atlas Cloud, LM Studio, OpenRouter, or another OpenAI-style endpoint, follow [Use OpenAI-Compatible APIs](../how-to/use-openai-compatible-api.md).
 
 In practice:
 
