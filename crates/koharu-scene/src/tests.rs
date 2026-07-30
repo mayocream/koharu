@@ -26,6 +26,83 @@ fn fresh_scene_has_an_empty_project_hierarchy() {
 }
 
 #[test]
+fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
+    let mut session = SceneSession::memory().unwrap();
+    let mut entities = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            entities = Some((
+                edit.add_entity(page, At::End)?,
+                edit.add_entity(page, At::End)?,
+            ));
+            Ok(())
+        })
+        .unwrap();
+    let base = session.commit(create).unwrap().snapshot;
+    let (left, right) = entities.unwrap();
+    let left_patch = base
+        .patch(|edit| edit.set(left, "default", &Geometry::rectangle(0.0, 0.0, 10.0, 10.0)))
+        .unwrap();
+    let right_patch = base
+        .patch(|edit| edit.set(right, "default", &Geometry::rectangle(1.0, 1.0, 10.0, 10.0)))
+        .unwrap();
+    let conflicting = base
+        .patch(|edit| edit.set(left, "default", &Geometry::rectangle(2.0, 2.0, 10.0, 10.0)))
+        .unwrap();
+
+    let current = session.commit(left_patch).unwrap().snapshot;
+    let current = session
+        .commit(right_patch.rebase_on(&current).unwrap())
+        .unwrap()
+        .snapshot;
+    assert!(conflicting.rebase_on(&current).is_err());
+}
+
+#[test]
+fn observed_page_subtree_guards_pipeline_rebase_inputs() {
+    let mut session = SceneSession::memory().unwrap();
+    let mut ids = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let left_page = edit.add_page(PageDraft::new("left", 100.0, 100.0), At::End)?;
+            let left_entity = edit.add_entity(left_page, At::End)?;
+            let right_page = edit.add_page(PageDraft::new("right", 100.0, 100.0), At::End)?;
+            ids = Some((left_page, left_entity, right_page));
+            Ok(())
+        })
+        .unwrap();
+    let base = session.commit(create).unwrap().snapshot;
+    let (left_page, left_entity, right_page) = ids.unwrap();
+
+    let observed = base
+        .patch(|edit| {
+            edit.observe_subtree(left_page)?;
+            edit.set_source_text(left_entity, source("derived"))
+        })
+        .unwrap();
+    let unrelated = base
+        .patch(|edit| edit.set_page(right_page, PageDraft::new("right changed", 100.0, 100.0)))
+        .unwrap();
+    let current = session.commit(unrelated).unwrap().snapshot;
+    assert!(observed.rebase_on(&current).is_ok());
+
+    let observed = current
+        .patch(|edit| {
+            edit.observe_subtree(left_page)?;
+            edit.set_source_text(left_entity, source("stale"))
+        })
+        .unwrap();
+    let changed_input = current
+        .patch(|edit| edit.set_page(left_page, PageDraft::new("left changed", 100.0, 100.0)))
+        .unwrap();
+    let current = session.commit(changed_input).unwrap().snapshot;
+    assert!(observed.rebase_on(&current).is_err());
+}
+
+#[test]
 fn project_and_relation_metadata_use_typed_components() {
     let mut session = SceneSession::memory().unwrap();
     let settings = ProjectSettings {
@@ -284,7 +361,7 @@ fn translation_requires_source_text() {
 }
 
 #[test]
-fn independent_pipeline_components_merge() {
+fn independent_pipeline_components_rebase() {
     let mut session = SceneSession::memory().unwrap();
     let mut entity = None;
     let create = session
@@ -326,8 +403,9 @@ fn independent_pipeline_components_merge() {
             )
         })
         .unwrap();
-    let merged = ScenePatch::merge([&translation, &typography]).unwrap();
-    let snapshot = session.commit(merged).unwrap().snapshot;
+    let current = session.commit(translation).unwrap().snapshot;
+    let typography = typography.rebase_on(&current).unwrap();
+    let snapshot = session.commit(typography).unwrap().snapshot;
     assert!(
         snapshot
             .component::<Translation>(entity, "en")
@@ -343,7 +421,7 @@ fn independent_pipeline_components_merge() {
 }
 
 #[test]
-fn descendant_scene_patch_uses_storage_ancestry() {
+fn descendant_scene_patch_rebases_after_ancestor_commit() {
     let mut session = SceneSession::memory().unwrap();
     let base = session.snapshot();
     let mut edit = base.edit();
@@ -356,8 +434,10 @@ fn descendant_scene_patch_uses_storage_ancestry() {
             edit.set(entity, "default", &source("late"))
         })
         .unwrap();
-    let merged = ScenePatch::merge([&ancestor, &descendant]).unwrap();
-    let snapshot = session.commit(merged).unwrap().snapshot;
+    assert!(base.preview([&ancestor, &descendant]).is_ok());
+    let current = session.commit(ancestor).unwrap().snapshot;
+    let descendant = descendant.rebase_on(&current).unwrap();
+    let snapshot = session.commit(descendant).unwrap().snapshot;
     assert_eq!(snapshot.children(page).unwrap().len(), 1);
 }
 
@@ -412,6 +492,46 @@ fn disk_scene_reopens_and_validates() {
     }
     let session = SceneSession::open(&path).unwrap();
     assert_eq!(session.snapshot().pages().len(), 1);
+}
+
+#[test]
+fn component_only_refresh_updates_the_existing_scene_index() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("refresh.khr");
+    let mut writer = SceneSession::create(&path).unwrap();
+    let mut reader = SceneSession::open(&path).unwrap();
+    let mut entity = None;
+    let create = writer
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            entity = Some(edit.add_entity(page, At::End)?);
+            Ok(())
+        })
+        .unwrap();
+    writer.commit(create).unwrap();
+    reader.refresh().unwrap();
+    let marker = reader.snapshot().index.build_marker();
+    let entity = entity.unwrap();
+
+    let update = writer
+        .snapshot()
+        .patch(|edit| edit.set_source_text(entity, source("refreshed")))
+        .unwrap();
+    writer.commit(update).unwrap();
+    reader.refresh().unwrap();
+
+    let snapshot = reader.snapshot();
+    assert_eq!(snapshot.index.build_marker(), marker);
+    assert_eq!(
+        snapshot
+            .component::<SourceText>(entity, "default")
+            .unwrap()
+            .unwrap()
+            .text
+            .value,
+        "refreshed"
+    );
 }
 
 #[test]

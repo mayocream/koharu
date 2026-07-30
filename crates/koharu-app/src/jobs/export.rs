@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs};
 
 use anyhow::{Context as _, Result, anyhow};
 use koharu_desktop::DesktopHandle;
-use koharu_pipeline::CancellationToken;
+use koharu_pipeline::StopToken;
 use koharu_psd::{
     PsdDocument, PsdExportOptions, PsdShaderEffect, PsdTextAlign, PsdTextBlock, PsdTextDirection,
     PsdTextStyle, ResolvedDocument, export_document,
@@ -19,7 +19,7 @@ use crate::protocol::ExportFormat;
 pub(super) fn run(
     renderer: &mut Option<Renderer>,
     request: ExportRequest,
-    cancellation: CancellationToken,
+    stop: StopToken,
     desktop: DesktopHandle<NativeEvent>,
 ) {
     let ExportRequest {
@@ -37,7 +37,7 @@ pub(super) fn run(
         }
         let renderer = renderer.as_ref().expect("renderer initialized above");
         for (index, page_id) in pages.into_iter().enumerate() {
-            if cancellation.is_cancelled() {
+            if stop.stopped() {
                 break;
             }
             let page = snapshot.page(page_id)?.page()?;
@@ -75,8 +75,8 @@ pub(super) fn run(
     finish_job(
         &desktop,
         id,
-        &cancellation,
         JobOutcome {
+            stopped: stop.stopped(),
             error: result.err().map(|error| error.to_string()),
             ..JobOutcome::default()
         },

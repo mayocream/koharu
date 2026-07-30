@@ -155,6 +155,16 @@ impl Font {
     pub fn post_script_name(&self) -> &str {
         &self.post_script_name
     }
+
+    /// Original font bytes for consumers that need a rasterizer other than Vello.
+    pub fn data(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+
+    /// Face index within [`Self::data`], including font collections.
+    pub const fn face_index(&self) -> u32 {
+        self.index
+    }
 }
 
 fn is_default_ignorable(character: char) -> bool {

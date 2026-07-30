@@ -41,9 +41,9 @@ function JobCard({ job }: { job: JobStatus }) {
               <Button
                 size='sm'
                 variant='outline'
-                onClick={() => koharuClient.fire({ type: 'cancel_job', job: job.id })}
+                onClick={() => koharuClient.fire({ type: 'stop_job', job: job.id })}
               >
-                {t('native.jobs.cancel', { defaultValue: 'Cancel' })}
+                {t('native.jobs.stop', { defaultValue: 'Stop' })}
               </Button>
             </div>
           </div>
@@ -52,7 +52,7 @@ function JobCard({ job }: { job: JobStatus }) {
     )
   }
 
-  if (job.state === 'finished' || job.state === 'cancelled') return null
+  if (job.state === 'finished' || job.state === 'stopped') return null
   return (
     <div className='rounded-xl border border-destructive/30 bg-card/95 p-3 shadow-xl backdrop-blur'>
       <div className='flex items-start gap-2'>

@@ -30,7 +30,7 @@ One entity can acquire new independent capabilities without changing a central
 | Relations | Relation records carry a typed relation component with declared endpoint references. |
 | Public API | Typed `SceneSession`, `SceneSnapshot`, `SceneEdit`, and `ScenePatch` newtypes. |
 | Compatibility | Each scene component evolves independently with `revision`; unknown extension components are preserved. |
-| Pipeline concurrency | Pipeline concerns write separate component keys and merge through storage patch ancestry. |
+| Pipeline concurrency | Page/stage work commits incrementally and explicitly rebases after validating observed inputs. |
 | Provenance | Authorship belongs to each replaceable component; entity lifecycle ownership is separate. |
 | Assets | Scene components describe blob meaning and metadata; storage owns only encoded bytes. |
 | Rendering detail | Persist user intent, not decoded images, glyph runs, render caches, tensors, or temporary layout results. |
@@ -66,14 +66,14 @@ validation.
   components;
 - cross-component validation and derived scene indexes;
 - ergonomic user and pipeline edit helpers;
-- scene patch preview, merge, and commit wrappers;
+- scene patch preview, explicit rebase, and commit wrappers;
 - conversion to application protocol DTOs where a dedicated adapter is not
   more appropriate.
 
 It does not own:
 
 - SQLite connections, tables, transactions, checkpoints, or history encoding;
-- structural component storage, patch ancestry, blob caching, or garbage
+- structural component storage, patch observations, blob caching, or garbage
   collection;
 - model loading, inference, scheduling, cancellation, or runtime selection;
 - image decoding, tensor conversion, shaping, compositing, or export;
@@ -581,7 +581,7 @@ Setters accept semantic values, clear optional values with named removal
 methods, and return IDs directly. Callers do not repeatedly pass a page ID when
 the parent index already knows it.
 
-## Scene patches and pipeline branches
+## Scene patches and pipeline concurrency
 
 `ScenePatch` wraps one `koharu_storage::Patch`. It adds no parallel operation
 list or attachment map.
@@ -595,33 +595,24 @@ impl SceneSnapshot {
 }
 
 impl ScenePatch {
-    pub fn merge<'a>(
-        patches: impl IntoIterator<Item = &'a ScenePatch>,
-    ) -> Result<ScenePatch>;
-
     pub fn project_id(&self) -> ProjectId;
     pub fn base_revision(&self) -> Revision;
     pub fn fingerprint(&self) -> PatchId;
+    pub fn rebase_on(&self, snapshot: &SceneSnapshot) -> Result<ScenePatch>;
 }
 ```
 
-Preview delegates ancestry, preconditions, structural references, and opaque
-component conflicts to storage. A patch created by `SceneEdit` retains its
-validated result index. Exact ancestor previews reuse that index. Component-
-only combinations validate affected components and update the private
-persistent component-membership index; record lifecycle or structural changes
-fall back to a full authoritative index rebuild.
+Preview delegates operation preconditions, structural references, observations,
+and opaque component conflicts to storage. A patch created by `SceneEdit`
+retains its validated result index for its exact base snapshot. Component-only
+previews validate affected components and persistently update the private
+component-membership index; record lifecycle or structural changes fall back
+to an authoritative index rebuild.
 
-Merge delegates ancestry and component-level conflicts to storage. Semantic
-validation needs a base snapshot, so it occurs when the merged patch is
-previewed or committed; invalid hierarchy, relation, authorship, and
-cross-component results are rejected before durable mutation.
-
-For the pipeline graph:
+For the fixed pipeline workflow:
 
 ```text
 Detection --> OCR --> Translation
-    |--------> Typography
     `--------> Inpainting
 ```
 
@@ -631,16 +622,16 @@ the intended component ownership is:
   components;
 - OCR adds or replaces source-text components;
 - translation adds locale-slotted translation components;
-- typography adds typography-intent components;
 - inpainting adds a page asset in its own role slot.
 
-Dependent nodes run on snapshots previewing exactly their ancestor patches.
-Independent nodes write different component keys and can run concurrently.
-Attempting to replace the same component from sibling branches conflicts.
-
-The pipeline merges in canonical `petgraph` topological order and commits one
-`ScenePatch`. No model receives a `SceneSession`, and intermediate previews do
-not touch SQLite.
+Each stage observes the complete page subtree and its incident relations before
+producing derived output. A stage starts only after its selected same-page
+prerequisites commit. Work on different pages may run concurrently; when it
+finishes, its patch explicitly rebases onto the pipeline's latest scene.
+Unrelated page changes compose, while a changed observed page or same-component
+write fails the rebase. Each successful page/stage output commits immediately,
+and the application groups those revisions into one user-facing undo action.
+No model receives a `SceneSession`.
 
 ## Scene commit validation
 
@@ -678,10 +669,10 @@ Scene validation covers semantics absent from storage:
 
 Validation is scoped during owned edits and component-only preview/commit
 paths. A translation edit does not decode asset bytes on unrelated pages.
-Open, refresh from an external writer, undo, and structural patches perform a
-full semantic validation and authoritative index rebuild. Debug/test builds
-also retain full storage consistency reconstruction. Exact patch ancestry and
-component-only branches reuse or persistently update validated indexes.
+Open, undo, and structural changes perform full semantic validation and an
+authoritative index rebuild. Component-only preview, commit, and external
+refresh paths validate affected values and persistently update the existing
+index. Debug/test builds retain full storage consistency reconstruction.
 Storage independently validates every replayed structural operation.
 
 Unknown extension components are structurally preserved but semantically
@@ -757,7 +748,7 @@ blob payload bytes unless the caller explicitly requests them.
   they do not rebuild the scene index.
 - Metadata reads and hierarchy queries require no mutex.
 - Preview and patch construction are entirely in memory.
-- Multiple pipeline branches can construct patches concurrently.
+- Different page/stage tasks can construct patches concurrently.
 - Component decoding caches never hold locks during caller work.
 - One storage head comparison arbitrates concurrent durable writers.
 - Old scene snapshots remain immutable and retain storage blob pins.
@@ -774,7 +765,7 @@ The scene does not add a global run lock or model lock.
 | Parent or child query | Derived parent lookup or decoded ordered child component |
 | Add/replace one component | Storage and scene persistent-map path updates |
 | Build scene preview | Storage preview plus validation/index work for affected scope |
-| Merge pipeline patches | Storage ancestry/conflict work plus scoped scene validation |
+| Rebase stage patch | Observed-page and write-precondition validation |
 | Commit | Scene validation plus one storage transaction and one revision |
 | Read asset bytes | Explicit lazy storage blob read |
 
@@ -787,15 +778,15 @@ Required invariants:
 - hierarchy and relation indexes are rebuilt from authoritative components on
   structural boundaries and shared across component-only previews; they are
   never checkpointed separately;
-- pipeline nodes with separate component keys do not conflict;
-- task completion order cannot change a canonical merged result;
-- a successful pipeline run creates one storage revision;
+- unrelated page tasks can rebase in completion order;
+- changes to an observed page invalidate stale derived output;
+- each successful page/stage result creates one storage revision;
 - metadata-only work performs no blob reads or image decoding.
 
 The `scene` Criterion benchmark uses a multi-thousand-entity project and covers
 snapshot clone, component-indexed query, component patch construction, and
-component-only preview. Larger fixture benchmarks additionally report branch
-merge and full structural index-rebuild costs.
+component-only preview. Larger fixture benchmarks additionally report explicit
+rebase, refresh, and full structural index-rebuild costs.
 
 ## Module layout
 
@@ -869,18 +860,18 @@ The redesign is complete when tests and benchmarks prove:
    hierarchy relations, dangling endpoints, or invalid root page order.
 7. Typed component codecs declare exactly the record and blob references in
    their logical values.
-8. Independent sibling pipeline patches write different components on one
-   entity successfully; same-component and same-children conflicts fail.
-9. An ancestor patch can insert an entity and a descendant patch can add
-   components to it, while missing ancestry is rejected by storage.
-10. Every permutation of pipeline task completion yields the same scene when
-    patches are merged in canonical dependency order.
+8. Unrelated page-stage patches rebase successfully; same-component writes and
+   changed observed page inputs fail.
+9. Ordered previews support a later patch whose preconditions depend on state
+   established by an earlier patch.
+10. Page-stage completion order cannot publish output computed from a changed
+    observed page subtree.
 11. User-owned component values survive producer reruns; producer-owned values
     can be replaced only by the compatible producer policy.
-12. Scene validation failure, cancellation, merge conflict, stale revision,
+12. Scene validation failure, cancellation, rebase conflict, stale revision,
     and SQLite failure leave the durable storage document unchanged.
-13. One successful full pipeline patch creates exactly one revision and one
-    undo unit.
+13. Each successful page-stage result creates one revision, and the application
+    can group all revisions from one run into one undo unit.
 14. Asset previews are readable before commit, while metadata paths never load
     encoded bytes.
 15. Old snapshots remain valid through later commits and storage GC.

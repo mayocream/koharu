@@ -1,9 +1,9 @@
 //! Generic, versioned record/component storage for Koharu.
 //!
 //! Storage owns identities, opaque component envelopes, immutable snapshots,
-//! dependency-aware patches, content-addressed bytes, SQLite durability, and
-//! revision history. Domain schemas and typed codecs belong in crates such as
-//! `koharu-scene`.
+//! flat optimistic patches, explicit read observations, content-addressed
+//! bytes, SQLite durability, and revision history. Domain schemas and typed
+//! codecs belong in crates such as `koharu-scene`.
 
 mod blob;
 mod component;

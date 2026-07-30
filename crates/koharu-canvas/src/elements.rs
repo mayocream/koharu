@@ -75,9 +75,13 @@ impl ElementScenes {
     }
 
     fn prepare_text(&mut self, context: &mut ElementSceneContext<'_>) {
+        let Some(locale) = context.locale else {
+            return;
+        };
         let mut request = RenderRequest::transparent(context.page.id);
         request.include_images = false;
-        request.locale = context.locale.cloned();
+        request.locale = Some(locale.clone());
+        request.fallback_to_source_text = false;
         request.theme = context.text.clone();
         let prepared = RenderPlan::compile(context.snapshot, &request).and_then(|plan| {
             PreparedPage::prepare(

@@ -1,12 +1,9 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Context as _;
 use koharu_desktop::DesktopHandle;
-use koharu_pipeline::{CancellationToken, Pipeline, PipelineEvent, Stage};
-use koharu_scene::SceneSession;
+use koharu_pipeline::{Committer, Pipeline, Progress, Request, RunStatus, StageOutput, StopToken};
+use koharu_scene::{Revision, SceneSession, SceneSnapshot};
 
 use super::{JobOutcome, NativeEvent, PipelineRequest, finish_job};
 use crate::protocol::RequestId;
@@ -14,14 +11,14 @@ use crate::protocol::RequestId;
 pub(super) async fn run(
     pipeline: &Pipeline,
     request: PipelineRequest,
-    cancellation: CancellationToken,
+    stop: StopToken,
     desktop: DesktopHandle<NativeEvent>,
 ) {
     let PipelineRequest {
         id,
         path,
         scope,
-        target,
+        operation,
     } = request;
     let mut session = match SceneSession::open(&path)
         .with_context(|| format!("failed to open {}", path.display()))
@@ -31,8 +28,8 @@ pub(super) async fn run(
             finish_job(
                 &desktop,
                 id,
-                &cancellation,
                 JobOutcome {
+                    stopped: stop.stopped(),
                     error: Some(error.to_string()),
                     ..JobOutcome::default()
                 },
@@ -44,82 +41,125 @@ pub(super) async fn run(
     let event_handle = desktop.clone();
     let event_progress = progress.clone();
     let events = Arc::new(move |event| {
-        handle_event(&event_handle, id, &event_progress, event);
+        handle_progress(&event_handle, id, &event_progress, event);
     });
-    let run = pipeline
-        .run(session.snapshot())
-        .scope(scope)
-        .target(target)
-        .cancellation(cancellation.clone())
-        .events(events);
-    let outcome = match run.execute().await {
-        Ok(report) => match session.commit(report.patch) {
-            Ok(commit) => {
-                let _ = desktop.send_event(NativeEvent::ProjectAdvanced { job: id });
-                JobOutcome {
-                    revisions: vec![commit.revision],
-                    ..JobOutcome::default()
-                }
-            }
-            Err(error) => JobOutcome {
-                error: Some(error.to_string()),
-                ..JobOutcome::default()
-            },
-        },
-        Err(error) => JobOutcome {
-            error: (!cancellation.is_cancelled()).then(|| error.to_string()),
+    let request = Request {
+        operation,
+        scope,
+        stop,
+        progress: Some(events),
+    };
+    let snapshot = session.snapshot();
+    let mut revisions = Vec::new();
+    let result = {
+        let mut committer = SessionCommitter {
+            session: &mut session,
+            revisions: &mut revisions,
+            desktop: &desktop,
+            job: id,
+        };
+        pipeline.execute(snapshot, request, &mut committer).await
+    };
+    let outcome = match result {
+        Ok(report) => JobOutcome {
+            revisions,
+            stopped: report.status == RunStatus::Stopped,
             ..JobOutcome::default()
         },
+        Err(error) => {
+            tracing::error!(stage = ?error.stage, %error, "pipeline execution failed");
+            JobOutcome {
+                revisions,
+                error: Some(error.to_string()),
+                ..JobOutcome::default()
+            }
+        }
     };
-    finish_job(&desktop, id, &cancellation, outcome);
+    finish_job(&desktop, id, outcome);
+}
+
+struct SessionCommitter<'a> {
+    session: &'a mut SceneSession,
+    revisions: &'a mut Vec<Revision>,
+    desktop: &'a DesktopHandle<NativeEvent>,
+    job: RequestId,
+}
+
+#[async_trait::async_trait]
+impl Committer for SessionCommitter<'_> {
+    async fn commit(&mut self, output: StageOutput) -> anyhow::Result<SceneSnapshot> {
+        let commit = self.session.commit(output.patch)?;
+        if commit.changes.to != commit.changes.from {
+            self.revisions.push(commit.revision);
+            let _ = self
+                .desktop
+                .send_event(NativeEvent::ProjectAdvanced { job: self.job });
+        }
+        Ok(commit.snapshot)
+    }
 }
 
 #[derive(Default)]
 struct ProgressState {
     completed: usize,
     total: usize,
-    models: BTreeMap<Stage, String>,
 }
 
-fn handle_event(
+fn handle_progress(
     desktop: &DesktopHandle<NativeEvent>,
     job: RequestId,
     progress: &Mutex<ProgressState>,
-    event: PipelineEvent,
+    event: Progress,
 ) {
     let update = match event {
-        PipelineEvent::RunStarted { stages, .. } => {
+        Progress::Started { pages, stages } => {
             let mut progress = progress.lock().unwrap_or_else(|error| error.into_inner());
             progress.completed = 0;
-            progress.total = stages.len();
-            Some((0, progress.total, None, None))
+            progress.total = pages.len().saturating_mul(stages.len());
+            Some((0, progress.total, None, None, None))
         }
-        PipelineEvent::ModelLoadStarted { stage, model, .. } => {
-            let mut progress = progress.lock().unwrap_or_else(|error| error.into_inner());
-            progress.models.insert(stage, model.clone());
-            Some((progress.completed, progress.total, Some(stage), Some(model)))
+        Progress::Loading { page, stage, model } => {
+            let progress = progress.lock().unwrap_or_else(|error| error.into_inner());
+            Some((
+                progress.completed,
+                progress.total,
+                Some(page),
+                Some(stage),
+                Some(model),
+            ))
         }
-        PipelineEvent::StageFinished { stage, .. } => {
+        Progress::Finished {
+            page, stage, model, ..
+        } => {
             let mut progress = progress.lock().unwrap_or_else(|error| error.into_inner());
             progress.completed = progress.completed.saturating_add(1).min(progress.total);
             Some((
                 progress.completed,
                 progress.total,
+                Some(page),
                 Some(stage),
-                progress.models.get(&stage).cloned(),
+                Some(model),
             ))
         }
-        PipelineEvent::RunFailed { stage, message, .. } => {
-            tracing::error!(stage = ?stage, %message, "pipeline run failed");
-            None
+        Progress::Skipped { page, stage } => {
+            let mut progress = progress.lock().unwrap_or_else(|error| error.into_inner());
+            progress.completed = progress.completed.saturating_add(1).min(progress.total);
+            Some((
+                progress.completed,
+                progress.total,
+                Some(page),
+                Some(stage),
+                None,
+            ))
         }
-        _ => None,
+        Progress::Running { .. } => None,
     };
-    if let Some((completed, total, stage, model)) = update {
+    if let Some((completed, total, page, stage, model)) = update {
         let _ = desktop.send_event(NativeEvent::PipelineProgress {
             job,
             completed,
             total,
+            page,
             stage,
             model,
         });

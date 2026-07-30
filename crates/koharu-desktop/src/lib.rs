@@ -1,4 +1,4 @@
-//! Wry desktop shell and WGPU presenter for Koharu's Rust-owned canvas.
+//! Wry desktop shell and Vello texture presenter for Koharu's Rust-owned canvas.
 
 mod app;
 mod gpu;

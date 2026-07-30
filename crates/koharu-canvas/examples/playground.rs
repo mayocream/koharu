@@ -7,8 +7,8 @@
 //! ```
 //!
 //! This example intentionally talks directly to the public Canvas API. It is a
-//! manual integration test for hit testing, transform previews, scene commits,
-//! camera behavior, asynchronous resource loading, and WGPU presentation.
+//! manual integration test for Vello rendering, camera behavior, asynchronous
+//! resource loading, and presentation. Editor controls live in React.
 
 use std::{
     io::Cursor,
@@ -20,12 +20,12 @@ use std::{
 use anyhow::{Context as _, Result, bail};
 use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use koharu_canvas::{
-    Camera, Canvas, CanvasGpu, ElementId, Frame, HitTarget, OverlayState, PageId, PhysicalPoint,
-    PhysicalSize, ViewState,
+    Camera, Canvas, CanvasGpu, ElementId, Frame, PageId, PhysicalPoint, PhysicalSize, ViewState,
 };
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, Point, SceneSession,
 };
+use vello::wgpu::{self, util::TextureBlitter};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -35,7 +35,7 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-const TITLE: &str = "Koharu Canvas Playground - drag nodes/handles | rotate circle | wheel zoom | middle-drag pan | F fit | Esc cancel";
+const TITLE: &str = "Koharu Canvas Playground - wheel zoom | middle-drag pan | F fit | Esc cancel";
 const PAGE_WIDTH: u32 = 1_200;
 const PAGE_HEIGHT: u32 = 800;
 
@@ -207,15 +207,11 @@ struct PlaygroundState {
     queue: Arc<wgpu::Queue>,
     config: wgpu::SurfaceConfiguration,
     suspended: bool,
-    pipeline: wgpu::RenderPipeline,
-    sampler: wgpu::Sampler,
-    bind_group: Option<wgpu::BindGroup>,
+    blitter: TextureBlitter,
     canvas: Canvas,
-    session: SceneSession,
+    _session: SceneSession,
     view: ViewState,
-    overlays: OverlayState,
     cursor: PhysicalPoint,
-    transforming: bool,
     panning: bool,
 }
 
@@ -249,7 +245,12 @@ impl PlaygroundState {
             .formats
             .iter()
             .copied()
-            .find(wgpu::TextureFormat::is_srgb)
+            .find(|format| {
+                matches!(
+                    format,
+                    wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Bgra8Unorm
+                )
+            })
             .or_else(|| capabilities.formats.first().copied())
             .context("the playground surface exposes no texture format")?;
         let alpha_mode = capabilities
@@ -268,9 +269,9 @@ impl PlaygroundState {
             view_formats: Vec::new(),
         };
         surface.configure(&device, &config);
-        let (pipeline, sampler) = presentation_pipeline(&device, format);
+        let blitter = TextureBlitter::new(&device, format);
 
-        let (session, page, nodes) = demo_scene()?;
+        let (session, page, _nodes) = demo_scene()?;
         let mut canvas = Canvas::new(
             CanvasGpu {
                 device: Arc::clone(&device),
@@ -285,12 +286,8 @@ impl PlaygroundState {
             ..ViewState::default()
         };
         canvas.set_view(view.clone());
+        canvas.set_render_target(viewport, PhysicalPoint::default());
         canvas.show_page(&session.snapshot(), page)?;
-        let overlays = OverlayState {
-            selected: vec![nodes[0]],
-            ..OverlayState::default()
-        };
-        canvas.set_overlays(overlays.clone());
 
         println!("{TITLE}");
         println!("Adapter: {}", adapter.get_info().name);
@@ -301,15 +298,11 @@ impl PlaygroundState {
             queue,
             config,
             suspended: viewport.is_empty(),
-            pipeline,
-            sampler,
-            bind_group: None,
+            blitter,
             canvas,
-            session,
+            _session: session,
             view,
-            overlays,
             cursor: PhysicalPoint::default(),
-            transforming: false,
             panning: false,
         })
     }
@@ -318,7 +311,8 @@ impl PlaygroundState {
         self.suspended = size.is_empty();
         self.view.size = size;
         self.canvas.set_view(self.view.clone());
-        self.bind_group = None;
+        self.canvas
+            .set_render_target(size, PhysicalPoint::default());
         if self.suspended {
             return;
         }
@@ -330,57 +324,16 @@ impl PlaygroundState {
     fn pointer_moved(&mut self, point: PhysicalPoint) {
         let previous = self.cursor;
         self.cursor = point;
-        if self.transforming {
-            let _ = self.canvas.update_transform(point);
-            return;
-        }
         if self.panning {
             self.view
                 .camera
                 .pan_by(point.x - previous.x, point.y - previous.y);
             self.canvas.set_view(self.view.clone());
-            return;
-        }
-        let hovered = self.canvas.hit_test(point).map(target_element);
-        if self.overlays.hovered != hovered {
-            self.overlays.hovered = hovered;
-            self.canvas.set_overlays(self.overlays.clone());
         }
     }
 
     fn mouse_input(&mut self, button: MouseButton, state: ElementState) -> Result<bool> {
         match (button, state) {
-            (MouseButton::Left, ElementState::Pressed) => {
-                let Some(target) = self.canvas.hit_test(self.cursor) else {
-                    self.overlays.selected.clear();
-                    self.canvas.set_overlays(self.overlays.clone());
-                    return Ok(true);
-                };
-                let element = target_element(target);
-                if !self.overlays.selected.contains(&element) {
-                    self.overlays.selected = vec![element];
-                    self.canvas.set_overlays(self.overlays.clone());
-                }
-                self.canvas
-                    .begin_transform(&self.overlays.selected, target, self.cursor)?;
-                self.transforming = true;
-                Ok(true)
-            }
-            (MouseButton::Left, ElementState::Released) if self.transforming => {
-                self.transforming = false;
-                let Some(commit) = self.canvas.finish_transform()? else {
-                    return Ok(true);
-                };
-                let patch = self.session.snapshot().patch(|edit| {
-                    for element in &commit.elements {
-                        edit.set(element.element, "default", &element.geometry)?;
-                    }
-                    Ok(())
-                })?;
-                let committed = self.session.commit(patch)?;
-                self.canvas.sync(&committed.snapshot, &committed.changes)?;
-                Ok(true)
-            }
             (MouseButton::Middle, ElementState::Pressed) => {
                 self.panning = true;
                 Ok(true)
@@ -412,13 +365,6 @@ impl PlaygroundState {
     }
 
     fn cancel_interaction(&mut self) {
-        if self.transforming {
-            self.canvas.cancel_transform();
-        } else {
-            self.overlays.selected.clear();
-            self.canvas.set_overlays(self.overlays.clone());
-        }
-        self.transforming = false;
         self.panning = false;
     }
 
@@ -427,23 +373,6 @@ impl PlaygroundState {
             return Ok(false);
         }
         let frame = self.canvas.render(now)?;
-        if self.bind_group.is_none() {
-            self.bind_group = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("koharu canvas playground bind group"),
-                layout: &self.pipeline.get_bind_group_layout(0),
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(frame.texture),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            }));
-        }
-
         let (surface_texture, suboptimal) = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
             wgpu::CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),
@@ -465,33 +394,8 @@ impl PlaygroundState {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("koharu canvas playground presenter"),
             });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("koharu canvas playground pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &surface_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(linear_color([29, 32, 40])),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(
-                0,
-                self.bind_group
-                    .as_ref()
-                    .expect("bind group was created above"),
-                &[],
-            );
-            pass.draw(0..3, 0..1);
-        }
+        self.blitter
+            .copy(&self.device, &mut encoder, frame.texture, &surface_view);
         self.queue.submit([encoder.finish()]);
         surface_texture.present();
         if suboptimal {
@@ -499,77 +403,6 @@ impl PlaygroundState {
         }
         Ok(frame.needs_redraw)
     }
-}
-
-fn target_element(target: HitTarget) -> ElementId {
-    match target {
-        HitTarget::Element(element) | HitTarget::Handle { element, .. } => element,
-    }
-}
-
-fn presentation_pipeline(
-    device: &wgpu::Device,
-    format: wgpu::TextureFormat,
-) -> (wgpu::RenderPipeline, wgpu::Sampler) {
-    let shader = device.create_shader_module(wgpu::include_wgsl!("playground.wgsl"));
-    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("koharu canvas playground layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-    });
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("koharu canvas playground pipeline layout"),
-        bind_group_layouts: &[Some(&layout)],
-        immediate_size: 0,
-    });
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("koharu canvas playground pipeline"),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    });
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("koharu canvas playground sampler"),
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        ..Default::default()
-    });
-    (pipeline, sampler)
 }
 
 fn demo_scene() -> Result<(SceneSession, PageId, Vec<ElementId>)> {
@@ -718,23 +551,6 @@ fn encode_png(image: RgbaImage) -> Vec<u8> {
         .write_to(&mut bytes, ImageFormat::Png)
         .expect("encoding an in-memory playground image cannot fail");
     bytes.into_inner()
-}
-
-fn linear_color([red, green, blue]: [u8; 3]) -> wgpu::Color {
-    let linear = |channel: u8| {
-        let value = f64::from(channel) / 255.0;
-        if value <= 0.04045 {
-            value / 12.92
-        } else {
-            ((value + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    wgpu::Color {
-        r: linear(red),
-        g: linear(green),
-        b: linear(blue),
-        a: 1.0,
-    }
 }
 
 fn main() -> Result<()> {

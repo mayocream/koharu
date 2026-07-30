@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use koharu_pipeline::{Scope, Target};
+use koharu_pipeline::{Operation, Scope};
 use koharu_scene::{EntityId, ProjectId, Revision, TextAlignment, WritingMode};
 use koharu_secrets::{ExposeSecret, SecretString};
 use koharu_translator::{Providers, TranslationConfig, TranslationCredentials};
@@ -104,6 +104,10 @@ pub enum UiCommand {
         page: EntityId,
         frame: Frame,
     },
+    SetSourceText {
+        entity: EntityId,
+        text: String,
+    },
     SetTranslation {
         entity: EntityId,
         locale: String,
@@ -134,9 +138,9 @@ pub enum UiCommand {
     Redo,
     RunPipeline {
         scope: Scope,
-        target: Target,
+        operation: Operation,
     },
-    CancelJob {
+    StopJob {
         job: RequestId,
     },
     ExportPages {
@@ -203,29 +207,13 @@ pub enum CanvasInteraction {
     SetDisplay {
         display: CanvasDisplay,
     },
-    SetOverlays {
-        selected: Vec<EntityId>,
-        hovered: Option<EntityId>,
-        draft: Option<Frame>,
-        guides: Vec<CanvasGuide>,
-        show_text_bounds: bool,
-        brush_cursor: Option<CanvasBrushCursor>,
-    },
-    HitTest {
-        #[specta(type = f64)]
-        id: u64,
-        x: f64,
-        y: f64,
-    },
     BeginTransform {
         elements: Vec<EntityId>,
-        target: HitTarget,
-        x: f64,
-        y: f64,
     },
     UpdateTransform {
-        x: f64,
-        y: f64,
+        #[specta(type = f64)]
+        frame: u64,
+        elements: Vec<TransformFrame>,
     },
     CancelTransform,
     BeginMaskStroke {
@@ -241,6 +229,12 @@ pub enum CanvasInteraction {
     },
     FinishMaskStroke,
     CancelMaskStroke,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Type)]
+pub struct TransformFrame {
+    pub element: EntityId,
+    pub frame: Frame,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
@@ -263,20 +257,6 @@ pub enum CanvasPageView {
 pub struct CanvasMaskOverlay {
     pub tint: [u8; 4],
     pub opacity: f32,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-#[serde(tag = "axis", content = "position", rename_all = "snake_case")]
-pub enum CanvasGuide {
-    Horizontal(f64),
-    Vertical(f64),
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct CanvasBrushCursor {
-    pub x: f64,
-    pub y: f64,
-    pub diameter: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
@@ -322,11 +302,6 @@ pub enum UiEvent {
     },
     ProjectChanged(Box<ProjectDelta>),
     ProjectClosed,
-    HitTest {
-        #[specta(type = f64)]
-        id: u64,
-        target: Option<HitTarget>,
-    },
     ViewChanged {
         zoom: f64,
         translation: [f64; 2],
@@ -336,6 +311,9 @@ pub enum UiEvent {
     DownloadChanged(DownloadStatus),
     SettingsChanged {
         settings: Box<SettingsView>,
+    },
+    ResourcesChanged {
+        resources: SystemResourcesView,
     },
     GarbageCollected {
         #[specta(type = f64)]
@@ -377,6 +355,53 @@ pub struct SettingsView {
     pub local_translation_models: Vec<String>,
     pub target_languages: Vec<TargetLanguageView>,
     pub fonts: Vec<FontFaceView>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Type)]
+pub struct SystemResourcesView {
+    #[specta(type = f64)]
+    pub process_memory_bytes: u64,
+    #[specta(type = f64)]
+    pub system_memory_total_bytes: u64,
+    #[specta(type = f64)]
+    pub system_memory_used_bytes: u64,
+    pub process_cpu_percent: f32,
+    pub system_cpu_percent: f32,
+    pub devices: Vec<DeviceResourcesView>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Type)]
+pub struct DeviceResourcesView {
+    pub name: String,
+    pub selected: bool,
+    #[specta(type = Option<f64>)]
+    pub memory_budget_bytes: Option<u64>,
+    #[specta(type = Option<f64>)]
+    pub memory_used_bytes: Option<u64>,
+    pub utilization_percent: Option<f32>,
+}
+
+impl From<koharu_pipeline::ResourceSnapshot> for SystemResourcesView {
+    fn from(snapshot: koharu_pipeline::ResourceSnapshot) -> Self {
+        Self {
+            process_memory_bytes: snapshot.process_memory_bytes,
+            system_memory_total_bytes: snapshot.system_memory_total_bytes,
+            system_memory_used_bytes: snapshot.system_memory_used_bytes,
+            process_cpu_percent: snapshot.process_cpu_percent,
+            system_cpu_percent: snapshot.system_cpu_percent,
+            devices: snapshot
+                .devices
+                .into_iter()
+                .map(|device| DeviceResourcesView {
+                    name: device.name,
+                    selected: device.selected,
+                    memory_budget_bytes: device.memory_budget_bytes,
+                    memory_used_bytes: device.memory_used_bytes,
+                    utilization_percent: device.utilization_percent,
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -635,27 +660,6 @@ pub struct ProjectDelta {
     pub can_redo: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum HitTarget {
-    Element { element: EntityId },
-    Handle { element: EntityId, handle: Handle },
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum Handle {
-    NorthWest,
-    North,
-    NorthEast,
-    East,
-    SouthEast,
-    South,
-    SouthWest,
-    West,
-    Rotate,
-}
-
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum JobStatus {
@@ -666,6 +670,7 @@ pub enum JobStatus {
         completed: usize,
         #[specta(type = f64)]
         total: usize,
+        page: Option<EntityId>,
         phase: Option<koharu_pipeline::Stage>,
         model: Option<String>,
     },
@@ -676,7 +681,7 @@ pub enum JobStatus {
         id: RequestId,
         error: String,
     },
-    Cancelled {
+    Stopped {
         id: RequestId,
     },
 }
@@ -761,6 +766,28 @@ mod tests {
     }
 
     #[test]
+    fn source_text_corrections_are_explicit_commands() {
+        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
+            "type": "command",
+            "id": "018f3b28-7fd8-7d5a-a833-6cb8637e6c00",
+            "base": 1,
+            "command": {
+                "type": "set_source_text",
+                "entity": "018f3b28-7fd8-7d5a-a833-6cb8637e6c01",
+                "text": "corrected"
+            }
+        }))
+        .unwrap();
+        assert!(matches!(
+            message,
+            BridgeMessage::Command {
+                command,
+                ..
+            } if matches!(*command, UiCommand::SetSourceText { ref text, .. } if text == "corrected")
+        ));
+    }
+
+    #[test]
     fn interaction_has_a_nested_canvas_tag() {
         let message: BridgeMessage = serde_json::from_value(serde_json::json!({
             "type": "interaction",
@@ -772,6 +799,34 @@ mod tests {
             BridgeMessage::Interaction {
                 interaction: CanvasInteraction::FitWindow
             }
+        ));
+    }
+
+    #[test]
+    fn transform_interactions_carry_complete_numbered_frames() {
+        let message: BridgeMessage = serde_json::from_value(serde_json::json!({
+            "type": "interaction",
+            "interaction": {
+                "type": "update_transform",
+                "frame": 7,
+                "elements": [{
+                    "element": "018f3b28-7fd8-7d5a-a833-6cb8637e6c01",
+                    "frame": {
+                        "x": 12.0,
+                        "y": 24.0,
+                        "width": 80.0,
+                        "height": 40.0,
+                        "angle_degrees": 15.0
+                    }
+                }]
+            }
+        }))
+        .unwrap();
+        assert!(matches!(
+            message,
+            BridgeMessage::Interaction {
+                interaction: CanvasInteraction::UpdateTransform { frame: 7, ref elements }
+            } if elements.len() == 1 && elements[0].frame.angle_degrees == 15.0
         ));
     }
 

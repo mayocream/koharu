@@ -83,7 +83,7 @@ function WorkflowPreview() {
     t('native.phase.detection', { defaultValue: 'Detection' }),
     t('native.phase.segmentation', { defaultValue: 'Segmentation' }),
     t('native.phase.inpainting', { defaultValue: 'Inpainting' }),
-    t('native.phase.typography', { defaultValue: 'Typography' }),
+    t('native.phase.translation', { defaultValue: 'Translation' }),
   ]
 
   useEffect(() => {

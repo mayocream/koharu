@@ -1,73 +1,42 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use koharu_scene::{Geometry, Point};
 use vello::kurbo::{Affine, Point as KurboPoint};
 
 use crate::{
-    CanvasPage, ElementId, ElementPreview, Error, Frame, Handle, HitTarget, PageId, PagePoint,
-    Result, TransformCommit,
+    CanvasPage, ElementFrame, ElementId, ElementPreview, Error, Frame, PageId, Result,
+    TransformCommit,
 };
 
-/// Pure-Rust state for one pointer-driven move, resize, or rotation.
+/// Validated Rust-side state for transform previews authored by React.
 ///
-/// The committed page is never mutated. Updates replace `previews`, rendering
-/// reads those frames, and `finish` returns the minimal changed frame set for
-/// the application to commit atomically.
+/// The committed page is never mutated. Every UI animation frame replaces the
+/// complete preview set, rendering reads those frames, and `finish` returns the
+/// minimal changed geometry set for one atomic scene commit.
 pub(crate) struct ActiveTransform {
     page: PageId,
-    target: HitTarget,
-    start: PagePoint,
     originals: Vec<ElementPreview>,
     previews: Vec<ElementPreview>,
-    previous_rotation: Option<f64>,
-    rotation_delta: f64,
+    supplied: HashMap<ElementId, Frame>,
+    last_frame: Option<u64>,
 }
 
 impl ActiveTransform {
-    pub fn new(
-        page: &CanvasPage,
-        selected: &[ElementId],
-        target: HitTarget,
-        start: PagePoint,
-    ) -> Result<Self> {
-        if !start.x.is_finite() || !start.y.is_finite() {
-            return Err(Error::Invalid(
-                "transform point must contain finite coordinates".into(),
-            ));
-        }
-        let target_element = target.element();
-        if !selected.contains(&target_element) {
-            return Err(Error::Invalid(
-                "transform target must be part of the selection".into(),
-            ));
-        }
-
+    pub fn new(page: &CanvasPage, selected: &[ElementId]) -> Result<Self> {
         let mut seen = HashSet::new();
-        let ids: Vec<_> = match target {
-            HitTarget::Element(_) => selected
-                .iter()
-                .copied()
-                .filter(|element| seen.insert(*element))
-                .collect(),
-            HitTarget::Handle { element, .. } => vec![element],
-        };
-        if ids.is_empty() {
-            return Err(Error::Invalid(
-                "an element transform requires a selection".into(),
-            ));
-        }
-
-        let originals = ids
-            .into_iter()
+        let originals = selected
+            .iter()
+            .copied()
+            .filter(|element| seen.insert(*element))
             .map(|element| {
                 let value = page.element(element).ok_or_else(|| {
                     Error::Invalid(format!(
                         "transform element {element} is not on the active page"
                     ))
                 })?;
-                if !value.visible || value.opacity <= 0.0 {
+                if !value.selectable() || !value.visible || value.opacity <= 0.0 {
                     return Err(Error::Invalid(format!(
-                        "transform element {element} is not visible"
+                        "transform element {element} is not selectable and visible"
                     )));
                 }
                 Ok(ElementPreview {
@@ -77,61 +46,71 @@ impl ActiveTransform {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let previous_rotation = matches!(
-            target,
-            HitTarget::Handle {
-                handle: Handle::Rotate,
-                ..
-            }
-        )
-        .then(|| pointer_angle(originals[0].frame, start));
-
+        if originals.is_empty() {
+            return Err(Error::Invalid(
+                "an element transform requires a selection".into(),
+            ));
+        }
         Ok(Self {
             page: page.id,
-            target,
-            start,
             previews: originals.clone(),
+            supplied: HashMap::with_capacity(originals.len()),
             originals,
-            previous_rotation,
-            rotation_delta: 0.0,
+            last_frame: None,
         })
     }
 
-    pub fn update(&mut self, point: PagePoint) -> Result<()> {
-        if !point.x.is_finite() || !point.y.is_finite() {
-            return Err(Error::Invalid(
-                "transform point must contain finite coordinates".into(),
-            ));
+    /// Replaces the preview with one complete, monotonically numbered UI frame.
+    /// Returns `false` for a stale or byte-equivalent frame so callers can avoid
+    /// unnecessary Vello scene composition.
+    pub fn update(&mut self, frame: u64, elements: &[ElementFrame]) -> Result<bool> {
+        if self.last_frame.is_some_and(|previous| frame <= previous) {
+            return Ok(false);
         }
-        let dx = point.x - self.start.x;
-        let dy = point.y - self.start.y;
-        let mut previews = self.originals.clone();
-        match self.target {
-            HitTarget::Element(_) => {
-                for (preview, original) in previews.iter_mut().zip(&self.originals) {
-                    preview.frame = move_frame(preview.frame, dx, dy)?;
-                    preview.geometry = transformed_geometry(original, preview.frame);
-                }
-            }
-            HitTarget::Handle {
-                handle: Handle::Rotate,
-                ..
-            } => {
-                let current = pointer_angle(self.originals[0].frame, point);
-                if let Some(previous) = self.previous_rotation {
-                    self.rotation_delta += normalize_radians(current - previous);
-                }
-                self.previous_rotation = Some(current);
-                previews[0].frame = rotate_frame(self.originals[0].frame, self.rotation_delta)?;
-                previews[0].geometry = transformed_geometry(&self.originals[0], previews[0].frame);
-            }
-            HitTarget::Handle { handle, .. } => {
-                previews[0].frame = resize_frame(self.originals[0].frame, handle, dx, dy)?;
-                previews[0].geometry = transformed_geometry(&self.originals[0], previews[0].frame);
+        if elements.len() != self.originals.len() {
+            return Err(Error::Invalid(format!(
+                "transform frame contains {} elements; expected {}",
+                elements.len(),
+                self.originals.len()
+            )));
+        }
+
+        self.supplied.clear();
+        for element in elements {
+            let frame = checked_frame(element.frame)?;
+            if self.supplied.insert(element.element, frame).is_some() {
+                return Err(Error::Invalid(format!(
+                    "transform frame repeats element {}",
+                    element.element
+                )));
             }
         }
-        self.previews = previews;
-        Ok(())
+
+        for original in &self.originals {
+            if !self.supplied.contains_key(&original.element) {
+                return Err(Error::Invalid(format!(
+                    "transform frame is missing element {}",
+                    original.element
+                )));
+            }
+        }
+
+        let mut changed = false;
+        for (original, current) in self.originals.iter().zip(&mut self.previews) {
+            let frame = self.supplied[&original.element];
+            if current.frame == frame {
+                continue;
+            }
+            let next = ElementPreview {
+                element: original.element,
+                frame,
+                geometry: transformed_geometry(original, frame),
+            };
+            changed = true;
+            *current = next;
+        }
+        self.last_frame = Some(frame);
+        Ok(changed)
     }
 
     pub fn preview(&self, element: ElementId) -> Option<Frame> {
@@ -142,14 +121,14 @@ impl ActiveTransform {
     }
 
     pub fn finish(self) -> Option<TransformCommit> {
-        let elements: Vec<_> = self
+        let elements = self
             .previews
             .into_iter()
             .zip(self.originals)
             .filter_map(|(preview, original)| {
                 (preview.geometry != original.geometry).then_some(preview)
             })
-            .collect();
+            .collect::<Vec<_>>();
         (!elements.is_empty()).then_some(TransformCommit {
             page: self.page,
             elements,
@@ -201,110 +180,11 @@ pub(crate) fn frame_transform(original: Frame, preview: Frame) -> Affine {
     ])
 }
 
-impl HitTarget {
-    const fn element(self) -> ElementId {
-        match self {
-            Self::Element(element) | Self::Handle { element, .. } => element,
-        }
-    }
-}
-
-fn move_frame(frame: Frame, dx: f64, dy: f64) -> Result<Frame> {
-    checked_frame(Frame {
-        x: (f64::from(frame.x) + dx) as f32,
-        y: (f64::from(frame.y) + dy) as f32,
-        ..frame
-    })
-}
-
-fn resize_frame(frame: Frame, handle: Handle, dx: f64, dy: f64) -> Result<Frame> {
-    let angle = f64::from(frame.angle_degrees).to_radians();
-    let (sin, cos) = angle.sin_cos();
-    let local_dx = dx * cos + dy * sin;
-    let local_dy = -dx * sin + dy * cos;
-    let mut left = -f64::from(frame.width) * 0.5;
-    let mut right = f64::from(frame.width) * 0.5;
-    let mut top = -f64::from(frame.height) * 0.5;
-    let mut bottom = f64::from(frame.height) * 0.5;
-
-    match handle {
-        Handle::NorthWest | Handle::West | Handle::SouthWest => left += local_dx,
-        Handle::North | Handle::South | Handle::Rotate => {}
-        Handle::NorthEast | Handle::East | Handle::SouthEast => right += local_dx,
-    }
-    match handle {
-        Handle::NorthWest | Handle::North | Handle::NorthEast => top += local_dy,
-        Handle::East | Handle::West | Handle::Rotate => {}
-        Handle::SouthEast | Handle::South | Handle::SouthWest => bottom += local_dy,
-    }
-
-    if right - left < 1.0 {
-        if matches!(handle, Handle::NorthWest | Handle::West | Handle::SouthWest) {
-            left = right - 1.0;
-        } else {
-            right = left + 1.0;
-        }
-    }
-    if bottom - top < 1.0 {
-        if matches!(
-            handle,
-            Handle::NorthWest | Handle::North | Handle::NorthEast
-        ) {
-            top = bottom - 1.0;
-        } else {
-            bottom = top + 1.0;
-        }
-    }
-
-    let local_center_x = (left + right) * 0.5;
-    let local_center_y = (top + bottom) * 0.5;
-    let center_offset_x = local_center_x * cos - local_center_y * sin;
-    let center_offset_y = local_center_x * sin + local_center_y * cos;
-    let width = right - left;
-    let height = bottom - top;
-    let center_x = f64::from(frame.x) + f64::from(frame.width) * 0.5 + center_offset_x;
-    let center_y = f64::from(frame.y) + f64::from(frame.height) * 0.5 + center_offset_y;
-    checked_frame(Frame {
-        x: (center_x - width * 0.5) as f32,
-        y: (center_y - height * 0.5) as f32,
-        width: width as f32,
-        height: height as f32,
-        ..frame
-    })
-}
-
-fn rotate_frame(frame: Frame, delta: f64) -> Result<Frame> {
-    checked_frame(Frame {
-        angle_degrees: (f64::from(frame.angle_degrees) + delta.to_degrees()) as f32,
-        ..frame
-    })
-}
-
-fn pointer_angle(frame: Frame, point: PagePoint) -> f64 {
-    let center_x = f64::from(frame.x) + f64::from(frame.width) * 0.5;
-    let center_y = f64::from(frame.y) + f64::from(frame.height) * 0.5;
-    (point.y - center_y).atan2(point.x - center_x)
-}
-
-fn normalize_radians(angle: f64) -> f64 {
-    (angle + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI
-}
-
 fn checked_frame(frame: Frame) -> Result<Frame> {
-    if frame.x.is_finite()
-        && frame.y.is_finite()
-        && frame.width.is_finite()
-        && frame.width > 0.0
-        && frame.height.is_finite()
-        && frame.height > 0.0
-        && frame.angle_degrees.is_finite()
-    {
-        Ok(frame)
-    } else {
-        Err(Error::Invalid(
-            "element transform produced an invalid frame".into(),
-        ))
-    }
+    frame
+        .is_valid()
+        .then_some(frame)
+        .ok_or_else(|| Error::Invalid("transform frame must be finite and non-empty".into()))
 }
 
 #[cfg(test)]
@@ -337,12 +217,21 @@ mod tests {
             .zip(frames.iter().copied())
             .map(|(id, frame)| CanvasElement {
                 id,
-                geometry: geometry(frame),
+                geometry: Geometry {
+                    origin: koharu_scene::Origin::User,
+                    points: crate::frame_corners(frame)
+                        .into_iter()
+                        .map(|point| Point {
+                            x: point.x,
+                            y: point.y,
+                        })
+                        .collect(),
+                },
                 frame,
                 visible: true,
                 opacity: 1.0,
                 image: None,
-                has_text: false,
+                has_text: true,
             })
             .collect();
         (
@@ -357,170 +246,70 @@ mod tests {
         )
     }
 
-    fn page_with_frame(frame: Frame) -> (CanvasPage, ElementId) {
-        let (page, ids) = page_with_frames(&[frame]);
-        (page, ids[0])
-    }
-
-    fn geometry(frame: Frame) -> Geometry {
-        Geometry {
-            origin: koharu_scene::Origin::User,
-            points: crate::frame_corners(frame)
-                .into_iter()
-                .map(|point| Point {
-                    x: point.x,
-                    y: point.y,
-                })
-                .collect(),
-        }
-    }
-
     #[test]
-    fn moving_translates_every_selected_element() {
-        let (page, ids) = page_with_frames(&[
-            Frame::new(10.0, 20.0, 40.0, 30.0),
-            Frame::new(80.0, 90.0, 20.0, 10.0),
-        ]);
-        let [first, second] = ids[..] else {
-            unreachable!()
-        };
-        let mut transform = ActiveTransform::new(
-            &page,
-            &[first, second],
-            HitTarget::Element(first),
-            PagePoint::new(5.0, 7.0),
-        )
-        .unwrap();
-
-        transform.update(PagePoint::new(17.0, 3.0)).unwrap();
-        let commit = transform.finish().unwrap();
-
-        assert_eq!(commit.elements[0].frame.x, 22.0);
-        assert_eq!(commit.elements[0].frame.y, 16.0);
-        assert_eq!(commit.elements[1].frame.x, 92.0);
-        assert_eq!(commit.elements[1].frame.y, 86.0);
-    }
-
-    #[test]
-    fn rotated_resize_preserves_the_opposite_edge() {
-        let frame = Frame {
+    fn frame_transform_maps_centers_and_dimensions() {
+        let original = Frame::new(10.0, 20.0, 30.0, 40.0);
+        let preview = Frame {
+            x: 50.0,
+            y: 60.0,
+            width: 60.0,
+            height: 20.0,
             angle_degrees: 90.0,
-            ..Frame::new(0.0, 0.0, 100.0, 50.0)
         };
-        let resized = resize_frame(frame, Handle::East, 0.0, 20.0).unwrap();
-
-        assert!((resized.width - 120.0).abs() < 1e-5);
-        assert!((resized.height - 50.0).abs() < 1e-5);
-        assert!((resized.x + 10.0).abs() < 1e-5);
-        assert!((resized.y - 10.0).abs() < 1e-5);
+        let mapped = frame_transform(original, preview) * KurboPoint::new(25.0, 40.0);
+        assert!((mapped.x - 80.0).abs() < 1e-5);
+        assert!((mapped.y - 70.0).abs() < 1e-5);
     }
 
     #[test]
-    fn every_resize_handle_preserves_its_opposite_anchor() {
-        fn midpoint(a: PagePoint, b: PagePoint) -> PagePoint {
-            PagePoint::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
-        }
-
-        fn opposite_anchor(frame: Frame, handle: Handle) -> PagePoint {
-            let [north_west, north_east, south_east, south_west] = crate::frame_corners(frame);
-            match handle {
-                Handle::NorthWest => south_east,
-                Handle::North => midpoint(south_east, south_west),
-                Handle::NorthEast => south_west,
-                Handle::East => midpoint(south_west, north_west),
-                Handle::SouthEast => north_west,
-                Handle::South => midpoint(north_west, north_east),
-                Handle::SouthWest => north_east,
-                Handle::West => midpoint(north_east, south_east),
-                Handle::Rotate => unreachable!(),
-            }
-        }
-
-        let frame = Frame {
-            angle_degrees: 37.0,
-            ..Frame::new(20.0, 30.0, 120.0, 70.0)
-        };
-        for handle in [
-            Handle::NorthWest,
-            Handle::North,
-            Handle::NorthEast,
-            Handle::East,
-            Handle::SouthEast,
-            Handle::South,
-            Handle::SouthWest,
-            Handle::West,
-        ] {
-            let before = opposite_anchor(frame, handle);
-            let resized = resize_frame(frame, handle, 19.0, -13.0).unwrap();
-            let after = opposite_anchor(resized, handle);
-            assert!((before.x - after.x).abs() < 1e-4, "{handle:?}");
-            assert!((before.y - after.y).abs() < 1e-4, "{handle:?}");
-        }
+    fn invalid_preview_frames_are_rejected() {
+        assert!(checked_frame(Frame::new(0.0, 0.0, 0.0, 10.0)).is_err());
+        assert!(checked_frame(Frame::new(f32::NAN, 0.0, 10.0, 10.0)).is_err());
     }
 
     #[test]
-    fn resizing_only_changes_the_handle_owner() {
-        let (page, ids) = page_with_frames(&[
+    fn update_requires_complete_frames_and_ignores_stale_samples() {
+        let originals = [
             Frame::new(10.0, 20.0, 40.0, 30.0),
             Frame::new(80.0, 90.0, 20.0, 10.0),
-        ]);
-        let [first, second] = ids[..] else {
-            unreachable!()
-        };
-        let mut transform = ActiveTransform::new(
-            &page,
-            &[first, second],
-            HitTarget::Handle {
-                element: first,
-                handle: Handle::East,
+        ];
+        let (page, ids) = page_with_frames(&originals);
+        let mut transform = ActiveTransform::new(&page, &ids).unwrap();
+        let moved = [
+            ElementFrame {
+                element: ids[0],
+                frame: Frame::new(15.0, 25.0, 40.0, 30.0),
             },
-            PagePoint::new(50.0, 35.0),
-        )
-        .unwrap();
-
-        transform.update(PagePoint::new(60.0, 35.0)).unwrap();
-        let commit = transform.finish().unwrap();
-
-        assert_eq!(commit.elements.len(), 1);
-        assert_eq!(commit.elements[0].element, first);
-        assert_eq!(commit.elements[0].frame.width, 50.0);
-    }
-
-    #[test]
-    fn rotation_uses_pointer_angle_around_the_frame_center() {
-        let (page, element) = page_with_frame(Frame::new(0.0, 0.0, 100.0, 50.0));
-        let mut transform = ActiveTransform::new(
-            &page,
-            &[element],
-            HitTarget::Handle {
-                element,
-                handle: Handle::Rotate,
+            ElementFrame {
+                element: ids[1],
+                frame: Frame::new(85.0, 95.0, 20.0, 10.0),
             },
-            PagePoint::new(50.0, -25.0),
-        )
-        .unwrap();
+        ];
 
-        transform.update(PagePoint::new(100.0, 25.0)).unwrap();
-        let frame = transform.finish().unwrap().elements[0].frame;
-
-        assert!((frame.angle_degrees - 90.0).abs() < 1e-5);
-        assert_eq!(
-            (frame.x, frame.y, frame.width, frame.height),
-            (0.0, 0.0, 100.0, 50.0)
+        assert!(transform.update(2, &moved).unwrap());
+        assert!(
+            !transform
+                .update(
+                    1,
+                    &[
+                        ElementFrame {
+                            element: ids[0],
+                            frame: originals[0],
+                        },
+                        ElementFrame {
+                            element: ids[1],
+                            frame: originals[1],
+                        },
+                    ],
+                )
+                .unwrap()
         );
-    }
+        assert_eq!(transform.preview(ids[0]), Some(moved[0].frame));
+        assert!(transform.update(3, &moved[..1]).is_err());
 
-    #[test]
-    fn cancelling_by_dropping_does_not_produce_a_commit() {
-        let (page, element) = page_with_frame(Frame::new(0.0, 0.0, 100.0, 50.0));
-        let transform = ActiveTransform::new(
-            &page,
-            &[element],
-            HitTarget::Element(element),
-            PagePoint::new(0.0, 0.0),
-        )
-        .unwrap();
-
-        assert!(transform.finish().is_none());
+        let commit = transform.finish().unwrap();
+        assert_eq!(commit.elements.len(), 2);
+        assert_eq!(commit.elements[0].frame, moved[0].frame);
+        assert_eq!(commit.elements[1].frame, moved[1].frame);
     }
 }

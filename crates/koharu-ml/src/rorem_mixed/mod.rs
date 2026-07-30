@@ -39,31 +39,6 @@ pub struct RoremMixed {
 }
 
 impl RoremMixed {
-    #[must_use]
-    pub fn is_downloaded() -> bool {
-        [
-            DIFFUSION_MODEL,
-            SDXL_VERSION_MARKER,
-            VAE_MODEL,
-            CLIP_L_MODEL,
-            CLIP_G_MODEL,
-        ]
-        .into_iter()
-        .all(koharu_runtime::package::huggingface::is_resolved)
-    }
-
-    pub async fn download() -> Result<()> {
-        tokio::try_join!(
-            huggingface::resolve(DIFFUSION_MODEL),
-            huggingface::resolve(SDXL_VERSION_MARKER),
-            huggingface::resolve(VAE_MODEL),
-            huggingface::resolve(CLIP_L_MODEL),
-            huggingface::resolve(CLIP_G_MODEL),
-        )
-        .context("failed to download RORem mixed assets")?;
-        Ok(())
-    }
-
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (diffusion_model, version_marker, vae, clip_l, clip_g) = tokio::try_join!(
             huggingface::resolve(DIFFUSION_MODEL),

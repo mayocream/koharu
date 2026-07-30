@@ -37,17 +37,6 @@ pub struct KoharuLayoutRFDetrSeg2XL {
 }
 
 impl KoharuLayoutRFDetrSeg2XL {
-    #[must_use]
-    pub fn is_downloaded() -> bool {
-        [CONFIG, WEIGHTS].into_iter().all(huggingface::is_resolved)
-    }
-
-    pub async fn download() -> Result<()> {
-        tokio::try_join!(huggingface::resolve(CONFIG), huggingface::resolve(WEIGHTS),)
-            .context("failed to download Koharu Layout RF-DETR assets")?;
-        Ok(())
-    }
-
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = huggingface::resolve(CONFIG)

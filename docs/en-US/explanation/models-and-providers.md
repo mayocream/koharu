@@ -59,7 +59,7 @@ In practice, the local models are usually quantized decoder-only transformers. G
 
 The local picker also includes general-purpose families that are not translation-specific:
 
-The default local translator is `gemma4-12b-it`.
+The default local translator is `qwen3.5-0.8b`.
 
 - LFM2.5 Instruct: `lfm2.5-1.2b-instruct`
 - Ministral 3 Instruct: `ministral-3-8b-instruct`

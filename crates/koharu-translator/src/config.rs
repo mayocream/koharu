@@ -58,7 +58,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_gemma_4_12b() {
+    fn defaults_to_gemma_4_12b_it() {
         let Providers::Local(config) = TranslationConfig::default().model else {
             panic!("expected local translation configuration");
         };

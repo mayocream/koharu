@@ -5,14 +5,13 @@ use std::{
 
 use crate::{
     BlobBatch, BlobId, ComponentAddress, ComponentKey, ComponentRecord, DocumentId, Edit, Patch,
-    PatchId, RecordId, RecordRef, Result, Revision, blob::BlobStore, state::State,
+    RecordId, RecordRef, Result, Revision, blob::BlobStore, state::State,
 };
 
 #[derive(Clone)]
 pub struct Snapshot {
     pub(crate) state: Arc<State>,
     pub(crate) blobs: Arc<BlobStore>,
-    lineage: Arc<BTreeSet<PatchId>>,
     overlay: Arc<BTreeMap<BlobId, Arc<[u8]>>>,
     _lease: Arc<BTreeSet<BlobId>>,
 }
@@ -24,7 +23,6 @@ impl std::fmt::Debug for Snapshot {
             .field("document", &self.state.document)
             .field("revision", &self.state.revision)
             .field("records", &self.state.records.len())
-            .field("preview_segments", &self.lineage.len())
             .finish()
     }
 }
@@ -35,7 +33,6 @@ impl Snapshot {
         Self {
             state,
             blobs,
-            lineage: Arc::new(BTreeSet::new()),
             overlay: Arc::new(BTreeMap::new()),
             _lease: lease,
         }
@@ -113,7 +110,7 @@ impl Snapshot {
 
     #[must_use]
     pub fn edit(&self) -> Edit {
-        Edit::new(self.state.clone(), (*self.lineage).clone())
+        Edit::new(self.state.clone())
     }
 
     pub fn patch(&self, f: impl FnOnce(&mut Edit) -> Result<()>) -> Result<Patch> {
@@ -124,16 +121,14 @@ impl Snapshot {
 
     pub fn preview<'a>(&self, patches: impl IntoIterator<Item = &'a Patch>) -> Result<Self> {
         let mut state = (*self.state).clone();
-        let mut lineage = (*self.lineage).clone();
         let mut overlay = (*self.overlay).clone();
         let mut affected_blobs = BTreeSet::new();
         for patch in patches {
             for operation in patch.operations() {
                 operation.blob_refs(&mut affected_blobs);
             }
-            let (next, next_lineage, attachments) = patch.apply(&state, &lineage)?;
+            let (next, attachments) = patch.apply(&state)?;
             state = next;
-            lineage = next_lineage;
             overlay.extend(attachments);
         }
         for id in affected_blobs {
@@ -149,13 +144,8 @@ impl Snapshot {
         Ok(Self {
             state,
             blobs: self.blobs.clone(),
-            lineage: Arc::new(lineage),
             overlay: Arc::new(overlay),
             _lease: lease,
         })
-    }
-
-    pub(crate) fn lineage(&self) -> &BTreeSet<PatchId> {
-        &self.lineage
     }
 }

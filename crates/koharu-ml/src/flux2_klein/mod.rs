@@ -125,23 +125,6 @@ pub struct Flux2KleinInpaint {
 }
 
 impl Flux2KleinInpaint {
-    #[must_use]
-    pub fn is_downloaded() -> bool {
-        [TRANSFORMER_WEIGHTS, TEXT_ENCODER_WEIGHTS, VAE_WEIGHTS]
-            .into_iter()
-            .all(koharu_runtime::package::huggingface::is_resolved)
-    }
-
-    pub async fn download() -> Result<()> {
-        tokio::try_join!(
-            huggingface::resolve(TRANSFORMER_WEIGHTS),
-            huggingface::resolve(TEXT_ENCODER_WEIGHTS),
-            huggingface::resolve(VAE_WEIGHTS),
-        )
-        .context("failed to download FLUX.2 Klein assets")?;
-        Ok(())
-    }
-
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (transformer, text_encoder, vae) = tokio::try_join!(
             huggingface::resolve(TRANSFORMER_WEIGHTS),

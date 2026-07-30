@@ -94,7 +94,11 @@ pub(crate) fn is_cjk_text(text: &str) -> bool {
     text.chars().any(|character| {
         matches!(
             script_map.get(character),
-            IcuScript::Han | IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Bopomofo
+            IcuScript::Han
+                | IcuScript::Hiragana
+                | IcuScript::Katakana
+                | IcuScript::Bopomofo
+                | IcuScript::Hangul
         )
     })
 }
@@ -124,5 +128,11 @@ mod tests {
         let (direction, script) = shaping_direction_for_text("مرحبا", WritingMode::Horizontal);
         assert_eq!(direction, Direction::RightToLeft);
         assert_eq!(script.unwrap().tag(), Tag::new(b"Arab"));
+    }
+
+    #[test]
+    fn cjk_detection_includes_korean() {
+        assert!(is_cjk_text("한국어"));
+        assert!(!is_cjk_text("English"));
     }
 }

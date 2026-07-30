@@ -7,15 +7,14 @@ use std::{
 use crate::{Project, classify_error, failure};
 use anyhow::{Result, anyhow};
 use koharu_canvas::{
-    Brush, BrushCursor, Camera, DisplayState, Guide as CanvasGuide, Handle as CanvasHandle,
-    HitTarget as CanvasHitTarget, MaskOverlay as CanvasMaskOverlay, MaskPlane as CanvasMaskPlane,
-    OverlayState, PageView as NativePageView, PhysicalPoint, StrokeMode,
+    Brush, Camera, DisplayState, ElementFrame, MaskOverlay as CanvasMaskOverlay,
+    MaskPlane as CanvasMaskPlane, PageView as NativePageView, PhysicalPoint, StrokeMode,
 };
 use koharu_config::Config;
 use koharu_desktop::{
     Application, DesktopContext, Frontend, MaskEncodingResult, Options as DesktopOptions,
 };
-use koharu_pipeline::{CancellationToken, PipelineConfig};
+use koharu_pipeline::{PipelineConfig, StopToken};
 use koharu_scene::{
     Asset, AssetMetadata, BlobId, EntityId, LanguageTag, Revision, SceneChangeSet, SceneComponent,
     SceneSession,
@@ -28,8 +27,8 @@ use crate::{
     jobs::{Background, ExportRequest, NativeEvent, PipelineRequest},
     protocol::{
         AppCommand, AppError, AppErrorCode, AppEvent, BridgeMessage, CanvasInteraction,
-        CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, Handle,
-        HitTarget, JobKind, JobStatus, MaskPlane, RequestId, SettingsView, TargetLanguageView,
+        CanvasPageView, DownloadStatus, FontFaceStyleView, FontFaceView, FontSourceView, JobKind,
+        JobStatus, MaskPlane, RequestId, SettingsView, SystemResourcesView, TargetLanguageView,
         TranslationSettings,
     },
     resources::Resources,
@@ -107,6 +106,7 @@ pub struct App {
     fonts: Vec<FontFaceView>,
     jobs: HashMap<RequestId, RunningJob>,
     downloads: HashMap<u64, DownloadStatus>,
+    system_resources: SystemResourcesView,
     pending_masks: HashSet<(EntityId, CanvasMaskPlane, u64)>,
     initial_path: Option<PathBuf>,
     initialization_error: Option<String>,
@@ -116,7 +116,7 @@ pub struct App {
 }
 
 struct RunningJob {
-    cancellation: CancellationToken,
+    stop: StopToken,
     status: JobStatus,
 }
 
@@ -143,6 +143,7 @@ impl App {
             fonts,
             jobs: HashMap::new(),
             downloads: HashMap::new(),
+            system_resources: SystemResourcesView::default(),
             pending_masks: HashSet::new(),
             initial_path,
             initialization_error: None,
@@ -172,7 +173,7 @@ impl App {
         desktop: &mut DesktopContext<'_, NativeEvent>,
     ) -> Result<()> {
         for job in self.jobs.values() {
-            job.cancellation.cancel();
+            job.stop.stop();
         }
         self.jobs.clear();
         self.pending_masks.clear();
@@ -186,7 +187,7 @@ impl App {
 
     fn close(&mut self, desktop: &mut DesktopContext<'_, NativeEvent>) -> Result<()> {
         for job in self.jobs.values() {
-            job.cancellation.cancel();
+            job.stop.stop();
         }
         self.jobs.clear();
         self.pending_masks.clear();
@@ -252,7 +253,7 @@ impl App {
             && !matches!(
                 &command,
                 AppCommand::Synchronize
-                    | AppCommand::CancelJob { .. }
+                    | AppCommand::StopJob { .. }
                     | AppCommand::GetSettings
                     | AppCommand::SetSettings { .. }
             )
@@ -308,19 +309,20 @@ impl App {
                 self.ensure_free_job(id)?;
                 self.ensure_job_kind_available(JobKind::Import)?;
                 let path = self.project_path()?.to_owned();
-                let cancellation = self.background.import(id, path, files, desktop.handle())?;
+                let stop = self.background.import(id, path, files, desktop.handle())?;
                 let status = JobStatus::Running {
                     id,
                     kind: JobKind::Import,
                     completed: 0,
                     total: 0,
+                    page: None,
                     phase: None,
                     model: None,
                 };
                 self.jobs.insert(
                     id,
                     RunningJob {
-                        cancellation,
+                        stop,
                         status: status.clone(),
                     },
                 );
@@ -333,16 +335,16 @@ impl App {
             AppCommand::Redo => {
                 return self.redo(desktop, base).map(CommandOutcome::Accepted);
             }
-            AppCommand::RunPipeline { scope, target } => {
+            AppCommand::RunPipeline { scope, operation } => {
                 self.require_base(base)?;
                 self.ensure_free_job(id)?;
                 self.ensure_job_kind_available(JobKind::Pipeline)?;
-                let cancellation = self.background.run_pipeline(
+                let stop = self.background.run_pipeline(
                     PipelineRequest {
                         id,
                         path: self.project_path()?.to_owned(),
                         scope,
-                        target,
+                        operation,
                     },
                     desktop.handle(),
                 )?;
@@ -351,28 +353,29 @@ impl App {
                     kind: JobKind::Pipeline,
                     completed: 0,
                     total: 0,
+                    page: None,
                     phase: None,
                     model: None,
                 };
                 self.jobs.insert(
                     id,
                     RunningJob {
-                        cancellation,
+                        stop,
                         status: status.clone(),
                     },
                 );
                 desktop.emit(EVENT_NAME, AppEvent::JobChanged(status))?;
                 return Ok(CommandOutcome::Accepted(base));
             }
-            AppCommand::CancelJob { job } => {
+            AppCommand::StopJob { job } => {
                 self.require_base(base)?;
                 self.jobs
                     .get(&job)
                     .ok_or_else(|| {
                         app_failure(AppErrorCode::NotFound, format!("job {job} is not running"))
                     })?
-                    .cancellation
-                    .cancel();
+                    .stop
+                    .stop();
                 return Ok(CommandOutcome::Accepted(base));
             }
             AppCommand::ExportPages { pages, format } => {
@@ -397,7 +400,7 @@ impl App {
                         "there are no pages to export",
                     ));
                 }
-                let cancellation = self.background.export(
+                let stop = self.background.export(
                     ExportRequest {
                         id,
                         snapshot: self.session()?.snapshot(),
@@ -413,13 +416,14 @@ impl App {
                     kind: JobKind::Export,
                     completed: 0,
                     total: 0,
+                    page: None,
                     phase: None,
                     model: None,
                 };
                 self.jobs.insert(
                     id,
                     RunningJob {
-                        cancellation,
+                        stop,
                         status: status.clone(),
                     },
                 );
@@ -454,6 +458,8 @@ impl App {
             } => {
                 let (translation, credentials) = (*translation).into_parts()?;
                 koharu_pipeline::Pipeline::new(pipeline.clone(), translation.clone())?;
+                let target_language_changed =
+                    self.translation.read()?.target_language != translation.target_language;
                 let locale = LanguageTag::new(translation.target_language.clone())?;
                 {
                     let mut current = self.pipeline.write()?;
@@ -469,7 +475,9 @@ impl App {
                 self.background.reconfigure(pipeline, translation)?;
                 desktop.canvas().set_locale(Some(locale.clone()));
                 self.emit_settings(desktop)?;
-                if let Some(page) = self.project.as_ref().and_then(Project::visible_page) {
+                if target_language_changed
+                    && let Some(page) = self.project.as_ref().and_then(Project::visible_page)
+                {
                     desktop.emit(
                         EVENT_NAME,
                         AppEvent::PageLoaded {
@@ -614,54 +622,19 @@ impl App {
                 };
                 desktop.set_view(view);
             }
-            CanvasInteraction::SetOverlays {
-                selected,
-                hovered,
-                draft,
-                guides,
-                show_text_bounds,
-                brush_cursor,
-            } => desktop.set_overlays(OverlayState {
-                selected,
-                hovered,
-                draft: draft.map(canvas_frame),
-                guides: guides
-                    .into_iter()
-                    .map(|guide| match guide {
-                        crate::protocol::CanvasGuide::Horizontal(position) => {
-                            CanvasGuide::Horizontal(position)
-                        }
-                        crate::protocol::CanvasGuide::Vertical(position) => {
-                            CanvasGuide::Vertical(position)
-                        }
-                    })
-                    .collect(),
-                show_text_bounds,
-                brush_cursor: brush_cursor.map(|cursor| BrushCursor {
-                    point: PhysicalPoint::new(cursor.x, cursor.y),
-                    diameter: cursor.diameter,
-                }),
-            }),
-            CanvasInteraction::HitTest { id, x, y } => {
-                let target = desktop
-                    .canvas()
-                    .hit_test(PhysicalPoint::new(x, y))
-                    .map(hit_target);
-                desktop.emit(EVENT_NAME, AppEvent::HitTest { id, target })?;
+            CanvasInteraction::BeginTransform { elements } => {
+                desktop.canvas().begin_transform(&elements)?
             }
-            CanvasInteraction::BeginTransform {
-                elements,
-                target,
-                x,
-                y,
-            } => desktop.canvas().begin_transform(
-                &elements,
-                canvas_hit_target(target),
-                PhysicalPoint::new(x, y),
-            )?,
-            CanvasInteraction::UpdateTransform { x, y } => desktop
-                .canvas()
-                .update_transform(PhysicalPoint::new(x, y))?,
+            CanvasInteraction::UpdateTransform { frame, elements } => {
+                let elements = elements
+                    .into_iter()
+                    .map(|element| ElementFrame {
+                        element: element.element,
+                        frame: canvas_frame(element.frame),
+                    })
+                    .collect::<Vec<_>>();
+                desktop.canvas().update_transform(frame, &elements)?;
+            }
             CanvasInteraction::CancelTransform => desktop.canvas().cancel_transform(),
             CanvasInteraction::BeginMaskStroke {
                 plane,
@@ -844,6 +817,12 @@ impl App {
         self.emit_project(desktop)?;
         self.emit_settings(desktop)?;
         self.emit_view(desktop)?;
+        desktop.emit(
+            EVENT_NAME,
+            AppEvent::ResourcesChanged {
+                resources: self.system_resources.clone(),
+            },
+        )?;
         for job in self.jobs.values() {
             desktop.emit(EVENT_NAME, AppEvent::JobChanged(job.status.clone()))?;
         }
@@ -977,6 +956,7 @@ impl Application for App {
 
     fn started(&mut self, desktop: &mut DesktopContext<'_, Self::Event>) -> Result<()> {
         self.background.subscribe_downloads(desktop.handle());
+        self.background.subscribe_resources(desktop.handle());
         start_runtime_initialization(desktop.handle());
         Ok(())
     }
@@ -1114,6 +1094,18 @@ impl Application for App {
                 );
                 desktop.emit(EVENT_NAME, AppEvent::DownloadChanged(status))
             }
+            NativeEvent::Resources(snapshot) => {
+                self.system_resources = snapshot.into();
+                if self.frontend_ready {
+                    desktop.emit(
+                        EVENT_NAME,
+                        AppEvent::ResourcesChanged {
+                            resources: self.system_resources.clone(),
+                        },
+                    )?;
+                }
+                Ok(())
+            }
             NativeEvent::ProjectAdvanced { job } => {
                 if self.jobs.contains_key(&job) {
                     self.refresh(desktop)?;
@@ -1124,6 +1116,7 @@ impl Application for App {
                 job,
                 completed,
                 total,
+                page,
                 stage,
                 model,
             } => {
@@ -1135,6 +1128,7 @@ impl Application for App {
                     kind: JobKind::Pipeline,
                     completed,
                     total,
+                    page,
                     phase: stage,
                     model,
                 };
@@ -1154,6 +1148,7 @@ impl Application for App {
                     kind: JobKind::Import,
                     completed,
                     total,
+                    page: None,
                     phase: None,
                     model: None,
                 };
@@ -1173,6 +1168,7 @@ impl Application for App {
                     kind: JobKind::Export,
                     completed,
                     total,
+                    page: None,
                     phase: None,
                     model: None,
                 };
@@ -1183,7 +1179,7 @@ impl Application for App {
                 job,
                 revisions,
                 pages: _,
-                cancelled,
+                stopped,
                 error,
             } => {
                 if self.jobs.remove(&job).is_none() {
@@ -1195,8 +1191,8 @@ impl Application for App {
                     let delta = self.project()?.history_delta();
                     desktop.emit(EVENT_NAME, AppEvent::ProjectChanged(Box::new(delta)))?;
                 }
-                let status = if cancelled {
-                    JobStatus::Cancelled { id: job }
+                let status = if stopped {
+                    JobStatus::Stopped { id: job }
                 } else if let Some(error) = error {
                     JobStatus::Failed { id: job, error }
                 } else {
@@ -1254,7 +1250,7 @@ impl Application for App {
 
     fn close_requested(&mut self, _desktop: &mut DesktopContext<'_, Self::Event>) -> Result<bool> {
         for job in self.jobs.values() {
-            job.cancellation.cancel();
+            job.stop.stop();
         }
         Ok(self.pending_masks.is_empty())
     }
@@ -1330,46 +1326,6 @@ const fn mask_plane(plane: MaskPlane) -> CanvasMaskPlane {
     match plane {
         MaskPlane::Text => CanvasMaskPlane::Text,
         MaskPlane::Brush => CanvasMaskPlane::Brush,
-    }
-}
-
-fn hit_target(target: CanvasHitTarget) -> HitTarget {
-    match target {
-        CanvasHitTarget::Element(element) => HitTarget::Element { element },
-        CanvasHitTarget::Handle { element, handle } => HitTarget::Handle {
-            element,
-            handle: match handle {
-                CanvasHandle::NorthWest => Handle::NorthWest,
-                CanvasHandle::North => Handle::North,
-                CanvasHandle::NorthEast => Handle::NorthEast,
-                CanvasHandle::East => Handle::East,
-                CanvasHandle::SouthEast => Handle::SouthEast,
-                CanvasHandle::South => Handle::South,
-                CanvasHandle::SouthWest => Handle::SouthWest,
-                CanvasHandle::West => Handle::West,
-                CanvasHandle::Rotate => Handle::Rotate,
-            },
-        },
-    }
-}
-
-const fn canvas_hit_target(target: HitTarget) -> CanvasHitTarget {
-    match target {
-        HitTarget::Element { element } => CanvasHitTarget::Element(element),
-        HitTarget::Handle { element, handle } => CanvasHitTarget::Handle {
-            element,
-            handle: match handle {
-                Handle::NorthWest => CanvasHandle::NorthWest,
-                Handle::North => CanvasHandle::North,
-                Handle::NorthEast => CanvasHandle::NorthEast,
-                Handle::East => CanvasHandle::East,
-                Handle::SouthEast => CanvasHandle::SouthEast,
-                Handle::South => CanvasHandle::South,
-                Handle::SouthWest => CanvasHandle::SouthWest,
-                Handle::West => CanvasHandle::West,
-                Handle::Rotate => CanvasHandle::Rotate,
-            },
-        },
     }
 }
 

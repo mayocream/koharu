@@ -27,12 +27,15 @@ static LIBTORCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| STORE_DIR.join("libtor
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumProperty)]
 pub enum Libtorch {
+    // The macOS order is intentionally root-first. Loading libc10 as a
+    // separate RTLD_LOCAL image before libtorch_cpu prevents dyld from
+    // resolving libc10's weak C++ definitions inside LibTorch's image group.
     #[strum(
         serialize = "cpu",
         props(
             windows_dylibs = "libiomp5md.dll,libiompstubs5md.dll,uv.dll,c10.dll,torch_global_deps.dll,torch_cpu.dll,shm.dll,torch.dll",
             linux_dylibs = "libgomp.so.1,libc10.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch.so",
-            macos_arm64_dylibs = "libomp.dylib,libc10.dylib,libshm.dylib,libtorch_global_deps.dylib,libtorch_cpu.dylib,libtorch.dylib"
+            macos_arm64_dylibs = "libtorch.dylib,libshm.dylib,libtorch_global_deps.dylib,libtorch_cpu.dylib,libc10.dylib,libomp.dylib"
         )
     )]
     Cpu,

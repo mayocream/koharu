@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, anyhow};
-use koharu_canvas::{Canvas, MaskCommit, OverlayState, ViewState};
+use koharu_canvas::{Canvas, MaskCommit, ViewState};
 use koharu_scene::{EntityId, SceneChangeSet, SceneSnapshot};
 use serde::Serialize;
 use serde_json::Value;
@@ -316,11 +316,6 @@ impl<E: Send + 'static> DesktopContext<'_, E> {
 
     pub fn set_view(&mut self, view: ViewState) {
         self.renderer.set_view(view);
-        self.request_redraw();
-    }
-
-    pub fn set_overlays(&mut self, overlays: OverlayState) {
-        self.renderer.canvas().set_overlays(overlays);
         self.request_redraw();
     }
 

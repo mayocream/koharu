@@ -62,13 +62,9 @@ pub(crate) struct NormalizedScope {
 }
 
 impl NormalizedScope {
-    pub(crate) fn new(
-        snapshot: &SceneSnapshot,
-        scope: &Scope,
-        selected: &BTreeSet<Stage>,
-    ) -> Result<Self> {
+    pub(crate) fn new(snapshot: &SceneSnapshot, scope: &Scope, stages: &[Stage]) -> Result<Self> {
         if matches!(scope, Scope::Entities(_))
-            && selected
+            && stages
                 .iter()
                 .any(|stage| matches!(stage, Stage::Detection | Stage::Inpainting))
         {
@@ -137,33 +133,36 @@ impl NormalizedScope {
         &self.pages
     }
 
-    pub(crate) fn contains_entity(
-        &self,
-        snapshot: &SceneSnapshot,
-        entity: EntityId,
-    ) -> Result<bool> {
-        if let Some(entities) = &self.entities {
-            return Ok(entities.contains(&entity));
-        }
-        let page = containing_page(snapshot, entity)?;
-        if !self.pages.contains(&page) {
-            return Ok(false);
-        }
-        let Some((region_page, bounds)) = self.region else {
-            return Ok(true);
-        };
-        if page != region_page {
-            return Ok(false);
-        }
-        Ok(snapshot
-            .component::<Geometry>(entity, "default")?
-            .is_some_and(|geometry| bounds.intersects(&geometry)))
+    pub(crate) fn entities(&self) -> Option<Arc<BTreeSet<EntityId>>> {
+        self.entities.clone()
     }
 
     pub(crate) fn region(&self, page: EntityId) -> Option<Bounds> {
+        debug_assert!(self.pages.contains(&page));
         self.region
             .and_then(|(candidate, bounds)| (candidate == page).then_some(bounds))
     }
+}
+
+pub(crate) fn contains_entity(
+    snapshot: &SceneSnapshot,
+    page: EntityId,
+    entities: Option<&BTreeSet<EntityId>>,
+    region: Option<Bounds>,
+    entity: EntityId,
+) -> Result<bool> {
+    if containing_page(snapshot, entity)? != page {
+        return Ok(false);
+    }
+    if let Some(entities) = entities {
+        return Ok(entities.contains(&entity));
+    }
+    let Some(bounds) = region else {
+        return Ok(true);
+    };
+    Ok(snapshot
+        .component::<Geometry>(entity, "default")?
+        .is_some_and(|geometry| bounds.intersects(&geometry)))
 }
 
 fn containing_page(snapshot: &SceneSnapshot, mut entity: EntityId) -> Result<EntityId> {

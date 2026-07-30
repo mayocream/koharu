@@ -303,21 +303,11 @@ fn pad_img_to_modulo(tensor: Tensor, modulo: u32) -> Tensor {
     let width = tensor.size()[3] as u32;
     let out_height = ceil_modulo(height, modulo);
     let out_width = ceil_modulo(width, modulo);
-    let height_indices = (0..out_height)
-        .map(|index| i64::from(symmetric_index(index, height)))
-        .collect::<Vec<_>>();
-    let width_indices = (0..out_width)
-        .map(|index| i64::from(symmetric_index(index, width)))
-        .collect::<Vec<_>>();
+    let height_indices = symmetric_indices(height, out_height, tensor.device());
+    let width_indices = symmetric_indices(width, out_width, tensor.device());
     tensor
-        .index_select(
-            2,
-            &Tensor::from_slice(&height_indices).to_device(tensor.device()),
-        )
-        .index_select(
-            3,
-            &Tensor::from_slice(&width_indices).to_device(tensor.device()),
-        )
+        .index_select(2, &height_indices)
+        .index_select(3, &width_indices)
 }
 
 fn ceil_modulo(value: u32, modulo: u32) -> u32 {
@@ -328,11 +318,25 @@ fn ceil_modulo(value: u32, modulo: u32) -> u32 {
     }
 }
 
-fn symmetric_index(index: u32, len: u32) -> u32 {
-    let index = index % (len * 2);
-    if index < len {
+fn symmetric_indices(length: u32, output_length: u32, device: Device) -> Tensor {
+    if !device.is_cuda() {
+        let indices = (0..output_length)
+            .map(|index| i64::from(symmetric_index(index, length)))
+            .collect::<Vec<_>>();
+        return Tensor::from_slice(&indices).to_device(device);
+    }
+    let length = i64::from(length);
+    let period = length * 2;
+    let indices = Tensor::arange(i64::from(output_length), (Kind::Int64, device));
+    let indices = &indices - indices.floor_divide_scalar(period) * period;
+    indices.where_self(&indices.lt(length), &(period - &indices - 1))
+}
+
+fn symmetric_index(index: u32, length: u32) -> u32 {
+    let index = index % (length * 2);
+    if index < length {
         index
     } else {
-        len * 2 - index - 1
+        length * 2 - index - 1
     }
 }

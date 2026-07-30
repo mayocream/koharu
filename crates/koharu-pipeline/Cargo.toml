@@ -2,7 +2,7 @@
 name = "koharu-pipeline"
 version.workspace = true
 edition.workspace = true
-description = "Scene-processing DAG and built-in engines for Koharu."
+description = "In-process scene-processing workflow for Koharu."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true
@@ -13,7 +13,6 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
@@ -24,7 +23,6 @@ koharu-runtime = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-translator = { workspace = true }
-petgraph = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }
@@ -33,7 +31,7 @@ sysinfo = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 nvml-wrapper = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

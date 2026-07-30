@@ -14,24 +14,15 @@ use vello::{
 
 use crate::damage::RenderDamage;
 use crate::{
-    ActiveStroke, ActiveTransform, Brush, Camera, CanvasDiagnostic, CanvasElement, CanvasGpu,
-    CanvasOptions, CanvasPage, ElementId, ElementSceneContext, ElementScenes, Error, Frame,
-    GpuRenderer, Guide, Handle, HitTarget, MaskCommit, MaskPlane, MaskState, OverlayGeometry,
-    OverlayState, PageId, PagePoint, PageView, PhysicalPoint, PhysicalSize, ResourceEvent,
-    ResourceKind, Resources, Result, TransformCommit, frame_contains, frame_corners,
+    ActiveStroke, ActiveTransform, Brush, CanvasDiagnostic, CanvasElement, CanvasGpu,
+    CanvasOptions, CanvasPage, ElementFrame, ElementId, ElementSceneContext, ElementScenes, Error,
+    GpuRenderer, MaskCommit, MaskPlane, MaskState, PageId, PagePoint, PageView, PhysicalPoint,
+    PhysicalSize, ResourceEvent, ResourceKind, Resources, Result, TransformCommit,
 };
 
-// Handles are editor controls, so they remain a fixed physical-pixel size
-// instead of shrinking and growing with the page zoom. Their hit target is
-// deliberately larger than the painted shape: this keeps the overlay tidy
-// while making the controls forgiving to grab with a mouse or trackpad.
-const HANDLE_VISUAL_SIZE: f64 = 16.0;
-const HANDLE_HIT_SIZE: f64 = 28.0;
-const ROTATE_HANDLE_OFFSET: f64 = 32.0;
-
 pub struct CanvasFrame<'a> {
-    /// Final page pixels plus editor chrome. The desktop host samples this view
-    /// into its window surface; ownership remains with `Canvas`.
+    /// Final Vello pixels for the desktop surface. React draws all editor
+    /// chrome in the transparent webview above this texture.
     pub texture: &'a wgpu::TextureView,
     pub size: PhysicalSize,
     /// Changes only after a new output texture image has been composed.
@@ -56,7 +47,9 @@ pub struct Canvas {
     // Authoritative presentation inputs and asynchronously decoded assets.
     resources: Resources,
     view: crate::ViewState,
-    overlays: OverlayState,
+    render_size: PhysicalSize,
+    render_origin: PhysicalPoint,
+    render_target_explicit: bool,
     snapshot: Option<SceneSnapshot>,
     page: Option<CanvasPage>,
     revision: Revision,
@@ -90,13 +83,16 @@ impl Canvas {
     ) -> Result<Self> {
         let resources = Resources::new(options.max_decoded_bytes, wake);
         let view = crate::ViewState::default();
-        let gpu = GpuRenderer::new(gpu, view.size)?;
+        let render_size = view.size;
+        let gpu = GpuRenderer::new(gpu, render_size)?;
         Ok(Self {
             gpu,
             options,
             resources,
             view,
-            overlays: OverlayState::default(),
+            render_size,
+            render_origin: PhysicalPoint::default(),
+            render_target_explicit: false,
             snapshot: None,
             page: None,
             revision: Revision::ZERO,
@@ -213,7 +209,8 @@ impl Canvas {
     }
 
     pub fn set_view(&mut self, view: crate::ViewState) {
-        if self.view.size != view.size {
+        if !self.render_target_explicit && self.render_size != view.size {
+            self.render_size = view.size;
             self.damage.target();
         }
         if self.view.camera != view.camera || self.view.display != view.display {
@@ -238,16 +235,20 @@ impl Canvas {
                 }
             }
         }
-        if self.view.camera != view.camera {
-            self.damage.overlay();
-        }
         self.view = view;
     }
 
-    pub fn set_overlays(&mut self, overlays: OverlayState) {
-        if self.overlays != overlays {
-            self.overlays = overlays;
-            self.damage.overlay();
+    /// Configures the full-window Vello target while keeping camera and pointer
+    /// coordinates relative to the React canvas viewport.
+    pub fn set_render_target(&mut self, size: PhysicalSize, origin: PhysicalPoint) {
+        self.render_target_explicit = true;
+        if self.render_size != size {
+            self.render_size = size;
+            self.damage.target();
+        }
+        if self.render_origin != origin && origin.x.is_finite() && origin.y.is_finite() {
+            self.render_origin = origin;
+            self.damage.content();
         }
     }
 
@@ -294,41 +295,7 @@ impl Canvas {
         self.view.camera.page_to_screen(point)
     }
 
-    #[must_use]
-    pub fn hit_test(&self, point: PhysicalPoint) -> Option<HitTarget> {
-        let page = self.page.as_ref()?;
-        let page_point = self.screen_to_page(point)?;
-        for &element in self.overlays.selected.iter().rev() {
-            let Some(selected) = page.element(element) else {
-                continue;
-            };
-            if !selected.visible || selected.opacity <= 0.0 {
-                continue;
-            }
-            let frame = self.preview_frame(selected);
-            for (handle, position) in handle_positions(frame, self.view.camera) {
-                if handle_contains(handle, position, point) {
-                    return Some(HitTarget::Handle { element, handle });
-                }
-            }
-        }
-        page.elements
-            .iter()
-            .rev()
-            .find(|element| {
-                element.visible
-                    && element.opacity > 0.0
-                    && frame_contains(self.preview_frame(element), page_point)
-            })
-            .map(|element| HitTarget::Element(element.id))
-    }
-
-    pub fn begin_transform(
-        &mut self,
-        selected: &[ElementId],
-        target: HitTarget,
-        point: PhysicalPoint,
-    ) -> Result<()> {
+    pub fn begin_transform(&mut self, selected: &[ElementId]) -> Result<()> {
         if self.transform.is_some() {
             return Err(Error::Invalid(
                 "an element transform is already active".into(),
@@ -339,26 +306,29 @@ impl Canvas {
                 "an element transform cannot start during a mask stroke".into(),
             ));
         }
-        let page_point = self.screen_to_page(point).ok_or(Error::NoPage)?;
         let page = self.page.as_ref().ok_or(Error::NoPage)?;
-        self.transform = Some(ActiveTransform::new(page, selected, target, page_point)?);
-        self.damage.overlay();
+        let selectable = selected
+            .iter()
+            .copied()
+            .filter(|element| {
+                page.element(*element)
+                    .is_some_and(CanvasElement::selectable)
+            })
+            .collect::<Vec<_>>();
+        self.transform = Some(ActiveTransform::new(page, &selectable)?);
         Ok(())
     }
 
-    pub fn update_transform(&mut self, point: PhysicalPoint) -> Result<()> {
-        if !point.x.is_finite() || !point.y.is_finite() {
-            return Err(Error::Invalid(
-                "transform point must contain finite coordinates".into(),
-            ));
-        }
-        let page_point = self.view.camera.screen_to_page(point);
-        self.transform
+    pub fn update_transform(&mut self, frame: u64, elements: &[ElementFrame]) -> Result<()> {
+        let changed = self
+            .transform
             .as_mut()
             .ok_or(Error::NoTransform)?
-            .update(page_point)?;
-        self.element_scenes.recompose();
-        self.damage.content();
+            .update(frame, elements)?;
+        if changed {
+            self.element_scenes.recompose();
+            self.damage.content();
+        }
         Ok(())
     }
 
@@ -467,20 +437,19 @@ impl Canvas {
 
     /// Produces the latest offscreen viewport texture.
     ///
-    /// The stages are intentionally explicit: install newly decoded resources,
-    /// rebuild Vello content only when required, then copy that stable content
-    /// and draw inexpensive editor chrome. `render` never presents a window
-    /// surface; that is the desktop host's responsibility.
+    /// The stages are intentionally explicit: install newly decoded resources
+    /// and rebuild Vello content only when required. `render` never presents a
+    /// window surface; that is the desktop host's responsibility.
     pub fn render(&mut self, now: Instant) -> Result<CanvasFrame<'_>> {
         self.drain_resources()?;
         if self.damage.target_pending() {
-            self.gpu.resize(self.view.size);
+            self.gpu.resize(self.render_size);
             self.damage.clear_target();
         }
-        if self.view.size.is_empty() {
+        if self.render_size.is_empty() {
             return Ok(CanvasFrame {
                 texture: self.gpu.output(),
-                size: self.view.size,
+                size: self.render_size,
                 generation: self.generation,
                 needs_redraw: false,
             });
@@ -494,12 +463,6 @@ impl Canvas {
             self.gpu
                 .render_content(&scene, self.options.workspace_color)?;
             self.damage.clear_content();
-        }
-
-        if self.damage.overlay_pending() {
-            let geometry = self.build_overlay_geometry();
-            self.gpu.compose_overlay(&geometry);
-            self.damage.clear_overlay();
             self.generation = self.generation.wrapping_add(1);
         }
         if needs_redraw {
@@ -508,7 +471,7 @@ impl Canvas {
 
         Ok(CanvasFrame {
             texture: self.gpu.output(),
-            size: self.view.size,
+            size: self.render_size,
             generation: self.generation,
             needs_redraw,
         })
@@ -723,8 +686,9 @@ impl Canvas {
     }
 
     fn build_scene(&mut self, now: Instant) -> Scene {
-        // Everything in page_scene uses page coordinates. One camera affine is
-        // applied at the end, keeping element, mask, and hit-test math aligned.
+        // Everything in page_scene uses page coordinates. React and Rust share
+        // a viewport-relative camera; render_origin moves that viewport into
+        // the full desktop target without changing interaction coordinates.
         let mut scene = Scene::new();
         let Some(page) = self.page.clone() else {
             return scene;
@@ -754,8 +718,18 @@ impl Canvas {
             f64::from(page.size.width),
             f64::from(page.size.height),
         );
-        scene.push_clip_layer(Fill::NonZero, self.view.camera.affine(), &page_rect);
-        scene.append(&page_scene, Some(self.view.camera.affine()));
+        let viewport_rect = Rect::new(
+            self.render_origin.x,
+            self.render_origin.y,
+            self.render_origin.x + f64::from(self.view.size.width),
+            self.render_origin.y + f64::from(self.view.size.height),
+        );
+        let camera = Affine::translate(Vec2::new(self.render_origin.x, self.render_origin.y))
+            * self.view.camera.affine();
+        scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &viewport_rect);
+        scene.push_clip_layer(Fill::NonZero, camera, &page_rect);
+        scene.append(&page_scene, Some(camera));
+        scene.pop_layer();
         scene.pop_layer();
         scene
     }
@@ -908,214 +882,5 @@ impl Canvas {
         page.assets
             .source
             .expect("CanvasPage requires a source asset")
-    }
-
-    fn build_overlay_geometry(&self) -> OverlayGeometry {
-        // OverlayGeometry uses physical pixels because handles and cursor
-        // borders must remain readable at every camera zoom.
-        let mut geometry = OverlayGeometry::default();
-        let Some(page) = self.page.as_ref() else {
-            return geometry;
-        };
-        let camera = self.view.camera;
-        let page_width = f64::from(page.size.width);
-        let page_height = f64::from(page.size.height);
-        for guide in &self.overlays.guides {
-            match *guide {
-                Guide::Horizontal(y) => geometry.line(
-                    camera.page_to_screen(PagePoint::new(0.0, y)),
-                    camera.page_to_screen(PagePoint::new(page_width, y)),
-                    1.0,
-                    [80, 210, 255, 220],
-                ),
-                Guide::Vertical(x) => geometry.line(
-                    camera.page_to_screen(PagePoint::new(x, 0.0)),
-                    camera.page_to_screen(PagePoint::new(x, page_height)),
-                    1.0,
-                    [80, 210, 255, 220],
-                ),
-            }
-        }
-        if self.overlays.show_text_bounds {
-            for (index, element) in page
-                .elements
-                .iter()
-                .filter(|element| element.has_text && element.visible && element.opacity > 0.0)
-                .enumerate()
-            {
-                let corners = screen_corners(self.preview_frame(element), camera);
-                geometry.outline(corners, 1.0, [255, 91, 145, 210]);
-                geometry.label(corners[0], index + 1, [255, 91, 145, 240]);
-            }
-        }
-        if let Some(frame) = self.overlays.draft {
-            let corners = screen_corners(frame, camera);
-            for index in 0..4 {
-                geometry.dashed_line(
-                    corners[index],
-                    corners[(index + 1) % 4],
-                    1.5,
-                    6.0,
-                    4.0,
-                    [110, 170, 255, 255],
-                );
-            }
-        }
-        if let Some(element) = self.overlays.hovered
-            && let Some(frame) = self.element_frame(element)
-        {
-            geometry.outline(screen_corners(frame, camera), 1.5, [80, 225, 235, 255]);
-        }
-        for &element in &self.overlays.selected {
-            let Some(frame) = self.element_frame(element) else {
-                continue;
-            };
-            geometry.outline(screen_corners(frame, camera), 2.0, [80, 145, 255, 255]);
-            let positions = handle_positions(frame, camera);
-            let north = positions[1].1;
-            let rotate = positions[8].1;
-            geometry.line(north, rotate, 1.5, [80, 145, 255, 255]);
-            for (handle, point) in positions {
-                if handle == Handle::Rotate {
-                    geometry.circle_ring(point, HANDLE_VISUAL_SIZE * 0.5, 4.0, [80, 145, 255, 255]);
-                } else {
-                    geometry.solid_rect(
-                        point,
-                        HANDLE_VISUAL_SIZE,
-                        HANDLE_VISUAL_SIZE,
-                        [245, 248, 255, 255],
-                    );
-                    geometry.solid_rect(
-                        point,
-                        HANDLE_VISUAL_SIZE - 4.0,
-                        HANDLE_VISUAL_SIZE - 4.0,
-                        [80, 145, 255, 255],
-                    );
-                }
-            }
-        }
-        if let Some(cursor) = self.overlays.brush_cursor {
-            geometry.circle_ring(
-                cursor.point,
-                f64::from(cursor.diameter) * camera.zoom() * 0.5,
-                1.5,
-                [255, 255, 255, 230],
-            );
-        }
-        geometry
-    }
-
-    fn preview_frame(&self, element: &CanvasElement) -> Frame {
-        self.transform
-            .as_ref()
-            .and_then(|transform| transform.preview(element.id))
-            .unwrap_or(element.frame)
-    }
-
-    fn element_frame(&self, id: ElementId) -> Option<Frame> {
-        let element = self.page.as_ref()?.element(id)?;
-        if !element.visible || element.opacity <= 0.0 {
-            return None;
-        }
-        let frame = self.preview_frame(element);
-        valid_frame(frame).then_some(frame)
-    }
-}
-
-fn screen_corners(frame: Frame, camera: Camera) -> [PhysicalPoint; 4] {
-    frame_corners(frame).map(|point| camera.page_to_screen(point))
-}
-
-fn handle_positions(frame: Frame, camera: Camera) -> [(Handle, PhysicalPoint); 9] {
-    let [north_west, north_east, south_east, south_west] = screen_corners(frame, camera);
-    let midpoint = |a: PhysicalPoint, b: PhysicalPoint| {
-        PhysicalPoint::new((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
-    };
-    let north = midpoint(north_west, north_east);
-    let angle = f64::from(frame.angle_degrees).to_radians();
-    let rotate = PhysicalPoint::new(
-        north.x + angle.sin() * ROTATE_HANDLE_OFFSET,
-        north.y - angle.cos() * ROTATE_HANDLE_OFFSET,
-    );
-    [
-        (Handle::NorthWest, north_west),
-        (Handle::North, north),
-        (Handle::NorthEast, north_east),
-        (Handle::East, midpoint(north_east, south_east)),
-        (Handle::SouthEast, south_east),
-        (Handle::South, midpoint(south_east, south_west)),
-        (Handle::SouthWest, south_west),
-        (Handle::West, midpoint(south_west, north_west)),
-        (Handle::Rotate, rotate),
-    ]
-}
-
-fn handle_contains(handle: Handle, center: PhysicalPoint, point: PhysicalPoint) -> bool {
-    let dx = point.x - center.x;
-    let dy = point.y - center.y;
-    if handle == Handle::Rotate {
-        dx.hypot(dy) <= HANDLE_HIT_SIZE * 0.5
-    } else {
-        dx.abs() <= HANDLE_HIT_SIZE * 0.5 && dy.abs() <= HANDLE_HIT_SIZE * 0.5
-    }
-}
-
-fn valid_frame(frame: Frame) -> bool {
-    frame.x.is_finite()
-        && frame.y.is_finite()
-        && frame.width.is_finite()
-        && frame.width > 0.0
-        && frame.height.is_finite()
-        && frame.height > 0.0
-        && frame.angle_degrees.is_finite()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn rotation_handle_keeps_a_constant_screen_offset() {
-        let frame = Frame::new(10.0, 20.0, 100.0, 50.0);
-        for zoom in [0.25, 1.0, 4.0] {
-            let camera = Camera::new(zoom, [12.0, 8.0]).unwrap();
-            let positions = handle_positions(frame, camera);
-            assert_eq!(positions[0].0, Handle::NorthWest);
-            assert_eq!(positions[4].0, Handle::SouthEast);
-            assert_eq!(positions[8].0, Handle::Rotate);
-            let north = positions[1].1;
-            let rotate = positions[8].1;
-            assert!((north.x - rotate.x).abs() < 1e-9);
-            assert!((north.y - rotate.y - ROTATE_HANDLE_OFFSET).abs() < 1e-9);
-        }
-        assert_eq!(HANDLE_VISUAL_SIZE, 16.0);
-    }
-
-    #[test]
-    fn handles_have_a_larger_forgiving_hit_target() {
-        let center = PhysicalPoint::new(100.0, 100.0);
-        let just_inside = HANDLE_HIT_SIZE * 0.5 - 0.01;
-        let just_outside = HANDLE_HIT_SIZE * 0.5 + 0.01;
-
-        assert!(handle_contains(
-            Handle::SouthEast,
-            center,
-            PhysicalPoint::new(center.x + just_inside, center.y + just_inside),
-        ));
-        assert!(!handle_contains(
-            Handle::SouthEast,
-            center,
-            PhysicalPoint::new(center.x + just_outside, center.y),
-        ));
-        assert!(handle_contains(
-            Handle::Rotate,
-            center,
-            PhysicalPoint::new(center.x, center.y + just_inside),
-        ));
-        assert!(!handle_contains(
-            Handle::Rotate,
-            center,
-            PhysicalPoint::new(center.x, center.y + just_outside),
-        ));
     }
 }

@@ -1,12 +1,17 @@
-use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
 use koharu_pipeline::{
-    AotInpaintingConfig, BaberuOcrConfig, DetectionModel, Flux2KleinConfig, FontDetectorConfig,
-    InpaintingModel, KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, MangaOcrConfig, OcrModel,
-    PaddleOcrVl1_6Config, Pipeline, PipelineConfig, PipelineEvent, RoremMixedConfig,
-    TypographyModel,
+    Committer, DetectionModel, Flux2KleinConfig, InpaintingModel, KoharuLayoutRFDetrSeg2XLConfig,
+    OcrModel, Operation, Pipeline, PipelineConfig, Progress, Request, RoremMixedConfig, Scope,
+    StageOutput,
 };
 use koharu_renderer::{RenderRequest, Renderer};
 use koharu_scene::{
@@ -43,6 +48,15 @@ struct Arguments {
 
     #[arg(long, default_value = "gemma4-12b-it")]
     llm: String,
+}
+
+struct SessionCommitter<'a>(&'a mut SceneSession);
+
+#[async_trait::async_trait]
+impl Committer for SessionCommitter<'_> {
+    async fn commit(&mut self, output: StageOutput) -> Result<koharu_scene::SceneSnapshot> {
+        Ok(self.0.commit(output.patch)?.snapshot)
+    }
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -84,18 +98,13 @@ impl Arguments {
                 }
             },
             ocr: match self.ocr {
-                OcrChoice::PaddleOcrVl1_6 => {
-                    OcrModel::PaddleOcrVl1_6(PaddleOcrVl1_6Config::default())
-                }
-                OcrChoice::MangaOcr => OcrModel::MangaOcr(MangaOcrConfig::default()),
-                OcrChoice::BaberuOcr => OcrModel::BaberuOcr(BaberuOcrConfig::default()),
+                OcrChoice::PaddleOcrVl1_6 => OcrModel::PaddleOcrVl1_6,
+                OcrChoice::MangaOcr => OcrModel::MangaOcr,
+                OcrChoice::BaberuOcr => OcrModel::BaberuOcr,
             },
-            typography: TypographyModel::FontDetector(FontDetectorConfig::default()),
             inpainting: match self.inpainting {
-                InpaintingChoice::LaMa => InpaintingModel::LaMa(LaMaConfig::default()),
-                InpaintingChoice::AotInpainting => {
-                    InpaintingModel::AotInpainting(AotInpaintingConfig::default())
-                }
+                InpaintingChoice::LaMa => InpaintingModel::LaMa {},
+                InpaintingChoice::AotInpainting => InpaintingModel::AotInpainting {},
                 InpaintingChoice::Flux2Klein => {
                     InpaintingModel::Flux2Klein(Flux2KleinConfig::default())
                 }
@@ -161,32 +170,41 @@ async fn main() -> Result<()> {
     let page = page.expect("page ID is assigned by the edit");
 
     let pipeline = Pipeline::new(arguments.pipeline_config(), arguments.translation_config())?;
+    let snapshot = session.snapshot();
+    let mut committer = SessionCommitter(&mut session);
     let report = pipeline
-        .run(session.snapshot())
-        .pages([page])
-        .events(Arc::new(|event| {
-            if let PipelineEvent::StageFinished { stage, elapsed, .. } = event {
-                eprintln!("{stage} finished in {:.2}s", elapsed.as_secs_f64());
-            }
-        }))
-        .execute()
+        .execute(
+            snapshot,
+            Request {
+                operation: Operation::Full,
+                scope: Scope::Pages(vec![page]),
+                progress: Some(Arc::new(|event| {
+                    if let Progress::Finished { stage, elapsed, .. } = event {
+                        eprintln!("{stage} finished in {:.2}s", elapsed.as_secs_f64());
+                    }
+                })),
+                ..Request::default()
+            },
+            &mut committer,
+        )
         .await?;
-    let commit = session.commit(report.patch)?;
+    eprintln!("pipeline finished in {:.2}s", report.elapsed.as_secs_f64());
 
     let renderer = Renderer::new()?;
     let mut request = RenderRequest::new(page);
     request.locale = Some(LanguageTag::new(arguments.target_language)?);
     request.theme.font_families = arguments.font_families;
-    let rendered = renderer.render(&commit.snapshot, &request)?;
+    let render_started = Instant::now();
+    let rendered = renderer.render(&session.snapshot(), &request)?;
+    let render_elapsed = render_started.elapsed();
     rendered
         .image
         .save(&arguments.output)
         .with_context(|| format!("failed to write {}", arguments.output.display()))?;
     eprintln!(
-        "rendered {} after {} stages in {:.2}s",
+        "rendered {} in {:.2}s",
         arguments.output.display(),
-        report.nodes.len(),
-        report.elapsed.as_secs_f64()
+        render_elapsed.as_secs_f64()
     );
     Ok(())
 }
@@ -245,7 +263,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             arguments.pipeline_config().ocr,
-            OcrModel::MangaOcr(_)
+            OcrModel::MangaOcr
         ));
         assert!(matches!(
             arguments.pipeline_config().inpainting,

@@ -17,7 +17,7 @@ web UI
 koharu-app
   |-- Project -------- SceneSession, visible page, grouped history
   |-- projection ----- SceneSnapshot -> UI capability views
-  |-- jobs ----------- pipeline, import, export, cancellation, progress
+  |-- jobs ----------- pipeline, import, export, stop, progress
   |-- resources ------ authorized content-addressed thumbnails
   `-- app ------------ native lifecycle and desktop/canvas coordination
         |
@@ -32,7 +32,7 @@ that do not belong in a document: which page is visible, camera state, running
 jobs, pending mask encodes, settings UI, and undo grouping.
 
 `koharu-app` does not own model implementations, rendering rules, GPU resource
-policy, SQLite details, or canvas gesture algorithms.
+policy, SQLite details, or React gesture algorithms.
 
 ## Project aggregate
 
@@ -64,6 +64,8 @@ remaining page becomes visible; an empty project has no visible page.
 
 Commands express intent:
 
+- `SetSourceText` corrects OCR text while preserving its detected language and
+  promotes the text to user authorship.
 - `SetTranslation` requires an explicit language tag.
 - `SetTypography` carries semantic typography preferences, not glyph layout or
   renderer effects.
@@ -96,8 +98,10 @@ cargo run -p koharu-app --bin generate
 
 Durable commands include the UI's base `Revision`. A stale command is rejected
 with the current revision; the client discards queued edits and requests a full
-synchronization. Interactions such as hit testing, camera movement, and live
-transform previews are ephemeral and do not advance the scene revision.
+synchronization. Interactions such as camera movement and live transform
+previews are ephemeral and do not advance the scene revision. React sends
+every move, resize, and rotation sample as a monotonically numbered, complete
+set of absolute frames; Rust rejects malformed sets and ignores stale frames.
 
 The main `SceneSession` is refreshed before each command and whenever a
 background writer reports progress. Scene change sets drive three independent
@@ -115,10 +119,12 @@ the entire project.
 
 The app uses in-process jobs; there is no worker process.
 
-- The `Pipeline` is constructed once and shared. Configuration changes are
-  applied directly through its atomic generation swap.
-- Pipeline work is asynchronous and uses the pipeline's dependency scheduler,
-  model locks, resource monitor, and cancellation token.
+- The `Pipeline` is constructed once and shared. Configuration changes replace
+  it with a newly validated immutable pipeline.
+- Pipeline work is asynchronous and uses page-stage dependencies, model locks,
+  concurrent model admission, the resource monitor, and a stop token.
+- Each completed pipeline page-stage patch commits immediately and advances the
+  visible project. All revisions from the invocation form one undo group.
 - Import runs on the blocking pool because file and image decoding are
   synchronous.
 - Export has a dedicated serial actor that reuses one GPU renderer and its font
@@ -128,8 +134,8 @@ The app uses in-process jobs; there is no worker process.
 - Export may run alongside one project-writing job. Pipeline and import are
   mutually exclusive at the app boundary to avoid competing project commits.
 
-Every long operation has a request ID, cancellation token, retained status, and
-progress events. Closing or replacing a project cancels all of its jobs. Late
+Every long operation has a request ID, stop token, retained status, and progress
+events. Closing or replacing a project stops all of its jobs. Late
 events are ignored after their request leaves the active job table.
 
 ## Startup and settings
@@ -183,9 +189,10 @@ omitted from authorization.
 - No durable UI mutation bypasses `SceneSession`.
 - No scene component payload crosses the desktop protocol directly.
 - A translation is always addressed by an explicit `LanguageTag`.
-- One accepted user command produces at most one scene commit.
+- Direct scene-edit commands produce at most one commit. Pipeline and import
+  jobs intentionally commit incrementally and group their revisions for undo.
 - Background snapshots are immutable; a background writer must commit through
-  its own session and notify the main session to refresh.
+  its own session and notify the main session after every commit.
 - Renderer and pipeline output remain semantic scene patches, not app-specific
   side tables.
 - UI resource access is allowlisted from the current snapshot.

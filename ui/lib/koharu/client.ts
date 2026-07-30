@@ -38,11 +38,11 @@ const EVENT_TYPES = new Set([
   'page_loaded',
   'project_changed',
   'project_closed',
-  'hit_test',
   'view_changed',
   'job_changed',
   'download_changed',
   'settings_changed',
+  'resources_changed',
   'garbage_collected',
 ])
 const ERROR_CODES = new Set([
@@ -256,8 +256,6 @@ export function isUiEvent(value: unknown): value is UiEvent {
       )
     case 'project_closed':
       return true
-    case 'hit_test':
-      return typeof value.id === 'number' && (value.target === null || isHitTarget(value.target))
     case 'view_changed':
       return (
         typeof value.zoom === 'number' &&
@@ -277,7 +275,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
         )
       }
       if (value.state === 'failed') return typeof value.error === 'string'
-      return value.state === 'finished' || value.state === 'cancelled'
+      return value.state === 'finished' || value.state === 'stopped'
     }
     case 'download_changed': {
       if (typeof value.id !== 'number') return false
@@ -307,7 +305,7 @@ export function isUiEvent(value: unknown): value is UiEvent {
       const pipeline = settings.pipeline
       const translation = settings.translation
       return (
-        (['detection', 'ocr', 'typography', 'inpainting'] as const).every(
+        (['detection', 'ocr', 'inpainting'] as const).every(
           (phase) =>
             pipeline[phase] === undefined ||
             pipeline[phase] === null ||
@@ -333,6 +331,28 @@ export function isUiEvent(value: unknown): value is UiEvent {
             typeof font.stretch === 'number' &&
             ['normal', 'italic', 'oblique'].includes(String(font.style)) &&
             ['system', 'registered'].includes(String(font.source)),
+        )
+      )
+    }
+    case 'resources_changed': {
+      const resources = value.resources
+      return (
+        isRecord(resources) &&
+        typeof resources.process_memory_bytes === 'number' &&
+        typeof resources.system_memory_total_bytes === 'number' &&
+        typeof resources.system_memory_used_bytes === 'number' &&
+        typeof resources.process_cpu_percent === 'number' &&
+        typeof resources.system_cpu_percent === 'number' &&
+        Array.isArray(resources.devices) &&
+        resources.devices.every(
+          (device) =>
+            isRecord(device) &&
+            typeof device.name === 'string' &&
+            typeof device.selected === 'boolean' &&
+            (device.memory_budget_bytes === null ||
+              typeof device.memory_budget_bytes === 'number') &&
+            (device.memory_used_bytes === null || typeof device.memory_used_bytes === 'number') &&
+            (device.utilization_percent === null || typeof device.utilization_percent === 'number'),
         )
       )
     }
@@ -395,12 +415,6 @@ function isNumberPair(value: unknown): value is [number, number] {
   return (
     Array.isArray(value) && value.length === 2 && value.every((item) => typeof item === 'number')
   )
-}
-
-function isHitTarget(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.element !== 'string') return false
-  if (value.type === 'element') return true
-  return value.type === 'handle' && typeof value.handle === 'string'
 }
 
 export const koharuClient = new KoharuClient()

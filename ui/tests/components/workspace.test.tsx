@@ -24,7 +24,7 @@ const element: EntityView = {
     ],
   },
   visibility: { visible: true, opacity: 1 },
-  image: null,
+  image: 'image',
   source_text: null,
   translation: null,
   typography: null,
@@ -78,6 +78,10 @@ function renderWorkspace() {
   vi.spyOn(koharuClient, 'fire').mockImplementation((command) => {
     commands.push(command)
   })
+  vi.spyOn(koharuClient, 'command').mockImplementation(async (command) => {
+    commands.push(command)
+    return 'accepted'
+  })
   render(
     <TooltipProvider>
       <Workspace />
@@ -104,35 +108,39 @@ describe('canvas transforms', () => {
       clientX: 30,
       clientY: 40,
     })
-    const hit = harness.interactions.find((interaction) => interaction.type === 'hit_test')
-    expect(hit).toMatchObject({ type: 'hit_test', x: 30, y: 40 })
-    if (!hit || hit.type !== 'hit_test') throw new Error('hit test was not sent')
-
-    harness.emit({
-      type: 'hit_test',
-      id: hit.id,
-      target: { type: 'element', element: element.id },
-    })
     expect(harness.interactions).toContainEqual({
       type: 'begin_transform',
       elements: [element.id],
-      target: { type: 'element', element: element.id },
-      x: 30,
-      y: 40,
     })
 
     fireEvent.pointerMove(harness.surface, { pointerId: 7, clientX: 55, clientY: 65 })
-    expect(harness.interactions).toContainEqual({ type: 'update_transform', x: 55, y: 65 })
+    expect(harness.interactions).toContainEqual({
+      type: 'update_transform',
+      frame: 1,
+      elements: [
+        {
+          element: element.id,
+          frame: { x: 35, y: 45, width: 100, height: 50, angle_degrees: 0 },
+        },
+      ],
+    })
 
     fireEvent.pointerUp(harness.surface, { pointerId: 7, clientX: 58, clientY: 70 })
     expect(
       harness.interactions.filter((interaction) => interaction.type === 'update_transform').at(-1),
-    ).toEqual({ type: 'update_transform', x: 58, y: 70 })
+    ).toEqual({
+      type: 'update_transform',
+      frame: 2,
+      elements: [
+        {
+          element: element.id,
+          frame: { x: 38, y: 50, width: 100, height: 50, angle_degrees: 0 },
+        },
+      ],
+    })
     expect(harness.commands).toEqual([{ type: 'finish_transform' }])
     expect(
-      harness.interactions.some(
-        (interaction) => interaction.type === 'set_overlays' && 'previews' in interaction,
-      ),
+      harness.interactions.some((interaction) => interaction.type === 'cancel_transform'),
     ).toBe(false)
   })
 
@@ -146,17 +154,9 @@ describe('canvas transforms', () => {
       clientX: 20,
       clientY: 25,
     })
-    const hit = harness.interactions.find((interaction) => interaction.type === 'hit_test')
-    if (!hit || hit.type !== 'hit_test') throw new Error('hit test was not sent')
-    harness.emit({
-      type: 'hit_test',
-      id: hit.id,
-      target: { type: 'handle', element: element.id, handle: 'east' },
-    })
-
     fireEvent.pointerCancel(harness.surface, { pointerId: 9 })
 
-    expect(harness.interactions.at(-2)).toEqual({ type: 'cancel_transform' })
+    expect(harness.interactions).toContainEqual({ type: 'cancel_transform' })
     expect(harness.commands).toEqual([])
   })
 })

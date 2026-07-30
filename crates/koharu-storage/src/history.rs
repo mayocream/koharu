@@ -31,6 +31,16 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
+    pub(crate) const fn empty(revision: Revision) -> Self {
+        Self {
+            from: revision,
+            to: revision,
+            records: Vec::new(),
+            components: Vec::new(),
+            blobs_added: Vec::new(),
+        }
+    }
+
     pub(crate) fn from_operations<'a>(
         from: Revision,
         to: Revision,

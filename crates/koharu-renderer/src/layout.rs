@@ -1,12 +1,20 @@
 //! Unicode-aware text shaping, line breaking, and layout.
 
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+    sync::Arc,
+};
 use unicode_bidi::BidiInfo;
 
 use anyhow::Result;
 use harfrust::{Feature, Tag};
 use hypher::Lang;
-use skrifa::{MetadataProvider, instance::Size};
+use skrifa::{
+    MetadataProvider,
+    instance::Size,
+    outline::{DrawSettings, OutlinePen},
+};
 
 use crate::{
     font::{Font, font_key},
@@ -19,7 +27,6 @@ use crate::{
 const HYPHENATION_MIN_WORD_LEN: usize = 8;
 const LINE_BREAK_HYPHEN_PENALTY: f32 = 2_000.0;
 const LINE_BREAK_OVERFLOW_MULTIPLIER: f32 = 10_000.0;
-const COMIC_BALLOON_AIR_FALLBACK_EM: f32 = 0.5;
 const COMIC_LINE_OVERFLOW_PENALTY: f32 = 1_000_000.0;
 const COMIC_MAX_LINES: usize = 64;
 
@@ -150,6 +157,8 @@ struct ComicBalloon {
     height: f32,
     contour: Vec<(f32, f32)>,
     vertical_alignment: f32,
+    minimum_air: f32,
+    edge_pixels: Arc<[(i32, i32)]>,
 }
 
 #[derive(Clone)]
@@ -171,6 +180,184 @@ pub struct TextLayout<'a> {
     min_line_height: Option<f32>,
     letter_spacing: f32,
     word_spacing: f32,
+    compact_emphasis_punctuation: bool,
+}
+
+fn largest_fitting_font_size<T>(
+    minimum: f32,
+    maximum: f32,
+    mut layout_at: impl FnMut(f32) -> Result<T>,
+    fits: impl Fn(&T) -> bool,
+) -> Result<Option<T>> {
+    let step = ((maximum - minimum) / 64.0).max(0.25);
+    let mut size = maximum;
+    let mut larger_non_fit = None;
+
+    loop {
+        let candidate = layout_at(size)?;
+        if fits(&candidate) {
+            let Some(mut high) = larger_non_fit else {
+                return Ok(Some(candidate));
+            };
+            let mut low = size;
+            let mut best = candidate;
+            let mut iterations = 0u32;
+            while high - low > 0.01 && iterations < 12 {
+                iterations += 1;
+                let midpoint = (low + high) * 0.5;
+                let candidate = layout_at(midpoint)?;
+                if fits(&candidate) {
+                    best = candidate;
+                    low = midpoint;
+                } else {
+                    high = midpoint;
+                }
+            }
+            return Ok(Some(best));
+        }
+
+        larger_non_fit = Some(size);
+        if size <= minimum {
+            return Ok(None);
+        }
+        size = (size - step).max(minimum);
+    }
+}
+
+fn rasterize_edge_segment(
+    pixels: &mut HashSet<(i32, i32)>,
+    (x0, y0): (f32, f32),
+    (x1, y1): (f32, f32),
+) {
+    let steps = ((x1 - x0).abs().max((y1 - y0).abs()) * 2.0).ceil().max(1.0) as usize;
+    for step in 0..=steps {
+        let t = step as f32 / steps as f32;
+        pixels.insert((
+            (x0 + (x1 - x0) * t).round() as i32,
+            (y0 + (y1 - y0) * t).round() as i32,
+        ));
+    }
+}
+
+fn rasterize_contour_edge(width: f32, height: f32, contour: &[(f32, f32)]) -> Vec<(i32, i32)> {
+    let mut pixels = HashSet::new();
+    if contour.len() >= 3 {
+        for index in 0..contour.len() {
+            rasterize_edge_segment(
+                &mut pixels,
+                contour[index],
+                contour[(index + 1) % contour.len()],
+            );
+        }
+    } else {
+        let center = (width * 0.5, height * 0.5);
+        let radii = (width * 0.5, height * 0.5);
+        let samples = ((width + height) * std::f32::consts::PI).ceil().max(16.0) as usize;
+        let mut previous = (center.0 + radii.0, center.1);
+        for sample in 1..=samples {
+            let angle = std::f32::consts::TAU * sample as f32 / samples as f32;
+            let point = (
+                center.0 + radii.0 * angle.cos(),
+                center.1 + radii.1 * angle.sin(),
+            );
+            rasterize_edge_segment(&mut pixels, previous, point);
+            previous = point;
+        }
+    }
+    let mut pixels = pixels.into_iter().collect::<Vec<_>>();
+    pixels.sort_unstable();
+    pixels
+}
+
+struct EdgePixelPen<'a> {
+    pixels: &'a mut HashSet<(i32, i32)>,
+    origin: (f32, f32),
+    current: (f32, f32),
+    start: (f32, f32),
+}
+
+impl EdgePixelPen<'_> {
+    fn screen_point(&self, point: (f32, f32)) -> (f32, f32) {
+        (self.origin.0 + point.0, self.origin.1 - point.1)
+    }
+
+    fn line_to_point(&mut self, point: (f32, f32)) {
+        rasterize_edge_segment(
+            self.pixels,
+            self.screen_point(self.current),
+            self.screen_point(point),
+        );
+        self.current = point;
+    }
+
+    fn curve_steps(points: &[(f32, f32)]) -> usize {
+        points
+            .windows(2)
+            .map(|pair| {
+                (pair[1].0 - pair[0].0)
+                    .abs()
+                    .max((pair[1].1 - pair[0].1).abs())
+            })
+            .sum::<f32>()
+            .ceil()
+            .clamp(4.0, 256.0) as usize
+    }
+}
+
+impl OutlinePen for EdgePixelPen<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.current = (x, y);
+        self.start = (x, y);
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.line_to_point((x, y));
+    }
+
+    fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
+        let start = self.current;
+        let control = (cx, cy);
+        let end = (x, y);
+        let steps = Self::curve_steps(&[start, control, end]);
+        for step in 1..=steps {
+            let t = step as f32 / steps as f32;
+            let one_minus_t = 1.0 - t;
+            self.line_to_point((
+                one_minus_t * one_minus_t * start.0
+                    + 2.0 * one_minus_t * t * control.0
+                    + t * t * end.0,
+                one_minus_t * one_minus_t * start.1
+                    + 2.0 * one_minus_t * t * control.1
+                    + t * t * end.1,
+            ));
+        }
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        let start = self.current;
+        let control0 = (cx0, cy0);
+        let control1 = (cx1, cy1);
+        let end = (x, y);
+        let steps = Self::curve_steps(&[start, control0, control1, end]);
+        for step in 1..=steps {
+            let t = step as f32 / steps as f32;
+            let one_minus_t = 1.0 - t;
+            self.line_to_point((
+                one_minus_t.powi(3) * start.0
+                    + 3.0 * one_minus_t * one_minus_t * t * control0.0
+                    + 3.0 * one_minus_t * t * t * control1.0
+                    + t.powi(3) * end.0,
+                one_minus_t.powi(3) * start.1
+                    + 3.0 * one_minus_t * one_minus_t * t * control0.1
+                    + 3.0 * one_minus_t * t * t * control1.1
+                    + t.powi(3) * end.1,
+            ));
+        }
+    }
+
+    fn close(&mut self) {
+        self.line_to_point(self.start);
+    }
 }
 
 impl<'a> TextLayout<'a> {
@@ -194,6 +381,7 @@ impl<'a> TextLayout<'a> {
             min_line_height: None,
             letter_spacing: 0.0,
             word_spacing: 0.0,
+            compact_emphasis_punctuation: false,
         }
     }
 
@@ -264,12 +452,16 @@ impl<'a> TextLayout<'a> {
         height: f32,
         contour: Vec<(f32, f32)>,
         vertical_alignment: f32,
+        minimum_air: f32,
     ) -> Self {
+        let edge_pixels = rasterize_contour_edge(width, height, &contour);
         self.comic_balloon = Some(ComicBalloon {
             width,
             height,
             contour,
             vertical_alignment: vertical_alignment.clamp(0.0, 1.0),
+            minimum_air: minimum_air.max(0.0),
+            edge_pixels: edge_pixels.into(),
         });
         self
     }
@@ -318,6 +510,11 @@ impl<'a> TextLayout<'a> {
         self
     }
 
+    pub(crate) fn with_compact_emphasis_punctuation(mut self, enabled: bool) -> Self {
+        self.compact_emphasis_punctuation = enabled;
+        self
+    }
+
     pub fn run(&self, text: &str) -> Result<LayoutRun<'a>> {
         if let Some(font_size) = self.font_size {
             return self.run_with_size(text, font_size);
@@ -341,6 +538,100 @@ impl<'a> TextLayout<'a> {
                 && layout.width <= max_width + f32::EPSILON
                 && layout.height <= max_height + f32::EPSILON
         };
+
+        if self.comic_balloon.is_some() {
+            // A balloon's usable width changes when the text reflows to a different
+            // number of lines, so a smaller font can fail even though a larger one
+            // fits. Search from largest to smallest instead of assuming monotonicity.
+            if let Some(best) = largest_fitting_font_size(
+                minimum,
+                maximum,
+                |size| self.run_with_size(text, size),
+                fits,
+            )? {
+                if best.lines.len() > 1
+                    && max_height.is_finite()
+                    && best.height < max_height * 0.6
+                    && let Some(preferred_line_height) = self.line_height
+                {
+                    let mut relaxed = self.clone();
+                    let maximum_line_height = preferred_line_height * 1.125;
+                    let mut low = preferred_line_height;
+                    let mut high = maximum_line_height;
+                    let mut relaxed_best = best.clone();
+                    let mut iterations = 0u32;
+                    while high - low > 0.001 && iterations < 12 {
+                        iterations += 1;
+                        let line_height = (low + high) * 0.5;
+                        relaxed.line_height = Some(line_height);
+                        let candidate = relaxed.run_with_size(text, best.font_size)?;
+                        if fits(&candidate) {
+                            relaxed_best = candidate;
+                            low = line_height;
+                        } else {
+                            high = line_height;
+                        }
+                    }
+                    tracing::info!(
+                        iterations,
+                        font_size = relaxed_best.font_size,
+                        line_height = low,
+                        "auto_size loosened leading"
+                    );
+                    return Ok(relaxed_best);
+                }
+                tracing::info!(font_size = best.font_size, "auto_size done");
+                return Ok(best);
+            }
+
+            let Some(preferred_line_height) = self.line_height else {
+                return self.run_with_size(text, minimum);
+            };
+            let minimum_line_height = self
+                .min_line_height
+                .unwrap_or(preferred_line_height)
+                .max(0.1)
+                .min(preferred_line_height);
+            if minimum_line_height >= preferred_line_height {
+                return self.run_with_size(text, minimum);
+            }
+
+            let mut compact = self.clone();
+            compact.line_height = Some(minimum_line_height);
+            let Some(mut best) = largest_fitting_font_size(
+                minimum,
+                maximum,
+                |size| compact.run_with_size(text, size),
+                fits,
+            )?
+            else {
+                return compact.run_with_size(text, minimum);
+            };
+
+            let font_size = best.font_size;
+            let mut low = minimum_line_height;
+            let mut high = preferred_line_height;
+            let mut iterations = 0u32;
+            while high - low > 0.001 && iterations < 12 {
+                iterations += 1;
+                let ratio = (low + high) * 0.5;
+                compact.line_height = Some(ratio);
+                let layout = compact.run_with_size(text, font_size)?;
+                if fits(&layout) {
+                    best = layout;
+                    low = ratio;
+                } else {
+                    high = ratio;
+                }
+            }
+            tracing::info!(
+                iterations,
+                font_size = best.font_size,
+                line_height = low,
+                "auto_size tightened leading"
+            );
+            return Ok(best);
+        }
 
         let maximum_layout = self.run_with_size(text, maximum)?;
         if fits(&maximum_layout) {
@@ -420,8 +711,6 @@ impl<'a> TextLayout<'a> {
         {
             line_breaker = line_breaker.with_hyphenation(lang, HYPHENATION_MIN_WORD_LEN);
         }
-        let normalized_text = normalize_emphasis_punctuation(text);
-        let text = normalized_text.as_str();
         // Use real font metrics for consistent line sizing across modes.
         let font_ref = self.font.skrifa_ref()?;
         let metrics = font_ref.metrics(Size::new(font_size), self.font.location());
@@ -448,15 +737,10 @@ impl<'a> TextLayout<'a> {
                 &[]
             },
         };
-        let balloon_air = if self.comic_balloon.is_some() {
-            shaper
-                .shape("o", self.font, &options)?
-                .x_advance
-                .abs()
-                .max(font_size * COMIC_BALLOON_AIR_FALLBACK_EM)
-        } else {
-            0.0
-        };
+        let balloon_air = self
+            .comic_balloon
+            .as_ref()
+            .map_or(0.0, |balloon| balloon.air(font_size));
 
         let mut max_extent = if self.writing_mode.is_vertical() {
             self.max_height
@@ -595,6 +879,7 @@ impl<'a> TextLayout<'a> {
                 max_extent,
                 line_height,
                 balloon_air,
+                balloon_air,
                 &bidi_info,
                 &mut lines,
                 &mut line_profiles,
@@ -613,6 +898,7 @@ impl<'a> TextLayout<'a> {
                     max_extent,
                     line_height,
                     balloon_air,
+                    balloon_air,
                     &bidi_info,
                     &mut lines,
                     &mut line_profiles,
@@ -627,6 +913,7 @@ impl<'a> TextLayout<'a> {
                     false,
                     max_extent,
                     line_height,
+                    balloon_air,
                     balloon_air,
                     &bidi_info,
                     &mut lines,
@@ -781,28 +1068,16 @@ impl<'a> TextLayout<'a> {
             }
         }
 
-        for line in &mut lines {
-            line.range.start = normalized_text.original_offset(line.range.start);
-            line.range.end = normalized_text.original_offset(line.range.end);
-            for glyph in &mut line.glyphs {
-                glyph.cluster = normalized_text.original_offset(glyph.cluster as usize) as u32;
-            }
-        }
+        let mut overflowed = self.comic_balloon.is_none()
+            && (contour_overflowed
+                || self
+                    .max_width
+                    .is_some_and(|maximum| width > maximum + f32::EPSILON)
+                || self
+                    .max_height
+                    .is_some_and(|maximum| height > maximum + f32::EPSILON));
 
-        let balloon_air_overflowed = self.comic_balloon.as_ref().is_some_and(|balloon| {
-            width + balloon_air * 2.0 > balloon.width + f32::EPSILON
-                || height + balloon_air * 2.0 > balloon.height + f32::EPSILON
-        });
-        let overflowed = contour_overflowed
-            || balloon_air_overflowed
-            || self
-                .max_width
-                .is_some_and(|maximum| width > maximum + f32::EPSILON)
-            || self
-                .max_height
-                .is_some_and(|maximum| height > maximum + f32::EPSILON);
-
-        Ok(LayoutRun {
+        let layout = LayoutRun {
             lines,
             width,
             height,
@@ -810,6 +1085,14 @@ impl<'a> TextLayout<'a> {
             overflowed,
             placement_offset_x,
             placement_offset_y,
+        };
+        if !overflowed && !self.comic_edge_clearance(font_size, &layout)? {
+            overflowed = true;
+        }
+
+        Ok(LayoutRun {
+            overflowed,
+            ..layout
         })
     }
 
@@ -822,7 +1105,8 @@ impl<'a> TextLayout<'a> {
         force_final_line: bool,
         max_extent: f32,
         line_height: f32,
-        balloon_air: f32,
+        balloon_air_x: f32,
+        balloon_air_y: f32,
         bidi_info: &BidiInfo<'_>,
         lines: &mut Vec<LayoutLine<'a>>,
         line_profiles: &mut Vec<LineProfile>,
@@ -868,7 +1152,8 @@ impl<'a> TextLayout<'a> {
                 &measures,
                 balloon,
                 line_height,
-                balloon_air,
+                balloon_air_x,
+                balloon_air_y,
                 self.hyphenation_policy,
             )
         } else if max_extent.is_finite() && max_extent > 0.0 {
@@ -1062,6 +1347,52 @@ impl<'a> TextLayout<'a> {
         }
     }
 
+    fn comic_edge_clearance(&self, font_size: f32, layout: &LayoutRun<'a>) -> Result<bool> {
+        let Some(balloon) = &self.comic_balloon else {
+            return Ok(true);
+        };
+
+        let origin_x = (balloon.width - layout.width) * 0.5 + layout.placement_offset_x;
+        let origin_y = (balloon.height - layout.height) * balloon.vertical_alignment
+            + layout.placement_offset_y;
+        let mut text_edge_pixels = HashSet::new();
+
+        for line in &layout.lines {
+            let (mut x, mut y) = line.baseline;
+            for glyph in &line.glyphs {
+                let font_ref = glyph.font.skrifa_ref()?;
+                if let Some(outline) = font_ref
+                    .outline_glyphs()
+                    .get(skrifa::GlyphId::new(glyph.glyph_id))
+                {
+                    let mut pen = EdgePixelPen {
+                        pixels: &mut text_edge_pixels,
+                        origin: (origin_x + x + glyph.x_offset, origin_y + y - glyph.y_offset),
+                        current: (0.0, 0.0),
+                        start: (0.0, 0.0),
+                    };
+                    outline
+                        .draw(
+                            DrawSettings::unhinted(Size::new(font_size), glyph.font.location()),
+                            &mut pen,
+                        )
+                        .map_err(|error| {
+                            anyhow::anyhow!(
+                                "failed to read glyph {} outline for balloon layout: {error}",
+                                glyph.glyph_id
+                            )
+                        })?;
+                }
+                x += glyph.x_advance;
+                y -= glyph.y_advance;
+            }
+        }
+
+        Ok(text_edge_pixels
+            .into_iter()
+            .all(|pixel| balloon.contains_with_clearance(pixel, balloon.air(font_size))))
+    }
+
     fn center_vertical_fullwidth_punctuation(
         &self,
         font_size: f32,
@@ -1103,17 +1434,33 @@ impl<'a> TextLayout<'a> {
     }
 
     fn apply_spacing(&self, text: &str, shaped: &mut ShapedRun<'a>) {
-        if self.letter_spacing == 0.0 && self.word_spacing == 0.0 {
+        if self.letter_spacing == 0.0
+            && self.word_spacing == 0.0
+            && !self.compact_emphasis_punctuation
+        {
             return;
         }
         for glyph in &mut shaped.glyphs {
             let character = text
                 .get(glyph.cluster as usize..)
                 .and_then(|tail| tail.chars().next());
+            let advance = if self.writing_mode.is_vertical() {
+                glyph.y_advance
+            } else {
+                glyph.x_advance
+            };
+            let compact_spacing = self
+                .compact_emphasis_punctuation
+                .then(|| emphasis_run_length(text, glyph.cluster as usize))
+                .flatten()
+                .map_or(0.0, |run_length| {
+                    -advance.abs() * (1.0 - 1.0 / run_length as f32)
+                });
             let extra = self.letter_spacing
                 + character
                     .filter(|character| character.is_whitespace())
-                    .map_or(0.0, |_| self.word_spacing);
+                    .map_or(0.0, |_| self.word_spacing)
+                + compact_spacing;
             if self.writing_mode.is_vertical() {
                 glyph.y_advance = extend_advance(glyph.y_advance, extra);
             } else {
@@ -1316,16 +1663,17 @@ fn comic_line_breaks(
     segments: &[LineBreakMeasure],
     balloon: &ComicBalloon,
     line_height: f32,
-    air: f32,
+    air_x: f32,
+    air_y: f32,
     policy: HyphenationPolicy,
 ) -> LineBreakResult {
-    let available_height = (balloon.height - air * 2.0).max(0.0);
+    let available_height = (balloon.height - air_y * 2.0).max(0.0);
     let maximum_lines = ((available_height / line_height).floor() as usize)
         .min(COMIC_MAX_LINES)
         .min(segments.len());
     if maximum_lines == 0 {
         let mut fallback =
-            line_breaks_with_policy(segments, (balloon.width - air * 2.0).max(1.0), policy);
+            line_breaks_with_policy(segments, (balloon.width - air_x * 2.0).max(1.0), policy);
         fallback.overflowed = true;
         return fallback;
     }
@@ -1333,7 +1681,7 @@ fn comic_line_breaks(
     let select = |allow_hyphenation| {
         (1..=maximum_lines)
             .filter_map(|line_count| {
-                let profiles = balloon.line_profiles(line_count, line_height, air)?;
+                let profiles = balloon.line_profiles(line_count, line_height, air_x, air_y)?;
                 exact_profiled_line_breaks(segments, profiles, allow_hyphenation)
             })
             .min_by(|left, right| {
@@ -1352,7 +1700,7 @@ fn comic_line_breaks(
 
     select(policy != HyphenationPolicy::Disabled).unwrap_or_else(|| {
         let mut fallback =
-            line_breaks_with_policy(segments, (balloon.width - air * 2.0).max(1.0), policy);
+            line_breaks_with_policy(segments, (balloon.width - air_x * 2.0).max(1.0), policy);
         fallback.overflowed = true;
         fallback
     })
@@ -1469,6 +1817,62 @@ fn breaks_overflow(segments: &[LineBreakMeasure], breaks: &[usize], widths: &[f3
 }
 
 impl ComicBalloon {
+    fn air(&self, font_size: f32) -> f32 {
+        self.minimum_air.max(font_size)
+    }
+
+    fn contains_with_clearance(&self, pixel: (i32, i32), air: f32) -> bool {
+        let point = (pixel.0 as f32 + 0.5, pixel.1 as f32 + 0.5);
+        if !self.contains(point) {
+            return false;
+        }
+        if air <= 0.0 {
+            return true;
+        }
+
+        let radius = air.ceil() as i32;
+        let first = self
+            .edge_pixels
+            .partition_point(|&(x, _)| x < pixel.0 - radius);
+        let last = self
+            .edge_pixels
+            .partition_point(|&(x, _)| x <= pixel.0 + radius);
+        let minimum_distance_squared = air * air;
+        !self.edge_pixels[first..last].iter().any(|&(x, y)| {
+            let dx = (pixel.0 - x) as f32;
+            let dy = (pixel.1 - y) as f32;
+            dx * dx + dy * dy < minimum_distance_squared
+        })
+    }
+
+    fn contains(&self, point: (f32, f32)) -> bool {
+        if self.contour.len() < 3 {
+            let radius_x = self.width * 0.5;
+            let radius_y = self.height * 0.5;
+            if radius_x <= 0.0 || radius_y <= 0.0 {
+                return false;
+            }
+            let x = (point.0 - radius_x) / radius_x;
+            let y = (point.1 - radius_y) / radius_y;
+            return x * x + y * y <= 1.0;
+        }
+
+        let mut inside = false;
+        let mut previous = self.contour[self.contour.len() - 1];
+        for &current in &self.contour {
+            if (current.1 > point.1) != (previous.1 > point.1) {
+                let intersection_x = (previous.0 - current.0) * (point.1 - current.1)
+                    / (previous.1 - current.1)
+                    + current.0;
+                if point.0 < intersection_x {
+                    inside = !inside;
+                }
+            }
+            previous = current;
+        }
+        inside
+    }
+
     fn block_top(&self, block_height: f32, air: f32) -> f32 {
         let available_height = (self.height - air * 2.0).max(0.0);
         air + (available_height - block_height).max(0.0) * self.vertical_alignment
@@ -1478,26 +1882,34 @@ impl ComicBalloon {
         &self,
         line_count: usize,
         line_height: f32,
-        air: f32,
+        air_x: f32,
+        air_y: f32,
     ) -> Option<Vec<LineProfile>> {
-        let rx = self.width * 0.5 - air;
-        let ry = self.height * 0.5 - air;
+        let rx = self.width * 0.5 - air_x;
+        let ry = self.height * 0.5 - air_y;
         let block_height = line_count as f32 * line_height;
         if rx <= 0.0 || ry <= 0.0 || block_height > ry * 2.0 + f32::EPSILON {
             return None;
         }
-        let top = self.block_top(block_height, air);
+        let top = self.block_top(block_height, air_y);
         let center_x = self.width * 0.5;
         let mut profiles = Vec::with_capacity(line_count);
         for line in 0..line_count {
-            let y = top + (line as f32 + 0.5) * line_height;
-            let normalized_y = ((y - self.height * 0.5) / ry).clamp(-1.0, 1.0);
-            let ellipse_half_width = rx * (1.0 - normalized_y * normalized_y).sqrt();
-            let mut left = center_x - ellipse_half_width;
-            let mut right = center_x + ellipse_half_width;
-            if let Some((contour_left, contour_right)) = self.contour_span(y) {
-                left = left.max(contour_left + air);
-                right = right.min(contour_right - air);
+            let line_top = top + line as f32 * line_height;
+            let mut left = f32::NEG_INFINITY;
+            let mut right = f32::INFINITY;
+            // A center-only sample lets glyph corners enter a narrowing contour.
+            // Intersect several spans across the complete line box instead.
+            for sample in 0..=4 {
+                let y = line_top + line_height * sample as f32 / 4.0;
+                let normalized_y = ((y - self.height * 0.5) / ry).clamp(-1.0, 1.0);
+                let ellipse_half_width = rx * (1.0 - normalized_y * normalized_y).sqrt();
+                let (sample_left, sample_right) = self.contour_span(y).map_or(
+                    (center_x - ellipse_half_width, center_x + ellipse_half_width),
+                    |(contour_left, contour_right)| (contour_left + air_x, contour_right - air_x),
+                );
+                left = left.max(sample_left);
+                right = right.min(sample_right);
             }
             if right <= left {
                 return None;
@@ -1576,167 +1988,28 @@ fn centered_x_offset(x_min: f32, x_max: f32) -> f32 {
     -((x_min + x_max) * 0.5)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum EmphasisMark {
-    Bang,
-    Question,
+fn is_emphasis_mark(character: char) -> bool {
+    matches!(character, '!' | '?' | '！' | '？')
 }
 
-fn emphasis_mark_kind(ch: char) -> Option<EmphasisMark> {
-    match ch {
-        '!' | '！' => Some(EmphasisMark::Bang),
-        '?' | '？' => Some(EmphasisMark::Question),
-        _ => None,
+fn emphasis_run_length(text: &str, offset: usize) -> Option<usize> {
+    let character = text.get(offset..)?.chars().next()?;
+    if !is_emphasis_mark(character) {
+        return None;
     }
-}
-
-fn emphasis_pair_symbol(left: EmphasisMark, right: EmphasisMark) -> char {
-    match (left, right) {
-        (EmphasisMark::Bang, EmphasisMark::Bang) => '‼',
-        (EmphasisMark::Question, EmphasisMark::Question) => '⁇',
-        (EmphasisMark::Bang, EmphasisMark::Question) => '⁉',
-        (EmphasisMark::Question, EmphasisMark::Bang) => '⁈',
-    }
-}
-
-#[derive(Debug)]
-enum NormalizedText<'a> {
-    Borrowed(&'a str),
-    Owned {
-        text: String,
-        original_offsets: Vec<usize>,
-    },
-}
-
-impl NormalizedText<'_> {
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Borrowed(text) => text,
-            Self::Owned { text, .. } => text,
-        }
-    }
-
-    fn original_offset(&self, normalized_offset: usize) -> usize {
-        match self {
-            Self::Borrowed(_) => normalized_offset,
-            Self::Owned {
-                original_offsets, ..
-            } => original_offsets
-                .get(normalized_offset)
-                .copied()
-                .unwrap_or_else(|| *original_offsets.last().unwrap_or(&0)),
-        }
-    }
-}
-
-fn normalize_emphasis_punctuation(text: &str) -> NormalizedText<'_> {
-    let chars = text.char_indices().collect::<Vec<_>>();
-    if !chars.windows(2).any(|pair| {
-        emphasis_mark_kind(pair[0].1).is_some() && emphasis_mark_kind(pair[1].1).is_some()
-    }) {
-        return NormalizedText::Borrowed(text);
-    }
-
-    let mut normalized_text = String::with_capacity(text.len());
-    let mut original_offsets = vec![0];
-    let mut index = 0usize;
-
-    while index < chars.len() {
-        let (start, ch) = chars[index];
-        let Some(kind) = emphasis_mark_kind(ch) else {
-            push_normalized_character(
-                &mut normalized_text,
-                &mut original_offsets,
-                ch,
-                start,
-                character_end(text, &chars, index),
-            );
-            index += 1;
-            continue;
-        };
-
-        let Some(&(_, next_ch)) = chars.get(index + 1) else {
-            push_normalized_character(
-                &mut normalized_text,
-                &mut original_offsets,
-                ch,
-                start,
-                text.len(),
-            );
-            break;
-        };
-        let Some(next_kind) = emphasis_mark_kind(next_ch) else {
-            push_normalized_character(
-                &mut normalized_text,
-                &mut original_offsets,
-                ch,
-                start,
-                character_end(text, &chars, index),
-            );
-            index += 1;
-            continue;
-        };
-
-        if kind == next_kind {
-            push_normalized_character(
-                &mut normalized_text,
-                &mut original_offsets,
-                emphasis_pair_symbol(kind, next_kind),
-                start,
-                character_end(text, &chars, index + 1),
-            );
-            index += 2;
-            continue;
-        }
-
-        if chars
-            .get(index + 2)
-            .and_then(|(_, lookahead)| emphasis_mark_kind(*lookahead))
-            == Some(next_kind)
-        {
-            push_normalized_character(
-                &mut normalized_text,
-                &mut original_offsets,
-                ch,
-                start,
-                character_end(text, &chars, index),
-            );
-            index += 1;
-            continue;
-        }
-
-        push_normalized_character(
-            &mut normalized_text,
-            &mut original_offsets,
-            emphasis_pair_symbol(kind, next_kind),
-            start,
-            character_end(text, &chars, index + 1),
-        );
-        index += 2;
-    }
-
-    NormalizedText::Owned {
-        text: normalized_text,
-        original_offsets,
-    }
-}
-
-fn character_end(text: &str, chars: &[(usize, char)], index: usize) -> usize {
-    chars.get(index + 1).map_or(text.len(), |(start, _)| *start)
-}
-
-fn push_normalized_character(
-    normalized_text: &mut String,
-    original_offsets: &mut Vec<usize>,
-    character: char,
-    original_start: usize,
-    original_end: usize,
-) {
-    let normalized_start = normalized_text.len();
-    normalized_text.push(character);
-    original_offsets.resize(normalized_text.len() + 1, original_start);
-    original_offsets[normalized_start] = original_start;
-    original_offsets[normalized_text.len()] = original_end;
+    let before = text
+        .get(..offset)?
+        .chars()
+        .rev()
+        .take_while(|character| is_emphasis_mark(*character))
+        .count();
+    let after = text
+        .get(offset..)?
+        .chars()
+        .take_while(|character| is_emphasis_mark(*character))
+        .count();
+    let length = before + after;
+    (length > 1).then_some(length)
 }
 
 fn is_fullwidth_punctuation(ch: char) -> bool {
@@ -1838,6 +2111,24 @@ mod tests {
         );
     }
 
+    fn comic_balloon(
+        width: f32,
+        height: f32,
+        contour: Vec<(f32, f32)>,
+        vertical_alignment: f32,
+        minimum_air: f32,
+    ) -> ComicBalloon {
+        let edge_pixels = rasterize_contour_edge(width, height, &contour);
+        ComicBalloon {
+            width,
+            height,
+            contour,
+            vertical_alignment,
+            minimum_air,
+            edge_pixels: edge_pixels.into(),
+        }
+    }
+
     #[test]
     fn capped_auto_size_shrinks_text_to_fit_the_available_height() -> anyhow::Result<()> {
         let font = any_system_font();
@@ -1920,6 +2211,20 @@ mod tests {
     }
 
     #[test]
+    fn font_size_search_handles_non_monotonic_balloon_fit() -> anyhow::Result<()> {
+        let fitted = largest_fitting_font_size(
+            9.0,
+            24.0,
+            |size| Ok(size),
+            |size| (10.0..=12.0).contains(size),
+        )?
+        .expect("the larger fitting range should be found");
+
+        assert!((11.99..=12.0).contains(&fitted));
+        Ok(())
+    }
+
+    #[test]
     fn optimal_line_breaks_balance_ragged_lines() {
         let segments = vec![
             LineBreakMeasure {
@@ -1936,13 +2241,8 @@ mod tests {
 
     #[test]
     fn comic_profiles_are_widest_in_the_middle() {
-        let balloon = ComicBalloon {
-            width: 200.0,
-            height: 120.0,
-            contour: vec![(0.0, 0.0), (200.0, 0.0), (200.0, 120.0), (0.0, 120.0)],
-            vertical_alignment: 0.5,
-        };
-        let profiles = balloon.line_profiles(5, 16.0, 10.0).unwrap();
+        let balloon = comic_balloon(200.0, 120.0, Vec::new(), 0.5, 0.0);
+        let profiles = balloon.line_profiles(5, 16.0, 10.0, 10.0).unwrap();
 
         assert!(profiles[0].width < profiles[1].width);
         assert!(profiles[1].width < profiles[2].width);
@@ -1951,14 +2251,45 @@ mod tests {
     }
 
     #[test]
+    fn comic_profiles_use_the_detected_contour_without_an_extra_ellipse() {
+        let balloon = comic_balloon(
+            200.0,
+            120.0,
+            vec![(0.0, 0.0), (200.0, 0.0), (200.0, 120.0), (0.0, 120.0)],
+            0.5,
+            0.0,
+        );
+        let profiles = balloon.line_profiles(5, 16.0, 10.0, 10.0).unwrap();
+
+        for profile in profiles {
+            assert_approx_eq(profile.width, 180.0);
+        }
+    }
+
+    #[test]
+    fn comic_profiles_reserve_air_across_the_entire_line_box() {
+        let balloon = comic_balloon(
+            200.0,
+            120.0,
+            vec![(100.0, 0.0), (200.0, 60.0), (100.0, 120.0), (0.0, 60.0)],
+            0.5,
+            0.0,
+        );
+        let profile = balloon.line_profiles(1, 40.0, 0.0, 10.0).unwrap()[0];
+
+        assert!((130.0..=135.0).contains(&profile.width));
+    }
+
+    #[test]
     fn comic_profiles_respect_asymmetric_contours() {
-        let balloon = ComicBalloon {
-            width: 200.0,
-            height: 120.0,
-            contour: vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
-            vertical_alignment: 0.5,
-        };
-        let profile = balloon.line_profiles(1, 16.0, 10.0).unwrap()[0];
+        let balloon = comic_balloon(
+            200.0,
+            120.0,
+            vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
+            0.5,
+            0.0,
+        );
+        let profile = balloon.line_profiles(1, 16.0, 10.0, 10.0).unwrap()[0];
 
         assert!(profile.center_offset < -20.0);
         assert!(profile.width < 130.0);
@@ -1977,10 +2308,62 @@ mod tests {
                 120.0,
                 vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
                 0.5,
+                0.0,
             )
             .run("Hello")?;
 
         assert!(layout.placement_offset_x() < -10.0);
+        Ok(())
+    }
+
+    #[test]
+    fn comic_auto_size_only_moderately_loosens_underfilled_leading() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let font_size = 16.0;
+        let layout = TextLayout::new(&font)
+            .with_max_font_size(font_size)
+            .with_min_font_size(font_size)
+            .with_line_height(1.2)
+            .with_alignment(TextAlign::Center)
+            .with_max_width(200.0)
+            .with_max_height(150.0)
+            .with_comic_balloon(
+                200.0,
+                150.0,
+                vec![(0.0, 0.0), (200.0, 0.0), (200.0, 150.0), (0.0, 150.0)],
+                0.5,
+                10.0,
+            )
+            .run("First\nSecond\nThird")?;
+
+        let leading = layout.lines[1].baseline.1 - layout.lines[0].baseline.1;
+        assert!(leading > font_size * 1.2);
+        assert!(leading <= font_size * 1.35 + 0.01);
+        Ok(())
+    }
+
+    #[test]
+    fn comic_auto_size_preserves_air_for_an_already_filled_layout() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let font_size = 16.0;
+        let layout = TextLayout::new(&font)
+            .with_max_font_size(font_size)
+            .with_min_font_size(font_size)
+            .with_line_height(1.2)
+            .with_alignment(TextAlign::Center)
+            .with_max_width(200.0)
+            .with_max_height(150.0)
+            .with_comic_balloon(
+                200.0,
+                150.0,
+                vec![(0.0, 0.0), (200.0, 0.0), (200.0, 150.0), (0.0, 150.0)],
+                0.5,
+                10.0,
+            )
+            .run("First\nSecond\nThird\nFourth\nFifth\nSixth")?;
+
+        let leading = layout.lines[1].baseline.1 - layout.lines[0].baseline.1;
+        assert_approx_eq(leading, font_size * 1.2);
         Ok(())
     }
 
@@ -2112,7 +2495,7 @@ mod tests {
     }
 
     #[test]
-    fn comic_balloon_reports_when_font_relative_air_cannot_fit() -> anyhow::Result<()> {
+    fn comic_balloon_reports_when_relative_air_cannot_fit() -> anyhow::Result<()> {
         let font = any_system_font();
         let layout = TextLayout::new(&font)
             .with_font_size(16.0)
@@ -2123,11 +2506,36 @@ mod tests {
                 10.0,
                 vec![(0.0, 0.0), (100.0, 0.0), (100.0, 10.0), (0.0, 10.0)],
                 0.5,
+                4.0,
             )
             .run("Hi")?;
 
         assert!(layout.overflowed());
         Ok(())
+    }
+
+    #[test]
+    fn comic_balloon_measures_polygon_edge_pixel_clearance() {
+        let balloon = comic_balloon(
+            100.0,
+            100.0,
+            vec![(50.0, 0.0), (100.0, 50.0), (50.0, 100.0), (0.0, 50.0)],
+            0.5,
+            8.0,
+        );
+
+        assert!(balloon.contains_with_clearance((50, 20), 8.0));
+        assert!(!balloon.contains_with_clearance((50, 5), 8.0));
+        assert!(!balloon.contains_with_clearance((10, 10), 8.0));
+    }
+
+    #[test]
+    fn comic_balloon_air_scales_with_the_candidate_font_size() {
+        let balloon = comic_balloon(100.0, 100.0, Vec::new(), 0.5, 4.0);
+
+        assert_approx_eq(balloon.air(12.0), 12.0);
+        assert_approx_eq(balloon.air(24.0), 24.0);
+        assert_approx_eq(balloon.air(3.0), 4.0);
     }
 
     #[test]
@@ -2383,49 +2791,37 @@ mod tests {
     }
 
     #[test]
-    fn emphasis_pairs_are_single_symbols() {
-        for (source, expected) in [
-            ("！！", "‼"),
-            ("!!", "‼"),
-            ("??", "⁇"),
-            ("!!?", "‼?"),
-            ("?!!", "?‼"),
-            ("!?!", "⁉!"),
-            ("！？", "⁉"),
-            ("？！", "⁈"),
-            ("Hello!?!", "Hello⁉!"),
-        ] {
-            assert_eq!(normalize_emphasis_punctuation(source).as_str(), expected);
-        }
-    }
-
-    #[test]
-    fn emphasis_normalization_preserves_original_offsets() {
-        let normalized = normalize_emphasis_punctuation("?!!後");
-
-        assert_eq!(normalized.as_str(), "?‼後");
-        assert_eq!(normalized.original_offset(0), 0);
-        assert_eq!(normalized.original_offset(1), 1);
-        assert_eq!(normalized.original_offset(4), 3);
-        assert_eq!(normalized.original_offset(normalized.as_str().len()), 6);
-    }
-
-    #[test]
-    fn horizontal_layout_applies_emphasis_normalization() -> anyhow::Result<()> {
+    fn cjk_emphasis_punctuation_keeps_every_symbol_and_uses_tighter_spacing() -> anyhow::Result<()>
+    {
         let font = any_system_font();
-        let text = "?!!";
-        let layout = TextLayout::new(&font).with_font_size(16.0).run(text)?;
-        let clusters = layout.lines[0]
+        let text = "後??!";
+        let regular = TextLayout::new(&font).with_font_size(16.0).run(text)?;
+        let compact = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_compact_emphasis_punctuation(true)
+            .run(text)?;
+        let clusters = compact.lines[0]
             .glyphs
             .iter()
             .map(|glyph| glyph.cluster)
             .collect::<Vec<_>>();
 
-        assert_eq!(layout.lines[0].range, 0..text.len());
-        assert!(clusters.contains(&0));
-        assert!(clusters.contains(&1));
-        assert!(!clusters.contains(&2));
+        assert_eq!(compact.lines[0].range, 0..text.len());
+        assert!(clusters.contains(&3));
+        assert!(clusters.contains(&4));
+        assert!(clusters.contains(&5));
+        assert!(compact.lines[0].advance < regular.lines[0].advance);
         Ok(())
+    }
+
+    #[test]
+    fn emphasis_run_length_includes_marks_on_both_sides() {
+        let text = "後？？!続";
+
+        assert_eq!(emphasis_run_length(text, 3), Some(3));
+        assert_eq!(emphasis_run_length(text, 6), Some(3));
+        assert_eq!(emphasis_run_length(text, 9), Some(3));
+        assert_eq!(emphasis_run_length(text, 0), None);
     }
 
     #[test]

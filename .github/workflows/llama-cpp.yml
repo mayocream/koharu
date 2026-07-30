@@ -189,7 +189,7 @@ jobs:
           retention-days: 3
 
   release:
-    # if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-24.04
     permissions:

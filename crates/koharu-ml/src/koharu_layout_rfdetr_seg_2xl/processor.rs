@@ -80,7 +80,6 @@ impl KoharuLayoutRFDetrImageProcessor {
         thresholds: KoharuLayoutThresholds,
     ) -> Result<KoharuLayoutDetections> {
         validate_thresholds(thresholds)?;
-
         let logits_size = output.pred_logits.size();
         ensure!(
             logits_size == [1, 300, 5],
@@ -155,18 +154,23 @@ impl KoharuLayoutRFDetrImageProcessor {
             .to_kind(Kind::Uint8)
             * 255;
 
-        let scores = tensor_to_vec_f32(&scores)?;
-        let labels = tensor_to_vec_i64(&labels)?;
-        let boxes = tensor_to_vec_f32(&boxes)?;
-        let masks = masks.to_device(Device::Cpu).contiguous();
+        // Keep reductions on the accelerator and coalesce the compact outputs
+        // before crossing the device boundary. The masks themselves remain a
+        // caller-facing CPU byte buffer, but their areas no longer require a
+        // second full-image scan on the CPU.
+        let areas = masks.count_nonzero_dim_intlist(&[1i64, 2, 3][..]);
+        let floats = Tensor::cat(&[scores.unsqueeze(1), boxes], 1);
+        let integers = Tensor::cat(&[labels.unsqueeze(1), areas.unsqueeze(1)], 1);
+        let floats = tensor_to_vec_f32(&floats)?;
+        let integers = tensor_to_vec_i64(&integers)?;
         let mask_size = image_width as usize * image_height as usize;
         let mask_values = tensor_to_vec_u8(&masks)?;
 
-        let mut detections = Vec::with_capacity(scores.len());
-        for index in 0..scores.len() {
-            let label_id = labels[index] as usize;
+        let mut detections = Vec::with_capacity(integers.len() / 2);
+        for index in 0..integers.len() / 2 {
+            let label_id = integers[index * 2] as usize;
             let pixels = mask_values[index * mask_size..(index + 1) * mask_size].to_vec();
-            let area = pixels.iter().map(|&value| u32::from(value != 0)).sum();
+            let area = integers[index * 2 + 1].clamp(0, i64::from(u32::MAX)) as u32;
             detections.push(KoharuLayoutDetection {
                 label_id,
                 label: self
@@ -174,8 +178,8 @@ impl KoharuLayoutRFDetrImageProcessor {
                     .get(label_id)
                     .cloned()
                     .unwrap_or_else(|| "__background__".to_owned()),
-                score: scores[index],
-                bbox: boxes[index * 4..index * 4 + 4].try_into().unwrap(),
+                score: floats[index * 5],
+                bbox: floats[index * 5 + 1..index * 5 + 5].try_into().unwrap(),
                 area,
                 mask: KoharuLayoutMask {
                     width: image_width,

@@ -14,6 +14,7 @@ use linux as platform;
 #[cfg(target_os = "windows")]
 use windows as platform;
 
+#[allow(unused)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Vendor {
     Nvidia,

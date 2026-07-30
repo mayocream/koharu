@@ -12,7 +12,6 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
-bytemuck = { workspace = true, features = ["derive"] }
 image = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }

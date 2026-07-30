@@ -351,6 +351,22 @@ impl State {
         Ok(stored_record(id, record))
     }
 
+    pub(crate) fn record_fingerprint(&self, id: RecordId) -> Option<[u8; 32]> {
+        let record = self.records.get(&id)?;
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"koharu-storage-record-v1");
+        hasher.update(id.as_uuid().as_bytes());
+        hasher.update(&(record.components.len() as u64).to_le_bytes());
+        for (key, value) in &record.components {
+            hasher.update(&(key.kind().as_str().len() as u64).to_le_bytes());
+            hasher.update(key.kind().as_str().as_bytes());
+            hasher.update(&(key.slot().as_str().len() as u64).to_le_bytes());
+            hasher.update(key.slot().as_str().as_bytes());
+            hasher.update(value.fingerprint());
+        }
+        Some(*hasher.finalize().as_bytes())
+    }
+
     pub(crate) fn referenced_blobs(&self) -> BTreeSet<BlobId> {
         self.blob_counts.keys().copied().collect()
     }

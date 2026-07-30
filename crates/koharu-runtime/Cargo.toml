@@ -26,7 +26,6 @@ tokio = { workspace = true }
 walkdir = { workspace = true }
 libloading = { workspace = true }
 flate2 = { workspace = true }
-num_cpus = { workspace = true }
 tar = { workspace = true }
 fast-glob = { workspace = true }
 cudarc = { workspace = true }

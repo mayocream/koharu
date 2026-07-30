@@ -21,7 +21,7 @@ import { WelcomeScreen } from '@/components/WelcomeScreen'
 import { useEditorStore } from '@/lib/koharu'
 import { cn } from '@/lib/utils'
 
-const LAYOUT_ID = 'koharu-main-layout-v3'
+const LAYOUT_ID = 'koharu-main-layout-v6'
 
 export function EditorApp() {
   const { t } = useTranslation()
@@ -90,9 +90,9 @@ export function EditorApp() {
             <Panel
               panelRef={navigatorRef}
               id='left'
-              defaultSize={160}
-              minSize={160}
-              maxSize={250}
+              defaultSize={104}
+              minSize={96}
+              maxSize={200}
               collapsible
               collapsedSize={0}
               onResize={(size) => {

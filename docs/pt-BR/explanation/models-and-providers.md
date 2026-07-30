@@ -59,7 +59,7 @@ Na prática, os modelos locais geralmente são transformers decoder-only quantiz
 
 O seletor local também inclui famílias de propósito geral que não são específicas para tradução:
 
-O tradutor local padrão é `gemma4-12b-it`.
+O tradutor local padrão é `qwen3.5-0.8b`.
 
 - LFM2.5 Instruct: `lfm2.5-1.2b-instruct`
 - Ministral 3 Instruct: `ministral-3-8b-instruct`

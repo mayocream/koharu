@@ -3,8 +3,8 @@
 //! CPU tests should cover exact geometry and state transitions. These tests
 //! instead render into the same offscreen texture used by the desktop host,
 //! read it back, and make tolerant pixel assertions. That catches integration
-//! mistakes between scene caching, Vello affines, texture composition, and the
-//! WGPU overlay pass without relying on brittle whole-image byte equality.
+//! mistakes between scene caching, Vello affines, and texture composition
+//! without relying on brittle whole-image byte equality.
 
 use std::{
     io::Cursor,
@@ -16,8 +16,8 @@ use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, SceneSession};
 
 use crate::{
-    Camera, Canvas, CanvasGpu, DisplayState, Frame, Guide, Handle, HitTarget, OverlayState,
-    PagePoint, PageView, PhysicalPoint, PhysicalSize, ViewState,
+    Camera, Canvas, CanvasGpu, DisplayState, ElementFrame, Frame, PageView, PhysicalPoint,
+    PhysicalSize, ViewState,
 };
 
 const VIEWPORT: PhysicalSize = PhysicalSize::new(64, 48);
@@ -163,24 +163,20 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     let commit = session.commit(patch).unwrap();
     let image = image.unwrap();
     canvas.sync(&commit.snapshot, &commit.changes).unwrap();
-    assert_eq!(
-        canvas.hit_test(canvas.page_to_screen(PagePoint::new(4.0, 3.0))),
-        Some(HitTarget::Element(image))
-    );
     woke.recv_timeout(Duration::from_secs(2)).unwrap();
     canvas.render(now + Duration::from_millis(182)).unwrap();
 
     // Moving must clear an old interior pixel and paint the new center. This
     // verifies the node pixels, not merely its selection outline.
+    canvas.begin_transform(&[image]).unwrap();
     canvas
-        .begin_transform(
-            &[image],
-            HitTarget::Element(image),
-            canvas.page_to_screen(PagePoint::new(4.0, 3.0)),
+        .update_transform(
+            1,
+            &[ElementFrame {
+                element: image,
+                frame: Frame::new(6.0, 5.0, 6.0, 4.0),
+            }],
         )
-        .unwrap();
-    canvas
-        .update_transform(canvas.page_to_screen(PagePoint::new(8.0, 6.0)))
         .unwrap();
     canvas.render(now + Duration::from_millis(183)).unwrap();
     let pixels = canvas.read_output_for_test();
@@ -190,18 +186,15 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     assert_eq!(moved.elements[0].frame, Frame::new(6.0, 5.0, 6.0, 4.0));
 
     // Resizing east exposes orange content beyond the committed right edge.
+    canvas.begin_transform(&[image]).unwrap();
     canvas
-        .begin_transform(
-            &[image],
-            HitTarget::Handle {
+        .update_transform(
+            1,
+            &[ElementFrame {
                 element: image,
-                handle: Handle::East,
-            },
-            canvas.page_to_screen(PagePoint::new(8.0, 4.0)),
+                frame: Frame::new(2.0, 2.0, 9.0, 4.0),
+            }],
         )
-        .unwrap();
-    canvas
-        .update_transform(canvas.page_to_screen(PagePoint::new(11.0, 4.0)))
         .unwrap();
     canvas.render(now + Duration::from_millis(184)).unwrap();
     let pixels = canvas.read_output_for_test();
@@ -211,18 +204,18 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
 
     // A 90-degree rotation paints above the original horizontal rectangle and
     // clears a point that was previously inside its left edge.
+    canvas.begin_transform(&[image]).unwrap();
     canvas
-        .begin_transform(
-            &[image],
-            HitTarget::Handle {
+        .update_transform(
+            1,
+            &[ElementFrame {
                 element: image,
-                handle: Handle::Rotate,
-            },
-            canvas.page_to_screen(PagePoint::new(5.0, 0.0)),
+                frame: Frame {
+                    angle_degrees: 90.0,
+                    ..Frame::new(2.0, 2.0, 6.0, 4.0)
+                },
+            }],
         )
-        .unwrap();
-    canvas
-        .update_transform(canvas.page_to_screen(PagePoint::new(9.0, 4.0)))
         .unwrap();
     canvas.render(now + Duration::from_millis(185)).unwrap();
     let pixels = canvas.read_output_for_test();
@@ -231,18 +224,12 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     let rotated = canvas.finish_transform().unwrap().unwrap();
     assert!((rotated.elements[0].frame.angle_degrees - 90.0).abs() < 1e-5);
 
-    canvas.set_overlays(OverlayState {
-        guides: vec![Guide::Vertical(4.0)],
-        ..OverlayState::default()
-    });
-    assert!(canvas.render(Instant::now()).unwrap().generation > generation);
     canvas.clear_page();
     assert!(
         canvas
             .screen_to_page(PhysicalPoint::new(1.0, 1.0))
             .is_none()
     );
-    assert!(canvas.hit_test(PhysicalPoint::new(1.0, 1.0)).is_none());
 }
 
 fn image_asset(bytes: Vec<u8>, width: u32, height: u32) -> AssetInput {

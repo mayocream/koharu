@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CanvasOverlay } from '@/components/canvas/CanvasOverlay'
 import { CanvasToolbar } from '@/components/canvas/CanvasToolbar'
 import { SubToolRail } from '@/components/canvas/SubToolRail'
 import { ToolRail } from '@/components/canvas/ToolRail'
@@ -12,20 +13,24 @@ import {
   useEditorStore,
   type CanvasDisplay,
   type CanvasMaskOverlay,
+  type EntityId,
   type Frame,
+  type TransformFrame,
 } from '@/lib/koharu'
-import { draftFrame, pagePoint, zoomAtPoint } from '@/lib/koharu/geometry'
-
-interface PendingHit {
-  id: number
-  pointer: number
-  start: [number, number]
-  additive: boolean
-  released: boolean
-}
+import {
+  draftFrame,
+  entityFrame,
+  hitTestEntities,
+  pagePoint,
+  scrollCamera,
+  translateFrames,
+  zoomAtPoint,
+} from '@/lib/koharu/geometry'
 
 interface ElementDrag {
   pointer: number
+  start: [number, number]
+  originals: TransformFrame[]
 }
 
 interface TextDraft {
@@ -43,55 +48,73 @@ interface PanDrag {
 export function Workspace() {
   const { t } = useTranslation()
   const surface = useRef<HTMLDivElement>(null)
-  const hitSequence = useRef(0)
-  const pendingHit = useRef<PendingHit | null>(null)
-  const hoverHit = useRef<number | null>(null)
   const drag = useRef<ElementDrag | null>(null)
   const textDraft = useRef<TextDraft | null>(null)
   const pan = useRef<PanDrag | null>(null)
   const masking = useRef<number | null>(null)
-  const cursor = useRef<[number, number] | null>(null)
   const spaceHeld = useRef(false)
+  const nativeTransform = useRef(false)
+  const transformFrame = useRef(0)
+  const transformSession = useRef(0)
+  const [previews, setPreviews] = useState<Record<EntityId, Frame>>({})
+  const [draft, setDraft] = useState<Frame | null>(null)
+  const [cursor, setCursor] = useState<[number, number] | null>(null)
 
   const page = useEditorStore((state) => state.page)
   const tool = useEditorStore((state) => state.tool)
   const selectedElements = useEditorStore((state) => state.selectedElements)
   const hoveredElement = useEditorStore((state) => state.hoveredElement)
-  const showTextBounds = useEditorStore((state) => state.showTextBounds)
   const display = useEditorStore((state) => state.display)
   const brushSize = useEditorStore((state) => state.brushSize)
-
-  const sendOverlays = useCallback(() => {
-    const state = useEditorStore.getState()
-    const draft = textDraft.current?.frame ?? null
-    const showCursor = state.tool === 'text_mask' || state.tool === 'brush_mask'
-    koharuClient.interact({
-      type: 'set_overlays',
-      selected: state.selectedElements,
-      hovered: state.hoveredElement,
-      draft,
-      guides: [],
-      show_text_bounds: state.showTextBounds,
-      brush_cursor:
-        showCursor && cursor.current
-          ? { x: cursor.current[0], y: cursor.current[1], diameter: state.brushSize }
-          : null,
-    })
-  }, [])
+  const camera = useEditorStore((state) => state.camera)
 
   const cancelGesture = useCallback(() => {
     if (masking.current !== null) koharuClient.interact({ type: 'cancel_mask_stroke' })
-    if (drag.current !== null) koharuClient.interact({ type: 'cancel_transform' })
-    pendingHit.current = null
+    if (nativeTransform.current) koharuClient.interact({ type: 'cancel_transform' })
+    nativeTransform.current = false
+    transformSession.current += 1
     drag.current = null
     textDraft.current = null
     pan.current = null
     masking.current = null
-    sendOverlays()
-  }, [sendOverlays])
+    setPreviews({})
+    setDraft(null)
+  }, [])
 
   const reportViewport = useCallback(() => {
     if (surface.current) koharuClient.reportViewport(surface.current)
+  }, [])
+
+  const beginTransform = useCallback((elements: TransformFrame[]) => {
+    if (!elements.length || nativeTransform.current) return
+    nativeTransform.current = true
+    transformSession.current += 1
+    transformFrame.current = 0
+    setPreviews(Object.fromEntries(elements.map(({ element, frame }) => [element, frame])))
+    koharuClient.interact({ type: 'begin_transform', elements: elements.map(({ element }) => element) })
+  }, [])
+
+  const updateTransform = useCallback((elements: TransformFrame[]) => {
+    if (!nativeTransform.current) return
+    transformFrame.current += 1
+    setPreviews(Object.fromEntries(elements.map(({ element, frame }) => [element, frame])))
+    koharuClient.interact({
+      type: 'update_transform',
+      frame: transformFrame.current,
+      elements,
+    })
+  }, [])
+
+  const finishTransform = useCallback(() => {
+    if (!nativeTransform.current) return
+    nativeTransform.current = false
+    const session = transformSession.current
+    void koharuClient
+      .command({ type: 'finish_transform' })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!nativeTransform.current && transformSession.current === session) setPreviews({})
+      })
   }, [])
 
   useEffect(() => {
@@ -124,15 +147,6 @@ export function Workspace() {
     koharuClient.interact({ type: 'set_display', display: next })
   }, [display, page])
 
-  useEffect(sendOverlays, [
-    brushSize,
-    hoveredElement,
-    selectedElements,
-    sendOverlays,
-    showTextBounds,
-    tool,
-  ])
-
   useEffect(() => {
     return koharuClient.subscribe((event) => {
       if (
@@ -144,40 +158,6 @@ export function Workspace() {
       ) {
         cancelGesture()
       }
-      if (event.type !== 'hit_test') return
-      if (event.id === hoverHit.current) {
-        hoverHit.current = null
-        useEditorStore.getState().setHoveredElement(event.target?.element ?? null)
-        return
-      }
-      const pending = pendingHit.current
-      if (!pending || pending.id !== event.id) return
-      pendingHit.current = null
-      const state = useEditorStore.getState()
-      const target = event.target
-      if (!target) {
-        if (!pending.additive) state.selectElements([])
-        return
-      }
-
-      const selected = pending.additive
-        ? state.selectedElements.includes(target.element)
-          ? state.selectedElements.filter((id) => id !== target.element)
-          : [...state.selectedElements, target.element]
-        : state.selectedElements.includes(target.element)
-          ? state.selectedElements
-          : [target.element]
-      state.selectElements(selected)
-
-      if (pending.released || !state.page || !selected.includes(target.element)) return
-      drag.current = { pointer: pending.pointer }
-      koharuClient.interact({
-        type: 'begin_transform',
-        elements: selected,
-        target,
-        x: pending.start[0],
-        y: pending.start[1],
-      })
     })
   }, [cancelGesture])
 
@@ -207,10 +187,7 @@ export function Workspace() {
         state.selectedElements.length
       ) {
         event.preventDefault()
-        koharuClient.fire({
-          type: 'delete_entities',
-          entities: state.selectedElements,
-        })
+        koharuClient.fire({ type: 'delete_entities', entities: state.selectedElements })
       } else if (event.key.toLowerCase() === state.shortcuts.fit) {
         koharuClient.interact({ type: 'fit_window' })
       } else if (event.key === 'Escape') {
@@ -257,12 +234,29 @@ export function Workspace() {
     )
   }
 
+  function selectable(entity: NonNullable<typeof page>['entities'][number]): boolean {
+    return entity.image !== null || isTextElement(entity)
+  }
+
+  function framesFor(elements: EntityId[]): TransformFrame[] {
+    const state = useEditorStore.getState()
+    return elements.flatMap((element) => {
+      const entity = state.page?.entities.find((candidate) => candidate.id === element)
+      const frame =
+        entity && selectable(entity) && entity.visibility.visible && entity.visibility.opacity > 0
+          ? previews[element] ?? entityFrame(entity)
+          : null
+      return frame ? [{ element, frame }] : []
+    })
+  }
+
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (!page || event.button > 1) return
+    if (event.target instanceof Element && event.target.closest('.moveable-control')) return
     event.currentTarget.setPointerCapture(event.pointerId)
     const state = useEditorStore.getState()
     const point = physicalPoint(event.clientX, event.clientY)
-    cursor.current = point
+    if (state.tool === 'text_mask' || state.tool === 'brush_mask') setCursor(point)
 
     if (event.button === 1 || state.tool === 'pan' || spaceHeld.current) {
       pan.current = {
@@ -275,19 +269,30 @@ export function Workspace() {
     }
 
     if (state.tool === 'select') {
-      const id = ++hitSequence.current
-      pendingHit.current = {
-        id,
-        pointer: event.pointerId,
-        start: point,
-        additive: event.shiftKey || event.ctrlKey || event.metaKey,
-        released: false,
+      const start = pageCoordinates(event.clientX, event.clientY)
+      const target = hitTestEntities(page.entities, start, selectable)
+      if (!target) {
+        if (!event.shiftKey && !event.ctrlKey && !event.metaKey) state.selectElements([])
+        return
       }
-      koharuClient.interact({ type: 'hit_test', id, x: point[0], y: point[1] })
+      const additive = event.shiftKey || event.ctrlKey || event.metaKey
+      const selected = additive
+        ? state.selectedElements.includes(target.id)
+          ? state.selectedElements.filter((id) => id !== target.id)
+          : [...state.selectedElements, target.id]
+        : state.selectedElements.includes(target.id)
+          ? state.selectedElements
+          : [target.id]
+      state.selectElements(selected)
+      if (!selected.includes(target.id)) return
+      const originals = framesFor(selected)
+      drag.current = { pointer: event.pointerId, start, originals }
+      beginTransform(originals)
     } else if (state.tool === 'text') {
       const start = pageCoordinates(event.clientX, event.clientY)
-      textDraft.current = { pointer: event.pointerId, start, frame: draftFrame(start, start) }
-      sendOverlays()
+      const frame = draftFrame(start, start)
+      textDraft.current = { pointer: event.pointerId, start, frame }
+      setDraft(frame)
     } else {
       masking.current = event.pointerId
       const plane = state.tool === 'text_mask' ? 'text' : 'brush'
@@ -315,22 +320,20 @@ export function Workspace() {
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     if (!page) return
     const point = physicalPoint(event.clientX, event.clientY)
-    cursor.current = point
     const state = useEditorStore.getState()
+    if (state.tool === 'text_mask' || state.tool === 'brush_mask') setCursor(point)
 
     if (pan.current?.pointer === event.pointerId) {
-      const dx = point[0] - pan.current.start[0]
-      const dy = point[1] - pan.current.start[1]
       const translation: [number, number] = [
-        pan.current.translation[0] + dx,
-        pan.current.translation[1] + dy,
+        pan.current.translation[0] + point[0] - pan.current.start[0],
+        pan.current.translation[1] + point[1] - pan.current.start[1],
       ]
+      useEditorStore.setState({ camera: { zoom: state.camera.zoom, translation, autoFit: false } })
       koharuClient.interact({ type: 'set_camera', zoom: state.camera.zoom, translation })
       return
     }
     if (masking.current === event.pointerId) {
       koharuClient.interact({ type: 'extend_mask_stroke', x: point[0], y: point[1] })
-      sendOverlays()
       return
     }
 
@@ -340,27 +343,35 @@ export function Workspace() {
         currentDraft.start,
         pageCoordinates(event.clientX, event.clientY),
       )
-      sendOverlays()
+      setDraft(currentDraft.frame)
       return
     }
 
     const currentDrag = drag.current
     if (currentDrag?.pointer === event.pointerId) {
-      koharuClient.interact({ type: 'update_transform', x: point[0], y: point[1] })
+      const current = pageCoordinates(event.clientX, event.clientY)
+      updateTransform(
+        translateFrames(currentDrag.originals, [
+          current[0] - currentDrag.start[0],
+          current[1] - currentDrag.start[1],
+        ]),
+      )
       return
     }
 
-    sendOverlays()
-    if (state.tool === 'select' && pendingHit.current === null && hoverHit.current === null) {
-      const id = ++hitSequence.current
-      hoverHit.current = id
-      koharuClient.interact({ type: 'hit_test', id, x: point[0], y: point[1] })
+    if (state.tool === 'select') {
+      const target = hitTestEntities(
+        page.entities,
+        pageCoordinates(event.clientX, event.clientY),
+        selectable,
+      )
+      const hovered = target?.id ?? null
+      if (hovered !== state.hoveredElement) state.setHoveredElement(hovered)
     }
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
     if (!page) return
-    if (pendingHit.current?.pointer === event.pointerId) pendingHit.current.released = true
     if (pan.current?.pointer === event.pointerId) pan.current = null
     if (masking.current === event.pointerId) {
       masking.current = null
@@ -382,40 +393,36 @@ export function Workspace() {
         }
       }
       textDraft.current = null
+      setDraft(null)
       koharuClient.fire({ type: 'add_text', page: page.id, frame })
     }
 
     if (drag.current?.pointer === event.pointerId) {
-      const point = physicalPoint(event.clientX, event.clientY)
-      koharuClient.interact({ type: 'update_transform', x: point[0], y: point[1] })
+      const current = pageCoordinates(event.clientX, event.clientY)
+      updateTransform(
+        translateFrames(drag.current.originals, [
+          current[0] - drag.current.start[0],
+          current[1] - drag.current.start[1],
+        ]),
+      )
       drag.current = null
-      koharuClient.fire({ type: 'finish_transform' })
+      finishTransform()
     }
-    sendOverlays()
   }
 
   function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
     if (!page) return
     event.preventDefault()
     const state = useEditorStore.getState()
-    if (event.ctrlKey || event.metaKey || Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
-      const point = physicalPoint(event.clientX, event.clientY)
-      const nextZoom = Math.min(
-        16,
-        Math.max(0.02, state.camera.zoom * Math.exp(-event.deltaY * 0.0015)),
-      )
-      const camera = zoomAtPoint(state.camera, point, nextZoom)
-      koharuClient.interact({ type: 'set_camera', ...camera })
-    } else {
-      koharuClient.interact({
-        type: 'set_camera',
-        zoom: state.camera.zoom,
-        translation: [
-          state.camera.translation[0] - event.deltaX * window.devicePixelRatio,
-          state.camera.translation[1] - event.deltaY * window.devicePixelRatio,
-        ],
-      })
-    }
+    const next = event.ctrlKey
+      ? zoomAtPoint(
+          state.camera,
+          physicalPoint(event.clientX, event.clientY),
+          Math.min(16, Math.max(0.02, state.camera.zoom * Math.exp(-event.deltaY * 0.0015))),
+        )
+      : scrollCamera(state.camera, [event.deltaX, event.deltaY])
+    useEditorStore.setState({ camera: { ...next, autoFit: false } })
+    koharuClient.interact({ type: 'set_camera', ...next })
   }
 
   const textCursor = tool === 'text' ? 'crosshair' : tool === 'pan' ? 'grab' : undefined
@@ -442,12 +449,28 @@ export function Workspace() {
           onPointerUp={handlePointerUp}
           onPointerCancel={cancelGesture}
           onPointerLeave={() => {
-            cursor.current = null
+            setCursor(null)
             useEditorStore.getState().setHoveredElement(null)
-            sendOverlays()
           }}
           onWheel={handleWheel}
-        />
+        >
+          {page && (
+            <CanvasOverlay
+              page={page}
+              camera={camera}
+              selected={selectedElements}
+              hovered={hoveredElement}
+              previews={previews}
+              draft={draft}
+              cursor={cursor}
+              brushSize={brushSize}
+              showBrushCursor={tool === 'text_mask' || tool === 'brush_mask'}
+              onTransformStart={beginTransform}
+              onTransformFrame={updateTransform}
+              onTransformEnd={finishTransform}
+            />
+          )}
+        </div>
       </div>
     </main>
   )

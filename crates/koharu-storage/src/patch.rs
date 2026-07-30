@@ -7,12 +7,11 @@ use revision::revisioned;
 
 use crate::{
     BlobId, ComponentKey, ComponentRecord, DocumentId, Error, PatchId, RecordId, Result, Revision,
-    blob::BlobAttachment,
     component::StoredComponent,
     state::{State, StoredRecord},
 };
 
-type AppliedPatch = (State, BTreeSet<PatchId>, BTreeMap<BlobId, Arc<[u8]>>);
+type AppliedPatch = (State, BTreeMap<BlobId, Arc<[u8]>>);
 
 #[revisioned(revision = 1)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -102,37 +101,6 @@ impl Operation {
         }
     }
 
-    fn writes(&self) -> WriteKey {
-        match self {
-            Self::InsertRecord { record } | Self::RemoveRecord { record } => {
-                WriteKey::RecordLife(record.id)
-            }
-            Self::ReplaceComponent { record, key, .. } => WriteKey::Component(*record, key.clone()),
-        }
-    }
-
-    fn accessed_records(&self, records: &mut BTreeSet<RecordId>) {
-        match self {
-            Self::InsertRecord { record } | Self::RemoveRecord { record } => {
-                records.insert(record.id);
-                for component in &record.components {
-                    records.extend(component.value.record_refs.iter().copied());
-                }
-            }
-            Self::ReplaceComponent {
-                record,
-                before,
-                after,
-                ..
-            } => {
-                records.insert(*record);
-                for value in [before, after].into_iter().flatten() {
-                    records.extend(value.record_refs.iter().copied());
-                }
-            }
-        }
-    }
-
     pub(crate) fn blob_refs(&self, blobs: &mut BTreeSet<BlobId>) {
         match self {
             Self::InsertRecord { record } | Self::RemoveRecord { record } => {
@@ -149,10 +117,55 @@ impl Operation {
     }
 }
 
+#[revisioned(revision = 1)]
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum WriteKey {
-    RecordLife(RecordId),
-    Component(RecordId, ComponentKey),
+pub(crate) enum Observation {
+    Record {
+        record: RecordId,
+        fingerprint: Option<[u8; 32]>,
+    },
+    Component {
+        record: RecordId,
+        key: ComponentKey,
+        fingerprint: Option<[u8; 32]>,
+    },
+}
+
+impl Observation {
+    fn validate(&self, state: &State) -> Result<()> {
+        match self {
+            Self::Record {
+                record,
+                fingerprint,
+            } => {
+                if state.record_fingerprint(*record) != *fingerprint {
+                    return Err(Error::patch_conflict(format!(
+                        "observed record {record} changed"
+                    )));
+                }
+            }
+            Self::Component {
+                record,
+                key,
+                fingerprint,
+            } => {
+                let current = state
+                    .component(*record, key)
+                    .map_err(|_| {
+                        Error::patch_conflict(format!(
+                            "record {record} containing observed component {key} changed"
+                        ))
+                    })?
+                    .map(|value| *value.fingerprint());
+                if current != *fingerprint {
+                    return Err(Error::patch_conflict(format!(
+                        "observed component {record}/{key} changed"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -162,6 +175,19 @@ pub struct PatchEffects {
 }
 
 impl PatchEffects {
+    #[doc(hidden)]
+    #[must_use]
+    pub fn from_changes(changes: &crate::ChangeSet) -> Self {
+        Self {
+            records: changes.records.iter().map(|change| change.id()).collect(),
+            components: changes
+                .components
+                .iter()
+                .map(|change| change.address.clone())
+                .collect(),
+        }
+    }
+
     #[must_use]
     pub fn records(&self) -> impl ExactSizeIterator<Item = RecordId> + '_ {
         self.records.iter().copied()
@@ -178,84 +204,69 @@ impl PatchEffects {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct PatchSegment {
-    pub(crate) id: PatchId,
-    pub(crate) requires: BTreeSet<PatchId>,
-    pub(crate) operations: Arc<[Operation]>,
-    pub(crate) attachments: BTreeMap<BlobId, Arc<[u8]>>,
-}
-
-impl PatchSegment {
-    pub(crate) fn new(
-        base: BaseRevision,
-        requires: BTreeSet<PatchId>,
-        operations: Vec<Operation>,
-        attachments: BTreeMap<BlobId, Arc<[u8]>>,
-    ) -> Result<Self> {
-        let encoded = revision::to_vec(&SegmentIdentity {
-            base,
-            requires: requires.iter().copied().collect(),
-            operations: operations.clone(),
-            attachments: attachments.keys().copied().collect(),
-        })?;
-        Ok(Self {
-            id: PatchId::for_bytes(&encoded),
-            requires,
-            operations: operations.into(),
-            attachments,
-        })
-    }
-
-    fn writes(&self) -> BTreeSet<WriteKey> {
-        self.operations.iter().map(Operation::writes).collect()
-    }
-
-    fn accessed_records(&self) -> BTreeSet<RecordId> {
-        let mut result = BTreeSet::new();
-        for operation in self.operations.iter() {
-            operation.accessed_records(&mut result);
-        }
-        result
-    }
+#[revisioned(revision = 1)]
+#[derive(Clone)]
+struct PatchIdentity {
+    base: BaseRevision,
+    observations: Vec<Observation>,
+    operations: Vec<Operation>,
+    attachments: Vec<BlobId>,
 }
 
 #[revisioned(revision = 1)]
 #[derive(Clone)]
-struct SegmentIdentity {
-    base: BaseRevision,
-    requires: Vec<PatchId>,
-    operations: Vec<Operation>,
-    attachments: Vec<BlobId>,
+struct PatchFingerprintIdentity {
+    body_id: PatchId,
+    label: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Patch {
     base: BaseRevision,
-    segments: Arc<[Arc<PatchSegment>]>,
+    base_state: Arc<State>,
+    observations: Arc<[Observation]>,
+    operations: Arc<[Operation]>,
+    attachments: Arc<BTreeMap<BlobId, Arc<[u8]>>>,
+    body_id: PatchId,
     label: Option<Arc<str>>,
 }
 
 impl Patch {
-    pub(crate) fn from_segment(base: BaseRevision, segment: PatchSegment) -> Self {
-        Self {
+    pub(crate) fn new(
+        base_state: Arc<State>,
+        observations: Vec<Observation>,
+        operations: Vec<Operation>,
+        attachments: BTreeMap<BlobId, Arc<[u8]>>,
+        label: Option<Arc<str>>,
+    ) -> Result<Self> {
+        let base = BaseRevision {
+            document: base_state.document,
+            revision: base_state.revision,
+        };
+        let identity = PatchIdentity {
             base,
-            segments: Arc::from([Arc::new(segment)]),
-            label: None,
-        }
+            observations: observations.clone(),
+            operations: operations.clone(),
+            attachments: attachments.keys().copied().collect(),
+        };
+        let body_id = PatchId::for_bytes(&revision::to_vec(&identity)?);
+        Ok(Self {
+            base,
+            base_state,
+            observations: observations.into(),
+            operations: operations.into(),
+            attachments: Arc::new(attachments),
+            body_id,
+            label,
+        })
     }
 
     pub(crate) fn from_operations(
-        base: BaseRevision,
+        base_state: Arc<State>,
         operations: Vec<Operation>,
         label: Option<Arc<str>>,
     ) -> Result<Self> {
-        let segment = PatchSegment::new(base, BTreeSet::new(), operations, BTreeMap::new())?;
-        Ok(Self {
-            base,
-            segments: Arc::from([Arc::new(segment)]),
-            label,
-        })
+        Self::new(base_state, Vec::new(), operations, BTreeMap::new(), label)
     }
 
     #[must_use]
@@ -265,9 +276,7 @@ impl Patch {
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.segments
-            .iter()
-            .all(|segment| segment.operations.is_empty())
+        self.operations.is_empty()
     }
 
     #[must_use]
@@ -283,27 +292,19 @@ impl Patch {
 
     #[must_use]
     pub fn fingerprint(&self) -> PatchId {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(self.base.document.as_uuid().as_bytes());
-        hasher.update(&self.base.revision.get().to_le_bytes());
-        hasher.update(&(self.segments.len() as u64).to_le_bytes());
-        for segment in self.segments.iter() {
-            hasher.update(segment.id.as_bytes());
-        }
-        if let Some(label) = &self.label {
-            hasher.update(&[1]);
-            hasher.update(&(label.len() as u64).to_le_bytes());
-            hasher.update(label.as_bytes());
-        } else {
-            hasher.update(&[0]);
-        }
-        PatchId::for_bytes(hasher.finalize().as_bytes())
+        let identity = PatchFingerprintIdentity {
+            body_id: self.body_id,
+            label: self.label.as_deref().map(str::to_owned),
+        };
+        let bytes = revision::to_vec(&identity)
+            .expect("serializing a patch fingerprint into a byte vector cannot fail");
+        PatchId::for_bytes(&bytes)
     }
 
     #[must_use]
     pub fn effects(&self) -> PatchEffects {
         let mut effects = PatchEffects::default();
-        for operation in self.operations() {
+        for operation in self.operations.iter() {
             match operation {
                 Operation::InsertRecord { record } | Operation::RemoveRecord { record } => {
                     effects.records.insert(record.id);
@@ -324,41 +325,35 @@ impl Patch {
     pub fn has_exact_input(&self, snapshot: &crate::Snapshot) -> bool {
         self.base.document == snapshot.document_id()
             && self.base.revision == snapshot.revision()
-            && self.segments.len() == 1
-            && self.segments[0].requires == *snapshot.lineage()
+            && Arc::ptr_eq(&self.base_state, &snapshot.state)
     }
 
-    pub fn merge<'a>(patches: impl IntoIterator<Item = &'a Patch>) -> Result<Self> {
-        let mut patches = patches.into_iter();
-        let first = patches
-            .next()
-            .ok_or_else(|| Error::invalid("cannot merge an empty patch collection"))?;
-        let base = first.base;
-        let mut segments = Vec::<Arc<PatchSegment>>::new();
-        let mut ids = BTreeSet::new();
-        let mut label = first.label.clone();
-        for patch in std::iter::once(first).chain(patches) {
-            if patch.base != base {
-                return Err(Error::patch_conflict("patch bases differ"));
-            }
-            if label.is_none() {
-                label = patch.label.clone();
-            }
-            for segment in patch.segments.iter() {
-                if ids.insert(segment.id) {
-                    segments.push(segment.clone());
-                }
-            }
+    /// Rebinds a patch to `snapshot` after verifying every observed input and
+    /// write precondition. This is an explicit optimistic rebase; ordinary
+    /// commits continue to reject stale revisions.
+    pub fn rebase_on(&self, snapshot: &crate::Snapshot) -> Result<Self> {
+        if self.base.document != snapshot.document_id() {
+            return Err(Error::DocumentMismatch {
+                patch: self.base.document,
+                session: snapshot.document_id(),
+            });
         }
-        validate_segments(&segments, &BTreeSet::new(), true)?;
-        Ok(Self {
-            base,
-            segments: segments.into(),
-            label,
-        })
+        if self.has_exact_input(snapshot) {
+            return Ok(self.clone());
+        }
+
+        let rebased = Self::new(
+            snapshot.state.clone(),
+            self.observations.to_vec(),
+            self.operations.to_vec(),
+            (*self.attachments).clone(),
+            self.label.clone(),
+        )?;
+        snapshot.preview([&rebased])?;
+        Ok(rebased)
     }
 
-    pub(crate) fn apply(&self, state: &State, lineage: &BTreeSet<PatchId>) -> Result<AppliedPatch> {
+    pub(crate) fn apply(&self, state: &State) -> Result<AppliedPatch> {
         if state.document != self.base.document {
             return Err(Error::DocumentMismatch {
                 patch: self.base.document,
@@ -371,95 +366,25 @@ impl Patch {
                 actual: state.revision,
             });
         }
-        validate_segments(&self.segments, lineage, false)?;
+        for observation in self.observations.iter() {
+            observation.validate(state)?;
+        }
+
         let mut next = state.clone();
-        let mut next_lineage = lineage.clone();
-        let mut attachments = BTreeMap::new();
-        for segment in self.segments.iter() {
-            if next_lineage.contains(&segment.id) {
-                continue;
-            }
-            for operation in segment.operations.iter() {
-                operation.apply(&mut next)?;
-            }
-            next_lineage.insert(segment.id);
-            for (id, bytes) in &segment.attachments {
-                if BlobId::for_bytes(bytes) != *id {
-                    return Err(Error::invalid("patch attachment hash mismatch"));
-                }
-                attachments.entry(*id).or_insert_with(|| bytes.clone());
+        for operation in self.operations.iter() {
+            operation.apply(&mut next)?;
+        }
+        for (id, bytes) in self.attachments.iter() {
+            if BlobId::for_bytes(bytes) != *id {
+                return Err(Error::invalid("patch attachment hash mismatch"));
             }
         }
         #[cfg(debug_assertions)]
         next.validate()?;
-        Ok((next, next_lineage, attachments))
+        Ok((next, (*self.attachments).clone()))
     }
 
     pub(crate) fn operations(&self) -> impl Iterator<Item = &Operation> {
-        self.segments
-            .iter()
-            .flat_map(|segment| segment.operations.iter())
+        self.operations.iter()
     }
-
-    pub(crate) fn attachments(&self) -> impl Iterator<Item = BlobAttachment> + '_ {
-        self.segments.iter().flat_map(|segment| {
-            segment
-                .attachments
-                .iter()
-                .map(|(id, bytes)| BlobAttachment::from_parts(*id, bytes.clone()))
-        })
-    }
-}
-
-fn validate_segments(
-    segments: &[Arc<PatchSegment>],
-    initial: &BTreeSet<PatchId>,
-    allow_external: bool,
-) -> Result<()> {
-    let all_ids: BTreeSet<_> = segments.iter().map(|segment| segment.id).collect();
-    let mut available = initial.clone();
-    for segment in segments {
-        for required in &segment.requires {
-            if (all_ids.contains(required) || !allow_external) && !available.contains(required) {
-                return Err(Error::MissingPatchDependency(*required));
-            }
-        }
-        available.insert(segment.id);
-    }
-
-    for (index, left) in segments.iter().enumerate() {
-        for right in &segments[index + 1..] {
-            if left.requires.contains(&right.id) || right.requires.contains(&left.id) {
-                continue;
-            }
-            let left_writes = left.writes();
-            let right_writes = right.writes();
-            if let Some(key) = left_writes.intersection(&right_writes).next() {
-                return Err(Error::patch_conflict(format!(
-                    "unrelated segments write {key:?}"
-                )));
-            }
-            let left_access = left.accessed_records();
-            let right_access = right.accessed_records();
-            for write in &left_writes {
-                if let WriteKey::RecordLife(record) = write
-                    && right_access.contains(record)
-                {
-                    return Err(Error::patch_conflict(format!(
-                        "record lifecycle for {record} conflicts with sibling access"
-                    )));
-                }
-            }
-            for write in &right_writes {
-                if let WriteKey::RecordLife(record) = write
-                    && left_access.contains(record)
-                {
-                    return Err(Error::patch_conflict(format!(
-                        "record lifecycle for {record} conflicts with sibling access"
-                    )));
-                }
-            }
-        }
-    }
-    Ok(())
 }

@@ -41,6 +41,7 @@
     "react-colorful": "^5.7.0",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.8",
+    "react-moveable": "^0.56.0",
     "react-resizable-panels": "^4.11.2",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"

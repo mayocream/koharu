@@ -3,7 +3,6 @@ use std::{hint::black_box, path::PathBuf, time::Duration};
 use anyhow::Result;
 use criterion::Criterion;
 use koharu_ml::koharu_layout_rfdetr_seg_2xl::KoharuLayoutRFDetrSeg2XL;
-use koharu_torch::Cuda;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -12,11 +11,10 @@ async fn main() -> Result<()> {
 
     koharu_ml::init().await?;
     let image = image::open(input)?;
-    let model = KoharuLayoutRFDetrSeg2XL::load(koharu_ml::Device::cuda(0)).await?;
+    let model = KoharuLayoutRFDetrSeg2XL::load(koharu_ml::Device::default()).await?;
 
     let warmup = model.inference(&image)?;
     black_box(warmup);
-    Cuda::synchronize(0);
 
     let mut criterion = Criterion::default()
         .sample_size(10)
@@ -25,12 +23,10 @@ async fn main() -> Result<()> {
         .configure_from_args();
     criterion.bench_function("koharu_layout_rfdetr_seg_2xl/inference", |bencher| {
         bencher.iter(|| {
-            Cuda::synchronize(0);
             let detections = model
                 .inference(black_box(&image))
                 .expect("KoharuLayout RF-DETR inference failed");
             black_box(detections);
-            Cuda::synchronize(0);
         });
     });
     criterion.final_summary();

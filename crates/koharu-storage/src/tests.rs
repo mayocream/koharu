@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ComponentKey, ComponentRecord, Error, Patch, RecordId, Revision, Session};
+use crate::{ComponentKey, ComponentRecord, Error, RecordId, Revision, Session};
 
 fn assert_send_sync<T: Send + Sync>() {}
 
@@ -70,7 +70,7 @@ fn commits_component_and_reopens() {
 }
 
 #[test]
-fn independent_components_merge_but_same_component_conflicts() {
+fn independent_components_rebase_but_same_component_conflicts() {
     let mut session = Session::memory().unwrap();
     let root = session.snapshot().root();
     let base = session.snapshot();
@@ -80,8 +80,9 @@ fn independent_components_merge_but_same_component_conflicts() {
     let right = base
         .patch(|edit| edit.set_component(root, key("right"), value(b"right")))
         .unwrap();
-    let merged = Patch::merge([&left, &right]).unwrap();
-    let committed = session.commit(merged).unwrap();
+    let committed = session.commit(left).unwrap();
+    let right = right.rebase_on(&committed.snapshot).unwrap();
+    let committed = session.commit(right).unwrap();
     assert_eq!(
         committed
             .snapshot
@@ -108,8 +109,36 @@ fn independent_components_merge_but_same_component_conflicts() {
     let two = base
         .patch(|edit| edit.set_component(root, key("same"), value(b"2")))
         .unwrap();
+    let committed = session.commit(one).unwrap();
     assert!(matches!(
-        Patch::merge([&one, &two]),
+        two.rebase_on(&committed.snapshot),
+        Err(Error::PatchConflict(_))
+    ));
+}
+
+#[test]
+fn rebase_rejects_changed_observed_inputs() {
+    let mut session = Session::memory().unwrap();
+    let root = session.snapshot().root();
+    let initial = session
+        .snapshot()
+        .patch(|edit| edit.set_component(root, key("source"), value(b"old")))
+        .unwrap();
+    let base = session.commit(initial).unwrap().snapshot;
+
+    let mut derived = base.edit();
+    derived.observe_component(root, &key("source")).unwrap();
+    derived
+        .set_component(root, key("derived"), value(b"from old"))
+        .unwrap();
+    let derived = derived.finish().unwrap();
+    let source_change = base
+        .patch(|edit| edit.set_component(root, key("source"), value(b"new")))
+        .unwrap();
+    let current = session.commit(source_change).unwrap().snapshot;
+
+    assert!(matches!(
+        derived.rebase_on(&current),
         Err(Error::PatchConflict(_))
     ));
 }
@@ -126,8 +155,10 @@ fn descendant_patch_can_edit_ancestor_record() {
         .patch(|edit| edit.set_component(record, key("late"), value(b"ready")))
         .unwrap();
     assert!(base.preview([&descendant]).is_err());
-    let merged = Patch::merge([&ancestor, &descendant]).unwrap();
-    let committed = session.commit(merged).unwrap();
+    assert!(base.preview([&ancestor, &descendant]).is_ok());
+    let committed = session.commit(ancestor).unwrap();
+    let descendant = descendant.rebase_on(&committed.snapshot).unwrap();
+    let committed = session.commit(descendant).unwrap();
     assert_eq!(
         committed
             .snapshot
@@ -275,6 +306,98 @@ fn stale_writer_never_rebases() {
 }
 
 #[test]
+fn refresh_folds_commit_tail_into_net_changes() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("refresh.khr");
+    let mut writer = Session::create(&path).unwrap();
+    let mut reader = Session::open(&path).unwrap();
+
+    let mut record = None;
+    let insert = writer
+        .snapshot()
+        .patch(|edit| {
+            let id = edit.insert_record()?;
+            edit.set_component(id, key("tail"), value(b"one"))?;
+            record = Some(id);
+            Ok(())
+        })
+        .unwrap();
+    writer.commit(insert).unwrap();
+    let record = record.unwrap();
+    let replace = writer
+        .snapshot()
+        .patch(|edit| edit.set_component(record, key("tail"), value(b"two")))
+        .unwrap();
+    writer.commit(replace).unwrap();
+
+    let changes = reader.refresh().unwrap();
+    assert_eq!(changes.from, Revision::ZERO);
+    assert_eq!(changes.to, Revision::new(2));
+    assert_eq!(changes.records, vec![crate::RecordChange::Inserted(record)]);
+    assert_eq!(changes.components.len(), 1);
+    assert_eq!(changes.components[0].kind, crate::ValueChangeKind::Inserted);
+    assert_eq!(
+        reader
+            .snapshot()
+            .component(record, &key("tail"))
+            .unwrap()
+            .unwrap()
+            .payload(),
+        b"two"
+    );
+}
+
+#[test]
+fn durable_envelope_golden_hashes() {
+    let root = RecordId::from(uuid::Uuid::from_bytes([1; 16]));
+    let child = RecordId::from(uuid::Uuid::from_bytes([2; 16]));
+    let component = ComponentRecord::new(7, &b"golden"[..], [child], []).unwrap();
+    let entry = crate::component::StoredComponentEntry {
+        key: key("golden"),
+        value: component.to_stored(),
+    };
+    let checkpoint = crate::history::Checkpoint {
+        document: crate::state::CheckpointRecord {
+            root,
+            records: vec![
+                crate::state::StoredRecord {
+                    id: root,
+                    components: vec![entry.clone()],
+                },
+                crate::state::StoredRecord {
+                    id: child,
+                    components: Vec::new(),
+                },
+            ],
+        },
+    };
+    let commit = crate::history::StoredCommit {
+        label: Some("golden".to_owned()),
+        operations: vec![crate::patch::Operation::ReplaceComponent {
+            record: root,
+            key: entry.key,
+            before: None,
+            after: Some(entry.value),
+        }],
+    };
+    let checkpoint = revision::to_vec(&checkpoint).unwrap();
+    let commit = revision::to_vec(&commit).unwrap();
+    assert_eq!(
+        blake3::hash(&checkpoint).to_string(),
+        "853fcbfecd5f617b698c6e7b4907ec24e022d98dd48c6bce17d65b5aa0923a1d"
+    );
+    assert_eq!(
+        blake3::hash(&commit).to_string(),
+        "67949bb62ef01b834316585436d40fee61e54493ad3be2083c6ff648b7ec51fc"
+    );
+    assert!(revision::from_slice::<crate::history::Checkpoint>(&checkpoint).is_ok());
+    assert!(revision::from_slice::<crate::history::StoredCommit>(&commit).is_ok());
+    assert!(
+        revision::from_slice::<crate::history::StoredCommit>(&commit[..commit.len() - 1]).is_err()
+    );
+}
+
+#[test]
 fn backup_is_a_valid_independent_document() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("source.khs");
@@ -319,7 +442,7 @@ fn insert_then_remove_is_an_empty_patch() {
 }
 
 #[test]
-fn patch_identity_effects_and_exact_ancestry_are_stable() {
+fn patch_identity_effects_and_exact_input_are_stable() {
     let session = Session::memory().unwrap();
     let base = session.snapshot();
     let root = base.root();
@@ -345,7 +468,7 @@ fn patch_identity_effects_and_exact_ancestry_are_stable() {
 }
 
 #[test]
-fn merged_change_set_reports_net_effects_without_scanning_semantics() {
+fn edit_change_set_reports_coalesced_net_effects() {
     let mut session = Session::memory().unwrap();
     let base = session.snapshot();
     let mut ancestor_edit = base.edit();
@@ -353,13 +476,10 @@ fn merged_change_set_reports_net_effects_without_scanning_semantics() {
     ancestor_edit
         .set_component(record, key("value"), value(b"one"))
         .unwrap();
-    let ancestor = ancestor_edit.finish().unwrap();
-    let preview = base.preview([&ancestor]).unwrap();
-    let descendant = preview
-        .patch(|edit| edit.set_component(record, key("value"), value(b"two")))
+    ancestor_edit
+        .set_component(record, key("value"), value(b"two"))
         .unwrap();
-    let merged = Patch::merge([&ancestor, &descendant]).unwrap();
-    let committed = session.commit(merged).unwrap();
+    let committed = session.commit(ancestor_edit.finish().unwrap()).unwrap();
     assert_eq!(
         committed.changes.records,
         vec![crate::RecordChange::Inserted(record)]
