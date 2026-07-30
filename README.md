@@ -216,6 +216,8 @@ If Koharu is useful in your workflow, consider sponsoring the project.
 - [GitHub Sponsors](https://github.com/sponsors/mayocream)
 - [Patreon](https://www.patreon.com/mayocream)
 
+![sponsors](./.github/sponsorkit/sponsors.svg)
+
 ## Contributors ❤️
 
 Thanks to all the contributors who have helped make Koharu better!

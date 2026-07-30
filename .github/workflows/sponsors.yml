@@ -1,0 +1,42 @@
+name: Sponsors
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sponsors
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Update sponsor graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SPONSORKIT_GITHUB_TOKEN: ${{ secrets.SPONSORKIT_GITHUB_TOKEN }}
+      SPONSORKIT_PATREON_TOKEN: ${{ secrets.SPONSORKIT_PATREON_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Validate provider tokens
+        run: |
+          test -n "$SPONSORKIT_GITHUB_TOKEN" || { echo "SPONSORKIT_GITHUB_TOKEN is not configured"; exit 1; }
+          test -n "$SPONSORKIT_PATREON_TOKEN" || { echo "SPONSORKIT_PATREON_TOKEN is not configured"; exit 1; }
+
+      - run: bun install --frozen-lockfile
+      - run: bun run sponsors
+
+      - name: Commit updated graph
+        run: |
+          git add .github/sponsorkit/sponsors.svg
+          git diff --cached --quiet && exit 0
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "chore: update sponsors [skip ci]"
+          git push

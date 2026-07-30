@@ -13,6 +13,7 @@
     "test:ui": "bun run --filter ui test",
     "typecheck:desktop": "tsc --project tests/integration-tests/tsconfig.json",
     "typecheck:integration": "bun run typecheck:desktop",
+    "sponsors": "cd .github/sponsorkit && sponsorkit --force",
     "format": "oxfmt ui tests package.json .oxfmtrc.json .vscode",
     "format:check": "oxfmt --check ui tests package.json .oxfmtrc.json .vscode"
   },
@@ -24,6 +25,7 @@
     "nodemon": "^3.1.14",
     "npm-run-all2": "^8.0.4",
     "oxfmt": "^0.56.0",
+    "sponsorkit": "^17.1.1",
     "typescript": "^6.0.3"
   }
 }
