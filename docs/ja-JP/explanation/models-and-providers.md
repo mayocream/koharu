@@ -55,29 +55,18 @@ Koharu は [llama.cpp](https://github.com/ggml-org/llama.cpp) を通じてロー
 
 実際には、ローカルモデルの多くは量子化済みの decoder-only transformer です。GGUF はファイル形式であり、`llama.cpp` は推論ランタイムです。
 
-### 英語出力向けの翻訳特化組み込みローカルモデル
-
-- [vntl-llama3-8b-v2](https://huggingface.co/lmg-anon/vntl-llama3-8b-v2-gguf): Q5_K_M GGUF。翻訳品質を優先するなら有力
-- [lfm2.5-1.2b-instruct](https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF): 低メモリ環境や高速な試行に向く小型の多言語 instruction モデル
-- [sugoi-14b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-14B-Ultra-GGUF) と [sugoi-32b-ultra](https://huggingface.co/sugoitoolkit/Sugoi-32B-Ultra-GGUF): より多くの VRAM / RAM を使える環境向けの大型翻訳寄りモデル
-
-### 中国語出力向けの翻訳特化組み込みローカルモデル
-
-- [sakura-galtransl-7b-v3.7](https://huggingface.co/SakuraLLM/Sakura-GalTransl-7B-v3.7): 品質と速度のバランスが良く、8 GB クラス GPU に向く
-- [sakura-1.5b-qwen2.5-v1.0](https://huggingface.co/shing3232/Sakura-1.5B-Qwen2.5-v1.0-GGUF-IMX): 中堅 GPU や CPU 寄り構成向けの軽量モデル
-
-### より広い言語対応向けの翻訳特化組み込みローカルモデル
-
-- [hunyuan-mt-7b](https://huggingface.co/Mungert/Hunyuan-MT-7B-GGUF): 中程度のハードウェア要件で使える多言語モデル
-
 ### その他の組み込みローカルモデルファミリ
 
 LLM ピッカーには、翻訳専用ではない汎用ファミリも含まれています。
 
-- Gemma 4 instruct: `gemma4-e2b-it`, `gemma4-e4b-it`, `gemma4-26b-a4b-it`, `gemma4-31b-it`
-- Gemma 4 uncensored: `gemma4-e2b-uncensored`, `gemma4-e4b-uncensored`
+既定のローカル翻訳モデルは `gemma4-12b-it` です。
+
+- LFM2.5 Instruct: `lfm2.5-1.2b-instruct`
+- Ministral 3 Instruct: `ministral-3-8b-instruct`
+- Gemma 4 instruct (Unsloth の QAT ベース Dynamic GGUF): `gemma4-e2b-it`、`gemma4-e4b-it`、`gemma4-12b-it`、`gemma4-26b-a4b-it`、`gemma4-31b-it`
+- Gemma 4 uncensored (利用可能な場合は HauhauCS QAT): `gemma4-e2b-uncensored`、`gemma4-e4b-uncensored`、`gemma4-12b-uncensored`、`gemma4-26b-a4b-uncensored`、`gemma4-31b-uncensored`
 - Qwen 3.5: `qwen3.5-0.8b`, `qwen3.5-2b`, `qwen3.5-4b`, `qwen3.5-9b`, `qwen3.5-27b`, `qwen3.5-35b-a3b`
-- Qwen 3.5 uncensored: `qwen3.5-2b-uncensored`, `qwen3.5-4b-uncensored`, `qwen3.5-9b-uncensored`, `qwen3.5-27b-uncensored`, `qwen3.5-35b-a3b-uncensored`
+- Qwen 3.5 uncensored: `qwen3.5-2b-uncensored`, `qwen3.5-4b-uncensored`, `qwen3.5-9b-uncensored`
 - Qwen 3.6: `qwen3.6-27b`, `qwen3.6-35b-a3b`
 - Qwen 3.6 uncensored: `qwen3.6-27b-uncensored`, `qwen3.6-35b-a3b-uncensored`
 
@@ -87,7 +76,7 @@ Koharu は、ローカルモデルをダウンロードせずに、リモート�
 
 対応しているプロバイダファミリ:
 
-- LLM ベース: `OpenAI`、`Gemini`、`Claude`、`DeepSeek`、および `/v1/models` と `/v1/chat/completions` を公開する任意の `OpenAI 互換` エンドポイント (LM Studio、OpenRouter、vLLM など)
+- LLM ベース: `OpenAI`、`Gemini`、`Claude`、`DeepSeek`、`OpenRouter`、`LM Studio`、および `/v1/models` と `/v1/chat/completions` を公開する任意の `OpenAI 互換` エンドポイント (vLLM、llama-server など)
 - 機械翻訳: `DeepL`、`Google Cloud Translation`、`Caiyun`
 
 機械翻訳プロバイダは chat モデルではなく、純粋な翻訳サービスです。原文と対象言語を渡すと翻訳結果が返り、システムプロンプトもモデル選択もありません。
@@ -96,11 +85,15 @@ Koharu は、ローカルモデルをダウンロードせずに、リモート�
 
 LLM ベースのプロバイダの組み込みカタログには次が含まれます。
 
-- OpenAI: GPT-5.5、GPT-5.4、GPT-5.x、GPT-4.1、o シリーズ、GPT-4o、旧 GPT chat モデル
-- Gemini: Gemini 3.1、Gemini 3、Gemini 2.5、Gemini 2.0 のテキスト出力モデル、および Gemini API でホストされる Gemma 4
-- Claude: 現行の Claude Opus、Sonnet、Haiku 4.x モデル、および上流の終了日までは利用できる非推奨の Claude 4 スナップショット
-- DeepSeek: DeepSeek V4 Flash、DeepSeek V4 Pro、`deepseek-chat` / `deepseek-reasoner` 互換エイリアス
+- OpenAI: GPT-5.6 Sol、Terra、Luna、GPT-5.5、GPT-5.4、以前の GPT-5 モデル、GPT-4.1、o3、GPT-4o mini
+- Gemini: Gemini 3.5 Flash、Gemini 3.1 Pro / Flash-Lite、Gemini 3 Flash、Gemini 2.5 のテキスト出力モデル
+- Claude: Claude Fable 5、Opus 4.8、Sonnet 5、Haiku 4.5、および一部の以前の Claude 4 モデル
+- DeepSeek: DeepSeek V4 Flash、DeepSeek V4 Pro
+- OpenRouter: テキスト出力モデルを OpenRouter から動的に取得
+- LM Studio: ネイティブ v1 REST API からローカル LLM を動的に取得
 - OpenAI 互換 API: モデル一覧は設定したエンドポイントから動的に取得されます
+
+チャットプロバイダの設定には、temperature、最大出力トークン数、および既定で無効のモデル対応思考トグルも含まれます。
 
 ### 機械翻訳プロバイダ
 

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter, Noto_Sans_JP, Noto_Sans_SC, Noto_Sans_TC } from 'next/font/google'
+import { Inter, Literata, Noto_Sans_JP, Noto_Sans_SC, Noto_Sans_TC } from 'next/font/google'
 
 import './globals.css'
 import Providers from '@/app/providers'
@@ -7,6 +7,11 @@ import Providers from '@/app/providers'
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
+})
+
+const literata = Literata({
+  subsets: ['latin'],
+  variable: '--font-literata',
 })
 
 const notoSansJP = Noto_Sans_JP({
@@ -36,7 +41,7 @@ function RootLayout({
   return (
     <html lang='en-US' suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${notoSansSC.variable} ${notoSansTC.variable} ${notoSansJP.variable} antialiased`}
+        className={`${inter.variable} ${literata.variable} ${notoSansSC.variable} ${notoSansTC.variable} ${notoSansJP.variable} antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

@@ -60,7 +60,7 @@ title: 翻译你的第一页
 - 使用本地 GGUF 模型，让所有东西都留在本机
 - 使用远程提供商，避免下载本地模型或承受较重的本地推理负担
 
-Koharu 可以接入 OpenAI、Gemini、Claude、DeepSeek，以及 LM Studio、OpenRouter 这类 OpenAI 兼容接口。
+Koharu 可以接入 OpenAI、Gemini、Claude、DeepSeek、OpenRouter、LM Studio，以及其他 OpenAI 兼容接口。
 
 如果你要接入 LM Studio、OpenRouter 或其他 OpenAI 风格端点，请参考 [使用 OpenAI 兼容 API](../how-to/use-openai-compatible-api.md)。
 

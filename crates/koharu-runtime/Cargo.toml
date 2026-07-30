@@ -2,39 +2,41 @@
 name = "koharu-runtime"
 version.workspace = true
 edition.workspace = true
-description.workspace = true
-license.workspace = true
+description = "Runtime package discovery, downloading, and dynamic library loading for Koharu."
+license = "MIT OR Apache-2.0"
 authors.workspace = true
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
-keywords.workspace = true
-publish.workspace = true
+keywords = ["koharu", "runtime", "cuda", "libtorch", "machine-learning"]
+categories = ["development-tools", "science"]
+publish = true
 
 [dependencies]
 anyhow = { workspace = true }
-camino = { workspace = true }
-koharu-core = { workspace = true }
-dirs = { workspace = true }
+console = { workspace = true }
 futures = { workspace = true }
-hf-hub = { workspace = true }
-indexmap = { workspace = true }
-indicatif = { workspace = true }
-inventory = { workspace = true }
+koharu-config = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 serde = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }
+walkdir = { workspace = true }
 libloading = { workspace = true }
 flate2 = { workspace = true }
 num_cpus = { workspace = true }
-tar = "0.4"
+tar = { workspace = true }
+fast-glob = { workspace = true }
+cudarc = { workspace = true }
+tempfile = { workspace = true }
+strum = { workspace = true }
+async-trait = { workspace = true }
+indicatif = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
+toml = { workspace = true }

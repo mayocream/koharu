@@ -1,7 +1,7 @@
 use std::fmt;
 use std::time::Instant;
 
-use koharu_runtime::{RuntimeHttpClient, RuntimeHttpConfig};
+use koharu_runtime::download::client;
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::Value;
@@ -18,11 +18,8 @@ use super::token_store::TokenStore;
 use super::tokens::CodexTokens;
 use crate::provider::{AiImageProvider, AiImageRequest, AiImageResult};
 
-const USER_AGENT: &str = concat!("koharu-ai/", env!("CARGO_PKG_VERSION"));
-
 #[derive(Clone)]
 pub struct CodexClient {
-    http_client: RuntimeHttpClient,
     config: CodexConfig,
     token_store: TokenStore,
 }
@@ -44,24 +41,15 @@ impl Default for CodexClient {
 
 impl CodexClient {
     pub fn new(config: CodexConfig) -> Self {
-        Self::try_new(config).expect("failed to build default runtime HTTP client")
+        Self::try_new(config).expect("failed to load the shared runtime HTTP client")
     }
 
     pub fn try_new(config: CodexConfig) -> Result<Self> {
-        Self::with_runtime_http_config(config, RuntimeHttpConfig::default())
-    }
-
-    pub fn with_runtime_http_config(config: CodexConfig, http: RuntimeHttpConfig) -> Result<Self> {
-        let http_client = http.build_client().map_err(CodexError::RuntimeHttpClient)?;
-        Ok(Self::with_http_client(config, http_client))
-    }
-
-    pub fn with_http_client(config: CodexConfig, http_client: RuntimeHttpClient) -> Self {
-        Self {
-            http_client,
+        client::shared().map_err(CodexError::HttpClient)?;
+        Ok(Self {
             config,
             token_store: TokenStore::default(),
-        }
+        })
     }
 
     pub fn with_token_store(mut self, token_store: TokenStore) -> Self {
@@ -80,7 +68,7 @@ impl CodexClient {
     pub async fn request_device_code(&self) -> Result<DeviceCode> {
         let endpoint = self.config.accounts_endpoint("deviceauth/usercode");
         let response = self
-            .http_client
+            .http_client()?
             .post(&endpoint)
             .json(&UserCodeRequest {
                 client_id: &self.config.client_id,
@@ -103,7 +91,7 @@ impl CodexClient {
     ) -> Result<Option<DeviceAuthorization>> {
         let endpoint = self.config.accounts_endpoint("deviceauth/token");
         let response = self
-            .http_client
+            .http_client()?
             .post(&endpoint)
             .json(&TokenPollRequest {
                 device_auth_id: device_code.device_auth_id(),
@@ -153,7 +141,7 @@ impl CodexClient {
     ) -> Result<CodexTokens> {
         let endpoint = self.config.issuer_endpoint("oauth/token");
         let response = self
-            .http_client
+            .http_client()?
             .post(&endpoint)
             .form(&TokenExchangeRequest {
                 grant_type: "authorization_code",
@@ -195,7 +183,7 @@ impl CodexClient {
             .ok_or(CodexError::MissingRefreshToken)?;
         let endpoint = self.config.issuer_endpoint("oauth/token");
         let response = self
-            .http_client
+            .http_client()?
             .post(&endpoint)
             .json(&TokenRefreshRequest {
                 client_id: &self.config.client_id,
@@ -281,10 +269,9 @@ impl CodexClient {
         request: &T,
     ) -> Result<reqwest::Response> {
         let mut builder = self
-            .http_client
+            .http_client()?
             .post(&self.config.responses_url)
             .bearer_auth(&tokens.access_token)
-            .header(reqwest::header::USER_AGENT, USER_AGENT)
             .json(request);
 
         if let Some(account_id) = tokens.chatgpt_account_id() {
@@ -292,6 +279,10 @@ impl CodexClient {
         }
 
         Ok(builder.send().await?)
+    }
+
+    fn http_client(&self) -> Result<koharu_runtime::download::client::HttpClient> {
+        client::shared().map_err(CodexError::HttpClient)
     }
 }
 

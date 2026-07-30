@@ -40,7 +40,7 @@ O texto vertical de mangá torna o problema ainda mais difícil:
 
 ## O que o Koharu realmente faz
 
-No nível da implementação, o renderizador vive no crate `koharu-renderer`, e a orquestração principal acontece em `koharu-app/src/renderer.rs`, `src/layout.rs`, `src/shape.rs`, `src/segment.rs` e `src/renderer.rs`.
+No nível da implementação, composição, layout, shaping, segmentação e rasterização WGPU ficam nos módulos correspondentes do crate `koharu-renderer`.
 
 A pipeline para um `TextBlock` traduzido é aproximadamente:
 
@@ -230,4 +230,3 @@ Em vez disso, o Koharu empurra o tratamento vertical de volta para os estágios 
 - renderização de texto "perfeita" é principalmente uma história que as pessoas contam antes de implementá-la
 
 Se você quer a versão curta: o renderizador do Koharu é cuidadoso porque a renderização de texto é um problema de sistemas acoplados, não uma etapa final de pintura.
-

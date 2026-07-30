@@ -1,10 +1,8 @@
 name: PR
 
+# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  issues:
-    types: [opened]
-  pull_request_target:
-    types: [opened]
+  workflow_dispatch:
 
 permissions:
   issues: write

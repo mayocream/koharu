@@ -12,108 +12,103 @@ keywords.workspace = true
 publish.workspace = true
 
 [dependencies]
+koharu-diffusion = { workspace = true }
+koharu-fonts = { workspace = true }
+koharu-llama = { workspace = true, features = ["llguidance"] }
 koharu-runtime = { workspace = true }
+koharu-torch = { workspace = true }
+ab_glyph = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
-candle-core = { workspace = true }
-candle-transformers = { workspace = true }
-candle-nn = { workspace = true }
-candle-flash-attn = { workspace = true, optional = true }
-tokenizers = { workspace = true }
+icu_properties = { workspace = true }
+encoding_rs = { workspace = true }
+fast_image_resize = { workspace = true }
+minijinja = { workspace = true }
+minijinja-contrib = { workspace = true }
+rayon = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tokenizers = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tokio = { workspace = true }
-rustfft = { workspace = true }
-rayon = { workspace = true }
-cudarc = { workspace = true, optional = true }
-objc2 = { workspace = true, optional = true }
-objc2-metal = { workspace = true, optional = true }
-objc2-metal-performance-shaders = { workspace = true, optional = true }
-objc2-metal-performance-shaders-graph = { workspace = true, optional = true }
-objc2-foundation = { workspace = true, optional = true }
-
-[features]
-cuda = [
-    "candle-core/cuda",
-    "candle-core/cudnn",
-    "candle-nn/cuda",
-    "candle-nn/cudnn",
-    "candle-transformers/cuda",
-    "candle-transformers/cudnn",
-    "cudarc",
-    "candle-flash-attn",
-    "candle-flash-attn/cudnn",
-]
-metal = [
-    "candle-core/metal",
-    "candle-nn/metal",
-    "candle-transformers/metal",
-    "objc2",
-    "objc2-metal",
-    "objc2-foundation",
-    "objc2-metal-performance-shaders",
-    "objc2-metal-performance-shaders-graph",
-]
 
 [dev-dependencies]
-dirs = { workspace = true }
+criterion = { workspace = true }
+tempfile = { workspace = true }
 
-[[bin]]
-name = "comic-text-detector"
-path = "bin/comic-text-detector.rs"
+[[bench]]
+name = "pp_doclayout_v3"
+harness = false
 
-[[bin]]
-name = "comic-text-bubble-detector"
-path = "bin/comic-text-bubble-detector.rs"
+[[bench]]
+name = "pp_ocr_v6_det"
+harness = false
 
-[[bin]]
+[[bench]]
+name = "pp_ocr_v6_rec"
+harness = false
+
+[[bench]]
+name = "aot_inpainting"
+harness = false
+
+[[bench]]
 name = "lama"
-path = "bin/lama.rs"
+harness = false
 
-[[bin]]
-name = "manga-ocr"
-path = "bin/manga-ocr.rs"
+[[bench]]
+name = "comic_text_detector"
+harness = false
 
-[[bin]]
-name = "paddleocr-vl"
-path = "bin/paddleocr-vl.rs"
+[[bench]]
+name = "comic_text_bubble_detector"
+harness = false
 
-[[bin]]
-name = "mit48px-ocr"
-path = "bin/mit48px-ocr.rs"
+[[bench]]
+name = "comic_onomatopoeia"
+harness = false
 
-[[bin]]
-name = "font-detect"
-path = "bin/font-detect.rs"
+[[bench]]
+name = "speech_bubble_yolov8m"
+harness = false
 
-[[bin]]
-name = "pp-doclayout-v3"
-path = "bin/pp-doclayout-v3.rs"
+[[bench]]
+name = "speech_bubble_yolo11n"
+harness = false
 
-[[bin]]
-name = "manga-text-segmentation-2025"
-path = "bin/manga-text-segmentation-2025.rs"
+[[bench]]
+name = "comic_layout_yolo26s"
+harness = false
 
-[[bin]]
-name = "speech-bubble-segmentation"
-path = "bin/speech-bubble-segmentation.rs"
+[[bench]]
+name = "flux2_klein"
+harness = false
 
-[[bin]]
-name = "anime-text"
-path = "bin/anime-text.rs"
+[[bench]]
+name = "paddle_ocr_vl"
+harness = false
 
-[[bin]]
-name = "aot-inpainting"
-path = "bin/aot-inpainting.rs"
+[[bench]]
+name = "manga_ocr"
+harness = false
 
-[[bin]]
-name = "flux2-klein"
-path = "bin/flux2-klein.rs"
+[[bench]]
+name = "baberu_ocr"
+harness = false
 
-[[bin]]
-name = "flux2-klein-prompt"
-path = "bin/flux2-klein-prompt.rs"
+[[bench]]
+name = "manga_text_mask"
+harness = false
+
+[[bench]]
+name = "font_detector"
+harness = false
+
+[[bench]]
+name = "koharu_layout_rfdetr_seg_2xl"
+harness = false

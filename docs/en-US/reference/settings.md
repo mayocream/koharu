@@ -27,7 +27,7 @@ Theme, language, and rendering-font changes apply immediately in the frontend.
 
 ## Engines
 
-The `Engines` tab selects the backend used for each pipeline stage:
+The `Engines` tab selects the processors used for each pipeline phase:
 
 - `Detector`
 - `Bubble Detector`
@@ -48,6 +48,8 @@ The `API Keys` tab currently covers these built-in providers:
 - `Gemini`
 - `Claude`
 - `DeepSeek`
+- `OpenRouter`
+- `LM Studio`
 - `DeepL`
 - `Google Cloud Translation`
 - `Caiyun`

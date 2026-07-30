@@ -3,20 +3,26 @@
     "ui/"
   ],
   "scripts": {
-    "dev": "bun run scripts/dev.ts tauri dev -- --profile=release-with-debug",
-    "build": "bun run scripts/dev.ts tauri build --no-bundle",
-    "cargo": "bun run scripts/dev.ts cargo",
+    "dev": "bun run --parallel dev:ui dev:native",
+    "dev:ui": "kill-port 3000 && bun run --cwd ui dev",
+    "dev:native": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec \"cargo run -p koharu --bin koharu --profile release-with-debug\"",
+    "build": "bun run --cwd ui build && cargo build -p koharu",
     "lint:ui": "bun run --filter ui lint",
+    "test:desktop": "playwright test --config tests/integration-tests/playwright.config.ts",
+    "test:integration": "bun run test:desktop",
     "test:ui": "bun run --filter ui test",
-    "format": "oxfmt ui package.json .oxfmtrc.json .vscode",
-    "format:check": "oxfmt --check ui package.json .oxfmtrc.json .vscode",
-    "generate:openapi": "cargo run -p koharu-rpc --bin openapi -- ui/openapi.json",
-    "generate:client": "openapi-generator-cli generate -i ui/openapi.json -g rust -o tests/integration-tests/client --package-name koharu-client --additional-properties=library=reqwest,supportAsync=true,preferUnsignedInt=true,packageVersion=0.0.0"
+    "typecheck:desktop": "tsc --project tests/integration-tests/tsconfig.json",
+    "typecheck:integration": "bun run typecheck:desktop",
+    "format": "oxfmt ui tests package.json .oxfmtrc.json .vscode",
+    "format:check": "oxfmt --check ui tests package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
-    "@openapitools/openapi-generator-cli": "^2.39.0",
-    "@tauri-apps/cli": "^2.11.3",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
     "git-cliff": "^2.13.1",
-    "oxfmt": "^0.56.0"
+    "kill-port": "^2.0.1",
+    "nodemon": "^3.1.14",
+    "oxfmt": "^0.56.0",
+    "typescript": "^6.0.3"
   }
 }

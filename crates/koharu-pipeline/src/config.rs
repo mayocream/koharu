@@ -1,0 +1,263 @@
+use serde::{Deserialize, Deserializer, Serialize};
+use specta::Type;
+
+use crate::builtin::{
+    AotInpaintingConfig, BaberuOcrConfig, Flux2KleinConfig, FontDetectorConfig,
+    KoharuLayoutRFDetrSeg2XLConfig, LaMaConfig, MangaOcrConfig, PaddleOcrVl1_6Config,
+    RoremMixedConfig,
+};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Type)]
+pub struct PipelineConfig {
+    pub detection: DetectionModel,
+    pub ocr: OcrModel,
+    pub typography: TypographyModel,
+    pub inpainting: InpaintingModel,
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+struct PipelineConfigWire {
+    detection: DetectionModel,
+    ocr: OcrModel,
+    typography: TypographyModel,
+    inpainting: InpaintingModel,
+}
+
+impl Default for PipelineConfigWire {
+    fn default() -> Self {
+        let config = PipelineConfig::default();
+        Self {
+            detection: config.detection,
+            ocr: config.ocr,
+            typography: config.typography,
+            inpainting: config.inpainting,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PipelineConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let config = PipelineConfigWire::deserialize(deserializer)?;
+        Ok(Self {
+            detection: config.detection,
+            ocr: config.ocr,
+            typography: config.typography,
+            inpainting: config.inpainting,
+        })
+    }
+}
+
+impl Default for PipelineConfig {
+    fn default() -> Self {
+        Self {
+            detection: DetectionModel::KoharuLayoutRFDetrSeg2XL(
+                KoharuLayoutRFDetrSeg2XLConfig::default(),
+            ),
+            ocr: OcrModel::PaddleOcrVl1_6(PaddleOcrVl1_6Config::default()),
+            typography: TypographyModel::FontDetector(FontDetectorConfig::default()),
+            inpainting: InpaintingModel::LaMa(LaMaConfig::default()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "model")]
+pub enum DetectionModel {
+    #[serde(rename = "koharu-layout-rfdetr-seg-2xl")]
+    KoharuLayoutRFDetrSeg2XL(KoharuLayoutRFDetrSeg2XLConfig),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "model")]
+pub enum OcrModel {
+    #[serde(rename = "paddleocr-vl-1.6")]
+    PaddleOcrVl1_6(PaddleOcrVl1_6Config),
+    #[serde(rename = "manga-ocr")]
+    MangaOcr(MangaOcrConfig),
+    #[serde(rename = "baberu-ocr")]
+    BaberuOcr(BaberuOcrConfig),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "model")]
+pub enum TypographyModel {
+    #[serde(rename = "font-detector")]
+    FontDetector(FontDetectorConfig),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(tag = "model")]
+pub enum InpaintingModel {
+    #[serde(rename = "lama")]
+    LaMa(LaMaConfig),
+    #[serde(rename = "aot-inpainting")]
+    AotInpainting(AotInpaintingConfig),
+    #[serde(rename = "flux2-klein")]
+    Flux2Klein(Flux2KleinConfig),
+    #[serde(rename = "rorem-mixed")]
+    RoremMixed(RoremMixedConfig),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_select_one_processor_for_each_phase() {
+        let config = PipelineConfig::default();
+
+        assert!(matches!(
+            config.detection,
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
+        ));
+        assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6(_)));
+        assert!(matches!(
+            config.typography,
+            TypographyModel::FontDetector(_)
+        ));
+        assert!(matches!(config.inpainting, InpaintingModel::LaMa(_)));
+    }
+
+    #[test]
+    fn parses_phase_keyed_processor_configuration() {
+        let config: PipelineConfig = toml::from_str(
+            r#"
+                [detection]
+                model = "koharu-layout-rfdetr-seg-2xl"
+
+                [ocr]
+                model = "baberu-ocr"
+
+                [typography]
+                model = "font-detector"
+                top_k = 5
+
+                [inpainting]
+                model = "rorem-mixed"
+                resolution = 1024
+                mask_dilation = 20
+            "#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            config.detection,
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
+        ));
+        assert!(matches!(config.ocr, OcrModel::BaberuOcr(_)));
+        assert!(matches!(
+            config.typography,
+            TypographyModel::FontDetector(config) if config.top_k == 5
+        ));
+        assert!(matches!(
+            config.inpainting,
+            InpaintingModel::RoremMixed(config)
+                if config.resolution == 1024
+                    && config.mask_dilation == 20
+                    && config.num_inference_steps == 30
+        ));
+    }
+
+    #[test]
+    fn missing_slots_use_defaults() {
+        let config = toml::from_str::<PipelineConfig>("").unwrap();
+
+        assert_eq!(config, PipelineConfig::default());
+    }
+
+    #[test]
+    fn ignores_legacy_processor_configuration() {
+        let config = toml::from_str::<PipelineConfig>(
+            r#"
+                [[processors]]
+                model = "comic_layout_yolo26s"
+                enabled = false
+
+                [[processors]]
+                model = "mask_fusion"
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(config, PipelineConfig::default());
+    }
+
+    #[test]
+    fn ignores_unknown_model_configuration_fields() {
+        let config = toml::from_str::<PipelineConfig>(
+            r#"
+                [detection]
+                model = "koharu-layout-rfdetr-seg-2xl"
+                legacy_threshold = 0.5
+
+                [ocr]
+                model = "paddleocr-vl-1.6"
+                legacy_language = "ja"
+
+                [typography]
+                model = "font-detector"
+                top_k = 5
+                legacy_fonts = ["Example"]
+
+                [inpainting]
+                model = "lama"
+                legacy_resolution = 1024
+            "#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            config.detection,
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
+        ));
+        assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6(_)));
+        assert!(matches!(
+            config.typography,
+            TypographyModel::FontDetector(config) if config.top_k == 5
+        ));
+        assert!(matches!(config.inpainting, InpaintingModel::LaMa(_)));
+    }
+
+    #[test]
+    fn parses_detection_and_generative_inpainting_options() {
+        let config = toml::from_str::<PipelineConfig>(
+            r#"
+                [detection]
+                model = "koharu-layout-rfdetr-seg-2xl"
+                text_threshold = 0.25
+                bubble_threshold = 0.45
+                panel_threshold = 0.55
+
+                [inpainting]
+                model = "flux2-klein"
+                prompt = "Reconstruct the illustration without text."
+                padding_mask_crop = 64
+                strength = 0.75
+                num_inference_steps = 8
+                seed = 42
+            "#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            config.detection,
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(config)
+                if config.text_threshold == Some(0.25)
+                    && config.bubble_threshold == Some(0.45)
+                    && config.panel_threshold == Some(0.55)
+        ));
+        assert!(matches!(
+            config.inpainting,
+            InpaintingModel::Flux2Klein(config)
+                if config.prompt == "Reconstruct the illustration without text."
+                    && config.padding_mask_crop == Some(64)
+                    && config.strength == 0.75
+                    && config.num_inference_steps == 8
+                    && config.seed == 42
+        ));
+    }
+}
