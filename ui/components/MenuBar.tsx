@@ -23,7 +23,7 @@ import {
 import { useScene } from '@/hooks/useScene'
 import { getConfig, startPipeline } from '@/lib/api/default/default'
 import { isTauri, openExternalUrl } from '@/lib/backend'
-import { exportCurrentProjectAs, importPages } from '@/lib/io/pagesIo'
+import { exportCurrentProjectAs, importPages, promptImportScript } from '@/lib/io/pagesIo'
 import {
   clearSelectionOnCurrentPage,
   closeProject,
@@ -173,6 +173,33 @@ export function MenuBar() {
     },
   ]
 
+  const scriptItems: MenuItem[] = [
+    {
+      label: t('menu.exportScript'),
+      onSelect: () => void exportCurrentProjectAs('script', [requirePageId()]),
+      disabled: !hasPage,
+      testId: 'menu-file-export-script',
+    },
+    {
+      label: t('menu.exportAllScript'),
+      onSelect: () => void exportCurrentProjectAs('script'),
+      disabled: !hasScene,
+      testId: 'menu-file-export-all-script',
+    },
+    {
+      label: t('menu.importScript'),
+      onSelect: () => void promptImportScript(requirePageId()),
+      disabled: !hasPage,
+      testId: 'menu-file-import-script',
+    },
+    {
+      label: t('menu.importAllScript'),
+      onSelect: () => void promptImportScript(),
+      disabled: !hasScene,
+      testId: 'menu-file-import-all-script',
+    },
+  ]
+
   const helpMenuItems: MenuItem[] = [
     { label: t('menu.discord'), onSelect: () => openExternalUrl('https://discord.gg/mHvHkxGnUY') },
     {
@@ -226,6 +253,18 @@ export function MenuBar() {
             </MenubarItem>
             <MenubarSeparator />
             {exportItems.map((item) => (
+              <MenubarItem
+                key={item.label}
+                data-testid={item.testId}
+                className='text-[13px]'
+                disabled={item.disabled}
+                onSelect={item.onSelect ? () => void item.onSelect?.() : undefined}
+              >
+                {item.label}
+              </MenubarItem>
+            ))}
+            <MenubarSeparator />
+            {scriptItems.map((item) => (
               <MenubarItem
                 key={item.label}
                 data-testid={item.testId}

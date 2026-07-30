@@ -3310,6 +3310,11 @@ export const useImportProject = <TError = unknown, TContext = unknown>(
 ): UseMutationResult<Awaited<ReturnType<typeof importProject>>, TError, void, TContext> => {
   return useMutation(getImportProjectMutationOptions(options), queryClient)
 }
+
+export const getImportScriptUrl = () => {
+  return `/api/v1/projects/current/import-script`
+}
+
 export const getDeleteProjectUrl = (id: string) => {
   return `/api/v1/projects/${id}`
 }

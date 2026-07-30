@@ -11,4 +11,5 @@ export const ExportFormat = {
   psd: 'psd',
   rendered: 'rendered',
   inpainted: 'inpainted',
+  script: 'script',
 } as const
