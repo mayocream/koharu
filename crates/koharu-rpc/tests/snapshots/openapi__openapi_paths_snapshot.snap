@@ -203,6 +203,12 @@ expression: paths
         ],
     ),
     (
+        "/projects/current/import-script",
+        [
+            "post",
+        ],
+    ),
+    (
         "/projects/import",
         [
             "post",
