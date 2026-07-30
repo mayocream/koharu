@@ -164,6 +164,7 @@ describe('KoharuClient', () => {
           target_language: 'en-US',
           instructions: null,
           credentials: {
+            atlas_cloud: emptyCredential(),
             openai: emptyCredential(),
             gemini: emptyCredential(),
             claude: emptyCredential(),

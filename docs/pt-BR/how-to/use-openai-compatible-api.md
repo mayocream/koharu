@@ -6,7 +6,7 @@ title: Usar APIs Compatíveis com OpenAI
 
 O Koharu pode traduzir através de APIs que seguem o formato Chat Completions da OpenAI, incluindo servidores locais como vLLM e llama-server.
 
-Esta página cobre o provedor `OpenAI Compatible` atual do Koharu. Ele é separado dos provedores embutidos OpenAI, Gemini, Claude, DeepSeek, OpenRouter, LM Studio, DeepL, Google Cloud Translation e Caiyun, cada um dos quais tem sua própria entrada de configuração dedicada.
+Esta página cobre o provedor `OpenAI Compatible` atual do Koharu. Ele é separado dos provedores embutidos Atlas Cloud, OpenAI, Gemini, Claude, DeepSeek, OpenRouter, LM Studio, DeepL, Google Cloud Translation e Caiyun, cada um dos quais tem sua própria entrada de configuração dedicada.
 
 ## O que o Koharu espera de um endpoint compatível
 
@@ -36,7 +36,7 @@ A UI atual expõe:
 - `Base URL` — obrigatório; aponta para a raiz da API (ex.: `http://127.0.0.1:1234/v1`)
 - `API Key` — opcional; só é enviada quando preenchida
 
-Existe uma única configuração de provedor `OpenAI Compatible`. Para alternar entre servidores compatíveis, mude a base URL e a API key opcional. O OpenRouter e o LM Studio usam entradas de provedor dedicadas.
+Existe uma única configuração de provedor `OpenAI Compatible`. Para alternar entre servidores compatíveis, mude a base URL e a API key opcional. Atlas Cloud, OpenRouter e LM Studio usam entradas de provedor dedicadas.
 
 O status dot reflete o estado da descoberta:
 
@@ -87,6 +87,22 @@ Referências oficiais:
 - [Autenticação do OpenRouter](https://openrouter.ai/docs/api/reference/authentication)
 - [Modelos do OpenRouter](https://openrouter.ai/models)
 
+## Atlas Cloud
+
+O Atlas Cloud tem uma entrada de provedor dedicada com uma base URL fixa.
+
+1. Crie uma API key no Atlas Cloud.
+2. No Koharu, selecione `Atlas Cloud` como provedor de tradução.
+3. Salve a API key no campo de credencial.
+4. Escolha um ID de modelo com o prefixo do provedor, como `qwen/qwen3.5-flash`.
+
+O Koharu descobre os modelos de chat atuais em `GET https://api.atlascloud.ai/v1/models` e traduz por `POST https://api.atlascloud.ai/v1/chat/completions`.
+
+Referências oficiais:
+
+- [API LLM do Atlas Cloud](https://www.atlascloud.ai/docs/models/llm)
+- [Biblioteca de modelos do Atlas Cloud](https://www.atlascloud.ai/models/llm)
+
 ## Outros endpoints compatíveis
 
 Para outras APIs self-hosted ou roteadas, use o mesmo checklist:
@@ -100,9 +116,9 @@ Se o servidor implementar apenas a API mais recente `Responses` ou algum schema 
 
 ## Alternando entre endpoints
 
-Como existe um único provedor `OpenAI Compatible`, apenas uma base URL personalizada é configurada por vez. O OpenRouter e o LM Studio permanecem configurados separadamente em seus provedores dedicados.
+Como existe um único provedor `OpenAI Compatible`, apenas uma base URL personalizada é configurada por vez. Atlas Cloud, OpenRouter e LM Studio permanecem configurados separadamente em seus provedores dedicados.
 
-Se você quer regularmente tanto um servidor compatível com OpenAI *quanto* um dos provedores de primeira classe do Koharu (`OpenAI`, `Claude`, `Gemini`, `DeepSeek`, `OpenRouter`, `LM Studio`), configure cada um separadamente — eles coexistem no seletor de LLM e você pode alternar com um clique.
+Se você quer regularmente tanto um servidor compatível com OpenAI *quanto* um dos provedores de primeira classe do Koharu (`Atlas Cloud`, `OpenAI`, `Claude`, `Gemini`, `DeepSeek`, `OpenRouter`, `LM Studio`), configure cada um separadamente — eles coexistem no seletor de LLM e você pode alternar com um clique.
 
 ## Erros comuns
 

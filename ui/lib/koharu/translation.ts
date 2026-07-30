@@ -2,6 +2,7 @@ import type { Providers, TargetLanguageView } from './protocol'
 
 export const translationProviders: Providers['provider'][] = [
   'local',
+  'atlas_cloud',
   'openai',
   'gemini',
   'claude',
@@ -16,6 +17,7 @@ export const translationProviders: Providers['provider'][] = [
 
 export const translationProviderLabels: Record<Providers['provider'], string> = {
   local: 'Local',
+  atlas_cloud: 'Atlas Cloud',
   openai: 'OpenAI',
   gemini: 'Gemini',
   claude: 'Claude',
@@ -32,6 +34,13 @@ export function defaultTranslationProvider(provider: Providers['provider']): Pro
   switch (provider) {
     case 'local':
       return { provider, model: 'qwen3.5-0.8b' }
+    case 'atlas_cloud':
+      return {
+        provider,
+        model: 'qwen/qwen3.5-flash',
+        temperature: null,
+        max_tokens: null,
+      }
     case 'openai':
       return {
         provider,

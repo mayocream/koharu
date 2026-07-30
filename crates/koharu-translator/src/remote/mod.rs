@@ -1,3 +1,4 @@
+mod atlas_cloud;
 mod caiyun;
 mod claude;
 mod deepl;
@@ -14,6 +15,7 @@ use async_trait::async_trait;
 use reqwest::{Client, RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 
+pub use atlas_cloud::{AtlasCloudConfig, discover_atlas_cloud_models};
 pub use caiyun::CaiyunConfig;
 pub use claude::ClaudeConfig;
 pub use deepl::DeepLConfig;
@@ -29,6 +31,7 @@ use crate::{Error, RemoteProviderKind, Result, Translation, TranslationRequest, 
 
 #[derive(Debug, Clone)]
 pub enum RemoteProvider {
+    AtlasCloud(AtlasCloudConfig),
     OpenAi(OpenAiConfig),
     Gemini(GeminiConfig),
     Claude(ClaudeConfig),
@@ -45,6 +48,7 @@ impl RemoteProvider {
     #[must_use]
     pub const fn kind(&self) -> RemoteProviderKind {
         match self {
+            Self::AtlasCloud(_) => RemoteProviderKind::AtlasCloud,
             Self::OpenAi(_) => RemoteProviderKind::OpenAi,
             Self::Gemini(_) => RemoteProviderKind::Gemini,
             Self::Claude(_) => RemoteProviderKind::Claude,
@@ -87,6 +91,10 @@ impl RemoteTranslator {
     #[must_use]
     pub fn with_generation_options(mut self, options: RemoteGenerationOptions) -> Self {
         match &mut self.provider {
+            RemoteProvider::AtlasCloud(config) => {
+                config.temperature = options.temperature;
+                config.max_tokens = options.max_tokens;
+            }
             RemoteProvider::OpenAi(config) => {
                 config.temperature = options.temperature;
                 config.max_tokens = options.max_tokens;
@@ -149,6 +157,9 @@ impl Translator for RemoteTranslator {
 
         let expected = request.segments.len();
         let segments = match &self.provider {
+            RemoteProvider::AtlasCloud(config) => {
+                atlas_cloud::translate(&self.client, config, &request).await?
+            }
             RemoteProvider::OpenAi(config) => {
                 openai::translate(&self.client, config, &request).await?
             }
@@ -234,6 +245,7 @@ mod tests {
 
     #[test]
     fn provider_ids_are_credential_keys() {
+        assert_eq!(RemoteProviderKind::AtlasCloud.id(), "atlas-cloud");
         assert_eq!(RemoteProviderKind::OpenAi.id(), "openai");
         assert_eq!(RemoteProviderKind::OpenRouter.id(), "openrouter");
         assert_eq!(RemoteProviderKind::LmStudio.id(), "lm-studio");

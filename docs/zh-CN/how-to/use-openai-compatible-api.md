@@ -6,7 +6,7 @@ title: 使用 OpenAI 兼容 API
 
 Koharu 可以通过遵循 OpenAI Chat Completions 形状的 API 来进行翻译，包括 vLLM、llama-server 等本地服务。
 
-本页针对的是 Koharu 当前的 `OpenAI Compatible` 提供方。它与 Koharu 内置的 OpenAI、Gemini、Claude、DeepSeek、OpenRouter、LM Studio、DeepL、Google Cloud Translation、Caiyun 等提供方相互独立，每一种都有自己的专属配置入口。
+本页针对的是 Koharu 当前的 `OpenAI Compatible` 提供方。它与 Koharu 内置的 Atlas Cloud、OpenAI、Gemini、Claude、DeepSeek、OpenRouter、LM Studio、DeepL、Google Cloud Translation、Caiyun 等提供方相互独立，每一种都有自己的专属配置入口。
 
 ## Koharu 对兼容端点的预期
 
@@ -36,7 +36,7 @@ Koharu 可以通过遵循 OpenAI Chat Completions 形状的 API 来进行翻译�
 - `Base URL`：必填；指向 API 根路径（例如 `http://127.0.0.1:1234/v1`）
 - `API Key`：可选；只有填写了才会被发送
 
-`OpenAI Compatible` 提供方只有一份配置。切换兼容服务时修改 base URL 和可选 API key；OpenRouter 和 LM Studio 使用各自独立的专用提供方配置。
+`OpenAI Compatible` 提供方只有一份配置。切换兼容服务时修改 base URL 和可选 API key；Atlas Cloud、OpenRouter 和 LM Studio 使用各自独立的专用提供方配置。
 
 状态指示点反映发现状态：
 
@@ -87,6 +87,22 @@ OpenRouter 现在有专用提供方入口，无需配置通用兼容提供方的
 - [OpenRouter 鉴权](https://openrouter.ai/docs/api/reference/authentication)
 - [OpenRouter 模型列表](https://openrouter.ai/models)
 
+## Atlas Cloud
+
+Atlas Cloud 有独立的提供方入口，并使用固定的 API base URL。
+
+1. 在 Atlas Cloud 创建 API key。
+2. 在 Koharu 中选择 `Atlas Cloud` 翻译提供方。
+3. 将 API key 保存到凭据字段。
+4. 选择带提供商前缀的模型 ID，例如 `qwen/qwen3.5-flash`。
+
+Koharu 从 `GET https://api.atlascloud.ai/v1/models` 动态获取当前聊天模型，并通过 `POST https://api.atlascloud.ai/v1/chat/completions` 执行翻译。
+
+官方参考：
+
+- [Atlas Cloud LLM API](https://www.atlascloud.ai/docs/models/llm)
+- [Atlas Cloud 模型库](https://www.atlascloud.ai/models/llm)
+
 ## 其他兼容端点
 
 对于其他自托管或路由型 API，可以使用同样的检查表：
@@ -100,9 +116,9 @@ OpenRouter 现在有专用提供方入口，无需配置通用兼容提供方的
 
 ## 在不同端点之间切换
 
-由于只有一份 `OpenAI Compatible` 提供方配置，同一时间只有一个自定义 base URL 生效。OpenRouter 和 LM Studio 通过各自的专用提供方独立配置。
+由于只有一份 `OpenAI Compatible` 提供方配置，同一时间只有一个自定义 base URL 生效。Atlas Cloud、OpenRouter 和 LM Studio 通过各自的专用提供方独立配置。
 
-如果你经常需要同时用一个 OpenAI 兼容服务 *和* 某个 Koharu 内置的一等公民提供方（`OpenAI`、`Claude`、`Gemini`、`DeepSeek`、`OpenRouter`、`LM Studio`），请分别配置它们——它们会同时出现在 LLM 选择器中，可以一键切换。
+如果你经常需要同时用一个 OpenAI 兼容服务 *和* 某个 Koharu 内置的一等公民提供方（`Atlas Cloud`、`OpenAI`、`Claude`、`Gemini`、`DeepSeek`、`OpenRouter`、`LM Studio`），请分别配置它们——它们会同时出现在 LLM 选择器中，可以一键切换。
 
 ## 常见错误
 

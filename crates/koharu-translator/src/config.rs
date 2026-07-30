@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig, GoogleCloudConfig,
-    LmStudioConfig, LocalConfig, OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig,
+    AtlasCloudConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
+    GoogleCloudConfig, LmStudioConfig, LocalConfig, OpenAiCompatibleConfig, OpenAiConfig,
+    OpenRouterConfig,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -35,6 +36,7 @@ impl TranslationConfig {
 #[serde(tag = "provider", rename_all = "snake_case")]
 pub enum Providers {
     Local(LocalConfig),
+    AtlasCloud(AtlasCloudConfig),
     #[serde(rename = "openai")]
     OpenAi(OpenAiConfig),
     Gemini(GeminiConfig),
@@ -97,6 +99,13 @@ mod tests {
         let value =
             serde_json::to_value(Providers::OpenRouter(OpenRouterConfig::default())).unwrap();
         assert_eq!(value["provider"], "openrouter");
+    }
+
+    #[test]
+    fn serializes_atlas_cloud_provider_name() {
+        let value =
+            serde_json::to_value(Providers::AtlasCloud(AtlasCloudConfig::default())).unwrap();
+        assert_eq!(value["provider"], "atlas_cloud");
     }
 
     #[test]

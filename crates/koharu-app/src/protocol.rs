@@ -463,6 +463,7 @@ impl TranslationSettings {
 
 #[derive(Clone, Default, Deserialize, Serialize, Type)]
 pub struct TranslationCredentialsView {
+    pub atlas_cloud: CredentialEdit,
     pub openai: CredentialEdit,
     pub gemini: CredentialEdit,
     pub claude: CredentialEdit,
@@ -484,6 +485,7 @@ impl fmt::Debug for TranslationCredentialsView {
 impl From<&TranslationCredentials> for TranslationCredentialsView {
     fn from(credentials: &TranslationCredentials) -> Self {
         Self {
+            atlas_cloud: CredentialEdit::from(&credentials.atlas_cloud),
             openai: CredentialEdit::from(&credentials.openai),
             gemini: CredentialEdit::from(&credentials.gemini),
             claude: CredentialEdit::from(&credentials.claude),
@@ -500,6 +502,7 @@ impl From<&TranslationCredentials> for TranslationCredentialsView {
 
 impl TranslationCredentialsView {
     fn apply(self, credentials: &mut TranslationCredentials) {
+        self.atlas_cloud.apply(&mut credentials.atlas_cloud);
         self.openai.apply(&mut credentials.openai);
         self.gemini.apply(&mut credentials.gemini);
         self.claude.apply(&mut credentials.claude);

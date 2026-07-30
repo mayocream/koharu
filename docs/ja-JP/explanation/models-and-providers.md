@@ -76,7 +76,7 @@ Koharu は、ローカルモデルをダウンロードせずに、リモート�
 
 対応しているプロバイダファミリ:
 
-- LLM ベース: `OpenAI`、`Gemini`、`Claude`、`DeepSeek`、`OpenRouter`、`LM Studio`、および `/v1/models` と `/v1/chat/completions` を公開する任意の `OpenAI 互換` エンドポイント (vLLM、llama-server など)
+- LLM ベース: `Atlas Cloud`、`OpenAI`、`Gemini`、`Claude`、`DeepSeek`、`OpenRouter`、`LM Studio`、および `/v1/models` と `/v1/chat/completions` を公開する任意の `OpenAI 互換` エンドポイント (vLLM、llama-server など)
 - 機械翻訳: `DeepL`、`Google Cloud Translation`、`Caiyun`
 
 機械翻訳プロバイダは chat モデルではなく、純粋な翻訳サービスです。原文と対象言語を渡すと翻訳結果が返り、システムプロンプトもモデル選択もありません。
@@ -89,6 +89,7 @@ LLM ベースのプロバイダの組み込みカタログには次が含まれ�
 - Gemini: Gemini 3.5 Flash、Gemini 3.1 Pro / Flash-Lite、Gemini 3 Flash、Gemini 2.5 のテキスト出力モデル
 - Claude: Claude Fable 5、Opus 4.8、Sonnet 5、Haiku 4.5、および一部の以前の Claude 4 モデル
 - DeepSeek: DeepSeek V4 Flash、DeepSeek V4 Pro
+- Atlas Cloud: 現在のチャットモデルを Atlas Cloud から動的に取得
 - OpenRouter: テキスト出力モデルを OpenRouter から動的に取得
 - LM Studio: ネイティブ v1 REST API からローカル LLM を動的に取得
 - OpenAI 互換 API: モデル一覧は設定したエンドポイントから動的に取得されます

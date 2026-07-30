@@ -126,7 +126,7 @@ Koharu supports both local and remote LLM backends. Local models run through [ll
 
 #### Cloud Providers
 
-Koharu supports hosted APIs from [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/).
+Koharu supports hosted APIs from [Atlas Cloud](https://www.atlascloud.ai/), [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/).
 
 #### Machine Translation Providers
 
