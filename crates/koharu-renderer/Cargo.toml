@@ -27,6 +27,7 @@ fontique = { workspace = true }
 parking_lot = { workspace = true }
 pollster = { workspace = true }
 rayon = { workspace = true }
+rust-embed = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

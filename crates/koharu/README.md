@@ -32,8 +32,8 @@ koharu-scene   koharu-desktop    background runtime            |
                     ^                               |            |
                     +-------------------------------+------------+
 
-Supporting services: koharu-config, koharu-secrets,
-koharu-runtime, koharu-fonts, and optional koharu-ai.
+Supporting services: koharu-config, koharu-secrets, koharu-runtime, and optional
+koharu-ai.
 ```
 
 The `koharu` entry package owns:
@@ -47,7 +47,7 @@ The `koharu` entry package owns:
 - applying short interactive commits and synchronizing their `ChangeSet` with
   `koharu-canvas`;
 - application-level undo/redo grouping;
-- pipeline, import, export, font-download, AI, and maintenance job policy;
+- pipeline, import, export, AI, and maintenance job policy;
 - the small Rust/React protocol and its read-only UI projection;
 - native file dialogs, recent projects, resource URLs, and update policy.
 
@@ -67,8 +67,7 @@ DAG, repository layer, service container, event bus, or application database.
 | `koharu-pipeline` | Owns model selection, scheduling, progress, cancellation, and model lifetime. |
 | `koharu-config` | Supplies live typed configuration handles. |
 | `koharu-secrets` | Implements the platform credential-store backend used by translation credentials. |
-| `koharu-runtime` | Supplies current HTTP clients, package paths, model/font downloads, and device discovery. |
-| `koharu-fonts` | Browses and downloads fonts, then causes canvas/export font caches to be invalidated. |
+| `koharu-runtime` | Supplies current HTTP clients, package paths, model downloads, and device discovery. |
 | `koharu-psd` | Writes PSD exports from an immutable project revision. |
 | `koharu-ai` | Runs optional image/assistant jobs and returns proposals; it never mutates a session directly. |
 

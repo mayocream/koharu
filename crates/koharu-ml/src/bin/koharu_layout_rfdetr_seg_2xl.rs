@@ -8,7 +8,6 @@ use imageproc::{
     drawing::{draw_filled_rect_mut, draw_hollow_rect_mut, draw_text_mut, text_size},
     rect::Rect,
 };
-use koharu_fonts::GoogleFonts;
 use koharu_ml::koharu_layout_rfdetr_seg_2xl::{KoharuLayoutDetections, KoharuLayoutRFDetrSeg2XL};
 
 #[derive(Debug, Parser)]
@@ -22,7 +21,7 @@ struct Cli {
     #[arg(long, value_name = "FILE")]
     annotated_output: Option<PathBuf>,
 
-    /// Font used for detection labels. Noto Sans JP is downloaded and cached when omitted.
+    /// Font used for detection labels when writing an annotated image.
     #[arg(long, value_name = "FILE")]
     font: Option<PathBuf>,
 
@@ -69,7 +68,11 @@ async fn main() -> Result<()> {
     let detections = model.inference_with_thresholds(&image, thresholds)?;
 
     if let Some(path) = cli.annotated_output.as_deref() {
-        let font = load_font(cli.font.as_deref()).await?;
+        let font_path = cli
+            .font
+            .as_deref()
+            .context("--font is required when --annotated-output is used")?;
+        let font = load_font(font_path)?;
         let mut annotated = image.to_rgba8();
         draw_detections(&mut annotated, &detections, &font, cli.font_size);
         annotated
@@ -86,17 +89,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn load_font(path: Option<&Path>) -> Result<FontArc> {
-    let path = if let Some(path) = path {
-        path.to_owned()
-    } else {
-        GoogleFonts::new()?
-            .fetch_family("Noto Sans JP")
-            .await
-            .context("failed to fetch Noto Sans JP")?
-    };
+fn load_font(path: &Path) -> Result<FontArc> {
     let data =
-        std::fs::read(&path).with_context(|| format!("failed to read font {}", path.display()))?;
+        std::fs::read(path).with_context(|| format!("failed to read font {}", path.display()))?;
     FontArc::try_from_vec(data).with_context(|| format!("failed to parse font {}", path.display()))
 }
 

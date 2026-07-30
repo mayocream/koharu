@@ -28,7 +28,7 @@ textures, and renderer caches are all derived state.
 | Scene coupling | Consume typed scene capabilities instead of a renderer-specific element enum. |
 | Visual policy | Keep non-persistent defaults in `RenderTheme`; scene typography remains user intent. |
 | Text | HarfRust shaping, Unicode BiDi, ICU4X line breaking and script data, Jieba Chinese segmentation, and Hypher hyphenation. |
-| Font discovery | Fontique system and registered fonts with language- and script-aware fallback. |
+| Font discovery | Fontique system, renderer-embedded, and caller-registered fonts with language- and script-aware fallback. |
 | Symbols | A renderer-owned ordered symbol and emoji fallback policy. |
 | Vertical text | Native top-to-bottom shaping with `vert`/`vrt2`, right-to-left or left-to-right column flow, and CJK punctuation adjustment. |
 | Parallelism | Prepare independent page layers in parallel while preserving deterministic scene order. |
@@ -160,7 +160,8 @@ fn render_text() -> anyhow::Result<image::RgbaImage> {
 ```
 
 This path deliberately does not use `RenderResources` or the prepared-page
-cache. The caller owns the resolved fonts and layout lifetime.
+cache. `FontSystem::new()` automatically registers the renderer-owned assets in
+`fonts/`; the caller owns the resolved fonts and layout lifetime.
 
 ## RenderRequest and RenderTheme
 

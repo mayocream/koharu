@@ -8,7 +8,6 @@ use imageproc::{
     drawing::{draw_filled_rect_mut, draw_line_segment_mut, draw_text_mut, text_size},
     rect::Rect,
 };
-use koharu_fonts::GoogleFonts;
 use koharu_ml::comic_onomatopoeia::{
     ComicOnomatopoeiaDetector, ComicOnomatopoeiaRecognizer, Detection, Recognition,
 };
@@ -28,9 +27,9 @@ struct Cli {
     #[arg(long, value_name = "FILE")]
     json_output: Option<PathBuf>,
 
-    /// Font used for OCR labels. Noto Sans JP is downloaded and cached when omitted.
+    /// Font used for OCR labels.
     #[arg(long, value_name = "FILE")]
-    font: Option<PathBuf>,
+    font: PathBuf,
 
     #[arg(long, default_value_t = 28.0)]
     font_size: f32,
@@ -82,7 +81,7 @@ async fn main() -> Result<()> {
     } else {
         ComicOnomatopoeiaRecognizer::load(device).await?
     };
-    let font = load_font(cli.font.as_deref()).await?;
+    let font = load_font(&cli.font)?;
 
     let regions = detector
         .inference(&image)?
@@ -122,17 +121,9 @@ fn save_marked(image: RgbaImage, path: &Path) -> Result<()> {
     .with_context(|| format!("failed to save {}", path.display()))
 }
 
-async fn load_font(path: Option<&Path>) -> Result<FontArc> {
-    let path = if let Some(path) = path {
-        path.to_owned()
-    } else {
-        GoogleFonts::new()?
-            .fetch_family("Noto Sans JP")
-            .await
-            .context("failed to fetch Noto Sans JP")?
-    };
+fn load_font(path: &Path) -> Result<FontArc> {
     let data =
-        std::fs::read(&path).with_context(|| format!("failed to read font {}", path.display()))?;
+        std::fs::read(path).with_context(|| format!("failed to read font {}", path.display()))?;
     FontArc::try_from_vec(data).with_context(|| format!("failed to parse font {}", path.display()))
 }
 

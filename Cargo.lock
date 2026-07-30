@@ -3797,18 +3797,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "koharu-fonts"
-version = "0.62.0-alpha.1"
-dependencies = [
- "anyhow",
- "koharu-runtime",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "koharu-llama"
 version = "0.62.0-alpha.1"
 dependencies = [
@@ -3847,7 +3835,6 @@ dependencies = [
  "image 0.25.10",
  "imageproc",
  "koharu-diffusion",
- "koharu-fonts",
  "koharu-llama",
  "koharu-runtime",
  "koharu-torch",
@@ -3919,6 +3906,7 @@ dependencies = [
  "parking_lot",
  "pollster",
  "rayon",
+ "rust-embed",
  "serde",
  "skrifa",
  "thiserror 2.0.18",

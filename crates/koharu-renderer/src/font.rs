@@ -12,9 +12,14 @@ use fontique::{
     Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
 use harfrust::{ShaperData, ShaperInstance, Variation};
+use rust_embed::RustEmbed;
 use skrifa::{MetadataProvider, instance::LocationRef, string::StringId};
 
 use crate::types::FontFaceStyle;
+
+#[derive(RustEmbed)]
+#[folder = "fonts/"]
+struct BundledFonts;
 
 /// A resolved face and variable-font instance used by shaping, metrics, and drawing.
 #[derive(Clone)]
@@ -213,14 +218,22 @@ impl FontSystem {
     pub fn new() -> Self {
         let mut collection = Collection::new(CollectionOptions::default());
         let system_families = collection.family_names().map(str::to_owned).collect();
-        Self {
+        let mut fonts = Self {
             collection,
             sources: SourceCache::new_shared(),
             system_families,
             system_faces: None,
             registered: HashMap::new(),
             resolved: HashMap::new(),
+        };
+        for path in BundledFonts::iter() {
+            let embedded = BundledFonts::get(path.as_ref())
+                .expect("an iterated embedded font must remain available");
+            fonts
+                .register(path.as_ref(), embedded.data.into_owned())
+                .expect("embedded fonts must contain usable faces");
         }
+        fonts
     }
 
     /// Registers caller-provided font data exactly once for the supplied stable key.
@@ -434,5 +447,20 @@ impl FontSystem {
 impl Default for FontSystem {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn embedded_fonts_are_registered_automatically() {
+        let mut fonts = FontSystem::new();
+
+        for family in ["Komika Hand", "Komika Jam", "Komika Slick", "Komika Slim"] {
+            let font = fonts.query_family(family).unwrap();
+            assert_eq!(font.family_name(), family);
+        }
     }
 }
