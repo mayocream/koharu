@@ -495,7 +495,7 @@ async fn import_script(
         label: "Import script translations".into(),
     };
 
-    session.apply(batch).map_err(|e| ApiError::internal(e))?;
+    session.apply(batch).map_err(ApiError::internal)?;
 
     Ok(())
 }

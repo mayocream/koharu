@@ -175,28 +175,28 @@ export function MenuBar() {
 
   const scriptItems: MenuItem[] = [
     {
-      label: t('menu.importScript'),
-      onSelect: () => void promptImportScript(requirePageId()),
-      disabled: !hasPage,
-      testId: 'menu-file-import-script',
-    },
-    {
       label: t('menu.exportScript'),
       onSelect: () => void exportCurrentProjectAs('script', [requirePageId()]),
       disabled: !hasPage,
       testId: 'menu-file-export-script',
     },
     {
-      label: t('menu.importAllScript'),
-      onSelect: () => void promptImportScript(),
-      disabled: !hasScene,
-      testId: 'menu-file-import-all-script',
-    },
-    {
       label: t('menu.exportAllScript'),
       onSelect: () => void exportCurrentProjectAs('script'),
       disabled: !hasScene,
       testId: 'menu-file-export-all-script',
+    },
+    {
+      label: t('menu.importScript'),
+      onSelect: () => void promptImportScript(requirePageId()),
+      disabled: !hasPage,
+      testId: 'menu-file-import-script',
+    },
+    {
+      label: t('menu.importAllScript'),
+      onSelect: () => void promptImportScript(),
+      disabled: !hasScene,
+      testId: 'menu-file-import-all-script',
     },
   ]
 
