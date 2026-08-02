@@ -241,12 +241,12 @@ fn normalized_channel(value: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_runtime::package::{PreloadablePackage, libtorch::Libtorch};
+    use koharu_runtime::{Feature, Runtime};
 
     async fn preload_libtorch() {
-        Libtorch::for_current_target()
+        Runtime::discover([Feature::Torch])
             .unwrap()
-            .preload()
+            .initialize()
             .await
             .unwrap();
     }

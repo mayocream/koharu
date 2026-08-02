@@ -1,15 +1,14 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    path::{Path, PathBuf},
-    sync::{Arc, OnceLock, Weak},
-    time::Duration,
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
 };
 
-use lru::LruCache;
-use parking_lot::{Condvar, Mutex};
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params_from_iter};
+use redb::ReadableDatabase;
 
-use crate::{BlobId, Error, Result};
+use crate::{
+    BlobId, Error, Result,
+    storage::{BLOBS, Store},
+};
 
 #[derive(Clone, Debug)]
 pub struct BlobAttachment {
@@ -66,134 +65,40 @@ impl BlobBatch {
     }
 }
 
-#[derive(Clone)]
-enum Source {
-    File(PathBuf),
-    Uri(String),
-}
-
-struct ByteCache {
-    entries: LruCache<BlobId, Arc<[u8]>>,
-    bytes: usize,
-    limit: usize,
-}
-
-impl ByteCache {
-    fn new(limit: usize) -> Self {
-        Self {
-            entries: LruCache::unbounded(),
-            bytes: 0,
-            limit,
-        }
-    }
-
-    fn insert(&mut self, id: BlobId, value: Arc<[u8]>) {
-        if self.limit == 0 || value.len() > self.limit {
-            return;
-        }
-        if let Some(old) = self.entries.put(id, value.clone()) {
-            self.bytes = self.bytes.saturating_sub(old.len());
-        }
-        self.bytes = self.bytes.saturating_add(value.len());
-        while self.bytes > self.limit {
-            let Some((_, old)) = self.entries.pop_lru() else {
-                break;
-            };
-            self.bytes = self.bytes.saturating_sub(old.len());
-        }
-    }
-}
-
-pub(crate) struct BlobStore {
-    readers: ReaderPool,
-    cache: Mutex<ByteCache>,
-    leases: Mutex<Vec<Weak<BTreeSet<BlobId>>>>,
-}
-
-impl BlobStore {
-    pub(crate) fn file(
-        path: &Path,
-        timeout: Duration,
-        cache_bytes: usize,
-        reader_limit: usize,
-    ) -> Arc<Self> {
-        static STORES: OnceLock<Mutex<HashMap<PathBuf, Weak<BlobStore>>>> = OnceLock::new();
-        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
-        let stores = STORES.get_or_init(|| Mutex::new(HashMap::new()));
-        let mut stores = stores.lock();
-        stores.retain(|_, store| store.strong_count() != 0);
-        if let Some(store) = stores.get(&path).and_then(Weak::upgrade) {
-            return store;
-        }
-        let store = Arc::new(Self {
-            readers: ReaderPool::new(Source::File(path.to_owned()), timeout, reader_limit),
-            cache: Mutex::new(ByteCache::new(cache_bytes)),
-            leases: Mutex::new(Vec::new()),
-        });
-        stores.insert(path, Arc::downgrade(&store));
-        store
-    }
-
-    pub(crate) fn uri(
-        uri: String,
-        timeout: Duration,
-        cache_bytes: usize,
-        reader_limit: usize,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            readers: ReaderPool::new(Source::Uri(uri), timeout, reader_limit),
-            cache: Mutex::new(ByteCache::new(cache_bytes)),
-            leases: Mutex::new(Vec::new()),
-        })
-    }
-
-    pub(crate) fn contains(&self, id: BlobId) -> Result<bool> {
-        if self.cache.lock().entries.contains(&id) {
+impl Store {
+    pub(crate) fn contains_blob(&self, id: BlobId) -> Result<bool> {
+        if self.cache.lock().contains(id) {
             return Ok(true);
         }
-        self.readers
-            .checkout()?
-            .query_row(
-                "SELECT 1 FROM blobs WHERE id = ?1",
-                [id.as_bytes().as_slice()],
-                |_| Ok(()),
-            )
-            .optional()
-            .map(|value| value.is_some())
-            .map_err(Into::into)
+        let transaction = self.database.read().begin_read()?;
+        let table = transaction.open_table(BLOBS)?;
+        Ok(table.get(id)?.is_some())
     }
 
-    pub(crate) fn read(&self, id: BlobId) -> Result<Arc<[u8]>> {
-        if let Some(bytes) = self.cache.lock().entries.get(&id).cloned() {
+    pub(crate) fn read_blob(&self, id: BlobId) -> Result<Arc<[u8]>> {
+        if let Some(bytes) = self.cache.lock().get(id) {
             return Ok(bytes);
         }
-        let bytes = self
-            .readers
-            .checkout()?
-            .query_row(
-                "SELECT bytes FROM blobs WHERE id = ?1",
-                [id.as_bytes().as_slice()],
-                |row| row.get::<_, Vec<u8>>(0),
-            )
-            .optional()?
-            .ok_or(Error::BlobNotFound(id))?;
-        if BlobId::for_bytes(&bytes) != id {
+        let transaction = self.database.read().begin_read()?;
+        let table = transaction.open_table(BLOBS)?;
+        let stored = table.get(id)?.ok_or(Error::BlobNotFound(id))?;
+        let bytes = stored.value();
+        if BlobId::for_bytes(bytes) != id {
             return Err(Error::invalid(format!("blob {id} has invalid content")));
         }
-        let bytes: Arc<[u8]> = bytes.into();
+        let bytes: Arc<[u8]> = Arc::from(bytes);
         self.cache.lock().insert(id, bytes.clone());
         Ok(bytes)
     }
 
-    pub(crate) fn read_many(&self, ids: impl IntoIterator<Item = BlobId>) -> Result<BlobBatch> {
-        const QUERY_CHUNK: usize = 500;
+    pub(crate) fn read_blobs(&self, ids: impl IntoIterator<Item = BlobId>) -> Result<BlobBatch> {
         let ids = ids.into_iter().collect::<BTreeSet<_>>();
         let mut batch = BlobBatch::default();
         let mut missing = Vec::new();
         {
             let mut cache = self.cache.lock();
             for id in &ids {
-                if let Some(bytes) = cache.entries.get(id).cloned() {
+                if let Some(bytes) = cache.get(*id) {
                     batch.blobs.insert(*id, bytes);
                 } else {
                     missing.push(*id);
@@ -204,31 +109,21 @@ impl BlobStore {
             return Ok(batch);
         }
 
-        let connection = self.readers.checkout()?;
-        for chunk in missing.chunks(QUERY_CHUNK) {
-            let placeholders = std::iter::repeat_n("?", chunk.len())
-                .collect::<Vec<_>>()
-                .join(",");
-            let sql = format!("SELECT id, bytes FROM blobs WHERE id IN ({placeholders})");
-            let mut statement = connection.prepare(&sql)?;
-            let rows = statement.query_map(
-                params_from_iter(chunk.iter().map(|id| id.as_bytes().as_slice())),
-                |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?)),
-            )?;
-            for row in rows {
-                let (raw_id, bytes) = row?;
-                let raw_id: [u8; 32] = raw_id.try_into().map_err(|_| Error::NotADocument)?;
-                let id = BlobId::from_bytes(raw_id);
-                if BlobId::for_bytes(&bytes) != id {
-                    return Err(Error::invalid(format!("blob {id} has invalid content")));
-                }
-                let bytes: Arc<[u8]> = bytes.into();
-                batch.blobs.insert(id, bytes.clone());
-                self.cache.lock().insert(id, bytes);
+        let transaction = self.database.read().begin_read()?;
+        let table = transaction.open_table(BLOBS)?;
+        let mut loaded = Vec::with_capacity(missing.len());
+        for id in missing {
+            let stored = table.get(id)?.ok_or(Error::BlobNotFound(id))?;
+            if BlobId::for_bytes(stored.value()) != id {
+                return Err(Error::invalid(format!("blob {id} has invalid content")));
             }
+            let bytes: Arc<[u8]> = Arc::from(stored.value());
+            batch.blobs.insert(id, bytes.clone());
+            loaded.push((id, bytes));
         }
-        if let Some(id) = ids.iter().find(|id| !batch.blobs.contains_key(id)).copied() {
-            return Err(Error::BlobNotFound(id));
+        let mut cache = self.cache.lock();
+        for (id, bytes) in loaded {
+            cache.insert(id, bytes);
         }
         Ok(batch)
     }
@@ -255,113 +150,10 @@ impl BlobStore {
         result
     }
 
-    pub(crate) fn invalidate(&self, ids: &BTreeSet<BlobId>) {
+    pub(crate) fn invalidate_blobs(&self, ids: &BTreeSet<BlobId>) {
         let mut cache = self.cache.lock();
         for id in ids {
-            if let Some(bytes) = cache.entries.pop(id) {
-                cache.bytes = cache.bytes.saturating_sub(bytes.len());
-            }
+            cache.remove(*id);
         }
-    }
-}
-
-struct ReaderPool {
-    source: Source,
-    timeout: Duration,
-    limit: usize,
-    state: Mutex<ReaderPoolState>,
-    available: Condvar,
-}
-
-#[derive(Default)]
-struct ReaderPoolState {
-    idle: Vec<Connection>,
-    total: usize,
-}
-
-impl ReaderPool {
-    fn new(source: Source, timeout: Duration, limit: usize) -> Self {
-        Self {
-            source,
-            timeout,
-            limit,
-            state: Mutex::new(ReaderPoolState::default()),
-            available: Condvar::new(),
-        }
-    }
-
-    fn checkout(&self) -> Result<ReaderGuard<'_>> {
-        loop {
-            let mut state = self.state.lock();
-            if let Some(connection) = state.idle.pop() {
-                return Ok(ReaderGuard {
-                    pool: self,
-                    connection: Some(connection),
-                });
-            }
-            if state.total < self.limit {
-                state.total += 1;
-                drop(state);
-                match self.open() {
-                    Ok(connection) => {
-                        return Ok(ReaderGuard {
-                            pool: self,
-                            connection: Some(connection),
-                        });
-                    }
-                    Err(error) => {
-                        let mut state = self.state.lock();
-                        state.total -= 1;
-                        self.available.notify_one();
-                        return Err(error);
-                    }
-                }
-            }
-            self.available.wait(&mut state);
-        }
-    }
-
-    fn open(&self) -> Result<Connection> {
-        let (location, flags) = match &self.source {
-            Source::File(path) => (
-                path.to_string_lossy().into_owned(),
-                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            ),
-            Source::Uri(uri) => (
-                uri.clone(),
-                OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | OpenFlags::SQLITE_OPEN_URI
-                    | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            ),
-        };
-        let connection = Connection::open_with_flags(location, flags)?;
-        connection.busy_timeout(self.timeout)?;
-        Ok(connection)
-    }
-}
-
-struct ReaderGuard<'pool> {
-    pool: &'pool ReaderPool,
-    connection: Option<Connection>,
-}
-
-impl std::ops::Deref for ReaderGuard<'_> {
-    type Target = Connection;
-
-    fn deref(&self) -> &Self::Target {
-        self.connection
-            .as_ref()
-            .expect("reader guard owns a connection")
-    }
-}
-
-impl Drop for ReaderGuard<'_> {
-    fn drop(&mut self) {
-        let connection = self
-            .connection
-            .take()
-            .expect("reader guard owns a connection");
-        self.pool.state.lock().idle.push(connection);
-        self.pool.available.notify_one();
     }
 }

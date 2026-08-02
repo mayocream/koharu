@@ -32,18 +32,18 @@ koharu-llama-sys = { path = "crates/koharu-llama-sys", version = "0.62.0-alpha.1
 koharu-runtime = { path = "crates/koharu-runtime", version = "0.62.0-alpha.1", default-features = false }
 koharu-torch = { path = "crates/koharu-torch", version = "0.62.0-alpha.1", default-features = false }
 koharu-torch-sys = { path = "crates/koharu-torch-sys", version = "0.62.0-alpha.1", default-features = false }
-koharu-ai = { path = "crates/koharu-ai", version = "0.62.0-alpha.1", default-features = false }
-koharu-app = { path = "crates/koharu-app", version = "0.62.0-alpha.1", default-features = false }
+koharu-agent = { path = "crates/koharu-agent", version = "0.62.0-alpha.1", default-features = false }
 koharu-ml = { path = "crates/koharu-ml", version = "0.62.0-alpha.1", default-features = false }
 koharu-pipeline = { path = "crates/koharu-pipeline", version = "0.62.0-alpha.1", default-features = false }
 koharu-translator = { path = "crates/koharu-translator", version = "0.62.0-alpha.1", default-features = false }
 koharu-psd = { path = "crates/koharu-psd", version = "0.62.0-alpha.1", default-features = false }
 koharu-renderer = { path = "crates/koharu-renderer", version = "0.62.0-alpha.1", default-features = false }
 koharu-canvas = { path = "crates/koharu-canvas", version = "0.62.0-alpha.1", default-features = false }
-koharu-desktop = { path = "crates/koharu-desktop", version = "0.62.0-alpha.1", default-features = false }
 koharu-secrets = { path = "crates/koharu-secrets", version = "0.62.0-alpha.1", default-features = false }
 
 # external dependencies
+alphanumeric-sort = "1.5.8"
+arc-swap = "1.7"
 hf-hub = "0.5"
 image = "0.25"
 webp = { version = "0.3.1", default-features = false }
@@ -91,12 +91,12 @@ url = { version = "2.5", features = ["serde"] }
 camino = { version = "1.1", features = ["serde1"] }
 indexmap = { version = "2.13", features = ["serde"] }
 indextree = "4.8.1"
+petgraph = "0.8.3"
 imbl = "7.0.1"
-rusqlite = { version = "0.40.1", default-features = false, features = [
-    "backup",
-    "bundled",
-    "cache",
-] }
+hashbrown = "0.17.1"
+slotmap = "1.1.1"
+smallvec = "1.15.2"
+redb = "4.1.0"
 revision = { version = "0.30.0", features = ["uuid"] }
 flate2 = { version = "1.0", default-features = false, features = [
     "zlib-ng-compat",
@@ -143,9 +143,19 @@ jieba-rs = "0.10"
 fontique = "0.11"
 pollster = "0.4"
 vello = "0.9"
-wgpu = { version = "29.0", features = ["wgsl"] }
 winit = "0.30.12"
-wry = { version = "0.55.1", features = ["transparent"] }
+tauri = { version = "=2.11.5", default-features = false, features = [
+    "compression",
+    "dbus",
+    "dynamic-acl",
+    "macos-private-api",
+    "specta",
+    "tracing",
+    "wry",
+    "x11",
+] }
+tauri-build = "=2.6.3"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
 atomicwrites = "0.4"
@@ -156,13 +166,11 @@ proptest = "1.6"
 base64 = "0.22"
 unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
-git-version = "0.3"
 keyring = { version = "4.1", features = ["linux-keyutils-keyring-store"] }
 keyring-core = "1.0"
 linux-keyutils-keyring-store = "1.0"
 lru = "0.18"
 llguidance = "1.7.5"
-petname = "3"
 sentry = { version = "0.48", features = ["tracing"] }
 fast-glob = "1.0"
 tar = "0.4"
@@ -180,12 +188,20 @@ libc = "0.2"
 memmap2 = "0.9"
 safetensors = "0.8"
 
+[profile.dev]
+debug = 1
+
+[profile.dev.package.redb]
+opt-level = 3
+
 [profile.dev.package.image]
 opt-level = 3
 
-[profile.dev.package.imageproc]
+[profile.dev.package.image-webp]
 opt-level = 3
 
-[profile.release-with-debug]
-inherits = "release"
-debug-assertions = true
+[profile.dev.package.webp]
+opt-level = 3
+
+[profile.dev.package.libwebp-sys]
+opt-level = 3

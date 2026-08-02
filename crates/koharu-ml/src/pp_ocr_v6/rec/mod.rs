@@ -4,7 +4,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -14,11 +13,11 @@ pub use self::{
 
 use self::model::Model;
 
-koharu_runtime::huggingface! {
-    CONFIG => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" => "config.json",
-    WEIGHTS => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" => "model.safetensors",
-    PROCESSOR => "PaddlePaddle/PP-OCRv6_medium_rec_safetensors" => "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" => "preprocessor_config.json",
-}
+model_repository!("PaddlePaddle/PP-OCRv6_medium_rec_safetensors" @ "024cad6a831de75c2c3c26e711ba8c4a82ccd24b" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+    PROCESSOR = "preprocessor_config.json",
+});
 
 #[derive(Debug)]
 pub struct PPOCRV6MediumRec {
@@ -30,13 +29,16 @@ pub struct PPOCRV6MediumRec {
 impl PPOCRV6MediumRec {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve PP-OCRv6 medium recognition config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve PP-OCRv6 medium recognition weights")?;
-        let processor_path = huggingface::resolve(PROCESSOR)
+        let processor_path = PROCESSOR
+            .resolve()
             .await
             .context("failed to resolve PP-OCRv6 medium recognition image processor")?;
 
@@ -74,16 +76,16 @@ impl PPOCRV6MediumRec {
 
 #[cfg(test)]
 mod tests {
-    use koharu_runtime::package::{PreloadablePackage, libtorch::Libtorch};
+    use koharu_runtime::{Feature, Runtime};
 
     use super::*;
 
     #[tokio::test]
     #[ignore = "downloads the checkpoint and LibTorch runtime"]
     async fn loads_medium_recognizer_checkpoint() {
-        Libtorch::for_current_target()
+        Runtime::discover([Feature::Torch])
             .unwrap()
-            .preload()
+            .initialize()
             .await
             .unwrap();
         let model = PPOCRV6MediumRec::load(crate::Device::cpu()).await.unwrap();

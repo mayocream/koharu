@@ -1,4 +1,4 @@
-use vello::{AaConfig, AaSupport, RenderParams, RendererOptions, Scene};
+use vello::{AaConfig, AaSupport, RenderParams, RendererOptions, Scene, peniko::ImageData, wgpu};
 
 use crate::{CanvasGpu, Error, PhysicalSize, Result, state::Color};
 
@@ -91,8 +91,79 @@ impl GpuRenderer {
             .map_err(|error| Error::Gpu(error.to_string()))
     }
 
+    pub fn mark_image_dirty(&mut self, image: &ImageData) {
+        self.vello.mark_override_image_dirty(image);
+    }
+
     pub fn output(&self) -> &wgpu::TextureView {
         &self.target.view
+    }
+
+    pub fn read_pixel(&self, x: f64, y: f64) -> Result<Color> {
+        if !x.is_finite() || !y.is_finite() || x < 0.0 || y < 0.0 {
+            return Err(Error::Invalid("sample point is outside the canvas".into()));
+        }
+        let x = x.floor() as u32;
+        let y = y.floor() as u32;
+        if x >= self.target.size.width || y >= self.target.size.height {
+            return Err(Error::Invalid("sample point is outside the canvas".into()));
+        }
+        let row_bytes = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("koharu canvas color sample"),
+            size: u64::from(row_bytes),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("koharu canvas color sample encoder"),
+            });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.target._texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x, y, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row_bytes),
+                    rows_per_image: None,
+                },
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        let submission = self.gpu.queue.submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+        self.gpu
+            .device
+            .poll(wgpu::PollType::Wait {
+                submission_index: Some(submission),
+                timeout: None,
+            })
+            .map_err(|error| Error::Gpu(format!("failed to poll color sample: {error}")))?;
+        receiver
+            .recv()
+            .map_err(|_| Error::Gpu("color sample channel closed".into()))?
+            .map_err(|error| Error::Gpu(format!("failed to map color sample: {error}")))?;
+        let mapped = slice.get_mapped_range();
+        let color = [mapped[0], mapped[1], mapped[2], mapped[3]];
+        drop(mapped);
+        buffer.unmap();
+        Ok(color)
     }
 
     #[cfg(test)]

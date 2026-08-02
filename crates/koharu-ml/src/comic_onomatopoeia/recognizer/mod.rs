@@ -6,16 +6,15 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::processor::Recognition;
 
 use self::{config::Config, model::Model, processor::Processor};
 
-koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/coo-comic-onomatopoeia-safetensors" => "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" => "trba-rot-sar-hardroi-2d/model.safetensors",
-}
+model_repository!("mayocream/coo-comic-onomatopoeia-safetensors" @ "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" {
+    WEIGHTS = "trba-rot-sar-hardroi-2d/model.safetensors"
+});
 
 /// COO's reported-best TRBA+2D comic onomatopoeia recognizer.
 #[derive(Debug)]
@@ -27,7 +26,8 @@ pub struct ComicOnomatopoeiaRecognizer {
 
 impl ComicOnomatopoeiaRecognizer {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve COO TRBA+2D weights")?;
         Self::load_from_path(device, weights_path)

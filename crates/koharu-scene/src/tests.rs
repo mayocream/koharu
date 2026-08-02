@@ -1,6 +1,52 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use revision::revisioned;
+
 use crate::*;
+
+const EVOLVING_COMPONENT_KIND: &str = "dev.koharu.test.evolving";
+
+#[revisioned(revision = 1)]
+#[derive(Clone)]
+struct EvolvingComponentV1 {
+    title: String,
+    legacy_count: u32,
+}
+
+impl Component for EvolvingComponentV1 {
+    const KIND: &'static str = EVOLVING_COMPONENT_KIND;
+}
+
+#[revisioned(revision = 2)]
+#[derive(Clone, Debug, PartialEq)]
+struct EvolvingComponentV2 {
+    title: String,
+    #[revision(end = 2, convert_fn = "migrate_legacy_count")]
+    legacy_count: u32,
+    #[revision(start = 2)]
+    count: u64,
+    #[revision(start = 2, default_fn = "default_label")]
+    label: String,
+}
+
+impl EvolvingComponentV2 {
+    fn migrate_legacy_count(
+        &mut self,
+        _revision: u16,
+        value: u32,
+    ) -> std::result::Result<(), revision::Error> {
+        self.count = u64::from(value);
+        Ok(())
+    }
+
+    fn default_label(_revision: u16) -> std::result::Result<String, revision::Error> {
+        Ok("migrated".to_owned())
+    }
+}
+
+impl Component for EvolvingComponentV2 {
+    const KIND: &'static str = EVOLVING_COMPONENT_KIND;
+}
 
 fn page() -> PageDraft {
     PageDraft::new("page", 1200.0, 1800.0)
@@ -17,17 +63,156 @@ fn source(text: &str) -> SourceText {
 
 #[test]
 fn fresh_scene_has_an_empty_project_hierarchy() {
-    assert_send_sync::<SceneSnapshot>();
-    assert_send_sync::<ScenePatch>();
-    let session = SceneSession::memory().unwrap();
+    assert_send_sync::<Snapshot>();
+    assert_send_sync::<Patch>();
+    let session = Session::memory().unwrap();
     let snapshot = session.snapshot();
-    assert_eq!(snapshot.revision(), Revision::new(1));
+    assert_eq!(snapshot.revision(), Revision::ZERO);
     assert_eq!(snapshot.pages().len(), 0);
 }
 
 #[test]
+fn built_in_component_schemas_remain_revision_one() {
+    fn schema<T: Component>() -> u16 {
+        <T as revision::Revisioned>::revision()
+    }
+
+    assert_eq!(
+        [
+            schema::<Project>(),
+            schema::<Page>(),
+            schema::<RasterLayer>(),
+            schema::<Geometry>(),
+            schema::<Visibility>(),
+            schema::<SourceText>(),
+            schema::<TextLayout>(),
+            schema::<Translation>(),
+            schema::<TextRole>(),
+            schema::<OcrAnalysis>(),
+            schema::<ReadingOrder>(),
+            schema::<Typography>(),
+            schema::<Region>(),
+            schema::<DetectionAnalysis>(),
+            schema::<EntityOrigin>(),
+            schema::<TextContent>(),
+            schema::<crate::components::Assets>(),
+            schema::<Relation>(),
+        ],
+        [1; 18]
+    );
+}
+
+#[test]
+fn built_in_component_kinds_express_domain_ownership() {
+    assert_eq!(
+        [
+            Project::KIND,
+            Page::KIND,
+            EntityOrigin::KIND,
+            Relation::KIND,
+            Geometry::KIND,
+            Visibility::KIND,
+            RasterLayer::KIND,
+            TextLayout::KIND,
+            TextContent::KIND,
+            SourceText::KIND,
+            Translation::KIND,
+            TextRole::KIND,
+            ReadingOrder::KIND,
+            Typography::KIND,
+            Region::KIND,
+            DetectionAnalysis::KIND,
+            OcrAnalysis::KIND,
+            crate::components::Assets::KIND,
+        ],
+        [
+            "dev.koharu.project",
+            "dev.koharu.page",
+            "dev.koharu.entity.origin",
+            "dev.koharu.relation",
+            "dev.koharu.geometry",
+            "dev.koharu.visibility",
+            "dev.koharu.layer.raster",
+            "dev.koharu.layer.text",
+            "dev.koharu.text.content",
+            "dev.koharu.text.source",
+            "dev.koharu.text.translation",
+            "dev.koharu.text.role",
+            "dev.koharu.text.reading-order",
+            "dev.koharu.text.typography",
+            "dev.koharu.analysis.region",
+            "dev.koharu.analysis.detection",
+            "dev.koharu.analysis.ocr",
+            "dev.koharu.assets",
+        ]
+    );
+}
+
+#[test]
+fn revision_one_project_components_upgrade_when_their_schema_evolves() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("evolving.khr");
+    let entity;
+    {
+        let mut session = Session::create(&path).unwrap();
+        let mut created = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(page(), At::End)?;
+                let id = edit.add_entity(page, At::End)?;
+                edit.set(
+                    id,
+                    &EvolvingComponentV1 {
+                        title: "revision one".to_owned(),
+                        legacy_count: 7,
+                    },
+                )?;
+                created = Some(id);
+                Ok(())
+            })
+            .unwrap();
+        session.commit(patch).unwrap();
+        session.checkpoint().unwrap();
+        entity = created.unwrap();
+    }
+
+    let mut session = Session::open(&path).unwrap();
+    let upgraded = session
+        .snapshot()
+        .component::<EvolvingComponentV2>(entity)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        upgraded,
+        EvolvingComponentV2 {
+            title: "revision one".to_owned(),
+            count: 7,
+            label: "migrated".to_owned(),
+        }
+    );
+
+    let patch = session
+        .snapshot()
+        .patch(|edit| edit.set(entity, &upgraded))
+        .unwrap();
+    session.commit(patch).unwrap();
+    session.checkpoint().unwrap();
+    drop(session);
+
+    let reopened = Session::open(&path).unwrap();
+    assert_eq!(
+        reopened
+            .snapshot()
+            .component::<EvolvingComponentV2>(entity)
+            .unwrap(),
+        Some(upgraded)
+    );
+}
+
+#[test]
 fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut entities = None;
     let create = session
         .snapshot()
@@ -43,13 +228,13 @@ fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
     let base = session.commit(create).unwrap().snapshot;
     let (left, right) = entities.unwrap();
     let left_patch = base
-        .patch(|edit| edit.set(left, "default", &Geometry::rectangle(0.0, 0.0, 10.0, 10.0)))
+        .patch(|edit| edit.set(left, &Geometry::rectangle(0.0, 0.0, 10.0, 10.0)))
         .unwrap();
     let right_patch = base
-        .patch(|edit| edit.set(right, "default", &Geometry::rectangle(1.0, 1.0, 10.0, 10.0)))
+        .patch(|edit| edit.set(right, &Geometry::rectangle(1.0, 1.0, 10.0, 10.0)))
         .unwrap();
     let conflicting = base
-        .patch(|edit| edit.set(left, "default", &Geometry::rectangle(2.0, 2.0, 10.0, 10.0)))
+        .patch(|edit| edit.set(left, &Geometry::rectangle(2.0, 2.0, 10.0, 10.0)))
         .unwrap();
 
     let current = session.commit(left_patch).unwrap().snapshot;
@@ -62,13 +247,13 @@ fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
 
 #[test]
 fn observed_page_subtree_guards_pipeline_rebase_inputs() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut ids = None;
     let create = session
         .snapshot()
         .patch(|edit| {
             let left_page = edit.add_page(PageDraft::new("left", 100.0, 100.0), At::End)?;
-            let left_entity = edit.add_entity(left_page, At::End)?;
+            let left_entity = edit.add_text_content(left_page, At::End)?;
             let right_page = edit.add_page(PageDraft::new("right", 100.0, 100.0), At::End)?;
             ids = Some((left_page, left_entity, right_page));
             Ok(())
@@ -80,7 +265,7 @@ fn observed_page_subtree_guards_pipeline_rebase_inputs() {
     let observed = base
         .patch(|edit| {
             edit.observe_subtree(left_page)?;
-            edit.set_source_text(left_entity, source("derived"))
+            edit.set(left_entity, &source("derived"))
         })
         .unwrap();
     let unrelated = base
@@ -92,7 +277,7 @@ fn observed_page_subtree_guards_pipeline_rebase_inputs() {
     let observed = current
         .patch(|edit| {
             edit.observe_subtree(left_page)?;
-            edit.set_source_text(left_entity, source("stale"))
+            edit.set(left_entity, &source("stale"))
         })
         .unwrap();
     let changed_input = current
@@ -104,8 +289,8 @@ fn observed_page_subtree_guards_pipeline_rebase_inputs() {
 
 #[test]
 fn project_and_relation_metadata_use_typed_components() {
-    let mut session = SceneSession::memory().unwrap();
-    let settings = ProjectSettings {
+    let mut session = Session::memory().unwrap();
+    let settings = Project {
         source_locale: Some(LanguageTag::new("ja").unwrap()),
         target_locales: vec![LanguageTag::new("en").unwrap()],
     };
@@ -114,14 +299,13 @@ fn project_and_relation_metadata_use_typed_components() {
     let patch = session
         .snapshot()
         .patch(|edit| {
-            edit.set_project("default", &settings)?;
+            edit.set_project(&settings)?;
             let page = edit.add_page(page(), At::End)?;
             let left = edit.add_entity(page, At::End)?;
             let right = edit.add_entity(page, At::End)?;
             let id = edit.add_relation(kind, left, right)?;
             edit.set_relation(
                 id,
-                "default",
                 &Visibility {
                     origin: Origin::User,
                     visible: true,
@@ -132,18 +316,26 @@ fn project_and_relation_metadata_use_typed_components() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let commit = session.commit(patch).unwrap();
+    let snapshot = commit.snapshot;
+    assert!(
+        commit.changes.components.iter().any(|change| {
+            change.owner == ComponentOwner::Project && change.kind == Project::KIND
+        })
+    );
+    assert!(commit.changes.components.iter().any(|change| {
+        change.owner == ComponentOwner::Relation(relation.unwrap())
+            && change.kind == Visibility::KIND
+    }));
     assert_eq!(
-        snapshot
-            .project_component::<ProjectSettings>("default")
-            .unwrap(),
+        snapshot.project_component::<Project>().unwrap(),
         Some(settings)
     );
     assert_eq!(
         snapshot
             .relation(relation.unwrap())
             .unwrap()
-            .component::<Visibility>("default")
+            .component::<Visibility>()
             .unwrap()
             .unwrap()
             .opacity,
@@ -153,15 +345,15 @@ fn project_and_relation_metadata_use_typed_components() {
 
 #[test]
 fn producer_reruns_respect_component_ownership() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut entities = None;
     let patch = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            let user = edit.add_entity(page, At::End)?;
-            edit.set_source_text(user, source("user"))?;
-            let generated = edit.add_entity(page, At::End)?;
+            let user = edit.add_text_content(page, At::End)?;
+            edit.set(user, &source("user"))?;
+            let generated = edit.add_text_content(page, At::End)?;
             entities = Some((user, generated));
             Ok(())
         })
@@ -172,29 +364,26 @@ fn producer_reruns_respect_component_ownership() {
     let generation = Generation::new(producer.clone());
     let mut edit = snapshot.edit_as(generation.clone());
     assert!(matches!(
-        edit.set_source_text(user, source("overwrite")),
+        edit.set(user, &source("overwrite")),
         Err(Error::Authorship(_))
     ));
-    edit.set_source_text(generated, source("generated"))
-        .unwrap();
+    edit.set(generated, &source("generated")).unwrap();
     let snapshot = session.commit(edit.finish().unwrap()).unwrap().snapshot;
 
     let mut rerun = snapshot.edit_as(generation);
-    rerun
-        .set_source_text(generated, source("generated again"))
-        .unwrap();
+    rerun.set(generated, &source("generated again")).unwrap();
     let snapshot = session.commit(rerun.finish().unwrap()).unwrap().snapshot;
     let other = Generation::new(ProducerId::new("dev.koharu.pipeline.other-ocr").unwrap());
     let mut other_edit = snapshot.edit_as(other);
     assert!(matches!(
-        other_edit.set_source_text(generated, source("wrong owner")),
+        other_edit.set(generated, &source("wrong owner")),
         Err(Error::Authorship(_))
     ));
 }
 
 #[test]
 fn pipeline_removal_respects_entity_lifecycle_owner() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut page_id = None;
     let patch = session
         .snapshot()
@@ -231,18 +420,13 @@ fn pipeline_removal_respects_entity_lifecycle_owner() {
 
 #[test]
 fn typed_page_entity_and_components_round_trip() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let patch = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            let text = edit.add_entity(page, At::End)?;
-            edit.set(text, "default", &source("こんにちは"))?;
-            edit.set(
-                text,
-                "default",
-                &Geometry::rectangle(10.0, 20.0, 100.0, 40.0),
-            )?;
+            let text = edit.add_text_content(page, At::End)?;
+            edit.set(text, &source("こんにちは"))?;
             Ok(())
         })
         .unwrap();
@@ -253,7 +437,7 @@ fn typed_page_entity_and_components_round_trip() {
     assert_eq!(
         commit
             .snapshot
-            .component::<SourceText>(text, "default")
+            .component::<SourceText>(text)
             .unwrap()
             .unwrap()
             .text
@@ -263,15 +447,132 @@ fn typed_page_entity_and_components_round_trip() {
 }
 
 #[test]
+fn text_analysis_content_and_presentation_have_distinct_ownership() {
+    let mut session = Session::memory().unwrap();
+    let mut ids = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let region = edit.add_analysis_region::<TextRegion>(
+                page,
+                At::End,
+                &Geometry::rectangle(10.0, 20.0, 100.0, 40.0),
+                None,
+            )?;
+            let content = edit.add_text_content(page, At::End)?;
+            edit.set(content, &source("source"))?;
+            let layer = edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &TextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                },
+            )?;
+            edit.relate::<RecognizedFrom>(content, region)?;
+            edit.relate::<FitsTo>(layer, region)?;
+            ids = Some((content, layer));
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).unwrap().snapshot;
+    let (content, layer) = ids.unwrap();
+    assert_eq!(
+        snapshot
+            .relation_from::<Presents>(layer)
+            .unwrap()
+            .unwrap()
+            .value()
+            .target,
+        content
+    );
+    assert!(matches!(
+        snapshot.patch(|edit| edit.set(content, &Geometry::rectangle(0.0, 0.0, 10.0, 10.0))),
+        Err(Error::Invalid(_))
+    ));
+}
+
+#[test]
+fn typed_relations_enforce_endpoints_and_functional_cardinality() {
+    let session = Session::memory().unwrap();
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let region = edit.add_analysis_region::<TextRegion>(
+            page,
+            At::End,
+            &Geometry::rectangle(0.0, 0.0, 10.0, 10.0),
+            None,
+        )?;
+        let layer = edit.add_entity(page, At::End)?;
+        edit.set(
+            layer,
+            &TextLayout {
+                origin: Origin::User,
+                kind: TextLayoutKind::Paragraph,
+            },
+        )?;
+        edit.relate::<Presents>(layer, region)?;
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::Invalid(_))));
+
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let first = edit.add_text_content(page, At::End)?;
+        let second = edit.add_text_content(page, At::End)?;
+        let layer = edit.add_text_layer(
+            page,
+            At::End,
+            first,
+            &TextLayout {
+                origin: Origin::User,
+                kind: TextLayoutKind::Paragraph,
+            },
+        )?;
+        edit.relate::<Presents>(layer, second)?;
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::Invalid(_))));
+}
+
+#[test]
+fn component_changes_cannot_invalidate_incident_typed_relations() {
+    let mut session = Session::memory().unwrap();
+    let mut layer = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let content = edit.add_text_content(page, At::End)?;
+            layer = Some(edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &TextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                },
+            )?);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).unwrap().snapshot;
+    let result = snapshot.patch(|edit| edit.remove::<TextLayout>(layer.unwrap()));
+    assert!(matches!(result, Err(Error::Invalid(_))));
+}
+
+#[test]
 fn hierarchy_move_and_promote_are_ordered() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut ids = None;
     let patch = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
             let group = edit.add_entity(page, At::End)?;
-            let child = edit.add_entity(group, At::End)?;
+            let child = edit.add_text_content(group, At::End)?;
             let sibling = edit.add_entity(page, At::End)?;
             ids = Some((page, group, child, sibling));
             Ok(())
@@ -298,8 +599,65 @@ fn hierarchy_move_and_promote_are_ordered() {
 }
 
 #[test]
+fn cross_page_subtree_move_preserves_identity_components_relations_and_undo() {
+    let mut session = Session::memory().unwrap();
+    let kind = RelationKind::new("dev.koharu.test.cross-page").unwrap();
+    let mut ids = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let source_page = edit.add_page(page(), At::End)?;
+            let target_page = edit.add_page(page(), At::End)?;
+            let group = edit.add_entity(source_page, At::End)?;
+            let child = edit.add_text_content(group, At::End)?;
+            edit.set(child, &source("stable"))?;
+            let relation = edit.add_relation(kind.clone(), child, target_page)?;
+            ids = Some((source_page, target_page, group, child, relation));
+            Ok(())
+        })
+        .unwrap();
+    session.commit(create).unwrap();
+    let (source_page, target_page, group, child, relation) = ids.unwrap();
+
+    let moved = session
+        .snapshot()
+        .patch(|edit| edit.move_entity(group, Some(target_page), At::End))
+        .unwrap();
+    let commit = session.commit(moved).unwrap();
+    assert!(
+        commit
+            .snapshot
+            .children(source_page)
+            .unwrap()
+            .next()
+            .is_none()
+    );
+    assert_eq!(commit.snapshot.parent(group).unwrap(), Some(target_page));
+    assert_eq!(commit.snapshot.parent(child).unwrap(), Some(group));
+    assert_eq!(
+        commit
+            .snapshot
+            .component::<SourceText>(child)
+            .unwrap()
+            .unwrap()
+            .text
+            .value,
+        "stable"
+    );
+    assert_eq!(
+        commit.snapshot.relation(relation).unwrap().value().source,
+        child
+    );
+
+    let undone = session.undo(commit.revision).unwrap().snapshot;
+    assert_eq!(undone.parent(group).unwrap(), Some(source_page));
+    assert_eq!(undone.parent(child).unwrap(), Some(group));
+    assert_eq!(undone.relation(relation).unwrap().value().source, child);
+}
+
+#[test]
 fn relations_are_records_with_typed_adjacency() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let kind = RelationKind::new("dev.koharu.test.reading-order").unwrap();
     let mut ids = None;
     let patch = session
@@ -345,15 +703,15 @@ fn relations_are_records_with_typed_adjacency() {
 
 #[test]
 fn translation_requires_source_text() {
-    let session = SceneSession::memory().unwrap();
+    let session = Session::memory().unwrap();
     let result = session.snapshot().patch(|edit| {
         let page = edit.add_page(page(), At::End)?;
         let entity = edit.add_entity(page, At::End)?;
         edit.set(
             entity,
-            "en",
             &Translation {
                 text: Authored::user("hello".to_owned()),
+                language: Some(LanguageTag::new("en").unwrap()),
             },
         )
     });
@@ -361,28 +719,55 @@ fn translation_requires_source_text() {
 }
 
 #[test]
+fn text_components_have_one_value_per_entity() {
+    let session = Session::memory().unwrap();
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let entity = edit.add_text_content(page, At::End)?;
+        edit.set(entity, &source("source"))?;
+        edit.set(
+            entity,
+            &Translation {
+                text: Authored::user("translation".to_owned()),
+                language: Some(LanguageTag::new("en").unwrap()),
+            },
+        )
+    });
+    assert!(result.is_ok());
+}
+
+#[test]
 fn independent_pipeline_components_rebase() {
-    let mut session = SceneSession::memory().unwrap();
-    let mut entity = None;
+    let mut session = Session::memory().unwrap();
+    let mut entities = None;
     let create = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            let id = edit.add_entity(page, At::End)?;
-            edit.set(id, "default", &source("source"))?;
-            entity = Some(id);
+            let content = edit.add_text_content(page, At::End)?;
+            edit.set(content, &source("source"))?;
+            let layer = edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &TextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                },
+            )?;
+            entities = Some((content, layer));
             Ok(())
         })
         .unwrap();
     let base = session.commit(create).unwrap().snapshot;
-    let entity = entity.unwrap();
+    let (content, layer) = entities.unwrap();
     let translation = base
         .patch(|edit| {
-            edit.set_translation(
-                entity,
-                &LanguageTag::new("en").unwrap(),
-                Translation {
+            edit.set(
+                content,
+                &Translation {
                     text: Authored::user("translation".to_owned()),
+                    language: Some(LanguageTag::new("en").unwrap()),
                 },
             )
         })
@@ -390,12 +775,16 @@ fn independent_pipeline_components_rebase() {
     let typography = base
         .patch(|edit| {
             edit.set(
-                entity,
-                "default",
+                layer,
                 &Typography {
                     origin: Origin::User,
                     preferred_font: Some("Inter".to_owned()),
+                    font_weight: Some(500),
                     size: Some(24.0),
+                    auto_fit: false,
+                    color: Some([1, 2, 3, 255]),
+                    stroke_color: None,
+                    stroke_width: None,
                     alignment: Some(TextAlignment::Center),
                     writing_mode: None,
                     extensions: BTreeMap::new(),
@@ -408,21 +797,16 @@ fn independent_pipeline_components_rebase() {
     let snapshot = session.commit(typography).unwrap().snapshot;
     assert!(
         snapshot
-            .component::<Translation>(entity, "en")
+            .component::<Translation>(content)
             .unwrap()
             .is_some()
     );
-    assert!(
-        snapshot
-            .component::<Typography>(entity, "default")
-            .unwrap()
-            .is_some()
-    );
+    assert!(snapshot.component::<Typography>(layer).unwrap().is_some());
 }
 
 #[test]
 fn descendant_scene_patch_rebases_after_ancestor_commit() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let base = session.snapshot();
     let mut edit = base.edit();
     let page = edit.add_page(page(), At::End).unwrap();
@@ -430,8 +814,8 @@ fn descendant_scene_patch_rebases_after_ancestor_commit() {
     let preview = base.preview([&ancestor]).unwrap();
     let descendant = preview
         .patch(|edit| {
-            let entity = edit.add_entity(page, At::End)?;
-            edit.set(entity, "default", &source("late"))
+            let entity = edit.add_text_content(page, At::End)?;
+            edit.set(entity, &source("late"))
         })
         .unwrap();
     assert!(base.preview([&ancestor, &descendant]).is_ok());
@@ -443,7 +827,7 @@ fn descendant_scene_patch_rebases_after_ancestor_commit() {
 
 #[test]
 fn assets_attach_bytes_without_decoding() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let role = AssetRole::new("source").unwrap();
     let mut entity = None;
     let patch = session
@@ -467,10 +851,7 @@ fn assets_attach_bytes_without_decoding() {
         })
         .unwrap();
     let snapshot = session.commit(patch).unwrap().snapshot;
-    let asset = snapshot
-        .component::<Asset>(entity.unwrap(), "source")
-        .unwrap()
-        .unwrap();
+    let asset = snapshot.asset(entity.unwrap(), &role).unwrap().unwrap();
     assert_eq!(&*snapshot.read_blob(asset.blob).unwrap(), b"encoded image");
     let batch = snapshot.read_blobs([asset.blob, asset.blob]).unwrap();
     assert_eq!(batch.len(), 1);
@@ -482,7 +863,7 @@ fn disk_scene_reopens_and_validates() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("scene.khs");
     {
-        let mut session = SceneSession::create(&path).unwrap();
+        let mut session = Session::create(&path).unwrap();
         let patch = session
             .snapshot()
             .patch(|edit| edit.add_page(page(), At::End).map(|_| ()))
@@ -490,42 +871,40 @@ fn disk_scene_reopens_and_validates() {
         session.commit(patch).unwrap();
         session.checkpoint().unwrap();
     }
-    let session = SceneSession::open(&path).unwrap();
+    let session = Session::open(&path).unwrap();
     assert_eq!(session.snapshot().pages().len(), 1);
 }
 
 #[test]
-fn component_only_refresh_updates_the_existing_scene_index() {
+fn refresh_updates_page_local_component_queries() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("refresh.khr");
-    let mut writer = SceneSession::create(&path).unwrap();
-    let mut reader = SceneSession::open(&path).unwrap();
+    let mut writer = Session::create(&path).unwrap();
+    let mut reader = Session::open(&path).unwrap();
     let mut entity = None;
     let create = writer
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            entity = Some(edit.add_entity(page, At::End)?);
+            entity = Some(edit.add_text_content(page, At::End)?);
             Ok(())
         })
         .unwrap();
     writer.commit(create).unwrap();
     reader.refresh().unwrap();
-    let marker = reader.snapshot().index.build_marker();
     let entity = entity.unwrap();
 
     let update = writer
         .snapshot()
-        .patch(|edit| edit.set_source_text(entity, source("refreshed")))
+        .patch(|edit| edit.set(entity, &source("refreshed")))
         .unwrap();
     writer.commit(update).unwrap();
     reader.refresh().unwrap();
 
     let snapshot = reader.snapshot();
-    assert_eq!(snapshot.index.build_marker(), marker);
     assert_eq!(
         snapshot
-            .component::<SourceText>(entity, "default")
+            .component::<SourceText>(entity)
             .unwrap()
             .unwrap()
             .text
@@ -536,7 +915,7 @@ fn component_only_refresh_updates_the_existing_scene_index() {
 
 #[test]
 fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let role = AssetRole::new("source").unwrap();
     let relation_kind = RelationKind::new("dev.koharu.test.association").unwrap();
     let mut ids = None;
@@ -544,9 +923,19 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            let left = edit.add_entity(page, At::End)?;
+            let left = edit.add_text_content(page, At::End)?;
             let right = edit.add_entity(page, At::End)?;
-            edit.set_source_text(left, source("user text"))?;
+            let analysis = edit.add_entity(page, At::End)?;
+            edit.set(left, &source("user text"))?;
+            edit.set(analysis, &Geometry::rectangle(0.0, 0.0, 10.0, 10.0))?;
+            edit.set(
+                analysis,
+                &Region {
+                    origin: Origin::User,
+                    kind: TextRegion::kind(),
+                    label: None,
+                },
+            )?;
             edit.set_asset(
                 left,
                 &role,
@@ -561,20 +950,20 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
                 ),
             )?;
             let relation = edit.add_relation(relation_kind.clone(), left, right)?;
-            ids = Some((left, relation));
+            ids = Some((left, analysis, relation));
             Ok(())
         })
         .unwrap();
     let snapshot = session.commit(create).unwrap().snapshot;
-    let (entity, relation) = ids.unwrap();
+    let (entity, analysis_entity, relation) = ids.unwrap();
     let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.detector").unwrap());
     let mut pipeline = snapshot.edit_as(generation.clone());
     assert!(matches!(
-        pipeline.remove::<SourceText>(entity, "default"),
+        pipeline.remove::<SourceText>(entity),
         Err(Error::Authorship(_))
     ));
     assert!(matches!(
-        pipeline.remove::<Asset>(entity, role.as_str()),
+        pipeline.remove_asset(entity, &role),
         Err(Error::Authorship(_))
     ));
     assert!(matches!(
@@ -590,11 +979,11 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
         }],
     };
     pipeline
-        .set(entity, "default", &analysis)
+        .set(analysis_entity, &analysis)
         .expect("new pipeline analysis is stamped by the edit context");
     let snapshot = session.commit(pipeline.finish().unwrap()).unwrap().snapshot;
     let stored = snapshot
-        .component::<DetectionAnalysis>(entity, "default")
+        .component::<DetectionAnalysis>(analysis_entity)
         .unwrap()
         .unwrap();
     assert!(matches!(stored.origin, Origin::Generated(_)));
@@ -603,28 +992,37 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
         ProducerId::new("dev.koharu.pipeline.other-detector").unwrap(),
     ));
     assert!(matches!(
-        other.set(entity, "default", &analysis),
+        other.set(analysis_entity, &analysis),
         Err(Error::Authorship(_))
     ));
     assert!(matches!(
-        other.remove::<DetectionAnalysis>(entity, "default"),
+        other.remove::<DetectionAnalysis>(analysis_entity),
         Err(Error::Authorship(_))
     ));
 }
 
 #[test]
 fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut ids = None;
     let create = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            let first = edit.add_entity(page, At::End)?;
-            let nested = edit.add_entity(first, At::End)?;
+            let first = edit.add_text_content(page, At::End)?;
+            let nested = edit.add_text_content(first, At::End)?;
             let second = edit.add_entity(page, At::End)?;
-            edit.set_source_text(first, source("first"))?;
-            edit.set_source_text(nested, source("nested"))?;
+            edit.set(first, &source("first"))?;
+            edit.set(nested, &source("nested"))?;
+            edit.set(second, &Geometry::rectangle(0.0, 0.0, 10.0, 10.0))?;
+            edit.set(
+                second,
+                &Region {
+                    origin: Origin::User,
+                    kind: TextRegion::kind(),
+                    label: None,
+                },
+            )?;
             ids = Some((page, first, nested, second));
             Ok(())
         })
@@ -637,7 +1035,7 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
     );
     assert_eq!(
         snapshot
-            .entities_with::<SourceText>("default")
+            .entities_with::<SourceText>()
             .unwrap()
             .map(EntityRef::id)
             .collect::<Vec<_>>(),
@@ -663,8 +1061,7 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
     let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.ocr").unwrap());
     let mut edit = snapshot.edit_as(generation);
     edit.set(
-        first,
-        "default",
+        second,
         &OcrAnalysis {
             origin: Origin::User,
             direction: TextDirection::Vertical,
@@ -680,7 +1077,6 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
     .unwrap();
     edit.set(
         first,
-        "default",
         &ReadingOrder {
             origin: Origin::User,
             index: 3,
@@ -690,7 +1086,7 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
     let snapshot = session.commit(edit.finish().unwrap()).unwrap().snapshot;
     assert!(matches!(
         snapshot
-            .component::<OcrAnalysis>(first, "default")
+            .component::<OcrAnalysis>(second)
             .unwrap()
             .unwrap()
             .origin,
@@ -698,7 +1094,7 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
     ));
     assert_eq!(
         snapshot
-            .component::<ReadingOrder>(first, "default")
+            .component::<ReadingOrder>(first)
             .unwrap()
             .unwrap()
             .index,
@@ -708,20 +1104,20 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
 
 #[test]
 fn scene_patch_exposes_stable_identity_and_base() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut entity = None;
     let create = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            entity = Some(edit.add_entity(page, At::End)?);
+            entity = Some(edit.add_text_content(page, At::End)?);
             Ok(())
         })
         .unwrap();
     let base = session.commit(create).unwrap().snapshot;
     let entity = entity.unwrap();
     let patch = base
-        .patch(|edit| edit.set_source_text(entity, source("identity")))
+        .patch(|edit| edit.set(entity, &source("identity")))
         .unwrap();
     assert_eq!(patch.project_id(), base.project_id());
     assert_eq!(patch.base_revision(), base.revision());
@@ -736,45 +1132,38 @@ fn scene_patch_exposes_stable_identity_and_base() {
 }
 
 #[test]
-fn component_only_pipeline_work_reuses_scene_indexes() {
-    let mut session = SceneSession::memory().unwrap();
+fn component_snapshots_clone_only_the_touched_page() {
+    let mut session = Session::memory().unwrap();
     let mut entity = None;
     let create = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(page(), At::End)?;
-            entity = Some(edit.add_entity(page, At::End)?);
+            entity = Some(edit.add_text_content(page, At::End)?);
             Ok(())
         })
         .unwrap();
     let base = session.commit(create).unwrap().snapshot;
     let entity = entity.unwrap();
-    let build_marker = base.index.build_marker();
+    let page = base.state.page_for(entity).unwrap();
+    let base_page = base.state.pages[&page].clone();
 
     let patch = base
-        .patch(|edit| edit.set_source_text(entity, source("cached")))
+        .patch(|edit| edit.set(entity, &source("cached")))
         .unwrap();
-    let cached_index = patch.result_index.clone().unwrap();
-    assert_eq!(cached_index.build_marker(), build_marker);
     let preview = base.preview([&patch]).unwrap();
-    assert!(Arc::ptr_eq(&preview.index, &cached_index));
-    assert_eq!(
-        preview
-            .entities_with::<SourceText>("default")
-            .unwrap()
-            .len(),
-        1
-    );
+    assert!(!Arc::ptr_eq(&preview.state.pages[&page], &base_page));
+    assert_eq!(preview.entities_with::<SourceText>().unwrap().len(), 1);
     let committed = session.commit(patch).unwrap().snapshot;
-    assert!(Arc::ptr_eq(&committed.index, &cached_index));
+    assert!(!Arc::ptr_eq(&committed.state.pages[&page], &base_page));
     let first = session.snapshot();
     let second = session.snapshot();
-    assert!(Arc::ptr_eq(&first.index, &second.index));
+    assert!(Arc::ptr_eq(&first.state, &second.state));
 }
 
 #[test]
 fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut endpoints = None;
     let create = session
         .snapshot()

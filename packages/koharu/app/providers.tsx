@@ -1,0 +1,95 @@
+'use client'
+
+import { QueryClientProvider } from '@tanstack/react-query'
+import { Channel } from '@tauri-apps/api/core'
+import { useEffect, type ReactNode } from 'react'
+import { I18nextProvider } from 'react-i18next'
+
+import { StartupView } from '@/components/app/StartupView'
+import ClientOnly from '@/components/ClientOnly'
+import { refreshTranslationModels } from '@/lib/backend'
+import i18n from '@/lib/i18n'
+import {
+  commands,
+  type CanvasState,
+  type Download,
+  type Job,
+  type ModelResources,
+} from '@/lib/protocol'
+import { pageKey, pagesKey, projectKey, queryClient, refresh } from '@/lib/queries'
+import {
+  receiveCanvas,
+  receiveDownload,
+  receiveStartupState,
+  receiveJob,
+  receiveResources,
+  useKoharuStore,
+} from '@/lib/store'
+import { Toaster } from '@koharu/ui/components/toast'
+import { TooltipProvider } from '@koharu/ui/components/tooltip'
+
+export function Providers({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    let active = true
+    const completed = new Map<string, number>()
+    const channel = <T,>(receive: (value: T) => void) =>
+      new Channel<T>((value) => {
+        if (active) receive(value)
+      })
+
+    void refreshTranslationModels().catch(() => undefined)
+
+    void commands
+      .subscribe(
+        channel<CanvasState>(receiveCanvas),
+        channel<Job>((job) => {
+          const previous = completed.get(job.id) ?? 0
+          completed.set(job.id, job.completed)
+          receiveJob(job)
+          if (job.completed > previous || job.state !== 'running') {
+            void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
+          }
+        }),
+        channel<Download>(receiveDownload),
+        channel<ModelResources>(receiveResources),
+      )
+      .then((state) => {
+        if (active) receiveStartupState(state)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const setLanguage = (language: string) => {
+      document.documentElement.lang = language
+    }
+    setLanguage(i18n.language)
+    i18n.on('languageChanged', setLanguage)
+    void i18n.changeLanguage()
+    return () => i18n.off('languageChanged', setLanguage)
+  }, [])
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>
+        <TooltipProvider delay={0}>
+          <ClientOnly fallback={<StartupView />}>
+            <StartupBoundary>{children}</StartupBoundary>
+            <Toaster />
+          </ClientOnly>
+        </TooltipProvider>
+      </I18nextProvider>
+    </QueryClientProvider>
+  )
+}
+
+function StartupBoundary({ children }: { children: ReactNode }) {
+  const initialized = useKoharuStore((state) => state.initialized)
+  return initialized ? children : <StartupView />
+}
+
+export default Providers

@@ -1,3 +1,10 @@
+//! Photoshop descriptor serialization shaped for GIMP's descriptor reader.
+//!
+//! GIMP reference: descriptor object and item traversal:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-util.c#L1037-L1175
+//! GIMP reference: descriptor value tags and payload decoding:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-util.c#L1844-L2163
+
 use crate::{error::PsdExportError, writer::PsdWriter};
 
 #[derive(Debug, Clone)]

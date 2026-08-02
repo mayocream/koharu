@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     io::Cursor,
     sync::{Arc, Mutex},
 };
@@ -19,9 +19,10 @@ use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
     KoharuLayoutThresholds,
 };
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, DetectionAnalysis, DetectionLabel, EntityId,
-    EntityOrigin, Generation, Geometry, Origin, Point, ReadingOrder, Region, RegionKind,
-    RelationKind, RemovePolicy, TextRole, Typography, WritingMode,
+    AssetInput, AssetMetadata, AssetRole, At, BubbleRegion, DetectionAnalysis, DetectionLabel,
+    EntityId, EntityOrigin, FitsTo, Generation, Geometry, Inside, Origin, PanelRegion, Point,
+    Presents, ReadingOrder, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy,
+    TextLayout, TextLayoutKind, TextRegion, TextRole, Typography, WritingMode,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -32,8 +33,6 @@ use crate::{DetectionModel, ModelCell};
 const MODEL_ID: &str = "mayocream/koharu-layout-rfdetr-seg-2xl-1152";
 const MODEL_NAME: &str = "koharu-layout-rfdetr-seg-2xl";
 const PRODUCER: &str = "dev.koharu.pipeline.detection";
-const FOREGROUND_COLOR_EXTENSION: &str = "dev.koharu.typography.foreground-color";
-const ANGLE_DEGREES_EXTENSION: &str = "dev.koharu.typography.angle-degrees";
 const ANGLE_SNAP_DEGREES: f32 = 3.0;
 const ANGLE_SEARCH_HALF_STEPS: i32 = 90;
 const ANGLE_SEARCH_STEP_DEGREES: f64 = 0.5;
@@ -92,7 +91,7 @@ impl StageProcessor for Processor {
             .await
     }
 
-    async fn process(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
+    async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         self.model
             .lock()
             .await
@@ -122,7 +121,7 @@ impl Model {
         })
     }
 
-    async fn run(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
+    async fn run(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         let page = input.page;
         let image = input
             .images
@@ -152,10 +151,25 @@ struct DetectedRegion {
     bounds: [f32; 4],
 }
 
+#[derive(Clone, Copy)]
+struct DetectedText {
+    region: DetectedRegion,
+    content: EntityId,
+    layer: EntityId,
+}
+
+#[derive(Clone)]
+struct PreviousText {
+    bounds: [f32; 4],
+    geometry: Geometry,
+    content: EntityId,
+    layer: EntityId,
+}
+
 #[derive(Default)]
 struct PageRegions {
     bubbles: Vec<DetectedRegion>,
-    texts: Vec<DetectedRegion>,
+    texts: Vec<DetectedText>,
 }
 
 #[derive(Clone, Copy)]
@@ -169,18 +183,36 @@ fn build_patch(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
-) -> Result<koharu_scene::ScenePatch> {
+) -> Result<koharu_scene::Patch> {
     let page = input.page;
+    let mut previous_texts = previous_texts(input, generation)?;
+    let mut reused_contents = BTreeSet::new();
     let mut edit = input.scene.edit_as(generation.clone());
     edit.observe_subtree(page)?;
-    remove_previous_detections(input, &mut edit, generation)?;
-    write_page(input, &mut edit, page, image, output, generation)?;
+    remove_previous_regions(input, &mut edit, generation)?;
+    write_page(
+        input,
+        &mut edit,
+        page,
+        image,
+        output,
+        generation,
+        &mut previous_texts,
+        &mut reused_contents,
+    )?;
+    remove_unmatched_texts(
+        input,
+        &mut edit,
+        generation,
+        previous_texts,
+        &reused_contents,
+    )?;
     finish(edit)
 }
 
-fn remove_previous_detections(
+fn remove_previous_regions(
     input: &StageInput,
-    edit: &mut koharu_scene::SceneEdit,
+    edit: &mut koharu_scene::Edit,
     generation: &Generation,
 ) -> Result<()> {
     let mut remove = Vec::new();
@@ -189,12 +221,13 @@ fn remove_previous_detections(
         if !input.contains_entity(id)? {
             continue;
         }
-        let owned = entity
-            .component::<EntityOrigin>("default")?
+        let owned_region = entity
+            .component::<EntityOrigin>()?
             .is_some_and(|origin| {
                 matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
-            });
-        if owned {
+            })
+            && entity.component::<Region>()?.is_some();
+        if owned_region {
             remove.push(id);
         }
     }
@@ -206,13 +239,95 @@ fn remove_previous_detections(
     Ok(())
 }
 
+fn previous_texts(input: &StageInput, generation: &Generation) -> Result<Vec<PreviousText>> {
+    let mut previous = Vec::new();
+    for entity in input.scene.descendants(input.page)? {
+        let region = entity.id();
+        if !input.contains_entity(region)? {
+            continue;
+        }
+        let owned_text_region = entity
+            .component::<EntityOrigin>()?
+            .is_some_and(|origin| {
+                matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
+            })
+            && entity
+                .component::<Region>()?
+                .is_some_and(|value| value.kind == TextRegion::kind());
+        if !owned_text_region {
+            continue;
+        }
+        let Some(geometry) = entity.component::<Geometry>()? else {
+            continue;
+        };
+        let Some(bounds) = geometry_bounds(&geometry) else {
+            continue;
+        };
+        for recognized in input.scene.relations_to_as::<RecognizedFrom>(region) {
+            let content = recognized.value().source;
+            for presentation in input.scene.relations_to_as::<Presents>(content) {
+                previous.push(PreviousText {
+                    bounds,
+                    geometry: geometry.clone(),
+                    content,
+                    layer: presentation.value().source,
+                });
+            }
+        }
+    }
+    Ok(previous)
+}
+
+fn remove_unmatched_texts(
+    input: &StageInput,
+    edit: &mut koharu_scene::Edit,
+    generation: &Generation,
+    previous: Vec<PreviousText>,
+    reused_contents: &BTreeSet<EntityId>,
+) -> Result<()> {
+    let mut contents = BTreeSet::new();
+    for previous in previous {
+        contents.insert(previous.content);
+        let layer_generated = input
+            .scene
+            .component::<EntityOrigin>(previous.layer)?
+            .is_some_and(|origin| {
+                matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
+            });
+        if layer_generated {
+            edit.remove_entity(previous.layer, RemovePolicy::Cascade)?;
+        } else if input.scene.component::<Geometry>(previous.layer)?.is_none() {
+            let mut geometry = previous.geometry;
+            geometry.origin = Origin::User;
+            edit.set(previous.layer, &geometry)?;
+        }
+    }
+    for content in contents {
+        if reused_contents.contains(&content) {
+            continue;
+        }
+        let content_generated = input
+            .scene
+            .component::<EntityOrigin>(content)?
+            .is_some_and(|origin| {
+                matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
+            });
+        if content_generated {
+            edit.remove_entity(content, RemovePolicy::Cascade)?;
+        }
+    }
+    Ok(())
+}
+
 fn write_page(
     input: &StageInput,
-    edit: &mut koharu_scene::SceneEdit,
+    edit: &mut koharu_scene::Edit,
     page: EntityId,
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
+    previous_texts: &mut Vec<PreviousText>,
+    reused_contents: &mut BTreeSet<EntityId>,
 ) -> Result<()> {
     let KoharuLayoutDetections {
         mut detections,
@@ -230,28 +345,51 @@ fn write_page(
     sort_by_layout(&mut detections);
 
     let image = image.to_rgb8();
-    let regions = write_regions(edit, page, &image, &detections, generation)?;
+    let regions = write_regions(
+        &input.scene,
+        edit,
+        page,
+        &image,
+        &detections,
+        generation,
+        previous_texts,
+        reused_contents,
+    )?;
     link_dialogue_regions(edit, &regions, generation)?;
     write_masks(input, edit, page, &detections, size)
 }
 
 fn write_regions(
-    edit: &mut koharu_scene::SceneEdit,
+    snapshot: &koharu_scene::Snapshot,
+    edit: &mut koharu_scene::Edit,
     page: EntityId,
     image: &RgbImage,
     detections: &[KoharuLayoutDetection],
     generation: &Generation,
+    previous_texts: &mut Vec<PreviousText>,
+    reused_contents: &mut BTreeSet<EntityId>,
 ) -> Result<PageRegions> {
     let mut regions = PageRegions::default();
     for (order, detection) in detections.iter().enumerate() {
-        let entity = write_region(edit, page, image, detection, order as u32, generation)?;
-        let detected = DetectedRegion {
-            entity,
-            bounds: detection.bbox,
-        };
+        let previous = (detection.label == "text")
+            .then(|| take_previous_text(previous_texts, detection.bbox))
+            .flatten();
+        let (detected, text) = write_region(
+            snapshot,
+            edit,
+            page,
+            image,
+            detection,
+            order as u32,
+            generation,
+            previous,
+            reused_contents,
+        )?;
         match detection.label.as_str() {
             "bubble" => regions.bubbles.push(detected),
-            "text" => regions.texts.push(detected),
+            "text" => regions
+                .texts
+                .push(text.expect("text detections create text semantics")),
             _ => {}
         }
     }
@@ -259,13 +397,16 @@ fn write_regions(
 }
 
 fn write_region(
-    edit: &mut koharu_scene::SceneEdit,
+    snapshot: &koharu_scene::Snapshot,
+    edit: &mut koharu_scene::Edit,
     page: EntityId,
     image: &RgbImage,
     detection: &KoharuLayoutDetection,
     order: u32,
     generation: &Generation,
-) -> Result<EntityId> {
+    previous: Option<PreviousText>,
+    reused_contents: &mut BTreeSet<EntityId>,
+) -> Result<(DetectedRegion, Option<DetectedText>)> {
     let entity = edit.add_entity(page, At::End)?;
     let kind = region_kind(&detection.label)?;
     let inferred = (detection.label == "text")
@@ -273,13 +414,17 @@ fn write_region(
         .flatten();
     let geometry = if detection.label == "bubble" {
         mask_geometry(&detection.mask).unwrap_or_else(|| rectangle_geometry(detection.bbox))
+    } else if detection.label == "text" {
+        inferred.map_or_else(
+            || rectangle_geometry(detection.bbox),
+            |typography| rotated_rectangle_geometry(detection.bbox, typography.angle_degrees),
+        )
     } else {
         rectangle_geometry(detection.bbox)
     };
-    edit.set(entity, "default", &geometry)?;
+    edit.set(entity, &geometry)?;
     edit.set(
         entity,
-        "default",
         &Region {
             origin: Origin::Generated(generation.clone()),
             kind: kind.clone(),
@@ -288,7 +433,6 @@ fn write_region(
     )?;
     edit.set(
         entity,
-        "default",
         &DetectionAnalysis {
             origin: Origin::Generated(generation.clone()),
             labels: vec![DetectionLabel {
@@ -297,57 +441,110 @@ fn write_region(
             }],
         },
     )?;
-    edit.set(
+    let region = DetectedRegion {
         entity,
-        "default",
-        &ReadingOrder {
-            origin: Origin::Generated(generation.clone()),
-            index: order,
-        },
-    )?;
-    if detection.label == "text" {
-        write_text_role(edit, entity, "dev.koharu.text.free-text", generation)?;
-        if let Some(inferred) = inferred {
-            let mut extensions = BTreeMap::new();
-            extensions.insert(
-                FOREGROUND_COLOR_EXTENSION.to_owned(),
-                format!(
-                    "#{:02x}{:02x}{:02x}",
-                    inferred.color[0], inferred.color[1], inferred.color[2]
-                ),
-            );
-            extensions.insert(
-                ANGLE_DEGREES_EXTENSION.to_owned(),
-                inferred.angle_degrees.to_string(),
-            );
-            edit.set(
-                entity,
-                "default",
-                &Typography {
+        bounds: detection.bbox,
+    };
+    if detection.label != "text" {
+        return Ok((region, None));
+    }
+
+    let (content, layer, created) = previous.map_or_else(
+        || -> Result<_> {
+            let content = edit.add_text_content(page, At::End)?;
+            let layer = edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &TextLayout {
                     origin: Origin::Generated(generation.clone()),
-                    preferred_font: None,
-                    size: Some(inferred.font_size),
-                    alignment: None,
-                    writing_mode: Some(inferred.writing_mode),
-                    extensions,
+                    kind: TextLayoutKind::Paragraph,
                 },
             )?;
-        }
+            Ok((content, layer, true))
+        },
+        |previous| Ok((previous.content, previous.layer, false)),
+    )?;
+    if !created {
+        reused_contents.insert(content);
     }
-    Ok(entity)
+    if created
+        || snapshot
+            .component::<ReadingOrder>(content)?
+            .is_none_or(|value| value.origin != Origin::User)
+    {
+        edit.set(
+            content,
+            &ReadingOrder {
+                origin: Origin::Generated(generation.clone()),
+                index: order,
+            },
+        )?;
+    }
+    if created
+        || snapshot
+            .component::<TextRole>(content)?
+            .is_none_or(|value| value.origin != Origin::User)
+    {
+        write_text_role(edit, content, "dev.koharu.text.free-text", generation)?;
+    }
+    if created || snapshot.component::<TextLayout>(layer)?.is_none() {
+        edit.set(
+            layer,
+            &TextLayout {
+                origin: Origin::Generated(generation.clone()),
+                kind: TextLayoutKind::Paragraph,
+            },
+        )?;
+    }
+    if created
+        || snapshot
+            .component::<Typography>(layer)?
+            .is_none_or(|value| value.origin != Origin::User)
+    {
+        edit.set(
+            layer,
+            &Typography {
+                origin: Origin::Generated(generation.clone()),
+                preferred_font: None,
+                font_weight: None,
+                size: inferred.map(|value| value.font_size),
+                auto_fit: true,
+                color: inferred
+                    .map(|value| [value.color[0], value.color[1], value.color[2], u8::MAX]),
+                stroke_color: None,
+                stroke_width: None,
+                alignment: None,
+                writing_mode: inferred.map(|value| value.writing_mode),
+                extensions: Default::default(),
+            },
+        )?;
+    }
+    edit.relate::<RecognizedFrom>(content, entity)?;
+
+    Ok((
+        region,
+        Some(DetectedText {
+            region,
+            content,
+            layer,
+        }),
+    ))
 }
 
 fn link_dialogue_regions(
-    edit: &mut koharu_scene::SceneEdit,
+    edit: &mut koharu_scene::Edit,
     regions: &PageRegions,
     generation: &Generation,
 ) -> Result<()> {
-    let relation = RelationKind::new("dev.koharu.relation.text-region")?;
     for text in &regions.texts {
-        let bubble = containing_bubble(&regions.bubbles, text.bounds);
+        let bubble = containing_bubble(&regions.bubbles, text.region.bounds);
         if let Some(bubble) = bubble {
-            edit.add_relation(relation.clone(), text.entity, bubble.entity)?;
-            write_text_role(edit, text.entity, "dev.koharu.text.dialogue", generation)?;
+            edit.relate::<Inside>(text.region.entity, bubble.entity)?;
+            edit.relate::<FitsTo>(text.layer, bubble.entity)?;
+            write_text_role(edit, text.content, "dev.koharu.text.dialogue", generation)?;
+        } else {
+            edit.relate::<FitsTo>(text.layer, text.region.entity)?;
         }
     }
     Ok(())
@@ -360,15 +557,35 @@ fn containing_bubble(bubbles: &[DetectedRegion], bounds: [f32; 4]) -> Option<&De
         .min_by(|left, right| area(left.bounds).total_cmp(&area(right.bounds)))
 }
 
+fn take_previous_text(previous: &mut Vec<PreviousText>, bounds: [f32; 4]) -> Option<PreviousText> {
+    let (index, overlap) = previous
+        .iter()
+        .enumerate()
+        .map(|(index, previous)| (index, overlap_over_smaller(previous.bounds, bounds)))
+        .max_by(|left, right| left.1.total_cmp(&right.1))?;
+    (overlap >= 0.5).then(|| previous.swap_remove(index))
+}
+
+fn geometry_bounds(geometry: &Geometry) -> Option<[f32; 4]> {
+    let first = geometry.points.first()?;
+    let (mut left, mut top, mut right, mut bottom) = (first.x, first.y, first.x, first.y);
+    for point in &geometry.points[1..] {
+        left = left.min(point.x);
+        top = top.min(point.y);
+        right = right.max(point.x);
+        bottom = bottom.max(point.y);
+    }
+    Some([left as f32, top as f32, right as f32, bottom as f32])
+}
+
 fn write_text_role(
-    edit: &mut koharu_scene::SceneEdit,
+    edit: &mut koharu_scene::Edit,
     entity: EntityId,
     role: &str,
     generation: &Generation,
 ) -> Result<()> {
     edit.set(
         entity,
-        "default",
         &TextRole {
             origin: Origin::Generated(generation.clone()),
             role: role.to_owned(),
@@ -643,6 +860,31 @@ fn rectangle_geometry([left, top, right, bottom]: [f32; 4]) -> Geometry {
     )
 }
 
+fn rotated_rectangle_geometry(
+    [left, top, right, bottom]: [f32; 4],
+    angle_degrees: f32,
+) -> Geometry {
+    let width = f64::from((right - left).max(1.0));
+    let height = f64::from((bottom - top).max(1.0));
+    let center_x = f64::from(left + right) * 0.5;
+    let center_y = f64::from(top + bottom) * 0.5;
+    let (sin, cos) = f64::from(angle_degrees).to_radians().sin_cos();
+    Geometry {
+        origin: Origin::User,
+        points: [
+            (-width * 0.5, -height * 0.5),
+            (width * 0.5, -height * 0.5),
+            (width * 0.5, height * 0.5),
+            (-width * 0.5, height * 0.5),
+        ]
+        .map(|(x, y)| Point {
+            x: center_x + x * cos - y * sin,
+            y: center_y + x * sin + y * cos,
+        })
+        .into(),
+    }
+}
+
 fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
     let mask = GrayImage::from_raw(mask.width, mask.height, mask.pixels.clone())?;
     let mut padded = GrayImage::new(mask.width() + 2, mask.height() + 2);
@@ -676,7 +918,7 @@ fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
 
 fn write_masks(
     input: &StageInput,
-    edit: &mut koharu_scene::SceneEdit,
+    edit: &mut koharu_scene::Edit,
     page: EntityId,
     detections: &[KoharuLayoutDetection],
     size: ImageSize,
@@ -707,7 +949,7 @@ struct MaskSpec {
 
 fn write_mask(
     input: &StageInput,
-    edit: &mut koharu_scene::SceneEdit,
+    edit: &mut koharu_scene::Edit,
     page: EntityId,
     detections: &[KoharuLayoutDetection],
     spec: MaskSpec,
@@ -775,9 +1017,9 @@ fn preserve_mask_outside_region(
 
 fn region_kind(label: &str) -> Result<RegionKind> {
     RegionKind::new(match label {
-        "text" => "dev.koharu.region.text",
-        "bubble" => "dev.koharu.region.bubble",
-        "panel" => "dev.koharu.region.panel",
+        "text" => TextRegion::KIND,
+        "bubble" => BubbleRegion::KIND,
+        "panel" => PanelRegion::KIND,
         _ => "dev.koharu.region.unknown",
     })
     .map_err(Into::into)

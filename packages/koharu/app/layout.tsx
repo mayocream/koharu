@@ -1,0 +1,46 @@
+import type { Metadata } from 'next'
+import { ThemeProvider } from 'next-themes'
+import { Noto_Sans_JP, Noto_Sans_SC, Noto_Sans_TC } from 'next/font/google'
+
+import './globals.css'
+import Providers from '@/app/providers'
+
+const notoSansJP = Noto_Sans_JP({
+  subsets: ['latin'],
+  variable: '--font-noto-jp',
+})
+
+const notoSansSC = Noto_Sans_SC({
+  subsets: ['latin'],
+  variable: '--font-noto-sc',
+})
+
+const notoSansTC = Noto_Sans_TC({
+  subsets: ['latin'],
+  variable: '--font-noto-tc',
+})
+
+export const metadata: Metadata = {
+  title: 'Koharu',
+}
+
+function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang='en-US' suppressHydrationWarning style={{ backgroundColor: 'transparent' }}>
+      <body
+        className={`${notoSansSC.variable} ${notoSansTC.variable} ${notoSansJP.variable} antialiased`}
+        style={{ backgroundColor: 'transparent' }}
+      >
+        <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
+          <Providers>{children}</Providers>
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}
+
+export default RootLayout

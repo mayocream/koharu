@@ -58,7 +58,7 @@ Koharu is organized as a Rust workspace with a Tauri shell and a Next.js UI:
 - **`koharu-renderer/`** — text shaping and rendering
 - **`koharu-psd/`** — layered PSD export
 - **`koharu-runtime/`** — runtime and model download management
-- **`ui/`** — Next.js web UI
+- **`packages/koharu/`** — Next.js web UI
 - **`tests/`** — Playwright end-to-end tests
 - **`docs/`** — documentation site (English, 日本語, 简体中文, Português)
 

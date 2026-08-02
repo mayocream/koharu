@@ -3,7 +3,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::processor::{Quad, TextBlock};
@@ -13,11 +12,11 @@ use self::{
     processor::{postprocess, preprocess, rearranged_inference},
 };
 
-koharu_runtime::huggingface! {
-    YOLO_WEIGHTS => "mayocream/comic-text-detector" => "15ade029f4dabd502bc97af6051c8b9f2bec24d5" => "yolo-v5.safetensors",
-    UNET_WEIGHTS => "mayocream/comic-text-detector" => "15ade029f4dabd502bc97af6051c8b9f2bec24d5" => "unet.safetensors",
-    DBNET_WEIGHTS => "mayocream/comic-text-detector" => "15ade029f4dabd502bc97af6051c8b9f2bec24d5" => "dbnet.safetensors",
-}
+model_repository!("mayocream/comic-text-detector" @ "15ade029f4dabd502bc97af6051c8b9f2bec24d5" {
+    YOLO_WEIGHTS = "yolo-v5.safetensors",
+    UNET_WEIGHTS = "unet.safetensors",
+    DBNET_WEIGHTS = "dbnet.safetensors",
+});
 
 #[derive(Debug)]
 pub struct ComicTextDetector {
@@ -28,13 +27,16 @@ pub struct ComicTextDetector {
 impl ComicTextDetector {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let yolo_path = huggingface::resolve(YOLO_WEIGHTS)
+        let yolo_path = YOLO_WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve comic-text-detector YOLO weights")?;
-        let unet_path = huggingface::resolve(UNET_WEIGHTS)
+        let unet_path = UNET_WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve comic-text-detector U-Net weights")?;
-        let dbnet_path = huggingface::resolve(DBNET_WEIGHTS)
+        let dbnet_path = DBNET_WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve comic-text-detector DBNet weights")?;
 

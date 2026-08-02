@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use koharu_scene::{At, Authored, EntityId, PageDraft, SceneSession, SourceText};
+use koharu_scene::{At, Authored, EntityId, PageDraft, Session, SourceText};
 
 const ENTITIES: usize = 2_048;
 
@@ -12,19 +12,21 @@ fn source(text: impl Into<String>) -> SourceText {
     }
 }
 
-fn populated() -> (SceneSession, EntityId) {
-    let mut session = SceneSession::memory().expect("create benchmark scene");
+fn populated() -> (Session, EntityId) {
+    let mut session = Session::memory().expect("create benchmark scene");
     let mut selected = None;
     let patch = session
         .snapshot()
         .patch(|edit| {
             let page = edit.add_page(PageDraft::new("page", 1200.0, 1800.0), At::End)?;
             for index in 0..ENTITIES {
-                let entity = edit.add_entity(page, At::End)?;
                 if index % 4 == 0 {
-                    edit.set_source_text(entity, source(format!("text {index}")))?;
+                    let content = edit.add_text_content(page, At::End)?;
+                    edit.set(content, &source(format!("text {index}")))?;
+                    selected = Some(content);
+                } else {
+                    edit.add_entity(page, At::End)?;
                 }
-                selected = Some(entity);
             }
             Ok(())
         })
@@ -44,7 +46,7 @@ fn scene_benchmarks(criterion: &mut Criterion) {
         bencher.iter(|| {
             black_box(
                 snapshot
-                    .entities_with::<SourceText>("default")
+                    .entities_with::<SourceText>()
                     .expect("query source text")
                     .count(),
             )
@@ -54,16 +56,25 @@ fn scene_benchmarks(criterion: &mut Criterion) {
         bencher.iter(|| {
             black_box(
                 snapshot
-                    .patch(|edit| edit.set_source_text(selected, source("changed")))
+                    .patch(|edit| edit.set(selected, &source("changed")))
                     .expect("build component patch"),
             )
         });
     });
     let patch = snapshot
-        .patch(|edit| edit.set_source_text(selected, source("changed")))
+        .patch(|edit| edit.set(selected, &source("changed")))
         .expect("build preview patch");
     criterion.bench_function("scene/component_preview", |bencher| {
         bencher.iter(|| black_box(snapshot.preview(black_box([&patch])).unwrap()));
+    });
+    criterion.bench_function("scene/reorder_patch", |bencher| {
+        bencher.iter(|| {
+            black_box(
+                snapshot
+                    .patch(|edit| edit.move_entity(selected, snapshot.parent(selected)?, At::Start))
+                    .expect("build reorder patch"),
+            )
+        });
     });
 }
 

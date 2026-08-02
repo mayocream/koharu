@@ -1,0 +1,454 @@
+'use client'
+
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+  Play,
+  Settings,
+  Sparkles,
+  Square,
+} from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+
+import { call, refreshTranslationModels } from '@/lib/backend'
+import {
+  commands,
+  type Model,
+  type ModelSelection,
+  type ProviderPreference,
+  type Stage,
+} from '@/lib/protocol'
+import { receivePreferences, useKoharuStore } from '@/lib/store'
+import { modelKey, providerName } from '@/lib/translation'
+import { Button } from '@koharu/ui/components/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
+import { cn } from '@koharu/ui/lib/utils'
+
+export type PipelineScope = 'page' | 'selected-pages' | 'project'
+export const pipelineStages: readonly Stage[] = ['detection', 'ocr', 'translation', 'inpainting']
+
+type SelectorView = 'root' | 'model' | 'scope' | 'stages'
+
+export function InferenceControl({
+  onRun,
+  disabled,
+}: {
+  onRun: (scope: PipelineScope, stages: Stage[]) => void
+  disabled: boolean
+}) {
+  const [scope, setScope] = useState<PipelineScope>('page')
+  const [stages, setStages] = useState<Stage[]>(() => [...pipelineStages])
+  const jobs = useKoharuStore((state) => state.jobs)
+  const selectedPages = useKoharuStore((state) => state.selectedPages)
+  const running = Object.values(jobs).find((job) => job.state === 'running') ?? null
+  const unavailable = scope === 'selected-pages' && selectedPages.length === 0
+
+  const stop = () => {
+    if (!running) return
+    void call(commands.stopJob, running.id).catch(() => undefined)
+  }
+
+  return (
+    <div className='flex items-center gap-1'>
+      <RuntimeSelector
+        scope={scope}
+        stages={stages}
+        selectionCount={selectedPages.length}
+        running={Boolean(running)}
+        onScopeChange={setScope}
+        onStagesChange={setStages}
+      />
+
+      <Button
+        type='button'
+        size='sm'
+        className='rounded-lg px-2.5 text-[11px]'
+        disabled={(disabled || unavailable) && !running}
+        aria-label={running ? 'Stop AI processing' : 'Run AI processing'}
+        onClick={running ? stop : () => onRun(scope, stages)}
+      >
+        {running ? <Square className='size-3 fill-current' /> : <Play className='size-3' />}
+        <span>{running ? 'Stop' : 'Run'}</span>
+      </Button>
+    </div>
+  )
+}
+
+function RuntimeSelector({
+  scope,
+  stages,
+  selectionCount,
+  running,
+  onScopeChange,
+  onStagesChange,
+}: {
+  scope: PipelineScope
+  stages: Stage[]
+  selectionCount: number
+  running: boolean
+  onScopeChange: (scope: PipelineScope) => void
+  onStagesChange: (stages: Stage[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [view, setView] = useState<SelectorView>('root')
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [savingModel, setSavingModel] = useState<string | null>(null)
+  const preferences = useKoharuStore((state) => state.preferences)
+  const translationModels = useKoharuStore((state) => state.translationModels)
+  const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const model = preferences?.pipeline.translation.model ?? null
+  const providers = preferences?.providers.entries ?? []
+  const choices = availableModels(model, translationModels, providers)
+  const modelLabel =
+    choices.find((choice) => model && modelKey(choice) === modelKey(model))?.name ??
+    shortModelName(model)
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    setView('root')
+    if (!next) return
+    setLoadingModels(true)
+    void refreshTranslationModels(true)
+      .catch(() => undefined)
+      .finally(() => setLoadingModels(false))
+  }
+
+  const chooseModel = (next: Model) => {
+    if (!preferences || savingModel) return
+    if (model && modelKey(model) === modelKey(next)) {
+      setView('root')
+      return
+    }
+
+    const key = modelKey(next)
+    setSavingModel(key)
+    const pipeline = {
+      ...preferences.pipeline,
+      translation: {
+        ...preferences.pipeline.translation,
+        model: {
+          provider: next.provider,
+          model: next.model,
+          quantization: next.quantizations[0]?.id ?? null,
+        },
+      },
+    }
+    void call(commands.savePreferences, pipeline, preferences.providers)
+      .then((saved) => {
+        receivePreferences(saved)
+        setView('root')
+      })
+      .catch(() => undefined)
+      .finally(() => setSavingModel(null))
+  }
+
+  const chooseScope = (next: PipelineScope) => {
+    onScopeChange(next)
+    setView('root')
+  }
+
+  const toggleStage = (stage: Stage) => {
+    if (stages.includes(stage)) {
+      if (stages.length > 1) onStagesChange(stages.filter((candidate) => candidate !== stage))
+      return
+    }
+    onStagesChange(
+      pipelineStages.filter((candidate) => candidate === stage || stages.includes(candidate)),
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        type='button'
+        aria-label='AI runtime selector'
+        className={cn(
+          'flex h-6 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
+          running && 'text-foreground',
+        )}
+      >
+        {running ? (
+          <Sparkles className='size-3 shrink-0 text-primary' />
+        ) : (
+          <Bot className='size-3 shrink-0 text-primary' />
+        )}
+        <span className='min-w-0 truncate'>{modelLabel}</span>
+        <ChevronDown className='size-3 shrink-0' />
+      </PopoverTrigger>
+
+      <PopoverContent
+        align='start'
+        sideOffset={4}
+        className='w-64 gap-0 rounded-xl border border-border/50 p-1 shadow-sm ring-0'
+      >
+        {view === 'root' && (
+          <div className='grid gap-0.5' aria-label='AI runtime shortcuts'>
+            <SelectorRow label='Model' value={modelLabel} onClick={() => setView('model')} />
+            <SelectorRow label='Scope' value={scopeLabel(scope)} onClick={() => setView('scope')} />
+            <SelectorRow
+              label='Stages'
+              value={stageSelectionLabel(stages)}
+              onClick={() => setView('stages')}
+            />
+            <div className='my-1 border-t border-border/70' />
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className='h-8 justify-start gap-2 rounded-lg px-2 text-[11px] font-normal text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+              onClick={() => {
+                setOpen(false)
+                setSettingsOpen(true)
+              }}
+            >
+              <Settings className='size-3.5' /> Settings
+            </Button>
+          </div>
+        )}
+
+        {view === 'model' && (
+          <SelectorPanel title='Model' onBack={() => setView('root')}>
+            <div className='max-h-64 overflow-y-auto overscroll-contain'>
+              {choices.map((choice) => {
+                const key = modelKey(choice)
+                const selected = model ? key === modelKey(model) : false
+                return (
+                  <Button
+                    key={key}
+                    type='button'
+                    variant='ghost'
+                    aria-label={`Use ${choice.name} from ${providerName(providers, choice.provider)}`}
+                    aria-pressed={selected}
+                    disabled={running || Boolean(savingModel)}
+                    className='h-auto min-h-9 w-full justify-start gap-2 rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
+                    onClick={() => chooseModel(choice)}
+                  >
+                    <span className='min-w-0 flex-1'>
+                      <span className='block truncate text-[11px] text-foreground'>
+                        {choice.name}
+                      </span>
+                      <span className='block truncate text-[9px] text-muted-foreground'>
+                        {providerName(providers, choice.provider)}
+                      </span>
+                    </span>
+                    {savingModel === key ? (
+                      <LoaderCircle className='size-3.5 shrink-0 animate-spin text-primary' />
+                    ) : (
+                      selected && <Check className='size-3.5 shrink-0 text-primary' />
+                    )}
+                  </Button>
+                )
+              })}
+              {loadingModels && choices.length === 0 && (
+                <div className='flex h-20 items-center justify-center gap-2 text-[11px] text-muted-foreground'>
+                  <LoaderCircle className='size-3.5 animate-spin' /> Loading models…
+                </div>
+              )}
+              {!loadingModels && choices.length === 0 && (
+                <div className='px-2.5 py-5 text-center text-[11px] text-muted-foreground'>
+                  No configured models
+                </div>
+              )}
+            </div>
+          </SelectorPanel>
+        )}
+
+        {view === 'scope' && (
+          <SelectorPanel title='Scope' onBack={() => setView('root')}>
+            <SelectorOption
+              value='page'
+              label='Current page'
+              detail='Run the open page'
+              selected={scope === 'page'}
+              onSelect={chooseScope}
+            />
+            <SelectorOption
+              value='selected-pages'
+              label='Selected pages'
+              detail={selectionCount ? `${selectionCount} selected` : 'Select pages first'}
+              selected={scope === 'selected-pages'}
+              disabled={selectionCount === 0}
+              onSelect={chooseScope}
+            />
+            <SelectorOption
+              value='project'
+              label='Entire project'
+              detail='Run every page'
+              selected={scope === 'project'}
+              onSelect={chooseScope}
+            />
+          </SelectorPanel>
+        )}
+
+        {view === 'stages' && (
+          <SelectorPanel title='Pipeline stages' onBack={() => setView('root')}>
+            <SelectorOption
+              value='detection'
+              label='Detection'
+              detail='Find panels and text regions'
+              selected={stages.includes('detection')}
+              onSelect={toggleStage}
+            />
+            <SelectorOption
+              value='ocr'
+              label='OCR'
+              detail='Read source text'
+              selected={stages.includes('ocr')}
+              onSelect={toggleStage}
+            />
+            <SelectorOption
+              value='translation'
+              label='Translation'
+              detail='Translate recognized text'
+              selected={stages.includes('translation')}
+              onSelect={toggleStage}
+            />
+            <SelectorOption
+              value='inpainting'
+              label='Inpainting'
+              detail='Clean text from artwork'
+              selected={stages.includes('inpainting')}
+              onSelect={toggleStage}
+            />
+          </SelectorPanel>
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function SelectorRow({
+  label,
+  value,
+  onClick,
+}: {
+  label: string
+  value: string
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type='button'
+      variant='ghost'
+      size='sm'
+      className='h-8 justify-start gap-3 rounded-lg px-2 text-[11px] font-normal hover:bg-primary/10'
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <span className='ml-auto max-w-40 truncate text-muted-foreground'>{value}</span>
+      <ChevronRight className='size-3.5 shrink-0 text-muted-foreground' />
+    </Button>
+  )
+}
+
+function SelectorPanel({
+  title,
+  onBack,
+  children,
+}: {
+  title: string
+  onBack: () => void
+  children: ReactNode
+}) {
+  return (
+    <div>
+      <div className='mb-1 flex h-7 items-center border-b border-border/60 px-0.5 pb-1'>
+        <Button
+          type='button'
+          variant='ghost'
+          size='icon-xs'
+          aria-label='Back'
+          className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+          onClick={onBack}
+        >
+          <ChevronLeft className='size-3.5' />
+        </Button>
+        <span className='ml-1 text-[11px] font-medium'>{title}</span>
+      </div>
+      <div className='grid gap-0.5'>{children}</div>
+    </div>
+  )
+}
+
+function SelectorOption<Value extends string>({
+  value,
+  label,
+  detail,
+  selected,
+  disabled = false,
+  onSelect,
+}: {
+  value: Value
+  label: string
+  detail: string
+  selected: boolean
+  disabled?: boolean
+  onSelect: (value: Value) => void
+}) {
+  return (
+    <Button
+      type='button'
+      variant='ghost'
+      aria-pressed={selected}
+      disabled={disabled}
+      className='h-auto min-h-9 justify-start gap-2 rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
+      onClick={() => onSelect(value)}
+    >
+      <span className='min-w-0 flex-1'>
+        <span className='block text-[11px]'>{label}</span>
+        <span className='block text-[9px] text-muted-foreground'>{detail}</span>
+      </span>
+      {selected && <Check className='size-3.5 shrink-0 text-primary' />}
+    </Button>
+  )
+}
+
+function availableModels(
+  selected: ModelSelection | null,
+  models: Model[],
+  providers: ProviderPreference[],
+): Model[] {
+  if (!selected || models.some((model) => modelKey(model) === modelKey(selected))) return models
+  return [
+    {
+      provider: selected.provider,
+      model: selected.model ?? null,
+      name: selected.model ?? providerName(providers, selected.provider),
+      quantizations: [],
+    },
+    ...models,
+  ]
+}
+
+function shortModelName(model: ModelSelection | null): string {
+  if (!model) return 'No model'
+  return model.model ?? 'Provider default'
+}
+
+function scopeLabel(scope: PipelineScope): string {
+  if (scope === 'project') return 'Project'
+  if (scope === 'selected-pages') return 'Selection'
+  return 'Page'
+}
+
+function stageLabel(stage: Stage): string {
+  switch (stage) {
+    case 'detection':
+      return 'Detection'
+    case 'ocr':
+      return 'OCR'
+    case 'translation':
+      return 'Translation'
+    case 'inpainting':
+      return 'Inpainting'
+  }
+}
+
+function stageSelectionLabel(stages: Stage[]): string {
+  if (stages.length === 1) return stageLabel(stages[0]!)
+  return `${stages.length} stages`
+}

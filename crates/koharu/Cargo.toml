@@ -1,5 +1,6 @@
 [package]
 name = "koharu"
+default-run = "koharu"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -10,32 +11,46 @@ repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
 license.workspace = true
-include = [
-    "src/**",
-    "icons/**",
-    "README.md",
-]
 
 [dependencies]
+alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
+base64 = { workspace = true }
 clap = { workspace = true }
-git-version = { workspace = true }
-koharu-app = { workspace = true }
+console = { workspace = true }
+dirs = { workspace = true }
+image = { workspace = true }
+koharu-agent = { workspace = true }
+koharu-canvas = { workspace = true }
+koharu-ml = { workspace = true }
+koharu-pipeline = { workspace = true }
+koharu-psd = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-runtime = { workspace = true }
+koharu-scene = { workspace = true }
+koharu-secrets = { workspace = true }
+koharu-translator = { workspace = true }
+parking_lot = { workspace = true }
+open = { workspace = true }
+rayon = { workspace = true }
 rfd = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+sentry = { workspace = true }
+specta = { workspace = true }
+specta-typescript = { workspace = true }
+tauri = { workspace = true }
+tauri-specta = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-console = { workspace = true }
 tracing-subscriber = { workspace = true }
-sentry = { workspace = true }
+uuid = { workspace = true }
+vello = { workspace = true }
+walkdir = { workspace = true }
+webp = { workspace = true }
 
-[dev-dependencies]
-image = { workspace = true }
-koharu-config = { workspace = true }
-koharu-pipeline = { workspace = true }
-koharu-scene = { workspace = true }
-koharu-translator = { workspace = true }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true }
-windows-sys = { workspace = true }
-winreg = { workspace = true }
+[build-dependencies]
+tauri-build = { workspace = true }

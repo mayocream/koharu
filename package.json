@@ -1,29 +1,20 @@
 {
   "workspaces": [
-    "ui/"
+    "packages/*"
   ],
   "scripts": {
-    "dev": "run-p dev:ui dev:desktop",
-    "dev:ui": "kill-port 3000 && bun run --cwd ui dev",
-    "dev:desktop": "nodemon --watch Cargo.toml --watch Cargo.lock --watch crates --ext rs,toml,lock,wgsl,json --exec 'cargo run -p koharu --bin koharu --profile release-with-debug'",
-    "build": "bun run --cwd ui build && cargo build -p koharu",
-    "lint:ui": "bun run --filter ui lint",
-    "test:desktop": "playwright test --config tests/integration-tests/playwright.config.ts",
-    "test:integration": "bun run test:desktop",
-    "test:ui": "bun run --filter ui test",
-    "typecheck:desktop": "tsc --project tests/integration-tests/tsconfig.json",
-    "typecheck:integration": "bun run typecheck:desktop",
+    "dev": "tauri dev",
+    "build": "tauri build --no-bundle",
+    "lint": "bun run --filter '@koharu/*' lint",
+    "test": "bun run --filter @koharu/app test",
     "sponsors": "cd .github/sponsorkit && sponsorkit --force",
-    "format": "oxfmt ui tests package.json .oxfmtrc.json .vscode",
-    "format:check": "oxfmt --check ui tests package.json .oxfmtrc.json .vscode"
+    "format": "oxfmt packages tests package.json .oxfmtrc.json .vscode",
+    "check": "oxfmt --check packages tests package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.1.1",
     "git-cliff": "^2.13.1",
-    "kill-port": "^2.0.1",
-    "nodemon": "^3.1.14",
-    "npm-run-all2": "^8.0.4",
     "oxfmt": "^0.56.0",
     "sponsorkit": "^17.1.1",
     "typescript": "^6.0.3"

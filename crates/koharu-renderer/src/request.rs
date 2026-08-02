@@ -1,11 +1,8 @@
-use koharu_scene::{AssetRole, EntityId, LanguageTag, RegionKind, RelationKind};
+use std::collections::BTreeSet;
 
-use crate::{RasterOptions, StrokeOptions};
+use koharu_scene::{AssetRole, EntityId};
 
-/// Default relation from a text entity to the region that constrains its layout.
-pub const TEXT_REGION_RELATION_KIND: &str = "dev.koharu.relation.text-region";
-/// Default semantic region kind used for speech-bubble safe areas.
-pub const BUBBLE_REGION_KIND: &str = "dev.koharu.region.bubble";
+use crate::StrokeOptions;
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub enum VerticalAlignment {
@@ -13,6 +10,17 @@ pub enum VerticalAlignment {
     #[default]
     Center,
     Bottom,
+}
+
+/// Whether layer visibility and opacity are resolved into the rendered frame.
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub enum LayerPresentation {
+    /// Omit hidden layers and bake opacity into each rendered layer.
+    #[default]
+    Resolved,
+    /// Retain every layer at full opacity so an interactive compositor can
+    /// apply visibility and opacity without repeating layout or shaping.
+    Deferred,
 }
 
 /// Non-persistent visual policy applied after scene intent has been resolved.
@@ -29,13 +37,12 @@ pub struct RenderTheme {
     /// Insets in top, right, bottom, left order.
     pub text_inset: [f32; 4],
     pub vertical_alignment: VerticalAlignment,
-    pub auto_fit: bool,
 }
 
 impl Default for RenderTheme {
     fn default() -> Self {
         Self {
-            font_families: Vec::new(),
+            font_families: vec!["CC Wild Words".to_owned(), "Arial".to_owned()],
             font_size: 24.0,
             minimum_font_size: 9.0,
             text_color: [0, 0, 0, 255],
@@ -45,7 +52,6 @@ impl Default for RenderTheme {
             word_spacing: 0.0,
             text_inset: [4.0; 4],
             vertical_alignment: VerticalAlignment::Center,
-            auto_fit: true,
         }
     }
 }
@@ -54,17 +60,16 @@ impl Default for RenderTheme {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenderRequest {
     pub page: EntityId,
-    pub locale: Option<LanguageTag>,
     /// Page asset roles in preference order. An empty list renders transparently.
     pub base_assets: Vec<AssetRole>,
     /// Asset role used by image entities.
     pub image_asset: AssetRole,
     pub include_images: bool,
+    /// Restricts text composition to specific entities while retaining page context.
+    pub text_entities: Option<BTreeSet<EntityId>>,
+    pub presentation: LayerPresentation,
     pub fallback_to_source_text: bool,
-    pub text_region_relation: RelationKind,
-    pub bubble_region: RegionKind,
     pub theme: RenderTheme,
-    pub raster: RasterOptions,
 }
 
 impl RenderRequest {
@@ -72,17 +77,13 @@ impl RenderRequest {
     pub fn new(page: EntityId) -> Self {
         Self {
             page,
-            locale: None,
-            base_assets: vec![asset_role("clean"), asset_role("source")],
+            base_assets: vec![asset_role("source")],
             image_asset: asset_role("source"),
             include_images: true,
+            text_entities: None,
+            presentation: LayerPresentation::Resolved,
             fallback_to_source_text: true,
-            text_region_relation: RelationKind::new(TEXT_REGION_RELATION_KIND)
-                .expect("the built-in relation kind is valid"),
-            bubble_region: RegionKind::new(BUBBLE_REGION_KIND)
-                .expect("the built-in region kind is valid"),
             theme: RenderTheme::default(),
-            raster: RasterOptions::default(),
         }
     }
 

@@ -1,0 +1,345 @@
+@import '@koharu/ui/globals.css';
+
+@font-face {
+  font-family: 'CC Wild Words';
+  src: url('../../../crates/koharu-renderer/fonts/ccwildwords/CC Wild Words Roman.ttf')
+    format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'CC Wild Words';
+  src: url('../../../crates/koharu-renderer/fonts/ccwildwords/CC Wild Words Italic.ttf')
+    format('truetype');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'CC Wild Words';
+  src: url('../../../crates/koharu-renderer/fonts/ccwildwords/CC Wild Words Bold Italic.ttf')
+    format('truetype');
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Hand';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKAH_.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Hand';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKAHB.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Hand';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKHI_.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Hand';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKHBI.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Jam';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKJ__.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Jam';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKJI_.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Slick';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKASK.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Slick';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKSKI.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Slim';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKASL.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Komika Slim';
+  src: url('../../../crates/koharu-renderer/fonts/komika/KOMIKSLI.ttf') format('truetype');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #d85b6a;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f4f4f4;
+  --muted-foreground: #626262;
+  --accent: #fff0f2;
+  --accent-foreground: #9e3c4c;
+  --destructive: #bd3f4d;
+  --border: #e5e5e5;
+  --input: #d3d3d3;
+  --ring: #d85b6a;
+  --surface-titlebar: #fff6f7;
+  --surface-toolbar: #ffffff;
+  --surface-sidebar: var(--surface-titlebar);
+  --surface-panel: #ffffff;
+  --surface-floating: #ffffff;
+  --surface-well: #f2f2f2;
+  --surface-canvas: #ffffff;
+  --workspace-background-rgb: 255 255 255;
+  --shadow-titlebar: 0 1px 0 rgb(125 45 59 / 0.08), 0 4px 16px rgb(125 45 59 / 0.05);
+  --shadow-panel: 0 1px 2px rgb(17 17 17 / 0.06), 0 10px 28px rgb(17 17 17 / 0.06);
+  --shadow-content: -1px -1px 1px rgb(17 17 17 / 0.05);
+  --shadow-toolrail: 0 3px 8px rgb(17 17 17 / 0.12), 0 1px 2px rgb(17 17 17 / 0.08);
+  --shadow-floating: 0 12px 32px rgb(17 17 17 / 0.16), 0 2px 8px rgb(17 17 17 / 0.08);
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #f5f5f5;
+  --card: #0b0b0b;
+  --card-foreground: #f5f5f5;
+  --popover: #0b0b0b;
+  --popover-foreground: #f5f5f5;
+  --primary: #f07b89;
+  --primary-foreground: #1f080c;
+  --secondary: #171717;
+  --secondary-foreground: #f5f5f5;
+  --muted: #171717;
+  --muted-foreground: #a5a5a5;
+  --accent: #3b151b;
+  --accent-foreground: #ffc4cb;
+  --destructive: #ff8b94;
+  --border: #2a2a2a;
+  --input: #404040;
+  --ring: #f07b89;
+  --surface-titlebar: #100c0e;
+  --surface-toolbar: #000000;
+  --surface-sidebar: var(--surface-titlebar);
+  --surface-panel: #0b0b0b;
+  --surface-floating: #111111;
+  --surface-well: #161616;
+  --surface-canvas: #000000;
+  --workspace-background-rgb: 0 0 0;
+  --shadow-titlebar: 0 1px 0 rgb(255 255 255 / 0.08), 0 4px 16px rgb(0 0 0 / 0.32);
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.5), 0 10px 28px rgb(0 0 0 / 0.42);
+  --shadow-content: -1px -1px 1px rgb(0 0 0 / 0.2);
+  --shadow-toolrail: 0 4px 10px rgb(0 0 0 / 0.38), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-floating: 0 14px 34px rgb(0 0 0 / 0.52), 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+@layer base {
+  html,
+  body {
+    @apply text-foreground select-none;
+    background-color: transparent;
+    overflow: hidden;
+    font-family:
+      var(--font-noto-jp), var(--font-noto-sc), var(--font-noto-tc), ui-sans-serif, system-ui,
+      sans-serif;
+    font-feature-settings:
+      'cv02' 1,
+      'cv03' 1,
+      'cv04' 1;
+  }
+
+  input,
+  textarea {
+    @apply select-text;
+  }
+
+  button,
+  [role='button'] {
+    -webkit-app-region: no-drag;
+  }
+
+  [data-tauri-drag-region] {
+    app-region: drag;
+  }
+
+  ::selection {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+
+  * {
+    scrollbar-color: color-mix(in srgb, var(--foreground) 22%, transparent) transparent;
+    scrollbar-width: thin;
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  .startup-spinner {
+    animation: koharu-startup-spin 1800ms linear infinite !important;
+  }
+}
+
+@layer components {
+  .workspace-corner-mask {
+    --workspace-corner-radius: calc(var(--radius) + 0.5rem);
+    overflow: visible !important;
+  }
+
+  .workspace-corner-mask::before {
+    position: absolute;
+    z-index: 50;
+    top: 0;
+    left: 0;
+    width: var(--workspace-corner-radius);
+    height: var(--workspace-corner-radius);
+    pointer-events: none;
+    content: '';
+    background: radial-gradient(
+      circle at bottom right,
+      transparent 0 calc(var(--workspace-corner-radius) - 1px),
+      var(--surface-sidebar) var(--workspace-corner-radius)
+    );
+  }
+}
+
+@keyframes koharu-startup-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@layer components {
+  [data-slot='button']:not(.rounded-none),
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='select-trigger'] {
+    border-radius: var(--radius-md);
+    box-shadow: none;
+  }
+
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='select-content'],
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'],
+  [data-slot='toast'] {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-floating);
+  }
+
+  .koharu-moveable {
+    --moveable-color: var(--primary);
+  }
+
+  .koharu-moveable-text {
+    --moveable-color: var(--primary);
+  }
+
+  .koharu-moveable .moveable-control {
+    pointer-events: auto;
+    width: 8px;
+    height: 8px;
+    margin-top: -4px;
+    margin-left: -4px;
+    border: 1px solid var(--background);
+    background: var(--moveable-color);
+  }
+
+  .koharu-moveable-text .moveable-control:not(.moveable-rotation-control) {
+    display: none;
+  }
+
+  .koharu-moveable-text .moveable-rotation {
+    height: 8px !important;
+  }
+
+  .koharu-moveable-text .moveable-rotation-control {
+    width: 5px !important;
+    height: 5px !important;
+    margin-top: -2.5px !important;
+    margin-left: -2.5px !important;
+    border-width: 1px;
+  }
+
+  .koharu-moveable-text .moveable-rotation-control::after {
+    position: absolute;
+    inset: -5px;
+    content: '';
+  }
+
+  .koharu-moveable .moveable-line {
+    background: var(--moveable-color);
+  }
+
+  .react-colorful {
+    width: 100%;
+    height: 164px;
+  }
+
+  .react-colorful__saturation,
+  .react-colorful__last-control {
+    border-radius: var(--radius-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  @layer base {
+    .startup-spinner {
+      animation: none !important;
+    }
+  }
+}

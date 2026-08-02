@@ -5,29 +5,25 @@ use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use specta::Type;
 use url::Url;
 
 use super::send_json;
-use crate::{RemoteProviderKind, Result, TranslationRequest, prompt};
+use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, display_name, prompt};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
+const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(default, deny_unknown_fields)]
 pub struct OpenAiCompatibleConfig {
-    pub base_url: Url,
-    pub model: String,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
+    pub base_url: Option<Url>,
 }
 
-impl OpenAiCompatibleConfig {
-    #[must_use]
-    pub fn new(base_url: Url, model: impl Into<String>) -> Self {
+impl Default for OpenAiCompatibleConfig {
+    fn default() -> Self {
         Self {
-            base_url,
-            model: model.into(),
-            temperature: None,
-            max_tokens: None,
+            base_url: Some(
+                Url::parse(DEFAULT_BASE_URL).expect("default OpenAI-compatible URL is valid"),
+            ),
         }
     }
 }
@@ -35,26 +31,22 @@ impl OpenAiCompatibleConfig {
 pub(super) async fn compatible(
     client: &Client,
     config: &OpenAiCompatibleConfig,
+    model: &str,
+    generation: &GenerationConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    let api_key = koharu_secrets::get(RemoteProviderKind::OpenAiCompatible.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty());
-    let endpoint = endpoint(&config.base_url, "chat/completions");
+    let api_key = koharu_secrets::get("openai-compatible")?;
+    let endpoint = endpoint(config.base_url.as_ref(), "chat/completions");
     translate(
         client,
-        ChatBackend {
-            provider: "openai-compatible",
-            endpoint: &endpoint,
-            api_key: api_key.as_ref().map(ExposeSecret::expose_secret),
-            model: &config.model,
-            temperature: config.temperature,
-            max_tokens: config.max_tokens,
-            max_completion_tokens: None,
-            reasoning_effort: None,
-            reasoning: None,
-            thinking: None,
-            response_mode: ResponseMode::PromptOnly,
-        },
+        ChatBackend::new(
+            "openai-compatible",
+            &endpoint,
+            api_key.as_ref().map(ExposeSecret::expose_secret),
+            model,
+            generation,
+            ResponseMode::PromptOnly,
+        ),
         request,
     )
     .await
@@ -79,8 +71,11 @@ pub(super) async fn translate(
             },
         ],
         temperature: backend.temperature,
+        top_p: backend.top_p,
         max_tokens: backend.max_tokens,
         max_completion_tokens: backend.max_completion_tokens,
+        frequency_penalty: backend.frequency_penalty,
+        presence_penalty: backend.presence_penalty,
         reasoning_effort: backend.reasoning_effort,
         reasoning: backend.reasoning.map(|enabled| ReasoningConfig { enabled }),
         thinking: backend.thinking.map(|kind| ThinkingConfig { kind }),
@@ -88,11 +83,11 @@ pub(super) async fn translate(
             .response_mode
             .response_format(request.segments.len()),
     };
-    let mut builder = client.post(backend.endpoint).json(&body);
+    let mut http = client.post(backend.endpoint).json(&body);
     if let Some(api_key) = backend.api_key {
-        builder = builder.bearer_auth(api_key);
+        http = http.bearer_auth(api_key);
     }
-    let response: ChatResponse = send_json(backend.provider, builder).await?;
+    let response: ChatResponse = send_json(backend.provider, http).await?;
     let text = response
         .choices
         .into_iter()
@@ -113,26 +108,61 @@ pub(super) struct ChatBackend<'a> {
     pub(super) api_key: Option<&'a str>,
     pub(super) model: &'a str,
     pub(super) temperature: Option<f32>,
+    pub(super) top_p: Option<f32>,
     pub(super) max_tokens: Option<u32>,
     pub(super) max_completion_tokens: Option<u32>,
+    pub(super) frequency_penalty: Option<f32>,
+    pub(super) presence_penalty: Option<f32>,
     pub(super) reasoning_effort: Option<&'static str>,
     pub(super) reasoning: Option<bool>,
     pub(super) thinking: Option<&'static str>,
     pub(super) response_mode: ResponseMode,
 }
 
-/// Lists models exposed by an OpenAI-compatible `/models` endpoint.
-pub async fn discover_openai_compatible_models(
-    client: &Client,
-    base_url: &Url,
-) -> Result<Vec<String>> {
-    let api_key = koharu_secrets::get(RemoteProviderKind::OpenAiCompatible.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty());
-    let mut builder = client.get(endpoint(base_url, "models"));
-    if let Some(api_key) = api_key {
-        builder = builder.bearer_auth(api_key.expose_secret());
+impl<'a> ChatBackend<'a> {
+    pub(super) fn new(
+        provider: &'static str,
+        endpoint: &'a str,
+        api_key: Option<&'a str>,
+        model: &'a str,
+        generation: &GenerationConfig,
+        response_mode: ResponseMode,
+    ) -> Self {
+        Self {
+            provider,
+            endpoint,
+            api_key,
+            model,
+            temperature: generation.temperature,
+            top_p: generation.top_p,
+            max_tokens: generation.max_tokens,
+            max_completion_tokens: None,
+            frequency_penalty: generation.frequency_penalty,
+            presence_penalty: generation.presence_penalty,
+            reasoning_effort: None,
+            reasoning: None,
+            thinking: None,
+            response_mode,
+        }
     }
-    discover_models("openai-compatible", builder).await
+}
+
+pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> Result<Vec<Model>> {
+    let api_key = koharu_secrets::get("openai-compatible")?;
+    let mut request = client.get(endpoint(config.base_url.as_ref(), "models"));
+    if let Some(api_key) = api_key {
+        request = request.bearer_auth(api_key.expose_secret());
+    }
+    Ok(discover_models("openai-compatible", request)
+        .await?
+        .into_iter()
+        .map(|model| Model {
+            provider: Provider::OpenAiCompatible,
+            name: display_name(&model),
+            model: Some(model),
+            quantizations: Vec::new(),
+        })
+        .collect())
 }
 
 pub(super) async fn discover_models(
@@ -143,10 +173,11 @@ pub(super) async fn discover_models(
     Ok(response.data.into_iter().map(|model| model.id).collect())
 }
 
-fn endpoint(base_url: &Url, suffix: &str) -> String {
+fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
+    let base_url = base_url.map_or(DEFAULT_BASE_URL, Url::as_str);
     format!(
         "{}/{}",
-        base_url.as_str().trim_end_matches('/'),
+        base_url.trim_end_matches('/'),
         suffix.trim_start_matches('/')
     )
 }
@@ -158,9 +189,15 @@ struct ChatRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_completion_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -247,11 +284,11 @@ struct ResponseMessage {
 
 #[derive(Deserialize)]
 struct ModelsResponse {
-    data: Vec<Model>,
+    data: Vec<ListedModel>,
 }
 
 #[derive(Deserialize)]
-struct Model {
+struct ListedModel {
     id: String,
 }
 
@@ -262,7 +299,10 @@ mod tests {
     #[test]
     fn endpoint_preserves_base_path() {
         let url = Url::parse("http://localhost:1234/v1").unwrap();
-        assert_eq!(endpoint(&url, "models"), "http://localhost:1234/v1/models");
+        assert_eq!(
+            endpoint(Some(&url), "models"),
+            "http://localhost:1234/v1/models"
+        );
     }
 
     #[test]
@@ -300,8 +340,11 @@ mod tests {
                 },
             ],
             temperature: None,
+            top_p: None,
             max_tokens: None,
             max_completion_tokens: Some(1024),
+            frequency_penalty: None,
+            presence_penalty: None,
             reasoning_effort: Some("none"),
             reasoning: None,
             thinking: None,

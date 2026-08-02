@@ -21,11 +21,8 @@ pub struct DeviceResources {
 #[derive(Clone, Debug, Default)]
 pub struct ResourceSnapshot {
     pub process_memory_bytes: u64,
-    pub system_memory_total_bytes: u64,
-    pub system_memory_used_bytes: u64,
-    pub available_system_memory_bytes: u64,
+    pub system_memory_bytes: u64,
     pub process_cpu_percent: f32,
-    pub system_cpu_percent: f32,
     pub devices: Vec<DeviceResources>,
 }
 
@@ -72,6 +69,8 @@ impl ResourceMonitor {
             let mut vram = vram::Monitor::new(device.clone());
             let mut vram_unavailable = false;
             let pid = get_current_pid().ok();
+            let logical_processors =
+                std::thread::available_parallelism().map_or(1, |count| count.get()) as f32;
             // Most page-local model calls finish in well under 500 ms. A shorter
             // interval keeps their VRAM peaks and utilization visible to both
             // admission control and the UI without polling in a tight loop.
@@ -85,7 +84,6 @@ impl ResourceMonitor {
                 };
                 if host_refresh_tick == 0 {
                     system.refresh_memory();
-                    system.refresh_cpu_usage();
                     if let Some(pid) = pid {
                         system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
                     }
@@ -112,11 +110,9 @@ impl ResourceMonitor {
                 };
                 monitor.changed.send_replace(ResourceSnapshot {
                     process_memory_bytes: process.map_or(0, sysinfo::Process::memory),
-                    system_memory_total_bytes: system.total_memory(),
-                    system_memory_used_bytes: system.used_memory(),
-                    available_system_memory_bytes: system.available_memory(),
-                    process_cpu_percent: process.map_or(0.0, sysinfo::Process::cpu_usage),
-                    system_cpu_percent: system.global_cpu_usage(),
+                    system_memory_bytes: system_memory.total_bytes,
+                    process_cpu_percent: process.map_or(0.0, sysinfo::Process::cpu_usage)
+                        / logical_processors,
                     devices,
                 });
                 monitor.sampled.store(true, Ordering::Release);

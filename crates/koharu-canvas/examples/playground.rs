@@ -22,9 +22,7 @@ use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use koharu_canvas::{
     Camera, Canvas, CanvasGpu, ElementId, Frame, PageId, PhysicalPoint, PhysicalSize, ViewState,
 };
-use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, Point, SceneSession,
-};
+use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, Point, Session};
 use vello::wgpu::{self, util::TextureBlitter};
 use winit::{
     application::ApplicationHandler,
@@ -209,7 +207,7 @@ struct PlaygroundState {
     suspended: bool,
     blitter: TextureBlitter,
     canvas: Canvas,
-    _session: SceneSession,
+    _session: Session,
     view: ViewState,
     cursor: PhysicalPoint,
     panning: bool,
@@ -405,8 +403,8 @@ impl PlaygroundState {
     }
 }
 
-fn demo_scene() -> Result<(SceneSession, PageId, Vec<ElementId>)> {
-    let mut session = SceneSession::memory()?;
+fn demo_scene() -> Result<(Session, PageId, Vec<ElementId>)> {
+    let mut session = Session::memory()?;
     let mut result = None;
     let nodes = [
         (
@@ -454,7 +452,7 @@ fn demo_scene() -> Result<(SceneSession, PageId, Vec<ElementId>)> {
         let mut ids = Vec::new();
         for (frame, size, base, accent) in nodes {
             let id = edit.add_entity(page, At::End)?;
-            edit.set(id, "default", &frame_geometry(frame))?;
+            edit.set(id, &frame_geometry(frame))?;
             edit.set_asset(
                 id,
                 &AssetRole::new("source")?,

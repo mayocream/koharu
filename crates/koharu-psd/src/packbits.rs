@@ -1,3 +1,10 @@
+//! PSD channel extraction and PackBits row encoding.
+//!
+//! GIMP reference: PackBits packet construction:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-util.c#L907-L1034
+//! GIMP reference: alpha-first layer channels and per-row length tables:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-export.c#L1772-L1974
+
 use image::RgbaImage;
 
 use crate::error::PsdExportError;

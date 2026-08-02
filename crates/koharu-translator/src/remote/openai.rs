@@ -1,74 +1,69 @@
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use specta::Type;
 
 use super::openai_compatible::{ChatBackend, ResponseMode};
-use crate::{RemoteProviderKind, Result, TranslationRequest};
+use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest};
 
 const URL: &str = "https://api.openai.com/v1/chat/completions";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct OpenAiConfig {
-    pub model: String,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub thinking: bool,
-}
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct OpenAiConfig {}
 
-impl Default for OpenAiConfig {
-    fn default() -> Self {
-        Self {
-            model: "gpt-4.1-mini".into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
-}
+pub(super) static MODELS: &[(&str, &str)] = &[
+    ("gpt-5.6", "5.6"),
+    ("gpt-5.6-sol", "5.6 Sol"),
+    ("gpt-5.6-terra", "5.6 Terra"),
+    ("gpt-5.6-luna", "5.6 Luna"),
+    ("gpt-5.5", "5.5"),
+    ("gpt-5.4", "5.4"),
+    ("gpt-5.4-mini", "5.4 mini"),
+    ("gpt-5.4-nano", "5.4 nano"),
+    ("gpt-5.2", "5.2"),
+    ("gpt-5.1", "5.1"),
+    ("gpt-5", "5"),
+    ("gpt-5-mini", "5 mini"),
+    ("gpt-5-nano", "5 nano"),
+    ("o3", "o3"),
+    ("gpt-4.1", "4.1"),
+    ("gpt-4.1-mini", "4.1 mini"),
+    ("gpt-4o-mini", "4o mini"),
+];
 
-impl OpenAiConfig {
-    #[must_use]
-    pub fn new(model: impl Into<String>) -> Self {
-        Self {
-            model: model.into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
+pub(super) async fn models() -> Result<Vec<Model>> {
+    Ok(if koharu_secrets::get("openai")?.is_some() {
+        Model::catalog(Provider::OpenAi, MODELS)
+    } else {
+        Vec::new()
+    })
 }
 
 pub(super) async fn translate(
     client: &Client,
-    config: &OpenAiConfig,
+    _config: &OpenAiConfig,
+    model: &str,
+    generation: &GenerationConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    let provider = RemoteProviderKind::OpenAi;
-    let api_key = koharu_secrets::get(provider.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty())
-        .with_context(|| format!("{} API key is not configured", provider.id()))?;
-    super::openai_compatible::translate(
-        client,
-        ChatBackend {
-            provider: "openai",
-            endpoint: URL,
-            api_key: Some(api_key.expose_secret()),
-            model: &config.model,
-            temperature: config.temperature,
-            max_tokens: None,
-            max_completion_tokens: config.max_tokens,
-            reasoning_effort: ["gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.5", "gpt-5.6"]
-                .iter()
-                .any(|prefix| config.model.starts_with(prefix))
-                .then_some(if config.thinking { "medium" } else { "none" }),
-            reasoning: None,
-            thinking: None,
-            response_mode: ResponseMode::JsonSchema,
-        },
-        request,
-    )
-    .await
+    let api_key = koharu_secrets::get("openai")?.context("openai API key is not configured")?;
+    let mut backend = ChatBackend::new(
+        "openai",
+        URL,
+        Some(api_key.expose_secret()),
+        model,
+        generation,
+        ResponseMode::JsonSchema,
+    );
+    backend.max_tokens = None;
+    backend.max_completion_tokens = generation.max_tokens;
+    backend.reasoning_effort = ["gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.5", "gpt-5.6"]
+        .iter()
+        .any(|prefix| model.starts_with(prefix))
+        .then_some(if generation.thinking {
+            "medium"
+        } else {
+            "none"
+        });
+    super::openai_compatible::translate(client, backend, request).await
 }

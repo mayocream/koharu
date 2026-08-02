@@ -353,14 +353,14 @@ impl Head {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use koharu_runtime::package::{PreloadablePackage, libtorch::Libtorch};
+    use koharu_runtime::{Feature, Runtime};
 
     #[tokio::test]
     #[ignore = "downloads and loads the LibTorch runtime"]
     async fn medium_recognizer_tree_matches_checkpoint() {
-        Libtorch::for_current_target()
+        Runtime::discover([Feature::Torch])
             .unwrap()
-            .preload()
+            .initialize()
             .await
             .unwrap();
         let config: PPOCRV6MediumRecConfig = serde_json::from_str(

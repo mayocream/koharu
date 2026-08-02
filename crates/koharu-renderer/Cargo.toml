@@ -32,7 +32,6 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 vello = { workspace = true }
-wgpu = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

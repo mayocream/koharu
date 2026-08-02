@@ -22,27 +22,38 @@ pub(crate) struct ActiveTransform {
 }
 
 impl ActiveTransform {
-    pub fn new(page: &CanvasPage, selected: &[ElementId]) -> Result<Self> {
+    pub fn new(page: &CanvasPage, controls: &[ElementFrame]) -> Result<Self> {
         let mut seen = HashSet::new();
-        let originals = selected
+        let originals = controls
             .iter()
-            .copied()
-            .filter(|element| seen.insert(*element))
-            .map(|element| {
-                let value = page.element(element).ok_or_else(|| {
+            .map(|control| {
+                if !seen.insert(control.element) {
+                    return Err(Error::Invalid(format!(
+                        "transform selection repeats element {}",
+                        control.element
+                    )));
+                }
+                let value = page.element(control.element).ok_or_else(|| {
                     Error::Invalid(format!(
-                        "transform element {element} is not on the active page"
+                        "transform element {} is not on the active page",
+                        control.element
                     ))
                 })?;
                 if !value.selectable() || !value.visible || value.opacity <= 0.0 {
                     return Err(Error::Invalid(format!(
-                        "transform element {element} is not selectable and visible"
+                        "transform element {} is not selectable and visible",
+                        control.element
                     )));
                 }
+                let frame = checked_frame(control.frame)?;
                 Ok(ElementPreview {
-                    element,
-                    frame: checked_frame(value.frame)?,
-                    geometry: value.geometry.clone(),
+                    element: control.element,
+                    frame,
+                    geometry: if value.has_text {
+                        geometry_from_frame(frame, value.geometry.origin.clone())
+                    } else {
+                        value.geometry.clone()
+                    },
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -113,11 +124,12 @@ impl ActiveTransform {
         Ok(changed)
     }
 
-    pub fn preview(&self, element: ElementId) -> Option<Frame> {
-        self.previews
+    pub fn affine(&self, element: ElementId) -> Option<Affine> {
+        self.originals
             .iter()
-            .find(|preview| preview.element == element)
-            .map(|preview| preview.frame)
+            .zip(&self.previews)
+            .find(|(original, _)| original.element == element)
+            .map(|(original, preview)| frame_transform(original.frame, preview.frame))
     }
 
     pub fn finish(self) -> Option<TransformCommit> {
@@ -150,6 +162,19 @@ fn transformed_geometry(original: &ElementPreview, preview: Frame) -> Geometry {
                     x: point.x,
                     y: point.y,
                 }
+            })
+            .collect(),
+    }
+}
+
+fn geometry_from_frame(frame: Frame, origin: koharu_scene::Origin) -> Geometry {
+    Geometry {
+        origin,
+        points: crate::geometry::frame_corners(frame)
+            .into_iter()
+            .map(|point| Point {
+                x: point.x,
+                y: point.y,
             })
             .collect(),
     }
@@ -193,7 +218,7 @@ mod tests {
     use crate::{CanvasElement, PhysicalSize, model::PageAssets};
 
     fn page_with_frames(frames: &[Frame]) -> (CanvasPage, Vec<ElementId>) {
-        let session = koharu_scene::SceneSession::memory().unwrap();
+        let session = koharu_scene::Session::memory().unwrap();
         let mut ids = None;
         session
             .snapshot()
@@ -231,6 +256,7 @@ mod tests {
                 visible: true,
                 opacity: 1.0,
                 image: None,
+                raster: None,
                 has_text: true,
             })
             .collect();
@@ -274,7 +300,13 @@ mod tests {
             Frame::new(80.0, 90.0, 20.0, 10.0),
         ];
         let (page, ids) = page_with_frames(&originals);
-        let mut transform = ActiveTransform::new(&page, &ids).unwrap();
+        let controls = ids
+            .iter()
+            .copied()
+            .zip(originals)
+            .map(|(element, frame)| ElementFrame { element, frame })
+            .collect::<Vec<_>>();
+        let mut transform = ActiveTransform::new(&page, &controls).unwrap();
         let moved = [
             ElementFrame {
                 element: ids[0],
@@ -304,12 +336,53 @@ mod tests {
                 )
                 .unwrap()
         );
-        assert_eq!(transform.preview(ids[0]), Some(moved[0].frame));
+        let mapped = transform.affine(ids[0]).unwrap()
+            * KurboPoint::new(
+                originals[0].x as f64 + originals[0].width as f64 * 0.5,
+                originals[0].y as f64 + originals[0].height as f64 * 0.5,
+            );
+        assert!((mapped.x - 35.0).abs() < 1e-5);
+        assert!((mapped.y - 40.0).abs() < 1e-5);
         assert!(transform.update(3, &moved[..1]).is_err());
 
         let commit = transform.finish().unwrap();
         assert_eq!(commit.elements.len(), 2);
         assert_eq!(commit.elements[0].frame, moved[0].frame);
         assert_eq!(commit.elements[1].frame, moved[1].frame);
+    }
+
+    #[test]
+    fn rendered_text_control_becomes_the_explicit_text_geometry() {
+        let source = Frame::new(10.0, 20.0, 80.0, 50.0);
+        let (page, ids) = page_with_frames(&[source]);
+        let control = Frame::new(30.0, 35.0, 40.0, 20.0);
+        let mut transform = ActiveTransform::new(
+            &page,
+            &[ElementFrame {
+                element: ids[0],
+                frame: control,
+            }],
+        )
+        .unwrap();
+        transform
+            .update(
+                1,
+                &[ElementFrame {
+                    element: ids[0],
+                    frame: Frame {
+                        x: control.x + 12.0,
+                        y: control.y - 7.0,
+                        ..control
+                    },
+                }],
+            )
+            .unwrap();
+
+        let commit = transform.finish().unwrap();
+        let expected = crate::frame_corners(Frame::new(42.0, 28.0, 40.0, 20.0));
+        for (actual, expected) in commit.elements[0].geometry.points.iter().zip(expected) {
+            assert!((actual.x - expected.x).abs() < 1e-5);
+            assert!((actual.y - expected.y).abs() < 1e-5);
+        }
     }
 }

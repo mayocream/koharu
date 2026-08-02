@@ -4,44 +4,36 @@ use std::{
     marker::PhantomData,
     path::Path,
     sync::Arc,
-    time::Duration,
 };
 
-use rusqlite::{Connection, MAIN_DB, OptionalExtension, Transaction, TransactionBehavior, params};
+use redb::{ReadableTable, WriteTransaction};
 
 use crate::{
-    BlobId, ChangeSet, DocumentId, Error, Patch, Result, Revision, Snapshot,
-    blob::BlobStore,
-    history::{Checkpoint, StoredCommit},
-    patch::Operation,
-    state::State,
-    storage,
+    BlobId, Commit, CommitRequest, DocumentId, Error, Recovery, Refresh, Result, Revision,
+    Snapshot,
+    history::StoredCommit,
+    storage::{BLOBS, COMMITS, FORMAT_VERSION, META, Metadata, Store},
 };
 
 const MAX_DURABLE_ENVELOPE_BYTES: usize = 512 * 1024 * 1024;
-const MAX_PATCH_OPERATIONS: usize = 10_000_000;
 
 #[derive(Clone, Debug)]
 pub struct Options {
-    pub busy_timeout: Duration,
+    pub database_cache_bytes: usize,
+    pub blob_cache_bytes: usize,
+    pub max_blob_bytes: usize,
     pub checkpoint_commits: u64,
     pub checkpoint_bytes: u64,
-    pub max_blob_bytes: usize,
-    pub blob_cache_bytes: usize,
-    pub blob_read_connections: usize,
-    pub synchronous_full: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
-            busy_timeout: Duration::from_secs(5),
+            database_cache_bytes: 64 * 1024 * 1024,
+            blob_cache_bytes: 256 * 1024 * 1024,
+            max_blob_bytes: 512 * 1024 * 1024,
             checkpoint_commits: 1_024,
             checkpoint_bytes: 64 * 1024 * 1024,
-            max_blob_bytes: 512 * 1024 * 1024,
-            blob_cache_bytes: 256 * 1024 * 1024,
-            blob_read_connections: 4,
-            synchronous_full: false,
         }
     }
 }
@@ -49,7 +41,6 @@ impl Default for Options {
 #[derive(Clone, Debug)]
 pub struct CommitResult {
     pub revision: Revision,
-    pub changes: ChangeSet,
     pub snapshot: Snapshot,
 }
 
@@ -59,11 +50,12 @@ pub struct GcReport {
     pub bytes: u64,
 }
 
+/// The single writer for one durable document. It tracks only the durable
+/// revision; the interpreted document state remains owned by the caller.
 pub struct Session {
-    connection: Connection,
-    blobs: Arc<BlobStore>,
-    state: Arc<State>,
-    _state_lease: Arc<BTreeSet<BlobId>>,
+    store: Arc<Store>,
+    document: DocumentId,
+    revision: Revision,
     options: Options,
     _single_writer: PhantomData<Cell<()>>,
 }
@@ -72,37 +64,44 @@ impl std::fmt::Debug for Session {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Session")
-            .field("document", &self.state.document)
-            .field("revision", &self.state.revision)
+            .field("document", &self.document)
+            .field("revision", &self.revision)
             .finish_non_exhaustive()
     }
 }
 
 impl Session {
-    pub fn create(path: impl AsRef<Path>) -> Result<Self> {
-        Self::create_with(path, Options::default())
+    pub fn create(
+        path: impl AsRef<Path>,
+        document: DocumentId,
+        checkpoint: Vec<u8>,
+    ) -> Result<Self> {
+        Self::create_with(path, document, checkpoint, Options::default())
     }
 
-    pub fn create_with(path: impl AsRef<Path>, options: Options) -> Result<Self> {
+    pub fn create_with(
+        path: impl AsRef<Path>,
+        document: DocumentId,
+        checkpoint: Vec<u8>,
+        options: Options,
+    ) -> Result<Self> {
         validate_options(&options)?;
-        let path = path.as_ref();
-        if path.exists() {
-            return Err(Error::invalid("storage document already exists"));
-        }
-        let connection =
-            storage::create_disk(path, options.busy_timeout, options.synchronous_full)?;
-        let state = State::empty(DocumentId::new());
-        let checkpoint = revision::to_vec(&Checkpoint {
-            document: state.to_checkpoint(),
-        })?;
-        storage::create_schema(&connection, state.document, &checkpoint)?;
-        let blobs = BlobStore::file(
-            path,
-            options.busy_timeout,
+        check_envelope_size(&checkpoint, "checkpoint")?;
+        let store = Store::create(
+            path.as_ref(),
+            options.database_cache_bytes,
             options.blob_cache_bytes,
-            options.blob_read_connections,
-        );
-        Ok(Self::assemble(connection, blobs, state, options))
+        )?;
+        store.initialize(&Metadata {
+            format: FORMAT_VERSION,
+            document,
+            head: Revision::ZERO,
+            checkpoint_revision: Revision::ZERO,
+            checkpoint,
+            commits_since_checkpoint: 0,
+            bytes_since_checkpoint: 0,
+        })?;
+        Ok(Self::assemble(store, document, Revision::ZERO, options))
     }
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -111,551 +110,369 @@ impl Session {
 
     pub fn open_with(path: impl AsRef<Path>, options: Options) -> Result<Self> {
         validate_options(&options)?;
-        let path = path.as_ref();
-        let connection = storage::open_disk(path, options.busy_timeout, options.synchronous_full)?;
-        let state = load_state(&connection)?;
-        validate_blob_references(&connection, &state, &BTreeMap::new())?;
-        let blobs = BlobStore::file(
-            path,
-            options.busy_timeout,
+        let store = Store::open(
+            path.as_ref(),
+            options.database_cache_bytes,
             options.blob_cache_bytes,
-            options.blob_read_connections,
-        );
-        Ok(Self::assemble(connection, blobs, state, options))
+        )?;
+        let metadata = store.metadata()?;
+        Ok(Self::assemble(
+            store,
+            metadata.document,
+            metadata.head,
+            options,
+        ))
     }
 
-    pub fn memory() -> Result<Self> {
-        Self::memory_with(Options::default())
+    pub fn memory(document: DocumentId, checkpoint: Vec<u8>) -> Result<Self> {
+        Self::memory_with(document, checkpoint, Options::default())
     }
 
-    pub fn memory_with(options: Options) -> Result<Self> {
+    pub fn memory_with(
+        document: DocumentId,
+        checkpoint: Vec<u8>,
+        options: Options,
+    ) -> Result<Self> {
         validate_options(&options)?;
-        let (connection, uri) =
-            storage::open_memory(options.busy_timeout, options.synchronous_full)?;
-        let state = State::empty(DocumentId::new());
-        let checkpoint = revision::to_vec(&Checkpoint {
-            document: state.to_checkpoint(),
+        check_envelope_size(&checkpoint, "checkpoint")?;
+        let store = Store::memory(options.database_cache_bytes, options.blob_cache_bytes)?;
+        store.initialize(&Metadata {
+            format: FORMAT_VERSION,
+            document,
+            head: Revision::ZERO,
+            checkpoint_revision: Revision::ZERO,
+            checkpoint,
+            commits_since_checkpoint: 0,
+            bytes_since_checkpoint: 0,
         })?;
-        storage::create_schema(&connection, state.document, &checkpoint)?;
-        let blobs = BlobStore::uri(
-            uri,
-            options.busy_timeout,
-            options.blob_cache_bytes,
-            options.blob_read_connections,
-        );
-        Ok(Self::assemble(connection, blobs, state, options))
+        Ok(Self::assemble(store, document, Revision::ZERO, options))
     }
 
     fn assemble(
-        connection: Connection,
-        blobs: Arc<BlobStore>,
-        state: State,
+        store: Arc<Store>,
+        document: DocumentId,
+        revision: Revision,
         options: Options,
     ) -> Self {
-        let state = Arc::new(state);
-        let state_lease = blobs.lease(state.referenced_blobs());
         Self {
-            connection,
-            blobs,
-            state,
-            _state_lease: state_lease,
+            store,
+            document,
+            revision,
             options,
             _single_writer: PhantomData,
         }
     }
 
     #[must_use]
-    pub fn document_id(&self) -> DocumentId {
-        self.state.document
+    pub const fn document_id(&self) -> DocumentId {
+        self.document
     }
 
     #[must_use]
-    pub fn revision(&self) -> Revision {
-        self.state.revision
+    pub const fn revision(&self) -> Revision {
+        self.revision
     }
 
     #[must_use]
-    pub fn snapshot(&self) -> Snapshot {
-        Snapshot::new(self.state.clone(), self.blobs.clone())
+    pub fn snapshot(&self, referenced: BTreeSet<BlobId>) -> Snapshot {
+        Snapshot::new(self.document, self.revision, self.store.clone(), referenced)
     }
 
-    pub fn commit(&mut self, patch: Patch) -> Result<CommitResult> {
-        if patch.base().document != self.document_id() {
-            return Err(Error::DocumentMismatch {
-                patch: patch.base().document,
-                session: self.document_id(),
-            });
+    pub fn recovery(&self) -> Result<Recovery> {
+        let metadata = self.store.metadata()?;
+        if metadata.document != self.document
+            || metadata.checkpoint_revision > metadata.head
+            || metadata.head != self.revision
+        {
+            return Err(Error::NotADocument);
         }
-        if patch.base().revision != self.revision() {
-            return Err(Error::RevisionConflict {
-                expected: patch.base().revision,
-                actual: self.revision(),
-            });
-        }
-        if patch.is_empty() {
-            let actual = storage::head(&self.connection)?;
-            if actual != self.revision() {
-                return Err(Error::RevisionConflict {
-                    expected: self.revision(),
-                    actual,
-                });
-            }
-            let revision = self.revision();
-            return Ok(CommitResult {
-                revision,
-                changes: ChangeSet::empty(revision),
-                snapshot: self.snapshot(),
-            });
-        }
-
-        let (mut next, attachments) = patch.apply(&self.state)?;
-        validate_attachments(&attachments, self.options.max_blob_bytes)?;
-        let operations = patch.operations().cloned().collect::<Vec<_>>();
-        let operation_blobs = operation_blob_ids(&operations);
-        validate_blob_ids(&self.connection, &operation_blobs, &attachments)?;
-
-        let parent = self.revision();
-        let revision = parent
-            .next()
-            .ok_or_else(|| Error::invalid("document revision overflow"))?;
-        if operations.len() > MAX_PATCH_OPERATIONS {
-            return Err(Error::invalid("patch contains too many operations"));
-        }
-        let stored = StoredCommit {
-            label: patch.label().map(str::to_owned),
-            operations: operations.clone(),
-        };
-        let payload = revision::to_vec(&stored)?;
-        check_envelope_size(&payload, "commit")?;
-        let meta = storage::meta(&self.connection)?;
-        let commit_count = meta.commits_since_checkpoint.saturating_add(1);
-        let commit_bytes = meta
-            .bytes_since_checkpoint
-            .saturating_add(payload.len() as u64);
-        next.revision = revision;
-        let make_checkpoint = threshold_reached(commit_count, self.options.checkpoint_commits)
-            || threshold_reached(commit_bytes, self.options.checkpoint_bytes);
-        let checkpoint = make_checkpoint
-            .then(|| {
-                revision::to_vec(&Checkpoint {
-                    document: next.to_checkpoint(),
-                })
-            })
-            .transpose()?;
-        if let Some(checkpoint) = &checkpoint {
-            check_envelope_size(checkpoint, "checkpoint")?;
-        }
-        let new_blobs = attachments
-            .keys()
-            .filter(|id| !blob_exists(&self.connection, **id).unwrap_or(false))
-            .copied()
-            .collect::<Vec<_>>();
-        let changes = ChangeSet::from_operations(
-            parent,
-            revision,
-            operations.iter(),
-            new_blobs.iter().copied(),
-        );
-
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        ensure_head(&transaction, parent)?;
-        persist_blobs(&transaction, &operation_blobs, &attachments)?;
-        transaction.execute(
-            "INSERT INTO commits (revision, parent_revision, label, payload)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![
-                storage::revision_to_sql(revision)?,
-                storage::revision_to_sql(parent)?,
-                stored.label.as_deref(),
-                payload,
-            ],
+        check_envelope_size(&metadata.checkpoint, "checkpoint")?;
+        let commits = decode_commits(
+            self.store
+                .load_commits(metadata.checkpoint_revision, metadata.head)?,
         )?;
-        for id in &operation_blobs {
-            transaction.execute(
-                "INSERT INTO commit_blobs (revision, blob_id) VALUES (?1, ?2)",
-                params![
-                    storage::revision_to_sql(revision)?,
-                    id.as_bytes().as_slice()
-                ],
-            )?;
-        }
-        if let Some(checkpoint) = checkpoint {
-            transaction.execute(
-                "UPDATE meta SET head_revision = ?1, checkpoint_revision = ?1,
-                 checkpoint = ?2, commits_since_checkpoint = 0,
-                 bytes_since_checkpoint = 0 WHERE singleton = 1",
-                params![storage::revision_to_sql(revision)?, checkpoint],
-            )?;
-        } else {
-            transaction.execute(
-                "UPDATE meta SET head_revision = ?1, commits_since_checkpoint = ?2,
-                 bytes_since_checkpoint = ?3 WHERE singleton = 1",
-                params![
-                    storage::revision_to_sql(revision)?,
-                    sql_u64(commit_count)?,
-                    sql_u64(commit_bytes)?,
-                ],
-            )?;
-        }
-        transaction.commit()?;
-        let state_lease = self.blobs.lease(next.referenced_blobs());
-        self.state = Arc::new(next);
-        self._state_lease = state_lease;
-        Ok(CommitResult {
-            revision,
-            changes,
-            snapshot: self.snapshot(),
+        Ok(Recovery {
+            document: self.document,
+            checkpoint_revision: metadata.checkpoint_revision,
+            head: metadata.head,
+            checkpoint: Arc::from(metadata.checkpoint),
+            commits,
         })
     }
 
-    pub fn refresh(&mut self) -> Result<ChangeSet> {
-        let before = self.state.clone();
-        let head = storage::head(&self.connection)?;
-        if head == before.revision {
-            return Ok(ChangeSet::empty(before.revision));
+    pub fn checkpoint_due(&self, commit_bytes: usize) -> Result<bool> {
+        let metadata = self.store.metadata()?;
+        ensure_head(&metadata, self.revision)?;
+        Ok(threshold_reached(
+            metadata.commits_since_checkpoint.saturating_add(1),
+            self.options.checkpoint_commits,
+        ) || threshold_reached(
+            metadata
+                .bytes_since_checkpoint
+                .saturating_add(commit_bytes as u64),
+            self.options.checkpoint_bytes,
+        ))
+    }
+
+    pub fn commit(
+        &mut self,
+        request: CommitRequest,
+        checkpoint: Option<Vec<u8>>,
+        referenced: BTreeSet<BlobId>,
+    ) -> Result<CommitResult> {
+        if request.document != self.document {
+            return Err(Error::DocumentMismatch {
+                patch: request.document,
+                session: self.document,
+            });
         }
-        if head < before.revision {
+        if request.parent != self.revision {
+            return Err(Error::RevisionConflict {
+                expected: request.parent,
+                actual: self.revision,
+            });
+        }
+        check_envelope_size(&request.forward, "forward commit")?;
+        check_envelope_size(&request.inverse, "inverse commit")?;
+        if let Some(checkpoint) = &checkpoint {
+            check_envelope_size(checkpoint, "checkpoint")?;
+        }
+
+        let revision = self
+            .revision
+            .next()
+            .ok_or_else(|| Error::invalid("document revision overflow"))?;
+        let mut attachments = BTreeMap::new();
+        for attachment in request.attachments {
+            let bytes = attachment.bytes();
+            if bytes.len() > self.options.max_blob_bytes {
+                return Err(Error::invalid(format!(
+                    "blob {} exceeds the configured size limit",
+                    attachment.id()
+                )));
+            }
+            attachments.insert(attachment.id(), bytes);
+        }
+        let stored = StoredCommit {
+            label: request.label.as_deref().map(str::to_owned),
+            forward: request.forward,
+            inverse: request.inverse,
+            blobs: request.blobs.iter().copied().collect(),
+        };
+        let payload = revision::to_vec(&stored)?;
+        check_envelope_size(&payload, "commit")?;
+
+        let transaction = self.store.write()?;
+        let mut metadata = metadata_in(&transaction)?;
+        ensure_head(&metadata, self.revision)?;
+        let commit_count = metadata.commits_since_checkpoint.saturating_add(1);
+        let commit_bytes = metadata
+            .bytes_since_checkpoint
+            .saturating_add(payload.len() as u64);
+        let make_checkpoint = threshold_reached(commit_count, self.options.checkpoint_commits)
+            || threshold_reached(commit_bytes, self.options.checkpoint_bytes);
+        if make_checkpoint && checkpoint.is_none() {
+            return Err(Error::invalid(
+                "a checkpoint is required after the configured commit threshold",
+            ));
+        }
+
+        {
+            let mut blobs = transaction.open_table(BLOBS)?;
+            for id in &request.blobs {
+                if blobs.get(*id)?.is_some() {
+                    continue;
+                }
+                let bytes = attachments.get(id).ok_or(Error::BlobNotFound(*id))?;
+                blobs.insert(*id, bytes.as_ref())?;
+            }
+        }
+        {
+            let mut commits = transaction.open_table(COMMITS)?;
+            if commits
+                .insert(revision.get(), payload.as_slice())?
+                .is_some()
+            {
+                return Err(Error::NotADocument);
+            }
+        }
+        metadata.head = revision;
+        if make_checkpoint {
+            metadata.checkpoint_revision = revision;
+            metadata.checkpoint = checkpoint.expect("checkpoint checked above");
+            metadata.commits_since_checkpoint = 0;
+            metadata.bytes_since_checkpoint = 0;
+        } else {
+            metadata.commits_since_checkpoint = commit_count;
+            metadata.bytes_since_checkpoint = commit_bytes;
+        }
+        write_metadata(&transaction, &metadata)?;
+        transaction.commit()?;
+
+        self.revision = revision;
+        Ok(CommitResult {
+            revision,
+            snapshot: self.snapshot(referenced),
+        })
+    }
+
+    pub fn prepare_refresh(&self) -> Result<Refresh> {
+        let metadata = self.store.metadata()?;
+        if metadata.document != self.document || metadata.head < self.revision {
             return Err(Error::NotADocument);
         }
-        let meta = storage::meta(&self.connection)?;
-        let (next, changes) = if let Some(result) = load_tail(&self.connection, &before, meta.head)?
+        let commits = decode_commits(self.store.load_commits(self.revision, metadata.head)?)?;
+        Ok(Refresh {
+            from: self.revision,
+            to: metadata.head,
+            commits,
+        })
+    }
+
+    pub fn accept_refresh(&mut self, refresh: &Refresh) -> Result<()> {
+        if refresh.from != self.revision
+            || refresh
+                .commits
+                .last()
+                .map_or(refresh.from, |commit| commit.revision)
+                != refresh.to
         {
-            result
-        } else {
-            let next = load_state(&self.connection)?;
-            let changes = ChangeSet::between(&before, &next, []);
-            (next, changes)
-        };
-        validate_blob_references(&self.connection, &next, &BTreeMap::new())?;
-        let state_lease = self.blobs.lease(next.referenced_blobs());
-        self.state = Arc::new(next);
-        self._state_lease = state_lease;
-        Ok(changes)
-    }
-
-    pub fn undo(&mut self, revision: Revision) -> Result<CommitResult> {
-        self.undo_many([revision])
-    }
-
-    pub fn undo_many(
-        &mut self,
-        revisions: impl IntoIterator<Item = Revision>,
-    ) -> Result<CommitResult> {
-        let mut revisions = revisions.into_iter().collect::<Vec<_>>();
-        revisions.sort_unstable_by(|left, right| right.cmp(left));
-        revisions.dedup();
-        if revisions.is_empty() {
-            return Err(Error::invalid("undo requires at least one revision"));
+            return Err(Error::RevisionConflict {
+                expected: refresh.from,
+                actual: self.revision,
+            });
         }
-        let mut operations = Vec::new();
-        for revision in &revisions {
-            let payload = self
-                .connection
-                .query_row(
-                    "SELECT payload FROM commits WHERE revision = ?1",
-                    [storage::revision_to_sql(*revision)?],
-                    |row| row.get::<_, Vec<u8>>(0),
-                )
-                .optional()?
-                .ok_or(Error::HistoryNotFound(*revision))?;
-            let commit: StoredCommit = revision::from_slice(&payload)?;
-            operations.extend(commit.operations.iter().rev().map(Operation::reversed));
-        }
-        let label: Arc<str> = if revisions.len() == 1 {
-            format!("Undo revision {}", revisions[0]).into()
-        } else {
-            format!("Undo {} revisions", revisions.len()).into()
-        };
-        let patch = Patch::from_operations(self.state.clone(), operations, Some(label))?;
-        self.commit(patch)
-    }
-
-    pub fn checkpoint(&mut self) -> Result<()> {
-        let revision = self.revision();
-        let checkpoint = revision::to_vec(&Checkpoint {
-            document: self.state.to_checkpoint(),
-        })?;
-        check_envelope_size(&checkpoint, "checkpoint")?;
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        ensure_head(&transaction, revision)?;
-        transaction.execute(
-            "UPDATE meta SET checkpoint_revision = head_revision, checkpoint = ?1,
-             commits_since_checkpoint = 0, bytes_since_checkpoint = 0 WHERE singleton = 1",
-            [checkpoint],
-        )?;
-        transaction.commit()?;
+        self.revision = refresh.to;
         Ok(())
     }
 
-    pub fn prune_history(&mut self, keep_from: Revision) -> Result<GcReport> {
-        if keep_from > self.revision().next().unwrap_or(self.revision()) {
+    pub fn history(&self, revision: Revision) -> Result<Commit> {
+        let payload = self
+            .store
+            .load_commit(revision)?
+            .ok_or(Error::HistoryNotFound(revision))?;
+        decode_commit(revision, &payload)
+    }
+
+    pub fn checkpoint(&mut self, checkpoint: Vec<u8>) -> Result<()> {
+        check_envelope_size(&checkpoint, "checkpoint")?;
+        let transaction = self.store.write()?;
+        let mut metadata = metadata_in(&transaction)?;
+        ensure_head(&metadata, self.revision)?;
+        metadata.checkpoint_revision = self.revision;
+        metadata.checkpoint = checkpoint;
+        metadata.commits_since_checkpoint = 0;
+        metadata.bytes_since_checkpoint = 0;
+        write_metadata(&transaction, &metadata)?;
+        transaction.commit()?;
+        self.store.flush()
+    }
+
+    pub fn prune_history(
+        &mut self,
+        keep_from: Revision,
+        checkpoint: Vec<u8>,
+        referenced: BTreeSet<BlobId>,
+    ) -> Result<GcReport> {
+        if keep_from > self.revision.next().unwrap_or(self.revision) {
             return Err(Error::invalid("history retention begins after the head"));
         }
-        self.checkpoint()?;
-        let revision = self.revision();
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        ensure_head(&transaction, revision)?;
-        transaction.execute(
-            "DELETE FROM commits WHERE revision < ?1",
-            [storage::revision_to_sql(keep_from)?],
-        )?;
-        let (report, removed) =
-            collect_garbage(&transaction, &self.state, self.blobs.live_blobs())?;
+        self.checkpoint(checkpoint)?;
+        let transaction = self.store.write()?;
+        let metadata = metadata_in(&transaction)?;
+        ensure_head(&metadata, self.revision)?;
+        {
+            let mut commits = transaction.open_table(COMMITS)?;
+            let keys = commits
+                .range(..keep_from.get())?
+                .map(|entry| entry.map(|(key, _)| key.value()))
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            for key in keys {
+                commits.remove(key)?;
+            }
+        }
+        let (report, removed) = collect_garbage(&transaction, referenced, self.store.live_blobs())?;
         transaction.commit()?;
-        self.blobs.invalidate(&removed);
+        self.store.flush()?;
+        self.store.invalidate_blobs(&removed);
         Ok(report)
     }
 
-    pub fn gc(&mut self) -> Result<GcReport> {
-        let revision = self.revision();
-        let transaction = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        ensure_head(&transaction, revision)?;
-        let (report, removed) =
-            collect_garbage(&transaction, &self.state, self.blobs.live_blobs())?;
+    pub fn gc(&mut self, referenced: BTreeSet<BlobId>) -> Result<GcReport> {
+        let transaction = self.store.write()?;
+        let metadata = metadata_in(&transaction)?;
+        ensure_head(&metadata, self.revision)?;
+        let (report, removed) = collect_garbage(&transaction, referenced, self.store.live_blobs())?;
         transaction.commit()?;
-        self.blobs.invalidate(&removed);
+        self.store.flush()?;
+        self.store.invalidate_blobs(&removed);
         Ok(report)
     }
 
-    pub fn compact(&mut self, keep_from: Revision) -> Result<GcReport> {
-        let report = self.prune_history(keep_from)?;
-        self.connection
-            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    pub fn compact(
+        &mut self,
+        keep_from: Revision,
+        checkpoint: Vec<u8>,
+        referenced: BTreeSet<BlobId>,
+    ) -> Result<GcReport> {
+        let report = self.prune_history(keep_from, checkpoint, referenced)?;
+        self.store.compact()?;
         Ok(report)
     }
 
     pub fn backup(&self, path: impl AsRef<Path>) -> Result<()> {
-        self.connection.backup(MAIN_DB, path.as_ref(), None)?;
-        Ok(())
+        self.store
+            .backup(path.as_ref(), self.options.database_cache_bytes)
+    }
+
+    pub fn flush(&self) -> Result<()> {
+        self.store.flush()
     }
 }
 
-fn load_state(connection: &Connection) -> Result<State> {
-    let meta = storage::meta(connection)?;
-    if meta.checkpoint_revision > meta.head {
-        return Err(Error::NotADocument);
-    }
-    check_envelope_size(&meta.checkpoint, "checkpoint")?;
-    let checkpoint: Checkpoint = revision::from_slice(&meta.checkpoint)?;
-    let mut state =
-        State::from_checkpoint(meta.document, meta.checkpoint_revision, checkpoint.document)?;
-    let mut statement = connection.prepare(
-        "SELECT revision, parent_revision, payload FROM commits
-         WHERE revision > ?1 AND revision <= ?2 ORDER BY revision",
-    )?;
-    let mut rows = statement.query(params![
-        storage::revision_to_sql(meta.checkpoint_revision)?,
-        storage::revision_to_sql(meta.head)?,
-    ])?;
-    let mut expected_parent = meta.checkpoint_revision;
-    while let Some(row) = rows.next()? {
-        let revision = storage::revision_from_sql(row.get(0)?)?;
-        let parent = storage::revision_from_sql(row.get(1)?)?;
-        if parent != expected_parent || revision != parent.next().ok_or(Error::NotADocument)? {
-            return Err(Error::NotADocument);
-        }
-        let payload: Vec<u8> = row.get(2)?;
-        check_envelope_size(&payload, "commit")?;
-        let commit: StoredCommit = revision::from_slice(&payload)?;
-        for operation in &commit.operations {
-            operation
-                .apply(&mut state)
-                .map_err(|error| Error::HistoryConflict(format!("revision {revision}: {error}")))?;
-        }
-        state.revision = revision;
-        expected_parent = revision;
-    }
-    if state.revision != meta.head {
-        return Err(Error::NotADocument);
-    }
-    state.validate()?;
-    Ok(state)
+fn decode_commits(values: Vec<(Revision, Vec<u8>)>) -> Result<Vec<Commit>> {
+    values
+        .into_iter()
+        .map(|(revision, payload)| decode_commit(revision, &payload))
+        .collect()
 }
 
-fn load_tail(
-    connection: &Connection,
-    current: &State,
-    head: Revision,
-) -> Result<Option<(State, ChangeSet)>> {
-    let mut statement = connection.prepare(
-        "SELECT revision, parent_revision, payload FROM commits
-         WHERE revision > ?1 AND revision <= ?2 ORDER BY revision",
-    )?;
-    let mut rows = statement.query(params![
-        storage::revision_to_sql(current.revision)?,
-        storage::revision_to_sql(head)?,
-    ])?;
-    let mut next = current.clone();
-    let mut expected_parent = current.revision;
-    let mut saw_commit = false;
-    let mut operations = Vec::new();
-    while let Some(row) = rows.next()? {
-        saw_commit = true;
-        let revision = storage::revision_from_sql(row.get(0)?)?;
-        let parent = storage::revision_from_sql(row.get(1)?)?;
-        if parent != expected_parent || revision != parent.next().ok_or(Error::NotADocument)? {
-            return Ok(None);
-        }
-        let payload: Vec<u8> = row.get(2)?;
-        check_envelope_size(&payload, "commit")?;
-        let commit: StoredCommit = revision::from_slice(&payload)?;
-        for operation in &commit.operations {
-            operation
-                .apply(&mut next)
-                .map_err(|error| Error::HistoryConflict(format!("revision {revision}: {error}")))?;
-        }
-        operations.extend(commit.operations);
-        next.revision = revision;
-        expected_parent = revision;
-    }
-    if saw_commit && next.revision == head {
-        next.validate()?;
-        let changes = ChangeSet::from_operations(current.revision, head, operations.iter(), []);
-        Ok(Some((next, changes)))
-    } else {
-        Ok(None)
-    }
-}
-
-fn validate_options(options: &Options) -> Result<()> {
-    if options.max_blob_bytes == 0 {
-        return Err(Error::invalid("maximum blob size must be non-zero"));
-    }
-    if options.blob_read_connections == 0 {
-        return Err(Error::invalid(
-            "blob reader connection count must be non-zero",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_attachments(
-    attachments: &BTreeMap<BlobId, Arc<[u8]>>,
-    max_blob_bytes: usize,
-) -> Result<()> {
-    for (id, bytes) in attachments {
-        if bytes.len() > max_blob_bytes {
-            return Err(Error::invalid(format!(
-                "blob {id} exceeds the configured size limit"
-            )));
-        }
-        if BlobId::for_bytes(bytes) != *id {
-            return Err(Error::invalid(format!("blob {id} has an invalid hash")));
-        }
-    }
-    Ok(())
-}
-
-fn validate_blob_references(
-    connection: &Connection,
-    state: &State,
-    attachments: &BTreeMap<BlobId, Arc<[u8]>>,
-) -> Result<()> {
-    for id in state.referenced_blobs() {
-        if !attachments.contains_key(&id) && !blob_exists(connection, id)? {
-            return Err(Error::BlobNotFound(id));
-        }
-    }
-    Ok(())
-}
-
-fn validate_blob_ids(
-    connection: &Connection,
-    ids: &BTreeSet<BlobId>,
-    attachments: &BTreeMap<BlobId, Arc<[u8]>>,
-) -> Result<()> {
-    for id in ids {
-        if !attachments.contains_key(id) && !blob_exists(connection, *id)? {
-            return Err(Error::BlobNotFound(*id));
-        }
-    }
-    Ok(())
-}
-
-fn blob_exists(connection: &Connection, id: BlobId) -> Result<bool> {
-    connection
-        .query_row(
-            "SELECT 1 FROM blobs WHERE id = ?1",
-            [id.as_bytes().as_slice()],
-            |_| Ok(()),
-        )
-        .optional()
-        .map(|value| value.is_some())
-        .map_err(Into::into)
-}
-
-fn operation_blob_ids(operations: &[Operation]) -> BTreeSet<BlobId> {
-    let mut result = BTreeSet::new();
-    for operation in operations {
-        operation.blob_refs(&mut result);
-    }
-    result
-}
-
-fn persist_blobs(
-    transaction: &Transaction<'_>,
-    referenced: &BTreeSet<BlobId>,
-    attachments: &BTreeMap<BlobId, Arc<[u8]>>,
-) -> Result<()> {
-    for id in referenced {
-        if blob_exists(transaction, *id)? {
-            continue;
-        }
-        let bytes = attachments.get(id).ok_or(Error::BlobNotFound(*id))?;
-        transaction.execute(
-            "INSERT INTO blobs (id, byte_len, bytes) VALUES (?1, ?2, ?3)",
-            params![
-                id.as_bytes().as_slice(),
-                i64::try_from(bytes.len()).map_err(|_| Error::invalid("blob is too large"))?,
-                bytes.as_ref(),
-            ],
-        )?;
-    }
-    Ok(())
+fn decode_commit(revision: Revision, payload: &[u8]) -> Result<Commit> {
+    check_envelope_size(payload, "commit")?;
+    let stored: StoredCommit = revision::from_slice(payload)?;
+    Ok(stored.into_commit(revision))
 }
 
 fn collect_garbage(
-    transaction: &Transaction<'_>,
-    state: &State,
+    transaction: &WriteTransaction,
+    mut marked: BTreeSet<BlobId>,
     live: BTreeSet<BlobId>,
 ) -> Result<(GcReport, BTreeSet<BlobId>)> {
-    let mut marked = state.referenced_blobs();
     marked.extend(live);
-    let mut statement = transaction.prepare("SELECT DISTINCT blob_id FROM commit_blobs")?;
-    let rows = statement.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
-    for row in rows {
-        marked.insert(blob_id_from_sql(&row?)?);
-    }
-    drop(statement);
-
-    let mut statement = transaction.prepare("SELECT id, byte_len FROM blobs")?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, i64>(1)?))
-    })?;
-    let mut removed = BTreeSet::new();
-    let mut bytes = 0_u64;
-    for row in rows {
-        let (id, byte_len) = row?;
-        let id = blob_id_from_sql(&id)?;
-        if !marked.contains(&id) {
-            removed.insert(id);
-            bytes = bytes.saturating_add(u64::try_from(byte_len).map_err(|_| Error::NotADocument)?);
+    {
+        let commits = transaction.open_table(COMMITS)?;
+        for entry in commits.iter()? {
+            let (_, payload) = entry?;
+            let commit: StoredCommit = revision::from_slice(payload.value())?;
+            marked.extend(commit.blobs);
         }
     }
-    drop(statement);
-    for id in &removed {
-        transaction.execute(
-            "DELETE FROM blobs WHERE id = ?1",
-            [id.as_bytes().as_slice()],
-        )?;
+
+    let mut removed = BTreeSet::new();
+    let mut bytes = 0_u64;
+    {
+        let mut blobs = transaction.open_table(BLOBS)?;
+        for entry in blobs.iter()? {
+            let (id, value) = entry?;
+            let id = id.value();
+            if !marked.contains(&id) {
+                removed.insert(id);
+                bytes = bytes.saturating_add(value.value().len() as u64);
+            }
+        }
+        for id in &removed {
+            blobs.remove(*id)?;
+        }
     }
     Ok((
         GcReport {
@@ -666,26 +483,47 @@ fn collect_garbage(
     ))
 }
 
-fn blob_id_from_sql(bytes: &[u8]) -> Result<BlobId> {
-    let bytes: [u8; 32] = bytes.try_into().map_err(|_| Error::NotADocument)?;
-    Ok(BlobId::from_bytes(bytes))
+fn metadata_in(transaction: &WriteTransaction) -> Result<Metadata> {
+    let meta = transaction.open_table(META)?;
+    let encoded = meta.get(0)?.ok_or(Error::NotADocument)?;
+    let metadata: Metadata = revision::from_slice(encoded.value())?;
+    if metadata.format != FORMAT_VERSION {
+        return Err(Error::UnsupportedSchema(metadata.format));
+    }
+    Ok(metadata)
 }
 
-fn ensure_head(connection: &Connection, expected: Revision) -> Result<()> {
-    let actual = storage::head(connection)?;
-    if actual == expected {
+fn write_metadata(transaction: &WriteTransaction, metadata: &Metadata) -> Result<()> {
+    let encoded = revision::to_vec(metadata)?;
+    transaction
+        .open_table(META)?
+        .insert(0, encoded.as_slice())?;
+    Ok(())
+}
+
+fn ensure_head(metadata: &Metadata, expected: Revision) -> Result<()> {
+    if metadata.head == expected {
         Ok(())
     } else {
-        Err(Error::RevisionConflict { expected, actual })
+        Err(Error::RevisionConflict {
+            expected,
+            actual: metadata.head,
+        })
     }
+}
+
+fn validate_options(options: &Options) -> Result<()> {
+    if options.database_cache_bytes == 0 {
+        return Err(Error::invalid("database cache size must be non-zero"));
+    }
+    if options.max_blob_bytes == 0 {
+        return Err(Error::invalid("maximum blob size must be non-zero"));
+    }
+    Ok(())
 }
 
 fn threshold_reached(value: u64, threshold: u64) -> bool {
     threshold != 0 && value >= threshold
-}
-
-fn sql_u64(value: u64) -> Result<i64> {
-    i64::try_from(value).map_err(|_| Error::invalid("counter exceeds SQLite INTEGER"))
 }
 
 fn check_envelope_size(bytes: &[u8], name: &str) -> Result<()> {

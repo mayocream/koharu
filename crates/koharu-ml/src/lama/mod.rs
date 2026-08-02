@@ -6,15 +6,14 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbImage};
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::config::{HDStrategy, InpaintRequest};
 use self::{config::FFCResNetGeneratorConfig, model::Model, processor::InpaintModel};
 
-koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/lama-manga" => "f91c85b26913b3e83f9877867b4c336da3675238" => "lama-manga.safetensors",
-}
+model_repository!("mayocream/lama-manga" @ "f91c85b26913b3e83f9877867b4c336da3675238" {
+    WEIGHTS = "lama-manga.safetensors"
+});
 
 #[derive(Debug)]
 pub struct LaMa {
@@ -25,7 +24,8 @@ pub struct LaMa {
 impl LaMa {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve LaMa weights")?;
         let mut model = Model::new(&FFCResNetGeneratorConfig::default(), device);

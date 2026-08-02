@@ -11,7 +11,7 @@ If you want to compile Koharu locally instead of using a prebuilt release, start
 A full desktop build includes:
 
 - the Rust application in `koharu/`
-- the embedded UI from `ui/`
+- the embedded UI from `packages/koharu/`
 - the local HTTP, RPC, and MCP server used by both GUI and headless modes
 
 The default desktop build is platform-aware:

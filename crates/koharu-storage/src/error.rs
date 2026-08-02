@@ -1,4 +1,4 @@
-use crate::{BlobId, DocumentId, RecordId, Revision};
+use crate::{BlobId, DocumentId, Revision};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -6,8 +6,10 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Sql(#[from] rusqlite::Error),
+    #[error("storage database error: {0}")]
+    Database(#[source] Box<dyn std::error::Error + Send + Sync>),
+    #[error("failed to persist storage changes: {0}")]
+    Durability(String),
     #[error(transparent)]
     Codec(#[from] revision::Error),
     #[error("not a Koharu storage document")]
@@ -19,14 +21,6 @@ pub enum Error {
         patch: DocumentId,
         session: DocumentId,
     },
-    #[error("record {0} was not found")]
-    RecordNotFound(RecordId),
-    #[error("record {0} already exists")]
-    RecordAlreadyExists(RecordId),
-    #[error("record {record} is referenced by {count} component(s)")]
-    RecordReferenced { record: RecordId, count: usize },
-    #[error("the permanent root record cannot be removed")]
-    RootRemoval,
     #[error("blob {0} was not found")]
     BlobNotFound(BlobId),
     #[error("revision conflict: expected {expected}, current revision is {actual}")]
@@ -34,22 +28,36 @@ pub enum Error {
         expected: Revision,
         actual: Revision,
     },
-    #[error("patch conflict: {0}")]
-    PatchConflict(String),
     #[error("revision {0} is no longer retained")]
     HistoryNotFound(Revision),
-    #[error("history no longer matches the current document: {0}")]
-    HistoryConflict(String),
     #[error("invalid storage data: {0}")]
     Invalid(String),
 }
 
+macro_rules! database_error {
+    ($($error:ty),+ $(,)?) => {
+        $(
+            impl From<$error> for Error {
+                fn from(error: $error) -> Self {
+                    Self::Database(Box::new(error))
+                }
+            }
+        )+
+    };
+}
+
+database_error!(
+    redb::DatabaseError,
+    redb::TransactionError,
+    redb::TableError,
+    redb::StorageError,
+    redb::CommitError,
+    redb::CompactionError,
+    redb::SetDurabilityError,
+);
+
 impl Error {
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
         Self::Invalid(message.into())
-    }
-
-    pub(crate) fn patch_conflict(message: impl Into<String>) -> Self {
-        Self::PatchConflict(message.into())
     }
 }

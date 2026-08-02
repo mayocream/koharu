@@ -1,161 +1,146 @@
-//! A segment-preserving translation interface for local GGUF models and hosted APIs.
-//!
-//! ```no_run
-//! use koharu_translator::{
-//!     Language, OpenAiConfig, RemoteProvider, RemoteTranslator, TranslationContext,
-//!     TranslationRequest, Translator,
-//! };
-//!
-//! # async fn example() -> koharu_translator::Result<()> {
-//! koharu_secrets::set("openai", &koharu_secrets::SecretString::from("api-key"))?;
-//! let translator = RemoteTranslator::new(RemoteProvider::OpenAi(OpenAiConfig::new(
-//!     "gpt-4.1-mini",
-//! )));
-//! let translation = translator
-//!     .translate(
-//!         TranslationRequest::new(["おはよう", "行こう！"], Language::English).with_context([
-//!             TranslationContext::new("また明日。", "See you tomorrow."),
-//!         ]),
-//!     )
-//!     .await?;
-//! assert_eq!(translation.segments.len(), 2);
-//! # Ok(())
-//! # }
-//! ```
+//! Translation through local and hosted providers.
 
-mod catalog;
-mod config;
-mod credentials;
+mod backend;
+mod error;
 mod json;
 mod language;
 mod local;
+mod model;
 mod prompt;
+mod provider;
 mod remote;
 
-use async_trait::async_trait;
-use thiserror::Error;
+use std::sync::Arc;
 
-pub use catalog::{
-    LocalModel, LocalModelDescriptor, RemoteModelDescriptor, RemoteProviderDescriptor,
-    RemoteProviderKind, SupportedLanguages, local_models, remote_models, remote_providers,
-};
-pub use config::{Providers, TranslationConfig};
-pub use credentials::TranslationCredentials;
-pub use koharu_ml::Device;
-pub use koharu_ml::llm::GenerationOptions as LocalGenerationOptions;
+use koharu_ml::Device;
+
+use error::{Error, Result};
+use local::LocalTranslator;
+
+pub use backend::{TranslationContext, TranslationRequest};
 pub use language::Language;
-pub use local::{LocalConfig, LocalTranslator, LocalTranslatorOptions};
-pub use remote::{
-    AtlasCloudConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
-    GoogleCloudConfig, LmStudioConfig, OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig,
-    RemoteGenerationOptions, RemoteProvider, RemoteTranslator, discover_atlas_cloud_models,
-    discover_lm_studio_models, discover_openai_compatible_models, discover_openrouter_models,
-};
+pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
+pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
+pub use provider::{Provider, ProviderConfig, ProvidersConfig};
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// One translation job. Segment boundaries are preserved in the result.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TranslationRequest {
-    pub segments: Vec<String>,
-    pub source_language: Option<Language>,
-    pub target_language: Language,
-    pub instructions: Option<String>,
-    /// Earlier source/translation pairs, ordered from oldest to newest.
-    pub context: Vec<TranslationContext>,
+#[derive(Clone)]
+pub struct Translator {
+    providers: koharu_config::Config<ProvidersConfig>,
+    local: Arc<tokio::sync::Mutex<Option<LoadedLocal>>>,
+    client: reqwest::Client,
+    device: Device,
 }
 
-impl TranslationRequest {
+struct LoadedLocal {
+    selection: ModelSelection,
+    translator: Arc<LocalTranslator>,
+}
+
+impl Translator {
+    pub fn from_config(
+        device: Device,
+        providers: koharu_config::Config<ProvidersConfig>,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            providers,
+            local: Arc::new(tokio::sync::Mutex::new(None)),
+            client: koharu_runtime::http_client()?,
+            device,
+        })
+    }
+
     #[must_use]
-    pub fn new(
-        segments: impl IntoIterator<Item = impl Into<String>>,
-        target_language: Language,
-    ) -> Self {
-        Self {
-            segments: segments.into_iter().map(Into::into).collect(),
-            source_language: None,
-            target_language,
-            instructions: None,
-            context: Vec::new(),
+    pub fn model(selection: &ModelSelection) -> &'static str {
+        selection.provider.into()
+    }
+
+    #[must_use]
+    pub fn loaded(&self, selection: &ModelSelection) -> bool {
+        if selection.provider != Provider::Local {
+            return true;
         }
+        self.local
+            .try_lock()
+            .map(|loaded| {
+                loaded
+                    .as_ref()
+                    .is_some_and(|loaded| loaded.selection == *selection)
+            })
+            .unwrap_or(true)
     }
 
-    #[must_use]
-    pub fn with_source_language(mut self, source_language: Language) -> Self {
-        self.source_language = Some(source_language);
-        self
+    pub fn unload(&self) -> bool {
+        self.local
+            .try_lock()
+            .map(|mut loaded| loaded.take().is_some())
+            .unwrap_or(false)
     }
 
-    #[must_use]
-    pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
-        self.instructions = Some(instructions.into());
-        self
-    }
-
-    #[must_use]
-    pub fn with_context(mut self, context: impl IntoIterator<Item = TranslationContext>) -> Self {
-        self.context = context.into_iter().collect();
-        self
-    }
-}
-
-/// One earlier source/translation pair used for terminology and dialogue continuity.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TranslationContext {
-    pub source: String,
-    pub translation: String,
-}
-
-impl TranslationContext {
-    #[must_use]
-    pub fn new(source: impl Into<String>, translation: impl Into<String>) -> Self {
-        Self {
-            source: source.into(),
-            translation: translation.into(),
+    pub async fn load_model(&self, selection: &ModelSelection) -> anyhow::Result<()> {
+        if selection.provider == Provider::Local {
+            self.local(selection).await?;
         }
+        Ok(())
     }
-}
 
-/// A translation whose entries correspond one-for-one with the request segments.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Translation {
-    pub segments: Vec<String>,
-}
+    pub async fn translate(
+        &self,
+        selection: &ModelSelection,
+        generation: GenerationConfig,
+        request: TranslationRequest,
+    ) -> anyhow::Result<(&'static str, Vec<String>)> {
+        let provider = selection.provider;
+        let provider_id: &'static str = provider.into();
+        if request.segments.is_empty() {
+            return Ok((provider_id, request.segments));
+        }
 
-/// A translation backend. Implementations must preserve segment count and order.
-#[async_trait]
-pub trait Translator: Send + Sync {
-    fn provider(&self) -> &'static str;
+        let expected = request.segments.len();
+        let translated = if provider == Provider::Local {
+            self.local(selection)
+                .await?
+                .translate(request, generation)
+                .await?
+        } else {
+            let providers = self.providers.read()?.clone();
+            remote::translate(&self.client, &providers, selection, &generation, &request).await?
+        };
+        if translated.len() != expected {
+            return Err(Error::SegmentCount {
+                provider: provider_id,
+                expected,
+                actual: translated.len(),
+            }
+            .into());
+        }
+        Ok((provider_id, translated))
+    }
 
-    async fn translate(&self, request: TranslationRequest) -> Result<Translation>;
-}
+    pub async fn models() -> anyhow::Result<Vec<Model>> {
+        let providers = ProvidersConfig::load()?;
+        let providers = providers.read()?.clone();
+        let client = koharu_runtime::http_client()?;
+        let mut models = local::models();
+        models.extend(remote::models(&client, &providers).await);
+        Ok(models)
+    }
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("{provider} does not support target language {language}")]
-    UnsupportedLanguage {
-        provider: &'static str,
-        language: Language,
-    },
-    #[error("{provider} does not support source language {language}")]
-    UnsupportedSourceLanguage {
-        provider: &'static str,
-        language: Language,
-    },
-    #[error("{provider} returned {actual} segments; expected {expected}")]
-    SegmentCount {
-        provider: &'static str,
-        expected: usize,
-        actual: usize,
-    },
-    #[error("{provider} quota or rate limit was exceeded")]
-    QuotaExceeded { provider: &'static str },
-    #[error("{provider} API request failed with HTTP {status}: {message}")]
-    Api {
-        provider: &'static str,
-        status: u16,
-        message: String,
-    },
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    async fn local(&self, selection: &ModelSelection) -> Result<Arc<LocalTranslator>> {
+        let mut loaded = self.local.lock().await;
+        if loaded
+            .as_ref()
+            .is_none_or(|loaded| loaded.selection != *selection)
+        {
+            *loaded = Some(LoadedLocal {
+                selection: selection.clone(),
+                translator: Arc::new(LocalTranslator::load(self.device.clone(), selection).await?),
+            });
+        }
+        Ok(Arc::clone(
+            &loaded
+                .as_ref()
+                .expect("local translator was loaded")
+                .translator,
+        ))
+    }
 }

@@ -1,0 +1,131 @@
+'use client'
+
+import { CircleAlert, Download, Square, X } from 'lucide-react'
+
+import { call } from '@/lib/backend'
+import { commands, type Download as DownloadState, type Job } from '@/lib/protocol'
+import { useKoharuStore } from '@/lib/store'
+import { Button } from '@koharu/ui/components/button'
+
+export function ActivityCenter() {
+  const jobs = useKoharuStore((state) => state.jobs)
+  const downloads = useKoharuStore((state) => state.downloads)
+  const visibleJobs = Object.values(jobs).filter(
+    (job) => job.state === 'running' || job.state === 'failed',
+  )
+  const visibleDownloads = Object.values(downloads).filter(
+    (download) => download.state === 'running' || download.state === 'failed',
+  )
+  if (visibleJobs.length === 0 && visibleDownloads.length === 0) return null
+
+  return (
+    <aside className='absolute right-3 bottom-9 z-30 flex w-72 max-w-[calc(100%-1.5rem)] flex-col rounded-2xl border border-border/50 bg-popover shadow-md'>
+      <div className='border-b px-3 py-2'>
+        <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>Activity</span>
+      </div>
+      {visibleDownloads.map((download) => (
+        <DownloadItem key={download.id} download={download} />
+      ))}
+      {visibleJobs.map((job) => (
+        <JobItem key={job.id} job={job} />
+      ))}
+    </aside>
+  )
+}
+
+function JobItem({ job }: { job: Job }) {
+  const dismiss = useKoharuStore((state) => state.dismissJob)
+  if (job.state === 'failed') {
+    return <Failure message={job.error || 'Processing failed'} onDismiss={() => dismiss(job.id)} />
+  }
+  const percent = progress(job.completed, job.total)
+  return (
+    <div className='border-b p-3 last:border-b-0'>
+      <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
+        <span className='mt-1.5 size-1.5 justify-self-center rounded-full bg-primary' />
+        <div className='min-w-0'>
+          <span className='block truncate text-[12px] font-medium capitalize'>
+            {job.stage || 'Processing'}
+          </span>
+          <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>{job.model}</p>
+        </div>
+        <span className='pt-0.5 text-right text-[10px] tabular-nums'>
+          {percent !== null ? `${percent}%` : null}
+        </span>
+        <Button
+          size='icon-xs'
+          variant='ghost'
+          className='-mt-1'
+          aria-label='Stop'
+          onClick={() => void call(commands.stopJob, job.id).catch(() => undefined)}
+        >
+          <Square className='size-2.5 fill-current' />
+        </Button>
+        <div className='col-start-2 col-end-4'>
+          <Progress value={percent} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DownloadItem({ download }: { download: DownloadState }) {
+  const dismiss = useKoharuStore((state) => state.dismissDownload)
+  if (download.state === 'failed') {
+    return (
+      <Failure
+        message={download.error || 'Download failed'}
+        onDismiss={() => dismiss(download.id)}
+      />
+    )
+  }
+  const percent = progress(download.completed, download.total)
+  return (
+    <div className='border-b p-3 last:border-b-0'>
+      <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
+        <Download className='mt-0.5 size-3.5 justify-self-center text-primary' />
+        <span className='truncate text-[11px]'>{download.name || 'Model download'}</span>
+        <span className='text-right text-[10px] tabular-nums'>
+          {percent !== null ? `${percent}%` : null}
+        </span>
+        <span aria-hidden='true' />
+        <div className='col-start-2 col-end-4'>
+          <Progress value={percent} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Failure({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  return (
+    <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5 border-b p-3 text-[11px] last:border-b-0'>
+      <CircleAlert className='mt-0.5 size-3.5 justify-self-center text-destructive' />
+      <span className='col-start-2 col-end-4 min-w-0 text-destructive'>{message}</span>
+      <Button
+        size='icon-xs'
+        variant='ghost'
+        className='-mt-1'
+        aria-label='Dismiss'
+        onClick={onDismiss}
+      >
+        <X />
+      </Button>
+    </div>
+  )
+}
+
+function Progress({ value }: { value: number | null }) {
+  return (
+    <div className='mt-2 h-1 overflow-hidden rounded-full bg-muted'>
+      <div
+        className={`h-full rounded-full bg-primary ${value === null ? 'w-1/2' : ''}`}
+        style={value === null ? undefined : { width: `${value}%` }}
+      />
+    </div>
+  )
+}
+
+function progress(completed: number, total: number): number | null {
+  return total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : null
+}

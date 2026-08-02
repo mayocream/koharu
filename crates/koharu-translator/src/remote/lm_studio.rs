@@ -3,45 +3,25 @@
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
-use reqwest::{Client, RequestBuilder};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use specta::Type;
 use url::Url;
 
 use super::send_json;
-use crate::{RemoteProviderKind, Result, TranslationRequest, prompt};
+use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, display_name, prompt};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
+const DEFAULT_BASE_URL: &str = "http://localhost:1234";
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(default, deny_unknown_fields)]
 pub struct LmStudioConfig {
-    pub base_url: Url,
-    pub model: String,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub thinking: bool,
+    pub base_url: Option<Url>,
 }
 
 impl Default for LmStudioConfig {
     fn default() -> Self {
         Self {
-            base_url: Url::parse("http://localhost:1234").expect("default LM Studio URL is valid"),
-            model: "model".into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
-}
-
-impl LmStudioConfig {
-    #[must_use]
-    pub fn new(base_url: Url, model: impl Into<String>) -> Self {
-        Self {
-            base_url,
-            model: model.into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
+            base_url: Some(Url::parse(DEFAULT_BASE_URL).expect("default LM Studio URL is valid")),
         }
     }
 }
@@ -49,23 +29,26 @@ impl LmStudioConfig {
 pub(super) async fn translate(
     client: &Client,
     config: &LmStudioConfig,
+    model: &str,
+    generation: &GenerationConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
+    let api_key = koharu_secrets::get("lm-studio")?;
     let (system, input) = prompt::prompts(request)?;
     let body = ChatRequest {
-        model: &config.model,
+        model,
         input: &input,
         system_prompt: &system,
-        temperature: config.temperature,
-        max_output_tokens: config.max_tokens,
-        reasoning: if config.thinking { "on" } else { "off" },
+        temperature: generation.temperature,
+        max_output_tokens: generation.max_tokens,
+        reasoning: if generation.thinking { "on" } else { "off" },
         store: false,
     };
-    let response: ChatResponse = send_json(
-        "lm-studio",
-        authenticate(client.post(endpoint(&config.base_url, "chat")).json(&body))?,
-    )
-    .await?;
+    let mut http = client.post(endpoint(config.base_url.as_ref(), "chat"));
+    if let Some(api_key) = api_key {
+        http = http.bearer_auth(api_key.expose_secret());
+    }
+    let response: ChatResponse = send_json("lm-studio", http.json(&body)).await?;
     let text = response
         .output
         .into_iter()
@@ -79,33 +62,31 @@ pub(super) async fn translate(
     Ok(prompt::translations("lm-studio", &text, &request.segments)?)
 }
 
-/// Lists locally available LLMs exposed by LM Studio's native API.
-pub async fn discover_lm_studio_models(client: &Client, base_url: &Url) -> Result<Vec<String>> {
-    let response: ModelsResponse = send_json(
-        "lm-studio",
-        authenticate(client.get(endpoint(base_url, "models")))?,
-    )
-    .await?;
-    Ok(response
-        .models
-        .into_iter()
-        .filter_map(|model| (model.kind == "llm").then_some(model.key))
-        .collect())
-}
-
-fn authenticate(mut request: RequestBuilder) -> Result<RequestBuilder> {
-    let api_key = koharu_secrets::get(RemoteProviderKind::LmStudio.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty());
+pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<Vec<Model>> {
+    let api_key = koharu_secrets::get("lm-studio")?;
+    let mut request = client.get(endpoint(config.base_url.as_ref(), "models"));
     if let Some(api_key) = api_key {
         request = request.bearer_auth(api_key.expose_secret());
     }
-    Ok(request)
+    let response: ModelsResponse = send_json("lm-studio", request).await?;
+    Ok(response
+        .models
+        .into_iter()
+        .filter(|model| model.kind == "llm")
+        .map(|model| Model {
+            provider: Provider::LmStudio,
+            name: display_name(&model.key),
+            model: Some(model.key),
+            quantizations: Vec::new(),
+        })
+        .collect())
 }
 
-fn endpoint(base_url: &Url, suffix: &str) -> String {
+fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
+    let base_url = base_url.map_or(DEFAULT_BASE_URL, Url::as_str);
     format!(
         "{}/api/v1/{}",
-        base_url.as_str().trim_end_matches('/'),
+        base_url.trim_end_matches('/'),
         suffix.trim_start_matches('/')
     )
 }
@@ -137,11 +118,11 @@ struct Output {
 
 #[derive(Deserialize)]
 struct ModelsResponse {
-    models: Vec<Model>,
+    models: Vec<ListedModel>,
 }
 
 #[derive(Deserialize)]
-struct Model {
+struct ListedModel {
     #[serde(rename = "type")]
     kind: String,
     key: String,
@@ -155,11 +136,11 @@ mod tests {
     fn uses_native_v1_endpoints() {
         let base_url = Url::parse("http://localhost:1234/").unwrap();
         assert_eq!(
-            endpoint(&base_url, "chat"),
+            endpoint(Some(&base_url), "chat"),
             "http://localhost:1234/api/v1/chat"
         );
         assert_eq!(
-            endpoint(&base_url, "models"),
+            endpoint(Some(&base_url), "models"),
             "http://localhost:1234/api/v1/models"
         );
     }

@@ -11,7 +11,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -24,10 +23,10 @@ pub use self::{
 
 use self::model::Model;
 
-koharu_runtime::huggingface! {
-    CONFIG => "mayocream/koharu-layout-rfdetr-seg-2xl-1152" => "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2" => "inference_config.json",
-    WEIGHTS => "mayocream/koharu-layout-rfdetr-seg-2xl-1152" => "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2" => "model.safetensors",
-}
+model_repository!("mayocream/koharu-layout-rfdetr-seg-2xl-1152" @ "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2" {
+    CONFIG = "inference_config.json",
+    WEIGHTS = "model.safetensors",
+});
 
 #[derive(Debug)]
 pub struct KoharuLayoutRFDetrSeg2XL {
@@ -39,10 +38,12 @@ pub struct KoharuLayoutRFDetrSeg2XL {
 impl KoharuLayoutRFDetrSeg2XL {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve KoharuLayout RF-DETR inference config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve KoharuLayout RF-DETR weights")?;
         let config = KoharuLayoutRFDetrSeg2XLConfig::from_file(&config_path)?;

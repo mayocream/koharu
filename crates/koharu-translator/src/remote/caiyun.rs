@@ -5,26 +5,30 @@ use anyhow::{Context, anyhow};
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use specta::Type;
 
 use super::send_json;
-use crate::{Error, Language, RemoteProviderKind, Result, TranslationRequest};
+use crate::{Error, Language, Model, Provider, Result, TranslationRequest};
 
 const URL: &str = "https://api.interpreter.caiyunai.com/v1/translator";
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(default, deny_unknown_fields)]
 pub struct CaiyunConfig {}
+
+pub(super) async fn models() -> Result<Vec<Model>> {
+    Ok(if koharu_secrets::get("caiyun")?.is_some() {
+        vec![Model::service(Provider::Caiyun, "Caiyun")]
+    } else {
+        Vec::new()
+    })
+}
 
 pub(super) async fn translate(
     client: &Client,
     _config: &CaiyunConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    let provider = RemoteProviderKind::Caiyun;
-    let api_key = koharu_secrets::get(provider.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty())
-        .with_context(|| format!("{} API key is not configured", provider.id()))?;
+    let api_key = koharu_secrets::get("caiyun")?.context("caiyun API key is not configured")?;
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "caiyun",
         language: request.target_language,

@@ -66,4 +66,4 @@ jobs:
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install --frozen-lockfile
       - name: Run headless Vitest suite
-        run: bun run --filter ui test
+        run: bun run --filter @koharu/app test

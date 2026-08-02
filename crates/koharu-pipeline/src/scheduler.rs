@@ -155,7 +155,7 @@ mod tests {
     use super::*;
 
     fn pages(count: usize) -> Vec<EntityId> {
-        let session = koharu_scene::SceneSession::memory().unwrap();
+        let session = koharu_scene::Session::memory().unwrap();
         let snapshot = session.snapshot();
         let mut pages = Vec::new();
         snapshot

@@ -1,40 +1,38 @@
-//! Scene compilation, Unicode text layout, and reusable WGPU rasterization.
+//! Scene composition, Unicode text rendering, and reusable Vello rasterization.
 //!
-//! Rendering is staged: [`RenderPlan`] resolves semantic scene components,
-//! [`PreparedPage`] performs resource decoding and text shaping, and [`Renderer`]
-//! owns bounded caches plus the headless raster backend. Prepared pages can also
-//! be appended directly to a caller-owned Vello scene for interactive display.
+//! Rendering is staged: [`Compositor::compile`] produces a [`Composition`],
+//! [`SceneRenderer::render`] records a retained [`Frame`], and
+//! [`Rasterizer::rasterize`] turns that frame into pixels. [`TextRenderer`]
+//! owns the layout and glyph-recording boundary used by the scene renderer.
 
 mod bubble;
+mod compositor;
 mod error;
 mod font;
 mod font_policy;
 mod layout;
-mod plan;
-mod prepare;
-mod raster;
-mod render;
+mod rasterizer;
 mod request;
 mod resources;
+mod scene_renderer;
 mod script;
 mod segment;
 mod shape;
+mod text_renderer;
 mod types;
 
+pub use compositor::{Composition, Compositor, RenderBounds, RenderDependency, RenderDiagnostic};
 pub use error::{Error, Result};
 pub use font::{Font, FontSystem};
 pub use font_policy::FontFallbackPolicy;
 pub use layout::{HyphenationPolicy, LayoutLine, LayoutRun, TextLayout, WritingMode};
-pub use plan::{RenderBounds, RenderDependency, RenderDiagnostic, RenderPlan};
-pub use prepare::{PreparedPage, RenderedEntity, RenderedEntityKind};
-pub use raster::{DownsampleFilter, RasterOptions, RenderOptions, StrokeOptions, WgpuRenderer};
-pub use render::{RenderOutput, Renderer};
-pub use request::{
-    BUBBLE_REGION_KIND, RenderRequest, RenderTheme, TEXT_REGION_RELATION_KIND, VerticalAlignment,
-};
+pub use rasterizer::{DownsampleFilter, Raster, RasterOptions, Rasterizer};
+pub use request::{LayerPresentation, RenderRequest, RenderTheme, VerticalAlignment};
 pub use resources::{FontManager, RenderResources};
+pub use scene_renderer::{Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText};
 pub use segment::{
     LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment, hyphenation_lang_from_tag,
 };
 pub use shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
+pub use text_renderer::{StrokeOptions, TextRenderOptions, TextRenderer};
 pub use types::{FontFaceInfo, FontFaceStyle, FontSource, TextAlign};

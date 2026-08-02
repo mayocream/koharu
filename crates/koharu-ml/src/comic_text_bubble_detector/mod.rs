@@ -9,7 +9,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -22,11 +21,11 @@ use self::{
     processor::{ImageSlicer, create_text_blocks},
 };
 
-koharu_runtime::huggingface! {
-    CONFIG => "ogkalu/comic-text-and-bubble-detector" => "16e8a622f91fabc6b5b65c96d32d1183f8843546" => "config.json",
-    PREPROCESSOR_CONFIG => "ogkalu/comic-text-and-bubble-detector" => "16e8a622f91fabc6b5b65c96d32d1183f8843546" => "preprocessor_config.json",
-    WEIGHTS => "ogkalu/comic-text-and-bubble-detector" => "16e8a622f91fabc6b5b65c96d32d1183f8843546" => "model.safetensors",
-}
+model_repository!("ogkalu/comic-text-and-bubble-detector" @ "16e8a622f91fabc6b5b65c96d32d1183f8843546" {
+    CONFIG = "config.json",
+    PREPROCESSOR_CONFIG = "preprocessor_config.json",
+    WEIGHTS = "model.safetensors",
+});
 
 #[derive(Debug)]
 pub struct RTDetrV2Detection {
@@ -40,13 +39,16 @@ pub struct RTDetrV2Detection {
 impl RTDetrV2Detection {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve comic text/bubble detector config")?;
-        let processor_path = huggingface::resolve(PREPROCESSOR_CONFIG)
+        let processor_path = PREPROCESSOR_CONFIG
+            .resolve()
             .await
             .context("failed to resolve comic text/bubble detector preprocessor config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve comic text/bubble detector weights")?;
 

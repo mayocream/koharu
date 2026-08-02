@@ -1,0 +1,1212 @@
+use std::{collections::HashSet, io::Cursor, path::PathBuf, sync::Arc};
+
+use anyhow::{Context as _, Result, anyhow, bail};
+use image::{DynamicImage, ImageFormat, RgbaImage};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
+    Geometry as SceneGeometry, Origin, PageDraft, Point as ScenePoint, Presents,
+    RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RemovePolicy,
+    Revision, Session, Snapshot, SourceText as SceneSourceText, TextLayout as SceneTextLayout,
+    TextLayoutKind, Translation as SceneTranslation, Typography as SceneTypography,
+    Visibility as SceneVisibility,
+};
+use parking_lot::Mutex;
+use serde::Serialize;
+use specta::Type;
+
+use super::{
+    canvas::{Frame, Point},
+    editing::{GeometryUpdate, TypographyUpdate},
+};
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct ProjectInfo {
+    pub name: String,
+    pub revision: Revision,
+    pub active_page: Option<EntityId>,
+    pub can_undo: bool,
+    pub can_redo: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+pub struct PageSize {
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct PageSummary {
+    pub id: EntityId,
+    pub label: String,
+    pub size: PageSize,
+    pub source_asset: Option<String>,
+    #[specta(type = f64)]
+    pub layer_count: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct Page {
+    pub id: EntityId,
+    pub label: String,
+    pub size: PageSize,
+    pub assets: PageAssets,
+    pub layers: Vec<Layer>,
+    pub regions: Vec<AnalysisRegion>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Type)]
+pub struct PageAssets {
+    pub source: Option<String>,
+    pub rendered: Option<String>,
+    pub text_mask: Option<String>,
+    pub coo_mask: Option<String>,
+    pub bubble_mask: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Layer {
+    Text {
+        id: EntityId,
+        parent: Option<EntityId>,
+        geometry: Option<Geometry>,
+        visibility: LayerVisibility,
+        content: TextContent,
+        typography: Option<Typography>,
+        layout: TextLayoutKind,
+        fit_region: Option<EntityId>,
+    },
+    Raster {
+        id: EntityId,
+        parent: Option<EntityId>,
+        visibility: LayerVisibility,
+        image: Option<String>,
+        name: String,
+        kind: RasterLayerKind,
+    },
+    Image {
+        id: EntityId,
+        parent: Option<EntityId>,
+        geometry: Geometry,
+        visibility: LayerVisibility,
+        image: String,
+    },
+    Artwork {
+        id: EntityId,
+        parent: Option<EntityId>,
+        geometry: Geometry,
+        visibility: LayerVisibility,
+        image: String,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct TextContent {
+    pub id: EntityId,
+    pub source: Option<SourceText>,
+    pub translation: Option<Translation>,
+    pub role: Option<String>,
+    pub source_region: Option<EntityId>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct AnalysisRegion {
+    pub id: EntityId,
+    pub parent: Option<EntityId>,
+    pub geometry: Geometry,
+    pub kind: String,
+    pub label: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct Geometry {
+    pub points: Vec<Point>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+pub struct LayerVisibility {
+    pub visible: bool,
+    pub opacity: f32,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct SourceText {
+    pub text: String,
+    pub language: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct Translation {
+    pub text: String,
+    pub language: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, Serialize, Type)]
+pub struct Typography {
+    pub preferred_font: Option<String>,
+    pub font_weight: Option<u16>,
+    pub size: Option<f32>,
+    pub auto_fit: bool,
+    pub color: Option<[u8; 4]>,
+    pub stroke_color: Option<[u8; 4]>,
+    pub stroke_width: Option<f32>,
+    pub alignment: Option<koharu_scene::TextAlignment>,
+    pub writing_mode: Option<koharu_scene::WritingMode>,
+}
+
+pub(crate) struct CurrentProject {
+    pub(crate) project: Mutex<Option<Project>>,
+}
+
+pub(crate) struct Project {
+    pub(crate) session: Session,
+    pub(crate) path: PathBuf,
+    pub(crate) active_page: Option<EntityId>,
+    pub(crate) undo: Vec<Vec<Revision>>,
+    pub(crate) redo: Vec<Vec<Revision>>,
+}
+
+impl Project {
+    pub(crate) fn create(path: PathBuf) -> Result<Self> {
+        let session = Session::create(&path)
+            .with_context(|| format!("failed to create {}", path.display()))?;
+        Ok(Self::new(session, path))
+    }
+
+    pub(crate) fn open(path: PathBuf) -> Result<Self> {
+        let session =
+            Session::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
+        Ok(Self::new(session, path))
+    }
+
+    fn new(session: Session, path: PathBuf) -> Self {
+        let active_page = session.snapshot().pages().next().map(|page| page.id());
+        Self {
+            session,
+            path,
+            active_page,
+            undo: Vec::new(),
+            redo: Vec::new(),
+        }
+    }
+
+    pub(crate) fn snapshot(&self) -> Snapshot {
+        self.session.snapshot()
+    }
+
+    pub(crate) fn revision(&self) -> Revision {
+        self.snapshot().revision()
+    }
+
+    pub(crate) fn active_page(&self) -> Option<EntityId> {
+        self.active_page
+    }
+
+    pub(crate) fn flush(&self) -> Result<()> {
+        self.session
+            .flush()
+            .with_context(|| format!("failed to persist {}", self.path.display()))
+    }
+
+    pub(crate) fn select_page(&mut self, page: EntityId) -> Result<()> {
+        self.snapshot().page(page)?;
+        self.active_page = Some(page);
+        Ok(())
+    }
+
+    pub(crate) fn reconcile_page(&mut self) {
+        let snapshot = self.snapshot();
+        if self
+            .active_page
+            .is_none_or(|page| snapshot.page(page).is_err())
+        {
+            self.active_page = snapshot.pages().next().map(|page| page.id());
+        }
+    }
+
+    pub(crate) fn info(&self) -> ProjectInfo {
+        ProjectInfo {
+            name: self
+                .path
+                .file_stem()
+                .filter(|name| !name.is_empty())
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "Untitled".into()),
+            revision: self.revision(),
+            active_page: self.active_page,
+            can_undo: !self.undo.is_empty(),
+            can_redo: !self.redo.is_empty(),
+        }
+    }
+
+    pub(crate) fn pages(snapshot: &Snapshot) -> Result<Vec<PageSummary>> {
+        snapshot
+            .pages()
+            .map(|page| {
+                let value = page.page()?;
+                let source_asset = Self::asset_id(snapshot, page.id(), "source")?;
+                let layer_count = snapshot
+                    .descendants(page.id())?
+                    .map(|entity| Self::is_layer(snapshot, entity.id()))
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .filter(|present| *present)
+                    .count()
+                    + usize::from(source_asset.is_some());
+                Ok(PageSummary {
+                    id: page.id(),
+                    label: value.label,
+                    size: PageSize {
+                        width: value.width,
+                        height: value.height,
+                    },
+                    source_asset,
+                    layer_count,
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn rename_page(&mut self, page: EntityId, label: String) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let current = snapshot.page(page)?.page()?;
+        let patch = snapshot.patch(|edit| {
+            edit.set_page(page, PageDraft::new(label, current.width, current.height))
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn delete_pages(&mut self, pages: Vec<EntityId>) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let pages = Self::unique_roots(&snapshot, pages)?;
+        let patch = snapshot.patch(|edit| {
+            for page in pages {
+                edit.remove_entity(page, RemovePolicy::Cascade)?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn move_page(&mut self, page: EntityId, index: usize) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let siblings = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
+        let at = Self::placement(&siblings, page, index);
+        let patch = snapshot.patch(|edit| edit.move_entity(page, None, at))?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn add_point_text(
+        &mut self,
+        page: EntityId,
+        point: Point,
+    ) -> Result<(Commit, EntityId)> {
+        if !point.x.is_finite() || !point.y.is_finite() {
+            bail!("text position must contain finite coordinates");
+        }
+        let value = self.snapshot().page(page)?.page()?;
+        if point.x < 0.0 || point.y < 0.0 || point.x >= value.width || point.y >= value.height {
+            bail!("text position must be inside the page");
+        }
+        self.add_text(
+            page,
+            Frame {
+                x: point.x as f32,
+                y: point.y as f32,
+                width: (value.width - point.x).clamp(1.0, 320.0) as f32,
+                height: (value.height - point.y).clamp(1.0, 120.0) as f32,
+                angle_degrees: 0.0,
+            },
+            TextLayoutKind::Point,
+        )
+    }
+
+    pub(crate) fn add_text_box(
+        &mut self,
+        page: EntityId,
+        frame: Frame,
+    ) -> Result<(Commit, EntityId)> {
+        self.add_text(page, frame, TextLayoutKind::Paragraph)
+    }
+
+    fn add_text(
+        &mut self,
+        page: EntityId,
+        frame: Frame,
+        kind: TextLayoutKind,
+    ) -> Result<(Commit, EntityId)> {
+        let snapshot = self.snapshot();
+        let geometry = Self::geometry_from_frame(frame)?;
+        let mut layer = None;
+        let patch = snapshot.patch(|edit| {
+            let content = edit.add_text_content(page, At::End)?;
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::user(String::new()),
+                    language: None,
+                },
+            )?;
+            let added_layer = edit.add_text_layer(
+                page,
+                At::End,
+                content,
+                &SceneTextLayout {
+                    origin: Origin::User,
+                    kind,
+                },
+            )?;
+            layer = Some(added_layer);
+            edit.set(added_layer, &geometry)?;
+            edit.set(
+                added_layer,
+                &SceneTypography {
+                    origin: Origin::User,
+                    preferred_font: None,
+                    font_weight: None,
+                    size: None,
+                    auto_fit: true,
+                    color: None,
+                    stroke_color: None,
+                    stroke_width: None,
+                    alignment: Some(match kind {
+                        TextLayoutKind::Point => koharu_scene::TextAlignment::Start,
+                        TextLayoutKind::Paragraph => koharu_scene::TextAlignment::Center,
+                    }),
+                    writing_mode: None,
+                    extensions: Default::default(),
+                },
+            )?;
+            Ok(())
+        })?;
+        Ok((
+            self.commit(patch)?,
+            layer.expect("text layer was added while building the patch"),
+        ))
+    }
+
+    pub(crate) fn set_source_text(&mut self, layer: EntityId, text: String) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let content = Self::text_content(&snapshot, layer)?;
+        let language = snapshot
+            .component::<SceneSourceText>(content)?
+            .and_then(|source| source.language);
+        let patch = snapshot.patch(|edit| {
+            edit.promote_entity_to_user(layer)?;
+            edit.promote_entity_to_user(content)?;
+            edit.set(
+                content,
+                &SceneSourceText {
+                    text: Authored::user(text),
+                    language,
+                },
+            )
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn set_translation(
+        &mut self,
+        layer: EntityId,
+        text: Option<String>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let content = Self::text_content(&snapshot, layer)?;
+        let language = snapshot
+            .component::<SceneTranslation>(content)?
+            .and_then(|translation| translation.language);
+        let patch = snapshot.patch(|edit| {
+            edit.promote_entity_to_user(layer)?;
+            edit.promote_entity_to_user(content)?;
+            match text {
+                Some(text) => edit.set(
+                    content,
+                    &SceneTranslation {
+                        text: Authored::user(text),
+                        language,
+                    },
+                ),
+                None => edit.remove::<SceneTranslation>(content),
+            }
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn set_typography(&mut self, updates: Vec<TypographyUpdate>) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let updates = updates
+            .into_iter()
+            .map(|update| {
+                let content = Self::text_content(&snapshot, update.layer)?;
+                Ok((update, content))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let patch = snapshot.patch(|edit| {
+            for (update, content) in updates {
+                edit.promote_entity_to_user(update.layer)?;
+                edit.promote_entity_to_user(content)?;
+                edit.set(
+                    update.layer,
+                    &SceneTypography {
+                        origin: Origin::User,
+                        preferred_font: update.typography.preferred_font,
+                        font_weight: update.typography.font_weight,
+                        size: update.typography.size.filter(|size| *size > 0.0),
+                        auto_fit: update.typography.auto_fit,
+                        color: update.typography.color,
+                        stroke_color: update.typography.stroke_color,
+                        stroke_width: update.typography.stroke_width,
+                        alignment: update.typography.alignment,
+                        writing_mode: update.typography.writing_mode,
+                        extensions: Default::default(),
+                    },
+                )?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn set_geometry(&mut self, updates: Vec<GeometryUpdate>) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let updates = updates
+            .into_iter()
+            .map(|update| {
+                let content = snapshot
+                    .component::<SceneTextLayout>(update.layer)?
+                    .is_some()
+                    .then(|| Self::text_content(&snapshot, update.layer))
+                    .transpose()?;
+                Ok((update, content))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let patch = snapshot.patch(|edit| {
+            for (update, content) in updates {
+                edit.promote_entity_to_user(update.layer)?;
+                if let Some(content) = content {
+                    edit.promote_entity_to_user(content)?;
+                }
+                edit.set(
+                    update.layer,
+                    &SceneGeometry {
+                        origin: Origin::User,
+                        points: update
+                            .points
+                            .into_iter()
+                            .map(|point| ScenePoint {
+                                x: point.x,
+                                y: point.y,
+                            })
+                            .collect(),
+                    },
+                )?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn set_visibility(
+        &mut self,
+        layers: Vec<EntityId>,
+        visible: Option<bool>,
+        opacity: Option<f32>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let layers = layers
+            .into_iter()
+            .map(|layer| {
+                let text = snapshot.component::<SceneTextLayout>(layer)?.is_some();
+                let content = text
+                    .then(|| Self::text_content(&snapshot, layer))
+                    .transpose()?;
+                Ok((layer, content))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let patch = snapshot.patch(|edit| {
+            for (layer, content) in layers {
+                edit.promote_entity_to_user(layer)?;
+                if let Some(content) = content {
+                    edit.promote_entity_to_user(content)?;
+                }
+                let mut value =
+                    snapshot
+                        .component::<SceneVisibility>(layer)?
+                        .unwrap_or(SceneVisibility {
+                            origin: Origin::User,
+                            visible: true,
+                            opacity: 1.0,
+                        });
+                if let Some(visible) = visible {
+                    value.visible = visible;
+                }
+                if let Some(opacity) = opacity {
+                    value.opacity = opacity;
+                }
+                value.origin = Origin::User;
+                edit.set(layer, &value)?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn delete_layers(&mut self, layers: Vec<EntityId>) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let layers = Self::unique_roots(&snapshot, layers)?;
+        let mut orphaned_contents = Vec::new();
+        for layer in &layers {
+            let Some(relation) = snapshot.relation_from::<Presents>(*layer)? else {
+                continue;
+            };
+            let content = relation.value().target;
+            if snapshot.relations_to_as::<Presents>(content).count() == 1 {
+                orphaned_contents.push(content);
+            }
+        }
+        let patch = snapshot.patch(|edit| {
+            for layer in layers {
+                if snapshot.page(layer).is_ok() {
+                    return Err(koharu_scene::Error::Invalid(
+                        "delete pages with delete_pages".to_owned(),
+                    ));
+                }
+                edit.remove_entity(layer, RemovePolicy::Cascade)?;
+            }
+            for content in orphaned_contents {
+                if snapshot.entity(content).is_ok() {
+                    edit.remove_entity(content, RemovePolicy::Cascade)?;
+                }
+            }
+            Ok(())
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn move_layer(
+        &mut self,
+        layer: EntityId,
+        parent: EntityId,
+        index: usize,
+    ) -> Result<Commit> {
+        let _span = tracing::info_span!("prepare_move_patch").entered();
+        let snapshot = self.snapshot();
+        let text = snapshot.component::<SceneTextLayout>(layer)?.is_some();
+        let content = text
+            .then(|| Self::text_content(&snapshot, layer))
+            .transpose()?;
+        let siblings = snapshot
+            .children(parent)?
+            .map(|candidate| Ok(Self::is_layer(&snapshot, candidate)?.then_some(candidate)))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        let at = Self::placement(&siblings, layer, index);
+        let patch = snapshot.patch(|edit| {
+            edit.promote_entity_to_user(layer)?;
+            if let Some(content) = content {
+                edit.promote_entity_to_user(content)?;
+            }
+            edit.move_entity(layer, Some(parent), at)
+        })?;
+        drop(_span);
+        let _span = tracing::info_span!("commit_scene_patch").entered();
+        self.commit(patch)
+    }
+
+    pub(crate) fn set_geometries(
+        &mut self,
+        geometries: impl IntoIterator<Item = (EntityId, SceneGeometry)>,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let geometries = geometries
+            .into_iter()
+            .map(|(element, geometry)| {
+                let content = snapshot
+                    .component::<SceneTextLayout>(element)?
+                    .is_some()
+                    .then(|| Self::text_content(&snapshot, element))
+                    .transpose()?;
+                Ok((element, geometry, content))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let patch = snapshot.patch(|edit| {
+            for (element, mut geometry, content) in geometries {
+                edit.promote_entity_to_user(element)?;
+                if let Some(content) = content {
+                    edit.promote_entity_to_user(content)?;
+                }
+                geometry.origin = Origin::User;
+                edit.set(element, &geometry)?;
+            }
+            Ok(())
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn apply_raster_stroke(
+        &mut self,
+        page: EntityId,
+        layer: Option<EntityId>,
+        mode: koharu_canvas::StrokeMode,
+        color: [u8; 4],
+        diameter: f32,
+        points: Vec<ScenePoint>,
+    ) -> Result<(Commit, EntityId)> {
+        if !diameter.is_finite() || diameter <= 0.0 || points.is_empty() {
+            bail!("a raster stroke requires a positive diameter and at least one point");
+        }
+        if points
+            .iter()
+            .any(|point| !point.x.is_finite() || !point.y.is_finite())
+        {
+            bail!("raster stroke points must be finite");
+        }
+        let snapshot = self.snapshot();
+        let page_value = snapshot.page(page)?.page()?;
+        let width = page_value.width.round() as u32;
+        let height = page_value.height.round() as u32;
+        if width == 0 || height == 0 {
+            bail!("page dimensions must be positive");
+        }
+        let mut raster_layer = None;
+        let mut promote_layer = false;
+        let mut image = if let Some(layer) = layer {
+            if snapshot.parent(layer)? != Some(page) {
+                bail!("the raster target must be a layer on the active page");
+            }
+            let target = snapshot
+                .component::<SceneRasterLayer>(layer)?
+                .context("the raster target must be a layer on the active page")?;
+            promote_layer = target.origin != Origin::User
+                || snapshot
+                    .component::<EntityOrigin>(layer)?
+                    .is_some_and(|origin| origin.origin != Origin::User);
+            raster_layer = Some(target);
+            match snapshot.asset(layer, &AssetRole::new("source")?)? {
+                Some(asset) => {
+                    image::load_from_memory(&snapshot.read_blob(asset.blob)?)?.to_rgba8()
+                }
+                None => RgbaImage::new(width, height),
+            }
+        } else {
+            if mode == koharu_canvas::StrokeMode::Erase {
+                bail!("eraser requires a raster layer target");
+            }
+            RgbaImage::new(width, height)
+        };
+        if image.dimensions() != (width, height) {
+            bail!("raster layer dimensions must match the page");
+        }
+        rasterize_stroke(&mut image, mode, color, diameter, &points);
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image).write_to(&mut bytes, ImageFormat::Png)?;
+        let source = AssetRole::new("source")?;
+        let name = format!(
+            "Paint {}",
+            snapshot
+                .children(page)?
+                .filter(|entity| {
+                    snapshot
+                        .component::<SceneRasterLayer>(*entity)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|layer| layer.kind == RasterLayerKind::Paint)
+                })
+                .count()
+                + 1
+        );
+        let mut committed_layer = layer;
+        let patch = snapshot.patch(|edit| {
+            let layer = if let Some(layer) = committed_layer {
+                if promote_layer {
+                    edit.promote_entity_to_user(layer)?;
+                    let raster = raster_layer
+                        .as_mut()
+                        .expect("an existing raster target has a layer component");
+                    raster.origin = Origin::User;
+                    edit.set(layer, raster)?;
+                }
+                layer
+            } else {
+                let layer = edit.add_entity(page, At::End)?;
+                edit.set(
+                    layer,
+                    &SceneRasterLayer {
+                        origin: Origin::User,
+                        name,
+                        kind: RasterLayerKind::Paint,
+                    },
+                )?;
+                committed_layer = Some(layer);
+                layer
+            };
+            edit.set_asset(
+                layer,
+                &source,
+                AssetInput::new(
+                    bytes.into_inner(),
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(width),
+                        height: Some(height),
+                        attributes: Default::default(),
+                    },
+                ),
+            )
+        })?;
+        Ok((
+            self.commit(patch)?,
+            committed_layer.expect("raster layer was selected or added while building the patch"),
+        ))
+    }
+
+    pub(crate) fn set_asset(
+        &mut self,
+        entity: EntityId,
+        role: &str,
+        bytes: impl Into<Arc<[u8]>>,
+        media_type: &str,
+        metadata: AssetMetadata,
+    ) -> Result<Commit> {
+        let snapshot = self.snapshot();
+        let role = AssetRole::new(role)?;
+        let patch = snapshot.patch(|edit| {
+            edit.set_asset(entity, &role, AssetInput::new(bytes, media_type, metadata))
+        })?;
+        self.commit(patch)
+    }
+
+    pub(crate) fn undo(&mut self) -> Result<Commit> {
+        let revisions = self.undo.pop().ok_or_else(|| anyhow!("nothing to undo"))?;
+        let commit = match self.session.undo_many(revisions.iter().copied()) {
+            Ok(commit) => commit,
+            Err(error) => {
+                self.undo.push(revisions);
+                return Err(error.into());
+            }
+        };
+        self.redo.push(vec![commit.revision]);
+        Ok(commit)
+    }
+
+    pub(crate) fn redo(&mut self) -> Result<Commit> {
+        let revisions = self.redo.pop().ok_or_else(|| anyhow!("nothing to redo"))?;
+        let commit = match self.session.undo_many(revisions.iter().copied()) {
+            Ok(commit) => commit,
+            Err(error) => {
+                self.redo.push(revisions);
+                return Err(error.into());
+            }
+        };
+        self.undo.push(vec![commit.revision]);
+        Ok(commit)
+    }
+
+    pub(crate) fn record(&mut self, revisions: Vec<Revision>) {
+        if !revisions.is_empty() {
+            self.undo.push(revisions);
+            self.redo.clear();
+        }
+    }
+
+    pub(crate) fn record_commit(&mut self, commit: &Commit) {
+        if commit.changes.to != commit.changes.from {
+            self.record(vec![commit.revision]);
+        }
+    }
+
+    fn commit(&mut self, patch: koharu_scene::Patch) -> Result<Commit> {
+        Ok(self.session.commit(patch)?)
+    }
+
+    pub(crate) fn page(snapshot: &Snapshot, page: EntityId) -> Result<Page> {
+        let value = snapshot.page(page)?.page()?;
+        let source = Self::asset_id(snapshot, page, "source")?;
+        let mut layers = snapshot
+            .descendants(page)?
+            .map(|entity| {
+                let id = entity.id();
+                Ok(Self::is_layer(snapshot, id)?.then_some(id))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .map(|layer| Self::layer_view(snapshot, layer))
+            .collect::<Result<Vec<_>>>()?;
+        if let Some(image) = source.clone() {
+            layers.insert(
+                0,
+                Layer::Artwork {
+                    id: page,
+                    parent: None,
+                    geometry: Geometry {
+                        points: vec![
+                            Point { x: 0.0, y: 0.0 },
+                            Point {
+                                x: value.width,
+                                y: 0.0,
+                            },
+                            Point {
+                                x: value.width,
+                                y: value.height,
+                            },
+                            Point {
+                                x: 0.0,
+                                y: value.height,
+                            },
+                        ],
+                    },
+                    visibility: LayerVisibility {
+                        visible: true,
+                        opacity: 1.0,
+                    },
+                    image,
+                },
+            );
+        }
+        let regions = snapshot
+            .descendants(page)?
+            .map(|entity| {
+                let id = entity.id();
+                snapshot
+                    .component::<SceneRegion>(id)?
+                    .map(|region| Self::analysis_region(snapshot, id, region))
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        Ok(Page {
+            id: page,
+            label: value.label,
+            size: PageSize {
+                width: value.width,
+                height: value.height,
+            },
+            assets: PageAssets {
+                source,
+                rendered: Self::asset_id(snapshot, page, "rendered")?,
+                text_mask: Self::asset_id(snapshot, page, "text-mask")?,
+                coo_mask: Self::asset_id(snapshot, page, "coo-mask")?,
+                bubble_mask: Self::asset_id(snapshot, page, "bubble-mask")?,
+            },
+            layers,
+            regions,
+        })
+    }
+
+    fn layer_view(snapshot: &Snapshot, layer: EntityId) -> Result<Layer> {
+        let parent = snapshot.parent(layer)?;
+        let visibility = Self::layer_visibility(snapshot, layer)?;
+        if let Some(layout) = snapshot.component::<SceneTextLayout>(layer)? {
+            let text_layer = snapshot.text_layer(layer)?;
+            let content = text_layer.content()?;
+            let source = content.source()?.map(|source| SourceText {
+                text: source.text.value,
+                language: source.language.map(|language| language.to_string()),
+            });
+            let translation = content.translation()?.map(|translation| Translation {
+                text: translation.text.value,
+                language: translation.language.map(|language| language.to_string()),
+            });
+            let role = content.role()?.map(|role| role.role);
+            let source_region = content.source_region()?.map(|region| region.id());
+            let fit_region = text_layer.fit_target()?.map(|region| region.id());
+            let typography = text_layer.typography()?.map(Self::typography_view);
+            return Ok(Layer::Text {
+                id: layer,
+                parent,
+                geometry: text_layer.frame()?.map(Self::geometry_view),
+                visibility,
+                content: TextContent {
+                    id: content.id(),
+                    source,
+                    translation,
+                    role,
+                    source_region,
+                },
+                typography,
+                layout: layout.kind,
+                fit_region,
+            });
+        }
+        if let Some(raster) = snapshot.component::<SceneRasterLayer>(layer)? {
+            return Ok(Layer::Raster {
+                id: layer,
+                parent,
+                visibility,
+                image: Self::asset_id(snapshot, layer, "source")?,
+                name: raster.name,
+                kind: raster.kind,
+            });
+        }
+        let geometry = snapshot
+            .component::<SceneGeometry>(layer)?
+            .map(Self::geometry_view)
+            .context("image layer has no geometry")?;
+        let image = Self::asset_id(snapshot, layer, "source")?
+            .context("image layer has no source asset")?;
+        Ok(Layer::Image {
+            id: layer,
+            parent,
+            geometry,
+            visibility,
+            image,
+        })
+    }
+
+    fn analysis_region(
+        snapshot: &Snapshot,
+        id: EntityId,
+        region: SceneRegion,
+    ) -> Result<AnalysisRegion> {
+        let geometry = snapshot
+            .component::<SceneGeometry>(id)?
+            .map(Self::geometry_view)
+            .context("analysis region has no geometry")?;
+        Ok(AnalysisRegion {
+            id,
+            parent: snapshot.parent(id)?,
+            geometry,
+            kind: region.kind.as_str().to_owned(),
+            label: region.label,
+        })
+    }
+
+    fn layer_visibility(snapshot: &Snapshot, layer: EntityId) -> Result<LayerVisibility> {
+        Ok(snapshot.component::<SceneVisibility>(layer)?.map_or(
+            LayerVisibility {
+                visible: true,
+                opacity: 1.0,
+            },
+            |visibility| LayerVisibility {
+                visible: visibility.visible,
+                opacity: visibility.opacity,
+            },
+        ))
+    }
+
+    fn typography_view(typography: SceneTypography) -> Typography {
+        Typography {
+            preferred_font: typography.preferred_font,
+            font_weight: typography.font_weight,
+            size: typography.size,
+            auto_fit: typography.auto_fit,
+            color: typography.color,
+            stroke_color: typography.stroke_color,
+            stroke_width: typography.stroke_width,
+            alignment: typography.alignment,
+            writing_mode: typography.writing_mode,
+        }
+    }
+
+    fn geometry_view(geometry: SceneGeometry) -> Geometry {
+        Geometry {
+            points: geometry
+                .points
+                .into_iter()
+                .map(|point| Point {
+                    x: point.x,
+                    y: point.y,
+                })
+                .collect(),
+        }
+    }
+
+    fn asset_id(snapshot: &Snapshot, entity: EntityId, role: &str) -> Result<Option<String>> {
+        Ok(snapshot
+            .asset(entity, &AssetRole::new(role)?)?
+            .map(|asset| asset.blob.to_string()))
+    }
+
+    fn is_layer(snapshot: &Snapshot, entity: EntityId) -> Result<bool> {
+        Ok(snapshot.component::<SceneTextLayout>(entity)?.is_some()
+            || snapshot.component::<SceneRasterLayer>(entity)?.is_some()
+            || (snapshot.component::<SceneGeometry>(entity)?.is_some()
+                && snapshot
+                    .asset(entity, &AssetRole::new("source")?)?
+                    .is_some()))
+    }
+
+    fn text_content(snapshot: &Snapshot, layer: EntityId) -> Result<EntityId> {
+        snapshot
+            .text_layer(layer)?
+            .content()
+            .map(|content| content.id())
+            .map_err(Into::into)
+    }
+
+    fn placement(siblings: &[EntityId], moving: EntityId, index: usize) -> At {
+        siblings
+            .iter()
+            .copied()
+            .filter(|entity| *entity != moving)
+            .nth(index)
+            .map_or(At::End, At::Before)
+    }
+
+    fn unique_roots(snapshot: &Snapshot, entities: Vec<EntityId>) -> Result<Vec<EntityId>> {
+        let selected = entities.into_iter().collect::<HashSet<_>>();
+        let mut roots = Vec::new();
+        for entity in selected.iter().copied() {
+            let mut parent = snapshot.parent(entity)?;
+            let mut nested = false;
+            while let Some(value) = parent {
+                if selected.contains(&value) {
+                    nested = true;
+                    break;
+                }
+                parent = snapshot.parent(value)?;
+            }
+            if !nested {
+                roots.push(entity);
+            }
+        }
+        roots.sort_unstable();
+        Ok(roots)
+    }
+
+    fn geometry_from_frame(frame: Frame) -> Result<SceneGeometry> {
+        if !frame.x.is_finite()
+            || !frame.y.is_finite()
+            || !frame.width.is_finite()
+            || !frame.height.is_finite()
+            || !frame.angle_degrees.is_finite()
+            || frame.width <= 0.0
+            || frame.height <= 0.0
+        {
+            bail!("frame must contain finite coordinates and positive dimensions");
+        }
+        let center_x = f64::from(frame.x + frame.width * 0.5);
+        let center_y = f64::from(frame.y + frame.height * 0.5);
+        let half_width = f64::from(frame.width) * 0.5;
+        let half_height = f64::from(frame.height) * 0.5;
+        let (sin, cos) = f64::from(frame.angle_degrees).to_radians().sin_cos();
+        Ok(SceneGeometry {
+            origin: Origin::User,
+            points: [
+                (-half_width, -half_height),
+                (half_width, -half_height),
+                (half_width, half_height),
+                (-half_width, half_height),
+            ]
+            .map(|(x, y)| ScenePoint {
+                x: center_x + x * cos - y * sin,
+                y: center_y + x * sin + y * cos,
+            })
+            .into(),
+        })
+    }
+}
+
+fn rasterize_stroke(
+    image: &mut RgbaImage,
+    mode: koharu_canvas::StrokeMode,
+    color: [u8; 4],
+    diameter: f32,
+    points: &[ScenePoint],
+) {
+    let radius = f64::from(diameter) * 0.5;
+    for (start, end) in points
+        .iter()
+        .zip(points.iter().skip(1))
+        .chain(points.last().map(|point| (point, point)))
+    {
+        let left = (start.x.min(end.x) - radius - 0.5).floor().max(0.0) as u32;
+        let top = (start.y.min(end.y) - radius - 0.5).floor().max(0.0) as u32;
+        let right = (start.x.max(end.x) + radius + 0.5)
+            .ceil()
+            .min(f64::from(image.width())) as u32;
+        let bottom = (start.y.max(end.y) + radius + 0.5)
+            .ceil()
+            .min(f64::from(image.height())) as u32;
+        let dx = end.x - start.x;
+        let dy = end.y - start.y;
+        let length_squared = dx * dx + dy * dy;
+        for y in top..bottom {
+            for x in left..right {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let t = if length_squared == 0.0 {
+                    0.0
+                } else {
+                    (((px - start.x) * dx + (py - start.y) * dy) / length_squared).clamp(0.0, 1.0)
+                };
+                let distance =
+                    ((px - (start.x + t * dx)).powi(2) + (py - (start.y + t * dy)).powi(2)).sqrt();
+                let coverage = (radius + 0.5 - distance).clamp(0.0, 1.0) as f32;
+                if coverage == 0.0 {
+                    continue;
+                }
+                let pixel = image.get_pixel_mut(x, y);
+                match mode {
+                    koharu_canvas::StrokeMode::Paint => {
+                        let source_alpha = f32::from(color[3]) / 255.0 * coverage;
+                        let destination_alpha = f32::from(pixel[3]) / 255.0;
+                        let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
+                        if output_alpha > 0.0 {
+                            for channel in 0..3 {
+                                let source = f32::from(color[channel]) / 255.0;
+                                let destination = f32::from(pixel[channel]) / 255.0;
+                                pixel[channel] = (((source * source_alpha
+                                    + destination * destination_alpha * (1.0 - source_alpha))
+                                    / output_alpha)
+                                    * 255.0)
+                                    .round() as u8;
+                            }
+                        }
+                        pixel[3] = (output_alpha * 255.0).round() as u8;
+                    }
+                    koharu_canvas::StrokeMode::Erase => {
+                        pixel[3] = (f32::from(pixel[3]) * (1.0 - coverage)).round() as u8;
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Drop for Project {
+    fn drop(&mut self) {
+        if let Err(error) = self.session.gc() {
+            tracing::warn!(%error, path = %self.path.display(), "automatic project garbage collection failed");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raster_strokes_are_continuous_and_erasable() {
+        let mut image = RgbaImage::new(32, 16);
+        let points = [
+            ScenePoint { x: 4.0, y: 8.0 },
+            ScenePoint { x: 28.0, y: 8.0 },
+        ];
+        rasterize_stroke(
+            &mut image,
+            koharu_canvas::StrokeMode::Paint,
+            [210, 40, 20, 255],
+            5.0,
+            &points,
+        );
+        for x in 4..28 {
+            assert_eq!(image.get_pixel(x, 8).0, [210, 40, 20, 255]);
+        }
+
+        rasterize_stroke(
+            &mut image,
+            koharu_canvas::StrokeMode::Erase,
+            [0, 0, 0, 0],
+            5.0,
+            &[ScenePoint { x: 16.0, y: 8.0 }],
+        );
+        assert_eq!(image.get_pixel(16, 8)[3], 0);
+        assert_eq!(image.get_pixel(4, 8)[3], 255);
+    }
+}

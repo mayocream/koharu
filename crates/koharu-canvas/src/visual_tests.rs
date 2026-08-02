@@ -13,11 +13,15 @@ use std::{
 };
 
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, Geometry, PageDraft, SceneSession};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRole, At, Geometry, Origin, PageDraft, RasterLayer,
+    RasterLayerKind, Session,
+};
+use vello::wgpu;
 
 use crate::{
-    Camera, Canvas, CanvasGpu, DisplayState, ElementFrame, Frame, PageView, PhysicalPoint,
-    PhysicalSize, ViewState,
+    Camera, Canvas, CanvasGpu, DisplayState, ElementFrame, Frame, PhysicalPoint, PhysicalSize,
+    ViewState,
 };
 
 const VIEWPORT: PhysicalSize = PhysicalSize::new(64, 48);
@@ -68,7 +72,7 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
             .expect("gpu-tests requires a WGPU device")
     });
 
-    let mut session = SceneSession::memory().unwrap();
+    let mut session = Session::memory().unwrap();
     let mut page = None;
     let source = rgba_png((16, 12), [21, 34, 55, 255]);
     let clean = rgba_png((16, 12), [89, 144, 233, 255]);
@@ -81,9 +85,18 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
                 &AssetRole::new("source")?,
                 image_asset(source.clone(), 16, 12),
             )?;
+            let cleanup = edit.add_entity(id, At::Start)?;
+            edit.set(
+                cleanup,
+                &RasterLayer {
+                    origin: Origin::User,
+                    name: "Cleanup".to_owned(),
+                    kind: RasterLayerKind::Cleanup,
+                },
+            )?;
             edit.set_asset(
-                id,
-                &AssetRole::new("clean")?,
+                cleanup,
+                &AssetRole::new("source")?,
                 image_asset(clean.clone(), 16, 12),
             )?;
             page = Some(id);
@@ -121,27 +134,11 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     assert_eq!(frame.size, VIEWPORT);
     assert!(frame.generation > 0);
     let generation = frame.generation;
+    let pixels = canvas.read_output_for_test();
+    assert_clean_blue(pixel(&pixels, 16, 12));
     assert_eq!(
         canvas.render(Instant::now()).unwrap().generation,
         generation
-    );
-
-    // Complete the source-to-clean transition using injected Instants rather
-    // than sleeping, keeping the rendering result deterministic.
-    canvas.set_view(ViewState {
-        size: VIEWPORT,
-        camera: Camera::contain(VIEWPORT, PhysicalSize::new(16, 12)),
-        display: DisplayState {
-            page: PageView::EditableClean,
-            ..DisplayState::default()
-        },
-    });
-    assert!(canvas.render(now).unwrap().needs_redraw);
-    assert!(
-        !canvas
-            .render(now + Duration::from_millis(181))
-            .unwrap()
-            .needs_redraw
     );
 
     let mut image = None;
@@ -150,7 +147,7 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
         .snapshot()
         .patch(|edit| {
             let id = edit.add_entity(page, At::End)?;
-            edit.set(id, "default", &Geometry::rectangle(2.0, 2.0, 6.0, 4.0))?;
+            edit.set(id, &Geometry::rectangle(2.0, 2.0, 6.0, 4.0))?;
             edit.set_asset(
                 id,
                 &AssetRole::new("source")?,
@@ -168,7 +165,12 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
 
     // Moving must clear an old interior pixel and paint the new center. This
     // verifies the node pixels, not merely its selection outline.
-    canvas.begin_transform(&[image]).unwrap();
+    canvas
+        .begin_transform(&[ElementFrame {
+            element: image,
+            frame: Frame::new(2.0, 2.0, 6.0, 4.0),
+        }])
+        .unwrap();
     canvas
         .update_transform(
             1,
@@ -186,7 +188,12 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     assert_eq!(moved.elements[0].frame, Frame::new(6.0, 5.0, 6.0, 4.0));
 
     // Resizing east exposes orange content beyond the committed right edge.
-    canvas.begin_transform(&[image]).unwrap();
+    canvas
+        .begin_transform(&[ElementFrame {
+            element: image,
+            frame: Frame::new(2.0, 2.0, 6.0, 4.0),
+        }])
+        .unwrap();
     canvas
         .update_transform(
             1,
@@ -204,7 +211,12 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
 
     // A 90-degree rotation paints above the original horizontal rectangle and
     // clears a point that was previously inside its left edge.
-    canvas.begin_transform(&[image]).unwrap();
+    canvas
+        .begin_transform(&[ElementFrame {
+            element: image,
+            frame: Frame::new(2.0, 2.0, 6.0, 4.0),
+        }])
+        .unwrap();
     canvas
         .update_transform(
             1,

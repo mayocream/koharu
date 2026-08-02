@@ -3,25 +3,34 @@ use std::{fmt, str::FromStr};
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use uuid::Uuid;
 
 use crate::{Error, Result};
 
-macro_rules! record_id {
+macro_rules! entity_id {
     ($name:ident) => {
         #[revisioned(revision = 1)]
         #[derive(
             Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
         )]
         #[serde(transparent)]
-        pub struct $name(koharu_storage::RecordId);
+        pub struct $name(Uuid);
 
         impl $name {
-            pub(crate) const fn from_storage(id: koharu_storage::RecordId) -> Self {
-                Self(id)
+            #[must_use]
+            pub fn new() -> Self {
+                Self(Uuid::now_v7())
             }
 
-            pub(crate) const fn storage(self) -> koharu_storage::RecordId {
+            #[must_use]
+            pub const fn as_uuid(self) -> Uuid {
                 self.0
+            }
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
             }
         }
 
@@ -33,8 +42,8 @@ macro_rules! record_id {
     };
 }
 
-record_id!(EntityId);
-record_id!(RelationId);
+entity_id!(EntityId);
+entity_id!(RelationId);
 
 #[derive(
     Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
@@ -89,52 +98,6 @@ impl FromStr for ProducerId {
 impl fmt::Display for ProducerId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ComponentSlot(String);
-
-impl ComponentSlot {
-    #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        let value = value.into();
-        Self(if value.is_empty() {
-            "default".to_owned()
-        } else {
-            value
-        })
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        if self.0.is_empty() {
-            "default"
-        } else {
-            &self.0
-        }
-    }
-
-    pub(crate) fn storage(&self) -> Result<koharu_storage::ComponentSlot> {
-        koharu_storage::ComponentSlot::new(self.as_str()).map_err(Into::into)
-    }
-}
-
-impl From<&str> for ComponentSlot {
-    fn from(value: &str) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<String> for ComponentSlot {
-    fn from(value: String) -> Self {
-        Self::new(value)
-    }
-}
-
-impl fmt::Display for ComponentSlot {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
     }
 }
 

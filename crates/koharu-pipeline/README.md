@@ -31,13 +31,37 @@ match report.status {
 ```
 
 `Committer::commit` receives a `StageOutput` and returns the committed
-`SceneSnapshot`. Pipeline outputs are optimistically rebased onto the latest
+`Snapshot`. Pipeline outputs are optimistically rebased onto the latest
 snapshot before the callback. Stage patches observe the exact hierarchy,
 components, and assets they consume. OCR, translation, and inpainting branches
 on one page therefore compose, while a changed input or overlapping write fails
 conflict validation instead of publishing stale derived output.
 
 The application records all revisions from one invocation as one undo group.
+
+## Configuration
+
+`Pipeline::load` reads `PipelineConfig` itself. The pipeline subscribes to the
+shared configuration and publishes a new immutable stage generation through
+`ArcSwap` whenever that section changes. An execution keeps the generation it
+started with, while later executions see the replacement. Models remain lazy.
+
+The public pipeline constructor accepts provider configuration rather than a
+prebuilt translator. Processor construction is a pipeline responsibility;
+translation does not require a separate application-owned runtime path.
+
+Translation is a normal pipeline processor. Its model selection, target
+language, instructions, and generation options live under
+`[pipeline.translation]` and are captured in the same immutable runner
+generation as detection, OCR, and inpainting. Provider connection settings are
+owned by `koharu-translator` under `[providers]`.
+
+The translation processor delegates provider execution and local-model
+residency to `koharu_translator::Translator`, but the translator does not load
+or watch workflow configuration. Each result replaces the `Translation`
+component of a semantic `TextContent` entity; the selected target language is
+stored as metadata on that value. The related analysis region and presentation
+layer remain independently editable entities.
 
 ## Fixed workflow
 
@@ -130,7 +154,7 @@ contract:
 
 - identify its model;
 - load lazily;
-- process exactly one page and produce a semantic `ScenePatch`.
+- process exactly one page and produce a semantic `Patch`.
 
 `StageInput` carries one page ID plus optional entity and region filters for
 that page. A stage cannot receive a project or page collection. Stage

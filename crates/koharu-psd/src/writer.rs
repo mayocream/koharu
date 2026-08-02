@@ -1,3 +1,10 @@
+//! Big-endian PSD primitives and padded legacy/Unicode strings.
+//!
+//! GIMP reference: Pascal string conversion and padding:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-util.c#L517-L658
+//! GIMP reference: UTF-16 string length, terminator, byte order, and padding:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-util.c#L659-L811
+
 #[derive(Debug, Default, Clone)]
 pub struct PsdWriter {
     bytes: Vec<u8>,
@@ -44,10 +51,6 @@ impl PsdWriter {
         self.write_bytes(&value.to_be_bytes());
     }
 
-    pub fn write_f32(&mut self, value: f32) {
-        self.write_bytes(&value.to_be_bytes());
-    }
-
     pub fn write_f64(&mut self, value: f64) {
         self.write_bytes(&value.to_be_bytes());
     }
@@ -78,14 +81,6 @@ impl PsdWriter {
         while !total.is_multiple_of(pad_to) {
             self.write_u8(0);
             total += 1;
-        }
-    }
-
-    pub fn write_unicode_string(&mut self, text: &str) {
-        let utf16: Vec<u16> = text.encode_utf16().collect();
-        self.write_u32(utf16.len() as u32);
-        for unit in utf16 {
-            self.write_u16(unit);
         }
     }
 

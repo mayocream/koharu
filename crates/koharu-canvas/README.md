@@ -1,10 +1,12 @@
 # koharu-canvas
 
 `koharu-canvas` is the Vello-backed editor viewport for a `koharu-scene`
-snapshot. It draws an editable page, text and image entities, masks, and live
-transform previews into an offscreen texture. React owns hit testing and
-editor controls; the application owns the window, surface, scene session, undo
-history, and persistence.
+snapshot. It draws an editable page, text and raster-layer entities, masks,
+and live transform previews into an offscreen texture. React owns tools, hit
+testing, selection, pointer gestures, and DOM controls. The canvas receives
+semantic preview operations and owns their validated native rendering. The
+application owns the window, surface, scene session, undo history, and
+persistence.
 
 The canvas is a view and interaction engine, not another scene model. Its
 internal page representation is derived and disposable; committed data remains
@@ -12,25 +14,25 @@ in `koharu-scene`.
 
 ## Scene contract
 
-`Canvas::show_page` consumes an immutable `SceneSnapshot` and the page's
+`Canvas::show_page` consumes an immutable `Snapshot` and the page's
 `EntityId`. `PageId` and `ElementId` are canvas aliases for that same unified
 identifier.
 
 An editable page uses these scene components:
 
-| Owner | Component or asset slot | Meaning |
+| Owner | Component or asset role | Meaning |
 | --- | --- | --- |
 | page entity | `Page` | label and page-space dimensions |
 | page entity | asset `source` | required original page image |
-| page entity | asset `clean` | optional inpainted editable base |
 | page entity | asset `rendered` | optional flattened preview |
 | page entity | asset `text-mask` | optional segmentation mask |
-| page entity | asset `brush-mask` | optional user repair mask |
-| page descendants | `Geometry` | editable polygon and drawing bounds |
+| page descendants | `Geometry` | editable polygon and text bounds |
+| page descendants | `RasterLayer` plus asset `source` | ordered transparent Cleanup and Paint layers |
 | page descendants | `Visibility` | visibility and opacity |
-| page descendants | asset `source` | optional image layer |
-| page descendants | `SourceText` | editable OCR data and text-block identity; never drawn as a viewport overlay |
-| page descendants | locale-keyed `Translation` and typography components | optional viewport text layer |
+| page descendants | asset `source` | optional image or raster-layer pixels |
+| content entity | `TextContent`, `SourceText`, and optional `Translation` | semantic OCR and translation data; never geometry or presentation |
+| text-layer entity | `TextLayout`, optional `Typography`, and `Presents` relation | editable viewport text presentation |
+| analysis-region entity | `Region`, `Geometry`, and analysis components | source-artwork observations used by OCR and fitting |
 
 Descendants are drawn in subtree order. Four-point rectangular geometries keep
 their rotation in the editor; arbitrary polygons currently use their
@@ -50,12 +52,13 @@ wake callback lets background image decoding request another event-loop turn.
 ```rust,no_run
 use std::sync::Arc;
 use koharu_canvas::{Canvas, CanvasGpu};
+use vello::wgpu;
 
 # fn example(
 #     device: Arc<wgpu::Device>,
 #     queue: Arc<wgpu::Queue>,
 #     wake: Arc<dyn Fn() + Send + Sync>,
-#     snapshot: &koharu_scene::SceneSnapshot,
+#     snapshot: &koharu_scene::Snapshot,
 #     page: koharu_scene::EntityId,
 # ) -> koharu_canvas::Result<()> {
 let mut canvas = Canvas::new(CanvasGpu { device, queue }, wake)?;
@@ -96,15 +99,16 @@ Decoded images use an LRU budget controlled by `CanvasOptions::max_decoded_bytes
 Masks stay as single-channel 256×256 copy-on-write tiles, so a stroke clones
 only the tiles it touches.
 
-Text uses the same `RenderPlan`, `PreparedPage`, `RenderResources`, and
-`RenderTheme` pipeline as `koharu-renderer`. The canvas asks it to prepare
-transparent text-only layers and reuses per-entity Vello scenes for live
-transforms. This avoids duplicated shaping policy and avoids GPU readback.
-The interactive canvas requires a target locale and disables source-text
-fallback: OCR text remains editable scene data but is never drawn as an editor
-overlay when a translation is missing.
-`set_text_options`, `set_locale`, and `invalidate_fonts` explicitly invalidate
-prepared text.
+Text uses the same `Compositor`, `SceneRenderer`, `RenderResources`, and
+`RenderTheme` pipeline as `koharu-renderer`. The canvas compiles a transparent
+text-only `Composition`, renders it to a retained `Frame`, and reuses its
+per-entity Vello scenes for live transforms. This avoids duplicated shaping
+policy and GPU readback.
+The interactive canvas renders text-layer entities whose related content has a
+`Translation` component, and disables source-text fallback: OCR text remains
+editable scene data but is never drawn as an editor overlay when a translation
+is missing. `set_text_options` and
+`invalidate_fonts` explicitly invalidate the retained text frame.
 
 `Canvas::render` returns a borrowed `CanvasFrame` containing an offscreen
 `TextureView`. The host presents that texture with Vello's `TextureBlitter`.
@@ -115,8 +119,9 @@ transition is active.
 
 React owns rotated hit testing, selection policy, handles, and move/resize/
 rotate geometry. The canvas validates and renders absolute preview frames;
-mask painting and coordinate conversion remain native. Persistent mutation is
-owned by the application.
+mask rasterization and color sampling remain native. Persistent mutation is
+owned by the application. The canvas has no tool, pointer-button, or pointer-
+phase state.
 
 Only text blocks and child image entities participate in React editor hit testing.
 Detection-only panel, bubble, and other analysis regions remain scene data for
@@ -134,7 +139,7 @@ canvas.update_transform(
 if let Some(commit) = canvas.finish_transform()? {
     let patch = session.snapshot().patch(|edit| {
         for element in &commit.elements {
-            edit.set(element.element, "default", &element.geometry)?;
+            edit.set(element.element, &element.geometry)?;
         }
         Ok(())
     })?;

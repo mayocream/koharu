@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use koharu_bindgen::Generator;
-use koharu_runtime::package::{Package, libtorch::Libtorch};
+use koharu_runtime::{Package, Torch};
 
 const SHIM_LIBRARY_NAME: &str = "koharu-torch";
 const OPAQUE_TYPES: &str = "^(tensor|scalar|optimizer|module|ivalue)$";
@@ -79,7 +79,7 @@ async fn build_shim() -> Result<()> {
     fs::create_dir_all(&target_dir)?;
 
     let target_shim = target_dir.join(shim_file_name());
-    let libtorch_dir = Libtorch::Cpu.resolve().await?.join("libtorch");
+    let libtorch_dir = Torch::CPU.install().await?.join("libtorch");
     let mut config = cmake::Config::new("libtch");
     config.define("CMAKE_PREFIX_PATH", libtorch_dir);
     if cfg!(windows) {

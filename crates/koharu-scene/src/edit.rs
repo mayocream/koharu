@@ -1,11 +1,16 @@
-use std::sync::Arc;
+use std::collections::{BTreeSet, HashSet};
+
+use smallvec::SmallVec;
 
 use crate::{
-    Asset, AssetInput, AssetRole, Children, ComponentSlot, EntityId, EntityOrigin, Error,
-    Generation, LanguageTag, Origin, Page, PageDraft, Relation, RelationId, RelationKind, Result,
-    SceneComponent, ScenePatch, SceneSnapshot, SourceText, Translation, ValidationContext,
-    component::{decode, encode, key},
-    index::Parent,
+    Asset, AssetInput, AssetRole, ComponentOwner, EntityId, EntityOrigin, Error, Generation,
+    Origin, Page, PageDraft, Patch, Relation, RelationId, RelationKind, RelationSpec, Result,
+    Snapshot,
+    component::{Component, ComponentKey, ComponentRecord, ValidationContext, decode, encode, key},
+    components::Assets,
+    patch::{Observation, Operation},
+    schema,
+    state::{Components, State, store_components},
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -23,104 +28,127 @@ pub enum RemovePolicy {
     PromoteChildren,
 }
 
-pub struct SceneEdit {
-    base: SceneSnapshot,
-    storage: koharu_storage::Edit,
-    index: crate::index::SceneIndex,
+pub struct Edit {
+    base: Snapshot,
+    state: State,
+    observations: BTreeSet<Observation>,
+    operations: Vec<Operation>,
+    attachments: Vec<koharu_storage::BlobAttachment>,
+    validate_entities: HashSet<EntityId>,
     generation: Option<Generation>,
 }
 
-impl SceneEdit {
-    pub(crate) fn new(base: SceneSnapshot, generation: Option<Generation>) -> Self {
+impl Edit {
+    pub(crate) fn new(base: Snapshot, generation: Option<Generation>) -> Self {
         Self {
-            storage: base.storage.edit(),
-            index: (*base.index).clone(),
+            state: (*base.state).clone(),
             base,
+            observations: BTreeSet::new(),
+            operations: Vec::new(),
+            attachments: Vec::new(),
+            validate_entities: HashSet::new(),
             generation,
         }
     }
 
-    /// Marks a page or entity subtree, plus its incident relations, as input
-    /// to this edit. An explicit rebase is rejected if any observed record
-    /// changed after the edit's base snapshot.
+    /// Observes the page that owns this subtree. Page epochs include hierarchy,
+    /// component, and incident-relation changes, making the check constant-time.
     pub fn observe_subtree(&mut self, root: EntityId) -> Result<()> {
-        if !self.index.parents.contains_key(&root) {
-            return Err(Error::EntityNotFound(root));
-        }
-        let entities = self.index.descendants(root);
-        for entity in &entities {
-            self.storage.observe_record(entity.storage())?;
-        }
-        for (id, relation) in &self.index.relations {
-            if entities.contains(&relation.source) || entities.contains(&relation.target) {
-                self.storage.observe_record(id.storage())?;
-            }
-        }
+        let page = self.state.page_for(root)?;
+        self.observations.insert(Observation::Page {
+            page,
+            epoch: self.state.pages.get(&page).map(|page| page.epoch),
+        });
         Ok(())
     }
 
-    /// Marks one typed component, including its absence, as input to this
-    /// edit without changing it.
-    pub fn observe<T: SceneComponent>(
-        &mut self,
-        entity: EntityId,
-        slot: impl Into<ComponentSlot>,
-    ) -> Result<()> {
-        if !self.index.parents.contains_key(&entity) {
-            return Err(Error::EntityNotFound(entity));
-        }
-        self.storage
-            .observe_component(entity.storage(), &key::<T>(slot.into())?)?;
+    pub fn observe<T: Component>(&mut self, entity: EntityId) -> Result<()> {
+        let key = key::<T>()?;
+        let fingerprint = self
+            .state
+            .component(entity, &key)?
+            .map(ComponentRecord::fingerprint);
+        self.observations.insert(Observation::Component {
+            owner: ComponentOwner::Entity(entity),
+            key,
+            fingerprint,
+        });
+        Ok(())
+    }
+
+    /// Observes the complete typed asset collection owned by an entity.
+    pub fn observe_assets(&mut self, entity: EntityId) -> Result<()> {
+        let key = key::<Assets>()?;
+        let fingerprint = self
+            .state
+            .component(entity, &key)?
+            .map(ComponentRecord::fingerprint);
+        self.observations.insert(Observation::Component {
+            owner: ComponentOwner::Entity(entity),
+            key,
+            fingerprint,
+        });
         Ok(())
     }
 
     pub fn add_page(&mut self, page: PageDraft, at: At) -> Result<EntityId> {
-        let id = EntityId::from_storage(self.storage.insert_record()?);
-        self.set_record(id.storage(), "default", &Page::from(page))?;
-        self.set_record(
-            id.storage(),
-            "default",
-            &EntityOrigin {
+        self.observe_page_order_write();
+        let id = EntityId::new();
+        let position = resolve_position(&self.state.page_order, at, None)?;
+        let components = self.entity_components([
+            self.encoded(&Page::from(page))?,
+            self.encoded(&EntityOrigin {
                 origin: self.lifecycle_origin(),
-            },
-        )?;
-        let root = self.base.storage.root();
-        let mut pages = self.read_children(root)?;
-        insert_at(pages.as_mut_vec(), id, at)?;
-        self.write_children(root, &pages)?;
-        self.index.pages = Arc::from(pages.as_slice());
-        self.index.parents.insert(id, Parent::Project);
+            })?,
+        ]);
+        let stored = store_components(&components);
+        self.state.insert_page(id, position, components)?;
+        self.operations.push(Operation::InsertPage {
+            id,
+            position: position as u32,
+            components: stored,
+        });
         Ok(id)
     }
 
     pub fn add_entity(&mut self, parent: EntityId, at: At) -> Result<EntityId> {
-        if !self.index.parents.contains_key(&parent) {
-            return Err(Error::EntityNotFound(parent));
-        }
-        let id = EntityId::from_storage(self.storage.insert_record()?);
-        self.set_record(
-            id.storage(),
-            "default",
-            &EntityOrigin {
-                origin: self.lifecycle_origin(),
-            },
-        )?;
-        let mut children = self.read_children(parent.storage())?;
-        insert_at(children.as_mut_vec(), id, at)?;
-        self.write_children(parent.storage(), &children)?;
-        self.index
+        let page = self.state.page_for(parent)?;
+        self.observe_page_write(page);
+        let siblings = self
+            .state
+            .page(page)?
+            .entity(parent)?
             .children
-            .insert(parent, Arc::from(children.as_slice()));
-        self.index.parents.insert(id, Parent::Entity(parent));
+            .iter()
+            .map(|key| self.state.pages[&page].entities[*key].id)
+            .collect::<Vec<_>>();
+        let position = resolve_position(&siblings, at, None)?;
+        let id = EntityId::new();
+        let components = self.entity_components([self.encoded(&EntityOrigin {
+            origin: self.lifecycle_origin(),
+        })?]);
+        let stored = store_components(&components);
+        self.state
+            .insert_entity(page, id, parent, position, components)?;
+        self.operations.push(Operation::InsertEntity {
+            page,
+            id,
+            parent,
+            position: position as u32,
+            components: stored,
+        });
         Ok(id)
     }
 
-    /// Replaces user-editable page metadata without changing page identity or children.
     pub fn set_page(&mut self, entity: EntityId, page: PageDraft) -> Result<()> {
-        if !self.index.pages.contains(&entity) {
+        if !self.state.pages.contains_key(&entity) {
             return Err(Error::EntityNotFound(entity));
         }
-        self.set_record(entity.storage(), "default", &Page::from(page))
+        self.replace_component(
+            ComponentOwner::Entity(entity),
+            key::<Page>()?,
+            Some(self.encode_value(&Page::from(page))?),
+        )
     }
 
     pub fn move_entity(
@@ -129,116 +157,118 @@ impl SceneEdit {
         parent: Option<EntityId>,
         at: At,
     ) -> Result<()> {
-        let old_parent = self
-            .index
-            .parents
-            .get(&entity)
-            .copied()
-            .ok_or(Error::EntityNotFound(entity))?;
-        if parent.is_none() && self.get::<Page>(entity.storage(), "default")?.is_none() {
-            return Err(Error::invalid(
-                "only pages may be moved to the project root",
-            ));
-        }
-        if parent.is_some() && self.get::<Page>(entity.storage(), "default")?.is_some() {
-            return Err(Error::invalid("pages must remain under the project root"));
-        }
-        if let Some(parent) = parent {
-            if !self.index.parents.contains_key(&parent) {
-                return Err(Error::EntityNotFound(parent));
+        let page = self.state.page_for(entity)?;
+        if entity == page {
+            if parent.is_some() {
+                return Err(Error::invalid("pages must remain at the project root"));
             }
-            if self.index.descendants(entity).contains(&parent) {
-                return Err(Error::HierarchyCycle);
+            let before = self.state.parent_and_position(entity)?.1;
+            let position = resolve_position(&self.state.page_order, at, Some(entity))?;
+            if before == position {
+                return Ok(());
             }
-        }
-        let old_record = match old_parent {
-            Parent::Project => self.base.storage.root(),
-            Parent::Entity(id) => id.storage(),
-        };
-        let mut old_children = self.read_children(old_record)?;
-        old_children.as_mut_vec().retain(|id| *id != entity);
-        self.write_children(old_record, &old_children)?;
-        match old_parent {
-            Parent::Project => self.index.pages = Arc::from(old_children.as_slice()),
-            Parent::Entity(id) => {
-                self.index
-                    .children
-                    .insert(id, Arc::from(old_children.as_slice()));
-            }
+            self.observe_page_order_write();
+            self.state.move_page(entity, position)?;
+            self.operations.push(Operation::MovePage {
+                id: entity,
+                before: before as u32,
+                after: position as u32,
+            });
+            return Ok(());
         }
 
-        let new_record = parent.map_or(self.base.storage.root(), EntityId::storage);
-        let mut new_children = self.read_children(new_record)?;
-        insert_at(new_children.as_mut_vec(), entity, at)?;
-        self.write_children(new_record, &new_children)?;
-        if let Some(parent) = parent {
-            self.index
-                .children
-                .insert(parent, Arc::from(new_children.as_slice()));
-            self.index.parents.insert(entity, Parent::Entity(parent));
-        } else {
-            self.index.pages = Arc::from(new_children.as_slice());
-            self.index.parents.insert(entity, Parent::Project);
+        let parent = parent.ok_or_else(|| Error::invalid("only pages may use the project root"))?;
+        let target_page = self.state.page_for(parent)?;
+        if target_page == page
+            && self
+                .state
+                .page(page)?
+                .descendants(entity)?
+                .contains(&parent)
+        {
+            return Err(Error::HierarchyCycle);
         }
+        let (before_parent, before_position) = self.state.parent_and_position(entity)?;
+        let before_parent = before_parent.expect("non-page entity has a parent");
+        let siblings = self
+            .state
+            .page(target_page)?
+            .entity(parent)?
+            .children
+            .iter()
+            .map(|key| self.state.pages[&target_page].entities[*key].id)
+            .collect::<Vec<_>>();
+        let position = resolve_position(&siblings, at, Some(entity))?;
+        if before_parent == parent && before_position == position {
+            return Ok(());
+        }
+        self.observe_page_write(page);
+        self.observe_page_write(target_page);
+        self.state.move_entity(entity, parent, position)?;
+        self.operations.push(Operation::MoveEntity {
+            id: entity,
+            before_page: page,
+            before_parent,
+            before_position: before_position as u32,
+            after_page: target_page,
+            after_parent: parent,
+            after_position: position as u32,
+        });
         Ok(())
     }
 
     pub fn remove_entity(&mut self, entity: EntityId, policy: RemovePolicy) -> Result<()> {
-        if !self.index.parents.contains_key(&entity) {
-            return Err(Error::EntityNotFound(entity));
+        let page = self.state.page_for(entity)?;
+        self.observe_page_write(page);
+        if entity == page {
+            self.observe_page_order_write();
         }
-        let subtree = self.index.descendants(entity);
+        let subtree = self.state.page(page)?.descendants(entity)?;
         for id in &subtree {
             self.validate_lifecycle_removal(*id)?;
         }
         let children = self
-            .index
+            .state
+            .page(page)?
+            .entity(entity)?
             .children
-            .get(&entity)
-            .map(|children| children.to_vec())
-            .unwrap_or_default();
-        if policy == RemovePolicy::PromoteChildren
-            && !children.is_empty()
-            && self.get::<Page>(entity.storage(), "default")?.is_some()
-        {
-            return Err(Error::invalid(
-                "page children cannot be promoted to the project root",
-            ));
-        }
+            .iter()
+            .map(|key| self.state.pages[&page].entities[*key].id)
+            .collect::<Vec<_>>();
         if policy == RemovePolicy::RejectNonEmpty && !children.is_empty() {
             return Err(Error::NonEmptyEntity(entity));
         }
-        let incident = self.incident_relations(entity);
+        if policy == RemovePolicy::PromoteChildren && entity == page && !children.is_empty() {
+            return Err(Error::invalid("page children cannot be promoted"));
+        }
+        let incident = subtree
+            .iter()
+            .flat_map(|id| self.incident_relations(*id))
+            .collect::<BTreeSet<_>>();
         if policy != RemovePolicy::Cascade && !incident.is_empty() {
             return Err(Error::IncidentRelations(entity));
         }
+
         match policy {
-            RemovePolicy::RejectNonEmpty => self.remove_single(entity, &[])?,
-            RemovePolicy::PromoteChildren => self.remove_single(entity, &children)?,
+            RemovePolicy::RejectNonEmpty => self.remove_leaf(entity),
+            RemovePolicy::PromoteChildren => {
+                let (parent, position) = self.state.parent_and_position(entity)?;
+                let parent = parent.ok_or_else(|| Error::invalid("page cannot be promoted"))?;
+                for (offset, child) in children.into_iter().enumerate() {
+                    self.move_to_position(child, parent, position + offset)?;
+                }
+                self.remove_leaf(entity)
+            }
             RemovePolicy::Cascade => {
-                let relation_ids = subtree
-                    .iter()
-                    .flat_map(|id| self.incident_relations(*id))
-                    .collect::<std::collections::BTreeSet<_>>();
-                for relation in relation_ids {
+                for relation in incident {
                     self.remove_relation(relation)?;
                 }
-                self.detach_from_parent(entity, &[])?;
-                // Clearing every component first removes all hierarchy and
-                // relation references before any record lifecycle operation.
-                let mut ids = subtree.iter().copied().collect::<Vec<_>>();
-                for id in &ids {
-                    self.clear_record(id.storage())?;
+                for id in subtree.into_iter().rev() {
+                    self.remove_leaf(id)?;
                 }
-                ids.reverse();
-                for id in ids {
-                    self.storage.remove_record(id.storage())?;
-                    self.index.parents.remove(&id);
-                    self.index.children.remove(&id);
-                }
+                Ok(())
             }
         }
-        Ok(())
     }
 
     pub fn promote_entity_to_user(&mut self, entity: EntityId) -> Result<()> {
@@ -247,112 +277,61 @@ impl SceneEdit {
                 "pipeline edits cannot claim user entity ownership".to_owned(),
             ));
         }
-        if !self.index.parents.contains_key(&entity) {
-            return Err(Error::EntityNotFound(entity));
-        }
-        self.set_record(
-            entity.storage(),
-            "default",
-            &EntityOrigin {
+        self.replace_component(
+            ComponentOwner::Entity(entity),
+            key::<EntityOrigin>()?,
+            Some(self.encode_value(&EntityOrigin {
                 origin: Origin::User,
-            },
+            })?),
         )
     }
 
-    pub fn set<T: SceneComponent>(
-        &mut self,
-        entity: EntityId,
-        slot: impl Into<ComponentSlot>,
-        value: &T,
-    ) -> Result<()> {
-        let slot = slot.into();
-        if !self.index.parents.contains_key(&entity) {
+    pub fn set<T: Component>(&mut self, entity: EntityId, value: &T) -> Result<()> {
+        if !self.state.contains_entity(entity) {
             return Err(Error::EntityNotFound(entity));
         }
-        if matches!(
-            T::KIND,
-            Children::KIND | Relation::KIND | Page::KIND | EntityOrigin::KIND
-        ) {
+        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
             return Err(Error::invalid(
                 "structural components use dedicated scene methods",
             ));
         }
-        let value = self.prepare_value(entity.storage(), slot.clone(), value)?;
-        self.set_record(entity.storage(), slot, &value)
-    }
-
-    pub fn set_project<T: SceneComponent>(
-        &mut self,
-        slot: impl Into<ComponentSlot>,
-        value: &T,
-    ) -> Result<()> {
-        if matches!(
-            T::KIND,
-            Children::KIND | Relation::KIND | Page::KIND | EntityOrigin::KIND
-        ) {
-            return Err(Error::invalid(
-                "project structural components use dedicated scene methods",
-            ));
-        }
-        let slot = slot.into();
-        let root = self.base.storage.root();
-        let value = self.prepare_value(root, slot.clone(), value)?;
-        self.set_record(root, slot, &value)
-    }
-
-    pub fn remove_project<T: SceneComponent>(
-        &mut self,
-        slot: impl Into<ComponentSlot>,
-    ) -> Result<()> {
-        if matches!(
-            T::KIND,
-            Children::KIND | Relation::KIND | Page::KIND | EntityOrigin::KIND
-        ) {
-            return Err(Error::invalid(
-                "project structural components cannot be removed generically",
-            ));
-        }
-        let slot = slot.into();
-        let root = self.base.storage.root();
-        self.validate_removal_authorship::<T>(root, slot.clone())?;
-        self.storage.remove_component(root, &key::<T>(slot)?)?;
+        let value = self.prepare_value(ComponentOwner::Entity(entity), value)?;
+        self.replace_component(
+            ComponentOwner::Entity(entity),
+            key::<T>()?,
+            Some(self.encode_value(&value)?),
+        )?;
+        self.validate_entities.insert(entity);
         Ok(())
     }
 
-    pub fn remove<T: SceneComponent>(
-        &mut self,
-        entity: EntityId,
-        slot: impl Into<ComponentSlot>,
-    ) -> Result<()> {
-        if !self.index.parents.contains_key(&entity) {
-            return Err(Error::EntityNotFound(entity));
+    pub fn set_project<T: Component>(&mut self, value: &T) -> Result<()> {
+        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
+            return Err(Error::invalid("project cannot carry structural components"));
         }
-        if matches!(
-            T::KIND,
-            Children::KIND | Relation::KIND | Page::KIND | EntityOrigin::KIND
-        ) {
+        let value = self.prepare_value(ComponentOwner::Project, value)?;
+        self.replace_component(
+            ComponentOwner::Project,
+            key::<T>()?,
+            Some(self.encode_value(&value)?),
+        )
+    }
+
+    pub fn remove_project<T: Component>(&mut self) -> Result<()> {
+        self.validate_removal_authorship::<T>(ComponentOwner::Project)?;
+        self.replace_component(ComponentOwner::Project, key::<T>()?, None)
+    }
+
+    pub fn remove<T: Component>(&mut self, entity: EntityId) -> Result<()> {
+        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
             return Err(Error::invalid(
-                "required structural components cannot be removed generically",
+                "required structural component cannot be removed",
             ));
         }
-        let slot = slot.into();
-        self.validate_removal_authorship::<T>(entity.storage(), slot.clone())?;
-        let key = key::<T>(slot)?;
-        self.storage.remove_component(entity.storage(), &key)?;
+        self.validate_removal_authorship::<T>(ComponentOwner::Entity(entity))?;
+        self.replace_component(ComponentOwner::Entity(entity), key::<T>()?, None)?;
+        self.validate_entities.insert(entity);
         Ok(())
-    }
-
-    pub fn set_translation(
-        &mut self,
-        entity: EntityId,
-        locale: &LanguageTag,
-        value: Translation,
-    ) -> Result<()> {
-        self.set(entity, locale.as_str(), &value)
-    }
-
-    pub fn set_source_text(&mut self, entity: EntityId, value: SourceText) -> Result<()> {
-        self.set(entity, "default", &value)
     }
 
     pub fn set_asset(
@@ -361,17 +340,77 @@ impl SceneEdit {
         role: &AssetRole,
         value: AssetInput,
     ) -> Result<()> {
-        let blob = self.storage.attach_blob(value.bytes);
-        self.set(
-            entity,
-            role.as_str(),
-            &Asset {
-                origin: Origin::User,
+        let attachment = koharu_storage::BlobAttachment::new(value.bytes);
+        let blob = attachment.id();
+        self.attachments.push(attachment);
+        let owner = ComponentOwner::Entity(entity);
+        let key = key::<Assets>()?;
+        let previous = self.component(owner, &key)?;
+        let fingerprint = previous.map(ComponentRecord::fingerprint);
+        let mut assets = previous
+            .map(|value| {
+                let record_exists = |id| self.state.contains_entity(id);
+                let blob_exists = |_id| true;
+                decode::<Assets>(value, &ValidationContext::new(&record_exists, &blob_exists))
+            })
+            .transpose()?
+            .unwrap_or_default();
+        if let Some(existing) = assets.values.get(role) {
+            self.validate_origin_removal(Some(&existing.origin))?;
+        }
+        if self.base.state.contains_entity(entity) {
+            self.observations.insert(Observation::Component {
+                owner,
+                key: key.clone(),
+                fingerprint,
+            });
+        }
+        assets.values.insert(
+            role.clone(),
+            Asset {
+                origin: self.lifecycle_origin(),
                 blob,
                 media_type: value.media_type,
                 metadata: value.metadata,
             },
-        )
+        );
+        let record = self.encode_value(&assets)?;
+        self.replace_component(owner, key, Some(record))
+    }
+
+    pub fn remove_asset(&mut self, entity: EntityId, role: &AssetRole) -> Result<()> {
+        let owner = ComponentOwner::Entity(entity);
+        let key = key::<Assets>()?;
+        let previous = self.component(owner, &key)?;
+        let fingerprint = previous.map(ComponentRecord::fingerprint);
+        let Some(mut assets) = previous
+            .map(|value| {
+                let record_exists = |id| self.state.contains_entity(id);
+                let blob_exists = |_id| true;
+                decode::<Assets>(value, &ValidationContext::new(&record_exists, &blob_exists))
+            })
+            .transpose()?
+        else {
+            return Ok(());
+        };
+        let Some(existing) = assets.values.get(role) else {
+            return Ok(());
+        };
+        self.validate_origin_removal(Some(&existing.origin))?;
+        if self.base.state.contains_entity(entity) {
+            self.observations.insert(Observation::Component {
+                owner,
+                key: key.clone(),
+                fingerprint,
+            });
+        }
+        assets.values.remove(role);
+        if assets.values.is_empty() {
+            self.replace_component(owner, key, None)
+        } else {
+            let record = self.encode_value(&assets)?;
+            self.replace_component(owner, key, Some(record))
+        }
     }
 
     pub fn add_relation(
@@ -380,39 +419,61 @@ impl SceneEdit {
         source: EntityId,
         target: EntityId,
     ) -> Result<RelationId> {
-        if !self.index.parents.contains_key(&source) {
+        if !self.state.contains_entity(source) {
             return Err(Error::EntityNotFound(source));
         }
-        if !self.index.parents.contains_key(&target) {
+        if !self.state.contains_entity(target) {
             return Err(Error::EntityNotFound(target));
         }
-        let id = RelationId::from_storage(self.storage.insert_record()?);
-        let relation = Relation {
+        let id = RelationId::new();
+        let value = Relation {
             origin: self.lifecycle_origin(),
             kind,
             source,
             target,
         };
-        self.set_record(id.storage(), "default", &relation)?;
-        self.index.relations.insert(id, relation.clone());
-        append_relation(&mut self.index.outgoing, source, id);
-        append_relation(&mut self.index.incoming, target, id);
+        let record_exists = |id| self.state.contains_entity(id);
+        let blob_exists = |id| {
+            self.attachments.iter().any(|blob| blob.id() == id) || self.base.blobs.has_blob(id)
+        };
+        schema::validate_new_relation(
+            &self.state,
+            &value,
+            &ValidationContext::new(&record_exists, &blob_exists),
+        )?;
+        self.state.insert_relation(id, value.clone())?;
+        self.operations.push(Operation::InsertRelation {
+            id,
+            value,
+            components: Vec::new(),
+        });
         Ok(id)
+    }
+
+    pub fn relate<R: RelationSpec>(
+        &mut self,
+        source: EntityId,
+        target: EntityId,
+    ) -> Result<RelationId> {
+        self.add_relation(R::kind(), source, target)
     }
 
     pub fn remove_relation(&mut self, id: RelationId) -> Result<()> {
         let relation = self
-            .index
+            .state
             .relations
             .get(&id)
             .cloned()
             .ok_or(Error::RelationNotFound(id))?;
-        self.validate_origin_removal(Some(&relation.origin))?;
-        self.index.relations.remove(&id);
-        self.clear_record(id.storage())?;
-        self.storage.remove_record(id.storage())?;
-        remove_relation_id(&mut self.index.outgoing, relation.source, id);
-        remove_relation_id(&mut self.index.incoming, relation.target, id);
+        self.validate_origin_removal(Some(&relation.value.origin))?;
+        let components = store_components(&relation.components);
+        let value = relation.value.clone();
+        self.state.remove_relation(id)?;
+        self.operations.push(Operation::RemoveRelation {
+            id,
+            value,
+            components,
+        });
         Ok(())
     }
 
@@ -422,100 +483,214 @@ impl SceneEdit {
                 "pipeline edits cannot claim user relation ownership".to_owned(),
             ));
         }
-        let relation = self
-            .index
+        let before = self
+            .state
             .relations
             .get(&id)
-            .cloned()
-            .ok_or(Error::RelationNotFound(id))?;
-        let promoted = Relation {
+            .ok_or(Error::RelationNotFound(id))?
+            .value
+            .clone();
+        let after = Relation {
             origin: Origin::User,
-            ..relation
+            ..before.clone()
         };
-        self.set_record(id.storage(), "default", &promoted)?;
-        self.index.relations.insert(id, promoted);
+        self.state.set_relation_value(id, after.clone())?;
+        self.operations
+            .push(Operation::ReplaceRelation { id, before, after });
         Ok(())
     }
 
-    pub fn set_relation<T: SceneComponent>(
-        &mut self,
-        relation: RelationId,
-        slot: impl Into<ComponentSlot>,
-        value: &T,
-    ) -> Result<()> {
-        if !self.index.relations.contains_key(&relation) {
+    pub fn set_relation<T: Component>(&mut self, relation: RelationId, value: &T) -> Result<()> {
+        if !self.state.relations.contains_key(&relation) {
             return Err(Error::RelationNotFound(relation));
         }
-        if matches!(
-            T::KIND,
-            Children::KIND | Relation::KIND | Page::KIND | EntityOrigin::KIND
-        ) {
+        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
             return Err(Error::invalid(
-                "relation structural components use dedicated scene methods",
+                "relation structural component is managed directly",
             ));
         }
-        let slot = slot.into();
-        let value = self.prepare_value(relation.storage(), slot.clone(), value)?;
-        self.set_record(relation.storage(), slot, &value)
+        let owner = ComponentOwner::Relation(relation);
+        let value = self.prepare_value(owner, value)?;
+        self.replace_component(owner, key::<T>()?, Some(self.encode_value(&value)?))
     }
 
-    pub fn remove_relation_component<T: SceneComponent>(
-        &mut self,
-        relation: RelationId,
-        slot: impl Into<ComponentSlot>,
-    ) -> Result<()> {
-        if !self.index.relations.contains_key(&relation) {
-            return Err(Error::RelationNotFound(relation));
-        }
-        if matches!(
-            T::KIND,
-            Children::KIND | Relation::KIND | Page::KIND | EntityOrigin::KIND
-        ) {
-            return Err(Error::invalid(
-                "relation structural components cannot be removed generically",
-            ));
-        }
-        let slot = slot.into();
-        self.validate_removal_authorship::<T>(relation.storage(), slot.clone())?;
-        self.storage
-            .remove_component(relation.storage(), &key::<T>(slot)?)?;
-        Ok(())
+    pub fn remove_relation_component<T: Component>(&mut self, relation: RelationId) -> Result<()> {
+        let owner = ComponentOwner::Relation(relation);
+        self.validate_removal_authorship::<T>(owner)?;
+        self.replace_component(owner, key::<T>()?, None)
     }
 
-    pub fn finish(self) -> Result<ScenePatch> {
-        let mut patch = ScenePatch {
-            storage: self.storage.finish()?,
-            result_index: None,
+    pub fn finish(self) -> Result<Patch> {
+        for entity in &self.validate_entities {
+            schema::validate_entity(&self.state, *entity)?;
+        }
+        let relations = self
+            .validate_entities
+            .iter()
+            .flat_map(|entity| {
+                self.state
+                    .outgoing
+                    .get(entity)
+                    .into_iter()
+                    .chain(self.state.incoming.get(entity))
+                    .flat_map(|relations| relations.iter().copied())
+            })
+            .collect::<HashSet<_>>();
+        let record_exists = |id| self.state.contains_entity(id);
+        let blob_exists = |id| {
+            self.attachments.iter().any(|blob| blob.id() == id) || self.base.blobs.has_blob(id)
         };
-        let preview = self.base.preview([&patch])?;
-        patch.result_index = Some(preview.index);
+        let context = ValidationContext::new(&record_exists, &blob_exists);
+        for relation in relations {
+            schema::validate_relation(
+                &self.state,
+                &self
+                    .state
+                    .relations
+                    .get(&relation)
+                    .ok_or(Error::RelationNotFound(relation))?
+                    .value,
+                &context,
+            )?;
+        }
+        let patch = Patch::new(
+            &self.base,
+            self.state,
+            self.observations.into_iter().collect(),
+            self.operations,
+            self.attachments,
+            None,
+        )?;
+        self.base.blobs.preview(
+            self.base.revision(),
+            patch.attachments.iter().cloned(),
+            patch.state.referenced_blobs(),
+        )?;
         Ok(patch)
     }
 
-    fn set_record<T: SceneComponent>(
+    fn move_to_position(
         &mut self,
-        record: koharu_storage::RecordId,
-        slot: impl Into<ComponentSlot>,
-        value: &T,
+        entity: EntityId,
+        parent: EntityId,
+        position: usize,
     ) -> Result<()> {
-        let slot = slot.into();
-        let record_exists = |id: EntityId| self.storage.view().contains_record(id.storage());
-        // Attached blobs are verified by storage preview. Structural component
-        // validation must not force a byte read.
-        let blob_exists = |_id| true;
-        let context = ValidationContext::new(&record_exists, &blob_exists);
-        let value = encode(value, &context)?;
-        self.storage.set_component(record, key::<T>(slot)?, value)?;
+        let (before_parent, before_position) = self.state.parent_and_position(entity)?;
+        let before_parent = before_parent.expect("promoted child is not a page");
+        self.state.move_entity(entity, parent, position)?;
+        self.operations.push(Operation::MoveEntity {
+            id: entity,
+            before_page: self.state.page_for(parent)?,
+            before_parent,
+            before_position: before_position as u32,
+            after_page: self.state.page_for(parent)?,
+            after_parent: parent,
+            after_position: position as u32,
+        });
         Ok(())
     }
 
-    fn prepare_value<T: SceneComponent>(
+    fn remove_leaf(&mut self, entity: EntityId) -> Result<()> {
+        let page = self.state.page_for(entity)?;
+        let (parent, position) = self.state.parent_and_position(entity)?;
+        if entity == page {
+            let page_state = self.state.page(page)?;
+            let components = store_components(&page_state.entities[page_state.root].components);
+            self.state.remove_page(entity)?;
+            self.operations.push(Operation::RemovePage {
+                id: entity,
+                position: position as u32,
+                components,
+            });
+        } else {
+            let parent = parent.expect("non-page entity has a parent");
+            let components = store_components(&self.state.entity(entity)?.components);
+            self.state.remove_leaf(entity)?;
+            self.operations.push(Operation::RemoveEntity {
+                page,
+                id: entity,
+                parent,
+                position: position as u32,
+                components,
+            });
+        }
+        Ok(())
+    }
+
+    fn replace_component(
         &mut self,
-        record: koharu_storage::RecordId,
-        slot: ComponentSlot,
-        value: &T,
-    ) -> Result<T> {
-        self.validate_removal_authorship::<T>(record, slot)?;
+        owner: ComponentOwner,
+        key: ComponentKey,
+        after: Option<ComponentRecord>,
+    ) -> Result<()> {
+        let before = self.component(owner, &key)?.cloned();
+        if before == after {
+            return Ok(());
+        }
+        match (owner, after.clone()) {
+            (ComponentOwner::Project, Some(value)) => {
+                self.state.set_project_component(key.clone(), value);
+            }
+            (ComponentOwner::Project, None) => {
+                self.state.remove_project_component(&key);
+            }
+            (ComponentOwner::Entity(id), Some(value)) => {
+                self.state.set_entity_component(id, key.clone(), value)?;
+            }
+            (ComponentOwner::Entity(id), None) => {
+                self.state.remove_entity_component(id, &key)?;
+            }
+            (ComponentOwner::Relation(id), Some(value)) => {
+                self.state.set_relation_component(id, key.clone(), value)?;
+            }
+            (ComponentOwner::Relation(id), None) => {
+                self.state.remove_relation_component(id, &key)?;
+            }
+        }
+        self.operations.push(Operation::ReplaceComponent {
+            owner,
+            key,
+            before: before.map(|value| value.to_stored()),
+            after: after.map(|value| value.to_stored()),
+        });
+        Ok(())
+    }
+
+    fn component(
+        &self,
+        owner: ComponentOwner,
+        key: &ComponentKey,
+    ) -> Result<Option<&ComponentRecord>> {
+        match owner {
+            ComponentOwner::Project => Ok(self.state.project_component(key)),
+            ComponentOwner::Entity(id) => self.state.component(id, key),
+            ComponentOwner::Relation(id) => self.state.relation_component(id, key),
+        }
+    }
+
+    fn encoded<T: Component>(&self, value: &T) -> Result<(ComponentKey, ComponentRecord)> {
+        Ok((key::<T>()?, self.encode_value(value)?))
+    }
+
+    fn encode_value<T: Component>(&self, value: &T) -> Result<ComponentRecord> {
+        let record_exists = |id| self.state.contains_entity(id);
+        let blob_exists = |id| {
+            self.attachments.iter().any(|blob| blob.id() == id) || self.base.blobs.has_blob(id)
+        };
+        encode(value, &ValidationContext::new(&record_exists, &blob_exists))
+    }
+
+    fn entity_components(
+        &self,
+        values: impl IntoIterator<Item = (ComponentKey, ComponentRecord)>,
+    ) -> Components {
+        let mut result = values.into_iter().collect::<SmallVec<[_; 8]>>();
+        result.sort_by(|left, right| left.0.cmp(&right.0));
+        result
+    }
+
+    fn prepare_value<T: Component>(&mut self, owner: ComponentOwner, value: &T) -> Result<T> {
+        self.validate_removal_authorship::<T>(owner)?;
         let mut value = value.clone();
         match &self.generation {
             Some(generation) => {
@@ -537,12 +712,31 @@ impl SceneEdit {
         Ok(value)
     }
 
-    fn validate_removal_authorship<T: SceneComponent>(
-        &mut self,
-        record: koharu_storage::RecordId,
-        slot: ComponentSlot,
-    ) -> Result<()> {
-        let existing = self.get::<T>(record, slot.as_str())?;
+    fn validate_removal_authorship<T: Component>(&mut self, owner: ComponentOwner) -> Result<()> {
+        let key = key::<T>()?;
+        let fingerprint = self
+            .component(owner, &key)?
+            .map(ComponentRecord::fingerprint);
+        let existing = self
+            .component(owner, &key)?
+            .map(|value| {
+                let record_exists = |id| self.state.contains_entity(id);
+                let blob_exists = |_id| true;
+                decode::<T>(value, &ValidationContext::new(&record_exists, &blob_exists))
+            })
+            .transpose()?;
+        let existed_at_base = match owner {
+            ComponentOwner::Project => true,
+            ComponentOwner::Entity(id) => self.base.state.contains_entity(id),
+            ComponentOwner::Relation(id) => self.base.state.relations.contains_key(&id),
+        };
+        if existed_at_base {
+            self.observations.insert(Observation::Component {
+                owner,
+                key,
+                fingerprint,
+            });
+        }
         match existing {
             None => Ok(()),
             Some(value) => {
@@ -584,7 +778,7 @@ impl SceneEdit {
             .map_or(Origin::User, Origin::Generated)
     }
 
-    fn validate_lifecycle_removal(&mut self, entity: EntityId) -> Result<()> {
+    fn validate_lifecycle_removal(&self, entity: EntityId) -> Result<()> {
         let Some(producer) = self
             .generation
             .as_ref()
@@ -592,9 +786,15 @@ impl SceneEdit {
         else {
             return Ok(());
         };
-        let lifecycle = self
-            .get::<EntityOrigin>(entity.storage(), "default")?
+        let key = key::<EntityOrigin>()?;
+        let value = self
+            .state
+            .component(entity, &key)?
             .ok_or_else(|| Error::invalid("entity lifecycle origin is missing"))?;
+        let record_exists = |id| self.state.contains_entity(id);
+        let blob_exists = |_id| true;
+        let lifecycle: EntityOrigin =
+            decode(value, &ValidationContext::new(&record_exists, &blob_exists))?;
         match lifecycle.origin {
             Origin::Generated(owner) if owner.producer == producer => Ok(()),
             Origin::Generated(owner) => Err(Error::Authorship(format!(
@@ -607,157 +807,49 @@ impl SceneEdit {
         }
     }
 
-    fn get<T: SceneComponent>(
-        &mut self,
-        record: koharu_storage::RecordId,
-        slot: &str,
-    ) -> Result<Option<T>> {
-        let key = key::<T>(slot)?;
-        self.storage.observe_component(record, &key)?;
-        let view = self.storage.view();
-        let Some(raw) = view.component(record, &key)? else {
-            return Ok(None);
-        };
-        let record_exists = |id: EntityId| view.contains_record(id.storage());
-        let blob_exists = |_id| true;
-        decode(
-            slot,
-            raw,
-            &ValidationContext::new(&record_exists, &blob_exists),
-        )
-        .map(Some)
-    }
-
-    fn read_children(&mut self, record: koharu_storage::RecordId) -> Result<Children> {
-        Ok(self.get::<Children>(record, "default")?.unwrap_or_default())
-    }
-
-    fn write_children(
-        &mut self,
-        record: koharu_storage::RecordId,
-        children: &Children,
-    ) -> Result<()> {
-        self.set_record(record, "default", children)
-    }
-
     fn incident_relations(&self, entity: EntityId) -> Vec<RelationId> {
-        self.index
+        self.state
             .outgoing
             .get(&entity)
             .into_iter()
-            .chain(self.index.incoming.get(&entity))
+            .chain(self.state.incoming.get(&entity))
             .flat_map(|ids| ids.iter().copied())
             .collect()
     }
 
-    fn remove_single(&mut self, entity: EntityId, promote: &[EntityId]) -> Result<()> {
-        self.detach_from_parent(entity, promote)?;
-        if !promote.is_empty() {
-            let parent = self.index.parents[&entity];
-            for child in promote {
-                self.index.parents.insert(*child, parent);
-            }
-        }
-        self.clear_record(entity.storage())?;
-        self.storage.remove_record(entity.storage())?;
-        self.index.parents.remove(&entity);
-        self.index.children.remove(&entity);
-        Ok(())
+    fn observe_page_order_write(&mut self) {
+        self.observations.insert(Observation::ProjectHierarchy {
+            epoch: self.base.state.page_order_epoch,
+        });
     }
 
-    fn detach_from_parent(&mut self, entity: EntityId, promote: &[EntityId]) -> Result<()> {
-        let parent = self.index.parents[&entity];
-        let record = match parent {
-            Parent::Project => self.base.storage.root(),
-            Parent::Entity(id) => id.storage(),
-        };
-        let mut siblings = self.read_children(record)?;
-        let position = siblings
-            .as_slice()
-            .iter()
-            .position(|id| *id == entity)
-            .ok_or_else(|| Error::invalid("parent index differs from children component"))?;
-        siblings
-            .as_mut_vec()
-            .splice(position..=position, promote.iter().copied());
-        self.write_children(record, &siblings)?;
-        match parent {
-            Parent::Project => self.index.pages = Arc::from(siblings.as_slice()),
-            Parent::Entity(id) => {
-                self.index
-                    .children
-                    .insert(id, Arc::from(siblings.as_slice()));
-            }
+    fn observe_page_write(&mut self, page: EntityId) {
+        if let Some(page) = self.base.state.pages.get(&page) {
+            self.observations.insert(Observation::Page {
+                page: page.entities[page.root].id,
+                epoch: Some(page.epoch),
+            });
         }
-        Ok(())
-    }
-
-    fn clear_record(&mut self, record: koharu_storage::RecordId) -> Result<()> {
-        let keys = self
-            .storage
-            .view()
-            .record(record)?
-            .components()
-            .map(|(key, _)| key.clone())
-            .collect::<Vec<_>>();
-        for key in keys {
-            self.storage.remove_component(record, &key)?;
-        }
-        Ok(())
     }
 }
 
-fn insert_at(values: &mut Vec<EntityId>, value: EntityId, at: At) -> Result<()> {
-    if values.contains(&value) {
-        return Err(Error::MultipleParents(value));
-    }
-    let position = match at {
-        At::Start => 0,
-        At::End => values.len(),
-        At::Before(anchor) => values
+fn resolve_position(values: &[EntityId], at: At, moving: Option<EntityId>) -> Result<usize> {
+    let filtered = values
+        .iter()
+        .copied()
+        .filter(|value| Some(*value) != moving)
+        .collect::<Vec<_>>();
+    match at {
+        At::Start => Ok(0),
+        At::End => Ok(filtered.len()),
+        At::Before(anchor) => filtered
             .iter()
             .position(|id| *id == anchor)
-            .ok_or_else(|| Error::invalid("before anchor is not a sibling"))?,
-        At::After(anchor) => values
+            .ok_or_else(|| Error::invalid("before anchor is not a sibling")),
+        At::After(anchor) => filtered
             .iter()
             .position(|id| *id == anchor)
             .map(|position| position + 1)
-            .ok_or_else(|| Error::invalid("after anchor is not a sibling"))?,
-    };
-    values.insert(position, value);
-    Ok(())
-}
-
-fn append_relation(
-    map: &mut imbl::OrdMap<EntityId, Arc<[RelationId]>>,
-    entity: EntityId,
-    relation: RelationId,
-) {
-    let mut values = map
-        .get(&entity)
-        .map(|values| values.to_vec())
-        .unwrap_or_default();
-    values.push(relation);
-    values.sort_unstable();
-    map.insert(entity, values.into());
-}
-
-fn remove_relation_id(
-    map: &mut imbl::OrdMap<EntityId, Arc<[RelationId]>>,
-    entity: EntityId,
-    relation: RelationId,
-) {
-    let Some(existing) = map.get(&entity) else {
-        return;
-    };
-    let values = existing
-        .iter()
-        .copied()
-        .filter(|id| *id != relation)
-        .collect::<Vec<_>>();
-    if values.is_empty() {
-        map.remove(&entity);
-    } else {
-        map.insert(entity, values.into());
+            .ok_or_else(|| Error::invalid("after anchor is not a sibling")),
     }
 }

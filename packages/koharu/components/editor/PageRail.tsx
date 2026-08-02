@@ -1,0 +1,491 @@
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
+import {
+  FilePlus2,
+  FolderOpen,
+  ImagePlus,
+  LoaderCircle,
+  MoreHorizontal,
+  Search,
+  Settings,
+  Trash2,
+} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
+import { call } from '@/lib/backend'
+import { commands, type PageImportSource, type PageSummary } from '@/lib/protocol'
+import {
+  pageKey,
+  pagesKey,
+  projectKey,
+  refresh,
+  useImportPages,
+  usePage,
+  usePages,
+} from '@/lib/queries'
+import { useKoharuStore } from '@/lib/store'
+import { Button } from '@koharu/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@koharu/ui/components/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@koharu/ui/components/dropdown-menu'
+import { Input } from '@koharu/ui/components/input'
+import { cn } from '@koharu/ui/lib/utils'
+
+const emptyPages: PageSummary[] = []
+
+export function PageRail() {
+  const { t } = useTranslation()
+  const pages = usePages().data ?? emptyPages
+  const active = usePage().data?.id ?? null
+  const selected = useKoharuStore((state) => state.selectedPages)
+  const selectPages = useKoharuStore((state) => state.selectPages)
+  const selectLayers = useKoharuStore((state) => state.selectLayers)
+  const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const { importPages, importing } = useImportPages()
+  const anchor = useRef<number | null>(null)
+  const [dragged, setDragged] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [renaming, setRenaming] = useState<PageSummary | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const normalized = query.trim().toLocaleLowerCase()
+  const visiblePages = useMemo(
+    () =>
+      pages
+        .map((page, index) => ({ page, index }))
+        .filter(({ page }) => !normalized || page.label.toLocaleLowerCase().includes(normalized)),
+    [normalized, pages],
+  )
+  const pageList = useRef<HTMLDivElement>(null)
+  const pageVirtualizer = useVirtualizer({
+    count: visiblePages.length,
+    getScrollElement: () => pageList.current,
+    getItemKey: (index) => visiblePages[index]?.page.id ?? index,
+    estimateSize: () => 72,
+    gap: 2,
+    overscan: 6,
+    initialRect: { width: 240, height: 600 },
+    observeElementRect: (instance, callback) =>
+      observeElementRect(instance, (rect) =>
+        callback({ width: rect.width || 240, height: rect.height || 600 }),
+      ),
+  })
+
+  const select = (index: number, additive: boolean, range: boolean) => {
+    const page = pages[index]
+    if (!page) return
+    let next: string[]
+    if (range && anchor.current !== null) {
+      const start = Math.min(anchor.current, index)
+      const end = Math.max(anchor.current, index)
+      const rangeIds = pages.slice(start, end + 1).map((item) => item.id)
+      next = additive ? [...new Set([...selected, ...rangeIds])] : rangeIds
+    } else if (additive) {
+      next = selected.includes(page.id)
+        ? selected.filter((id) => id !== page.id)
+        : [...selected, page.id]
+      anchor.current = index
+    } else {
+      next = [page.id]
+      anchor.current = index
+    }
+    selectPages(next)
+    selectLayers([])
+    void call(commands.selectPage, page.id)
+      .then(() => refresh(projectKey, pageKey))
+      .catch(() => undefined)
+  }
+
+  const deletePage = (page: string) =>
+    void call(commands.deletePages, [page])
+      .then(() => {
+        selectPages(selected.filter((selectedPage) => selectedPage !== page))
+        if (active === page) selectLayers([])
+        return refresh(projectKey, pagesKey, pageKey)
+      })
+      .catch(() => undefined)
+
+  const openRename = (page: PageSummary) => {
+    setRenaming(page)
+    setRenameValue(page.label)
+  }
+
+  const closeRename = () => {
+    setRenaming(null)
+    setRenameValue('')
+  }
+
+  const submitRename = () => {
+    const page = renaming
+    const label = renameValue.trim()
+    if (!page || !label || label === page.label) {
+      closeRename()
+      return
+    }
+    void call(commands.renamePage, page.id, label)
+      .then(() => refresh(projectKey, pagesKey, pageKey))
+      .catch(() => undefined)
+      .finally(closeRename)
+  }
+
+  return (
+    <>
+      <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-sidebar)]'>
+        <header className='flex h-10 shrink-0 items-center justify-between px-2.5'>
+          <div className='flex min-w-0 items-center gap-2'>
+            <h2 className='text-[11px] font-semibold'>
+              {t('native.navigator.pages', { defaultValue: 'Pages' })}
+            </h2>
+            <span className='rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
+              {pages.length}
+            </span>
+          </div>
+          <PageImportMenu compact importing={importing} onImport={importPages} />
+        </header>
+
+        {importing && (
+          <div
+            role='status'
+            aria-live='polite'
+            className='flex h-7 shrink-0 items-center gap-1.5 px-2.5 text-[9px] text-muted-foreground'
+          >
+            <LoaderCircle className='size-3 animate-spin' aria-hidden='true' />
+            {t('native.navigator.importing', { defaultValue: 'Importing pages…' })}
+          </div>
+        )}
+
+        {pages.length > 0 && (
+          <div className='border-b px-2 py-1.5'>
+            <label className='flex h-7 items-center gap-1.5 rounded-lg border border-input bg-background/70 px-2'>
+              <Search className='size-3 text-muted-foreground' />
+              <Input
+                value={query}
+                aria-label='Filter pages'
+                placeholder='Filter pages'
+                className='h-6 min-w-0 border-0 bg-transparent p-0 text-[10px] shadow-none focus-visible:ring-0'
+                onChange={(event) => setQuery(event.currentTarget.value)}
+              />
+            </label>
+          </div>
+        )}
+
+        {pages.length === 0 ? (
+          <div className='flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center'>
+            <p className='text-[11px] font-medium'>No pages yet</p>
+            <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
+              Import images to begin.
+            </p>
+            <div className='mt-3'>
+              <PageImportMenu importing={importing} onImport={importPages} />
+            </div>
+          </div>
+        ) : visiblePages.length === 0 ? (
+          <div className='grid flex-1 place-items-center px-4 text-center text-[10px] text-muted-foreground'>
+            No matching pages
+          </div>
+        ) : (
+          <div ref={pageList} className='min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5'>
+            <div className='relative w-full' style={{ height: pageVirtualizer.getTotalSize() }}>
+              {pageVirtualizer.getVirtualItems().map((virtualRow) => {
+                const item = visiblePages[virtualRow.index]
+                if (!item) return null
+                const { page, index } = item
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    className='absolute top-0 left-0 w-full'
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    <PageItem
+                      page={page}
+                      active={active === page.id}
+                      selected={selected.includes(page.id)}
+                      dragged={dragged === page.id}
+                      onSelect={(additive, range) => select(index, additive, range)}
+                      onDragStart={() => setDragged(page.id)}
+                      onDragEnd={() => setDragged(null)}
+                      onRename={() => openRename(page)}
+                      onDelete={() => deletePage(page.id)}
+                      onDrop={() => {
+                        if (dragged && dragged !== page.id) {
+                          void call(commands.movePage, dragged, index)
+                            .then(() => refresh(projectKey, pagesKey))
+                            .catch(() => undefined)
+                        }
+                        setDragged(null)
+                      }}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className='mt-auto flex shrink-0 items-center gap-2 px-2 py-2'>
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            className='size-8 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
+            aria-label='Settings'
+            title='Settings'
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings className='size-4' />
+          </Button>
+          <ResourceMonitor />
+        </div>
+      </aside>
+
+      <Dialog
+        open={renaming !== null}
+        onOpenChange={(open) => {
+          if (!open) closeRename()
+        }}
+      >
+        <DialogContent className='sm:max-w-md'>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              submitRename()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>Rename page</DialogTitle>
+              <DialogDescription>Choose a short name for this page.</DialogDescription>
+            </DialogHeader>
+            <Input
+              autoFocus
+              value={renameValue}
+              aria-label='Page name'
+              className='mt-4'
+              onChange={(event) => setRenameValue(event.currentTarget.value)}
+            />
+            <DialogFooter className='mt-4'>
+              <Button type='button' variant='ghost' onClick={closeRename}>
+                Cancel
+              </Button>
+              <Button type='submit' disabled={!renameValue.trim()}>
+                Rename
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function PageImportMenu({
+  compact = false,
+  importing,
+  onImport,
+}: {
+  compact?: boolean
+  importing: boolean
+  onImport: (source: PageImportSource) => void
+}) {
+  const { t } = useTranslation()
+  const label = t('native.navigator.import', { defaultValue: 'Import pages' })
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          compact ? (
+            <Button
+              variant='ghost'
+              size='icon-sm'
+              disabled={importing}
+              aria-busy={importing}
+              aria-label={label}
+              title={label}
+            />
+          ) : (
+            <Button
+              size='sm'
+              variant='outline'
+              disabled={importing}
+              aria-busy={importing}
+              className='rounded-lg text-[10px]'
+            />
+          )
+        }
+      >
+        {importing ? <LoaderCircle className='animate-spin' /> : <FilePlus2 />}
+        {!compact &&
+          (importing
+            ? t('native.navigator.importingAction', { defaultValue: 'Importing…' })
+            : t('native.navigator.importAction', { defaultValue: 'Import' }))}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={compact ? 'end' : 'start'}
+        className='w-auto min-w-20 border border-border/50 p-0.5 shadow-sm ring-0'
+      >
+        <DropdownMenuItem
+          disabled={importing}
+          className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
+          onClick={() => onImport('files')}
+        >
+          <ImagePlus />
+          {t('native.navigator.importFiles', { defaultValue: 'Files...' })}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={importing}
+          className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
+          onClick={() => onImport('folder')}
+        >
+          <FolderOpen />
+          {t('native.navigator.importFolder', { defaultValue: 'Folder...' })}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function PageItem({
+  page,
+  active,
+  selected,
+  dragged,
+  onSelect,
+  onDragStart,
+  onDragEnd,
+  onRename,
+  onDelete,
+  onDrop,
+}: {
+  page: PageSummary
+  active: boolean
+  selected: boolean
+  dragged: boolean
+  onSelect: (additive: boolean, range: boolean) => void
+  onDragStart: () => void
+  onDragEnd: () => void
+  onRename: () => void
+  onDelete: () => void
+  onDrop: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <article
+      draggable
+      data-active={active}
+      data-selected={selected}
+      className={cn(
+        'group grid cursor-default grid-cols-[48px_minmax(0,1fr)] gap-2 rounded-xl border border-transparent p-1 transition-colors select-none',
+        'hover:bg-foreground/[0.045] data-[active=true]:border-primary/60 data-[active=true]:bg-[var(--surface-floating)] data-[selected=true]:bg-accent',
+        dragged && 'opacity-50',
+      )}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest('button,[role="menuitem"]')) return
+        onSelect(event.ctrlKey || event.metaKey, event.shiftKey)
+      }}
+      onDoubleClick={onRename}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault()
+        onDrop()
+      }}
+    >
+      <div className='grid h-16 w-12 place-items-center overflow-hidden rounded-lg bg-[var(--surface-well)]'>
+        {page.source_asset ? (
+          <PageThumbnail page={page.id} asset={page.source_asset} label={page.label} />
+        ) : (
+          <span className='text-[9px] text-muted-foreground'>No image</span>
+        )}
+      </div>
+      <div className='min-w-0 py-0.5'>
+        <div className='flex items-start gap-1'>
+          <span className='min-w-0 flex-1 truncate text-[10px] font-medium'>{page.label}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant='ghost'
+                  size='icon-xs'
+                  aria-label={`Actions for ${page.label}`}
+                  className='-mt-1 shrink-0 opacity-0 shadow-none group-hover:opacity-100 aria-expanded:opacity-100'
+                />
+              }
+            >
+              <MoreHorizontal />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem onClick={onRename}>Rename</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant='destructive' onClick={onDelete}>
+                <Trash2 /> {t('native.navigator.delete', { defaultValue: 'Delete page' })}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <p className='mt-1 text-[9px] leading-3.5 text-muted-foreground'>
+          {page.layer_count > 0 ? `${page.layer_count} layers` : 'No layers'}
+        </p>
+        <p className='mt-1 text-[9px] text-muted-foreground tabular-nums'>
+          {page.size.width} × {page.size.height}
+        </p>
+      </div>
+    </article>
+  )
+}
+
+function PageThumbnail({ page, asset, label }: { page: string; asset: string; label: string }) {
+  const [source, setSource] = useState<string | null>(null)
+  const [settled, setSettled] = useState(false)
+
+  useEffect(() => {
+    setSettled(false)
+    const timeout = window.setTimeout(() => setSettled(true), 100)
+    return () => window.clearTimeout(timeout)
+  }, [asset])
+
+  const thumbnail = useQuery({
+    queryKey: ['thumbnail', asset],
+    queryFn: async () => new Uint8Array(await call(commands.getThumbnail, page)),
+    enabled: settled,
+    staleTime: Number.POSITIVE_INFINITY,
+    notifyOnChangeProps: ['data'],
+  }).data
+
+  useEffect(() => {
+    if (!thumbnail) return
+    const url = URL.createObjectURL(new Blob([thumbnail.buffer], { type: 'image/webp' }))
+    setSource(url)
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [thumbnail])
+
+  return (
+    <div className='grid size-full place-items-center'>
+      {source ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={source} alt={label} draggable={false} className='size-full object-contain' />
+      ) : (
+        <span className='text-[9px] text-muted-foreground'>Loading…</span>
+      )}
+    </div>
+  )
+}

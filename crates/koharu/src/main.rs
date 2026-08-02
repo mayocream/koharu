@@ -28,5 +28,5 @@ async fn main() -> anyhow::Result<()> {
         .with(sentry::tracing_layer())
         .with(koharu::tracing::TimingLayer::new())
         .init();
-    koharu_app::app::run(arguments.project)
+    tokio::task::block_in_place(|| koharu::run(arguments.project, tauri::generate_context!()))
 }

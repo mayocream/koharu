@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
 use koharu_scene::{
-    Asset, BlobId, EntityId, Geometry, Region, SceneSnapshot, SourceText, Visibility,
+    AssetRole, BlobId, EntityId, Geometry, RasterLayer, RasterLayerKind, Snapshot, TextLayout,
+    Visibility,
 };
 
 use crate::{Error, Frame, PhysicalSize, Result};
@@ -12,17 +13,15 @@ const MAX_SURFACE_PIXELS: u64 = 268_435_456;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PageAssets {
     pub source: Option<BlobId>,
-    pub clean: Option<BlobId>,
     pub rendered: Option<BlobId>,
     pub text_mask: Option<BlobId>,
-    pub brush_mask: Option<BlobId>,
 }
 
 impl PageAssets {
     pub(crate) const fn mask(&self, plane: crate::MaskPlane) -> Option<BlobId> {
         match plane {
             crate::MaskPlane::Text => self.text_mask,
-            crate::MaskPlane::Brush => self.brush_mask,
+            crate::MaskPlane::Inpaint => None,
         }
     }
 }
@@ -36,11 +35,12 @@ pub(crate) struct CanvasElement {
     pub opacity: f32,
     pub image: Option<BlobId>,
     pub has_text: bool,
+    pub raster: Option<RasterLayerKind>,
 }
 
 impl CanvasElement {
     pub(crate) const fn selectable(&self) -> bool {
-        self.has_text || self.image.is_some()
+        self.raster.is_none() && (self.has_text || self.image.is_some())
     }
 }
 
@@ -54,7 +54,7 @@ pub(crate) struct CanvasPage {
 }
 
 impl CanvasPage {
-    pub(crate) fn load(snapshot: &SceneSnapshot, id: EntityId) -> Result<Self> {
+    pub(crate) fn load(snapshot: &Snapshot, id: EntityId) -> Result<Self> {
         let page = snapshot.page(id)?.page()?;
         let size = PhysicalSize::new(page.width.ceil() as u32, page.height.ceil() as u32);
         if size.is_empty()
@@ -69,11 +69,9 @@ impl CanvasPage {
         }
 
         let assets = PageAssets {
-            source: asset_blob(snapshot, id, "source")?,
-            clean: asset_blob(snapshot, id, "clean")?,
-            rendered: asset_blob(snapshot, id, "rendered")?,
-            text_mask: asset_blob(snapshot, id, "text-mask")?,
-            brush_mask: asset_blob(snapshot, id, "brush-mask")?,
+            source: asset_blob(snapshot, id, &AssetRole::new("source")?)?,
+            rendered: asset_blob(snapshot, id, &AssetRole::new("rendered")?)?,
+            text_mask: asset_blob(snapshot, id, &AssetRole::new("text-mask")?)?,
         };
         if assets.source.is_none() {
             return Err(Error::Invalid(format!("page {id} has no source asset")));
@@ -84,27 +82,45 @@ impl CanvasPage {
         for entity in snapshot.subtree(id)?.skip(1) {
             let entity = entity.id();
             members.insert(entity);
-            let Some(geometry) = snapshot.component::<Geometry>(entity, "default")? else {
+            if let Some(raster) = snapshot.component::<RasterLayer>(entity)? {
+                let image = asset_blob(snapshot, entity, &AssetRole::new("source")?)?;
+                let visibility = visibility(snapshot, entity)?;
+                let geometry =
+                    Geometry::rectangle(0.0, 0.0, f64::from(size.width), f64::from(size.height));
+                elements.push(CanvasElement {
+                    id: entity,
+                    frame: Frame::new(0.0, 0.0, size.width as f32, size.height as f32),
+                    geometry,
+                    visible: visibility.visible,
+                    opacity: visibility.opacity,
+                    image,
+                    has_text: false,
+                    raster: Some(raster.kind),
+                });
+                continue;
+            }
+            let has_text = snapshot.component::<TextLayout>(entity)?.is_some();
+            let geometry = if has_text {
+                text_geometry(snapshot, entity)?
+            } else {
+                snapshot.component::<Geometry>(entity)?
+            };
+            let Some(geometry) = geometry else {
                 continue;
             };
             let Some(frame) = geometry_frame(&geometry) else {
                 continue;
             };
-            let visibility = snapshot
-                .component::<Visibility>(entity, "default")?
-                .unwrap_or(Visibility {
-                    origin: koharu_scene::Origin::User,
-                    visible: true,
-                    opacity: 1.0,
-                });
+            let visibility = visibility(snapshot, entity)?;
             elements.push(CanvasElement {
                 id: entity,
                 geometry,
                 frame,
                 visible: visibility.visible,
                 opacity: visibility.opacity,
-                image: asset_blob(snapshot, entity, "source")?,
-                has_text: is_text_block(snapshot, entity)?,
+                image: asset_blob(snapshot, entity, &AssetRole::new("source")?)?,
+                has_text,
+                raster: None,
             });
         }
 
@@ -126,22 +142,22 @@ impl CanvasPage {
     }
 }
 
-fn is_text_block(snapshot: &SceneSnapshot, entity: EntityId) -> Result<bool> {
-    if snapshot
-        .component::<SourceText>(entity, "default")?
-        .is_some()
-    {
-        return Ok(true);
-    }
+fn visibility(snapshot: &Snapshot, entity: EntityId) -> Result<Visibility> {
     Ok(snapshot
-        .component::<Region>(entity, "default")?
-        .is_some_and(|region| region.kind.as_str() == "dev.koharu.region.text"))
+        .component::<Visibility>(entity)?
+        .unwrap_or(Visibility {
+            origin: koharu_scene::Origin::User,
+            visible: true,
+            opacity: 1.0,
+        }))
 }
 
-fn asset_blob(snapshot: &SceneSnapshot, entity: EntityId, slot: &str) -> Result<Option<BlobId>> {
-    Ok(snapshot
-        .component::<Asset>(entity, slot)?
-        .map(|asset| asset.blob))
+fn text_geometry(snapshot: &Snapshot, layer: EntityId) -> Result<Option<Geometry>> {
+    Ok(snapshot.text_layer(layer)?.frame()?)
+}
+
+fn asset_blob(snapshot: &Snapshot, entity: EntityId, role: &AssetRole) -> Result<Option<BlobId>> {
+    Ok(snapshot.asset(entity, role)?.map(|asset| asset.blob))
 }
 
 fn geometry_frame(geometry: &Geometry) -> Option<Frame> {
@@ -221,7 +237,10 @@ fn rectangle_frame(points: &[koharu_scene::Point]) -> Option<Frame> {
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{At, Geometry, Origin, PageDraft, Point, Region, RegionKind, SceneSession};
+    use koharu_scene::{
+        At, BubbleRegion, FitsTo, Geometry, Origin, PageDraft, Point, Session, TextLayout,
+        TextLayoutKind,
+    };
 
     use super::*;
 
@@ -271,33 +290,28 @@ mod tests {
     }
 
     #[test]
-    fn detected_text_regions_are_canvas_text_blocks_before_ocr() {
-        let mut session = SceneSession::memory().unwrap();
+    fn text_layers_resolve_automatic_frames_from_regions() {
+        let mut session = Session::memory().unwrap();
         let mut entities = None;
         let patch = session
             .snapshot()
             .patch(|edit| {
                 let page = edit.add_page(PageDraft::new("page", 100.0, 100.0), At::End)?;
+                let bubble = edit.add_analysis_region::<BubbleRegion>(
+                    page,
+                    At::End,
+                    &Geometry::rectangle(10.0, 20.0, 30.0, 40.0),
+                    Some("bubble".into()),
+                )?;
                 let text = edit.add_entity(page, At::End)?;
                 edit.set(
                     text,
-                    "default",
-                    &Region {
+                    &TextLayout {
                         origin: Origin::User,
-                        kind: RegionKind::new("dev.koharu.region.text")?,
-                        label: Some("text".into()),
+                        kind: TextLayoutKind::Paragraph,
                     },
                 )?;
-                let bubble = edit.add_entity(page, At::End)?;
-                edit.set(
-                    bubble,
-                    "default",
-                    &Region {
-                        origin: Origin::User,
-                        kind: RegionKind::new("dev.koharu.region.bubble")?,
-                        label: Some("bubble".into()),
-                    },
-                )?;
+                edit.relate::<FitsTo>(text, bubble)?;
                 entities = Some((text, bubble));
                 Ok(())
             })
@@ -305,8 +319,10 @@ mod tests {
         let snapshot = session.commit(patch).unwrap().snapshot;
         let (text, bubble) = entities.unwrap();
 
-        assert!(is_text_block(&snapshot, text).unwrap());
-        assert!(!is_text_block(&snapshot, bubble).unwrap());
+        assert_eq!(
+            text_geometry(&snapshot, text).unwrap(),
+            Some(Geometry::rectangle(10.0, 20.0, 30.0, 40.0))
+        );
 
         let frame = Frame::new(0.0, 0.0, 10.0, 10.0);
         let analysis_region = CanvasElement {
@@ -316,6 +332,7 @@ mod tests {
             visible: true,
             opacity: 1.0,
             image: None,
+            raster: None,
             has_text: false,
         };
         let text_block = CanvasElement {

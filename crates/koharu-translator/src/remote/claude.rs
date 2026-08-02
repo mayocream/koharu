@@ -5,69 +5,58 @@ use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use specta::Type;
 
 use super::send_json;
-use crate::{RemoteProviderKind, Result, TranslationRequest, prompt};
+use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, prompt};
 
 const URL: &str = "https://api.anthropic.com/v1/messages";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct ClaudeConfig {
-    pub model: String,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub thinking: bool,
-}
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct ClaudeConfig {}
 
-impl Default for ClaudeConfig {
-    fn default() -> Self {
-        Self {
-            model: "claude-sonnet-5".into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
-}
+pub(super) static MODELS: &[(&str, &str)] = &[
+    ("claude-fable-5", "Claude Fable 5"),
+    ("claude-opus-4-8", "Claude Opus 4.8"),
+    ("claude-sonnet-5", "Claude Sonnet 5"),
+    ("claude-haiku-4-5", "Claude Haiku 4.5"),
+    ("claude-opus-4-7", "Claude Opus 4.7"),
+    ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
+    ("claude-opus-4-6", "Claude Opus 4.6"),
+    ("claude-opus-4-5-20251101", "Claude Opus 4.5"),
+    ("claude-haiku-4-5-20251001", "Claude Haiku 4.5 Snapshot"),
+];
 
-impl ClaudeConfig {
-    #[must_use]
-    pub fn new(model: impl Into<String>) -> Self {
-        Self {
-            model: model.into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
+pub(super) async fn models() -> Result<Vec<Model>> {
+    Ok(if koharu_secrets::get("claude")?.is_some() {
+        Model::catalog(Provider::Claude, MODELS)
+    } else {
+        Vec::new()
+    })
 }
 
 pub(super) async fn translate(
     client: &Client,
-    config: &ClaudeConfig,
+    _config: &ClaudeConfig,
+    model: &str,
+    generation: &GenerationConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    let provider = RemoteProviderKind::Claude;
-    let api_key = koharu_secrets::get(provider.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty())
-        .with_context(|| format!("{} API key is not configured", provider.id()))?;
+    let api_key = koharu_secrets::get("claude")?.context("claude API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let body = Request {
-        model: &config.model,
-        max_tokens: config.max_tokens.unwrap_or(8192),
+        model,
+        max_tokens: generation.max_tokens.unwrap_or(8192),
         system: &system,
         messages: [Message {
             role: "user",
             content: &user,
         }],
-        temperature: config.temperature,
-        thinking: config
-            .model
+        temperature: generation.temperature,
+        thinking: model
             .starts_with("claude-sonnet-5")
             .then_some(ThinkingConfig {
-                kind: if config.thinking {
+                kind: if generation.thinking {
                     "adaptive"
                 } else {
                     "disabled"

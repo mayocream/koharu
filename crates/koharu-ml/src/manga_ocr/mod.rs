@@ -4,19 +4,18 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{config::MangaOcrConfig, processor::ViTImageProcessor};
 
 use self::{model::Model, processor::Tokenizer};
 
-koharu_runtime::huggingface! {
-    CONFIG => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "config.json",
-    WEIGHTS => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "model.safetensors",
-    PROCESSOR => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "preprocessor_config.json",
-    VOCABULARY => "mayocream/manga-ocr" => "4380edba990b959c508752350955350c1c80c31c" => "vocab.txt",
-}
+model_repository!("mayocream/manga-ocr" @ "4380edba990b959c508752350955350c1c80c31c" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+    PROCESSOR = "preprocessor_config.json",
+    VOCABULARY = "vocab.txt",
+});
 
 #[derive(Debug)]
 pub struct MangaOcr {
@@ -29,16 +28,20 @@ pub struct MangaOcr {
 impl MangaOcr {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve Manga OCR config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve Manga OCR weights")?;
-        let processor_path = huggingface::resolve(PROCESSOR)
+        let processor_path = PROCESSOR
+            .resolve()
             .await
             .context("failed to resolve Manga OCR image processor")?;
-        let vocabulary_path = huggingface::resolve(VOCABULARY)
+        let vocabulary_path = VOCABULARY
+            .resolve()
             .await
             .context("failed to resolve Manga OCR vocabulary")?;
 

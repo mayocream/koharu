@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use koharu_scene::{EntityId, ScenePatch};
+use koharu_scene::{EntityId, Patch};
 
 use crate::{
     ErrorKind, PipelineConfig, PipelineError, Progress, ProgressSink, Stage, StopToken, progress,
@@ -22,12 +22,12 @@ pub(crate) struct StageRunner {
 impl StageRunner {
     pub(crate) fn new(
         config: &PipelineConfig,
-        translation: &koharu_translator::TranslationConfig,
+        translator: koharu_translator::Translator,
         device: &koharu_ml::Device,
         resources: Arc<ResourceMonitor>,
     ) -> Result<Self> {
         Ok(Self {
-            stages: Stages::new(config, translation, device)?,
+            stages: Stages::new(config, translator, device)?,
             residency: Residency::new(resources.clone()),
             resources,
         })
@@ -191,7 +191,7 @@ impl StageJob {
 }
 
 pub(crate) enum StageOutcome {
-    Patch(ScenePatch),
+    Patch(Patch),
     Skipped,
     Stopped,
 }

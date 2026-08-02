@@ -11,7 +11,7 @@ Se você quer compilar o Koharu localmente em vez de usar uma release pré-compi
 Um build completo para desktop inclui:
 
 - a aplicação Rust em `koharu/`
-- a UI embutida de `ui/`
+- a UI embutida de `packages/koharu/`
 - o servidor HTTP, RPC e MCP local usado tanto pelos modos GUI quanto headless
 
 O build desktop padrão é ciente de plataforma:

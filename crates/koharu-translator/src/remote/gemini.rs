@@ -5,72 +5,69 @@ use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use specta::Type;
 use url::Url;
 
 use super::send_json;
-use crate::{RemoteProviderKind, Result, TranslationRequest, prompt};
+use crate::{
+    GenerationConfig as TranslationGeneration, Model, Provider, Result, TranslationRequest, prompt,
+};
 
 const ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct GeminiConfig {
-    pub model: String,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub thinking: bool,
-}
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(default, deny_unknown_fields)]
+pub struct GeminiConfig {}
 
-impl Default for GeminiConfig {
-    fn default() -> Self {
-        Self {
-            model: "gemini-2.5-flash".into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
-}
+pub(super) static MODELS: &[(&str, &str)] = &[
+    ("gemini-flash-lite-latest", "Gemini Flash-Lite Latest"),
+    ("gemini-flash-latest", "Gemini Flash Latest"),
+    ("gemini-pro-latest", "Gemini Pro Latest"),
+    ("gemini-3.5-flash", "Gemini 3.5 Flash"),
+    ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
+    (
+        "gemini-3.1-pro-preview-customtools",
+        "Gemini 3.1 Pro Preview Custom Tools",
+    ),
+    ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite"),
+    ("gemini-3-flash-preview", "Gemini 3 Flash Preview"),
+    ("gemini-2.5-pro", "Gemini 2.5 Pro"),
+    ("gemini-2.5-flash", "Gemini 2.5 Flash"),
+    ("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"),
+];
 
-impl GeminiConfig {
-    #[must_use]
-    pub fn new(model: impl Into<String>) -> Self {
-        Self {
-            model: model.into(),
-            temperature: None,
-            max_tokens: None,
-            thinking: false,
-        }
-    }
+pub(super) async fn models() -> Result<Vec<Model>> {
+    Ok(if koharu_secrets::get("gemini")?.is_some() {
+        Model::catalog(Provider::Gemini, MODELS)
+    } else {
+        Vec::new()
+    })
 }
 
 pub(super) async fn translate(
     client: &Client,
-    config: &GeminiConfig,
+    _config: &GeminiConfig,
+    model: &str,
+    generation: &TranslationGeneration,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    let provider = RemoteProviderKind::Gemini;
-    let api_key = koharu_secrets::get(provider.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty())
-        .with_context(|| format!("{} API key is not configured", provider.id()))?;
+    let api_key = koharu_secrets::get("gemini")?.context("gemini API key is not configured")?;
     let (system, user) = prompt::prompts(request)?;
     let schema = prompt::output_schema(request.segments.len());
-    let mut url = Url::parse(&format!("{ROOT}/{}:generateContent", config.model))
-        .expect("Gemini API root is valid");
+    let mut url =
+        Url::parse(&format!("{ROOT}/{model}:generateContent")).expect("Gemini API root is valid");
     url.query_pairs_mut()
         .append_pair("key", api_key.expose_secret());
     let body = Request {
         system_instruction: Content::new(&system),
         contents: [Content::new(&user)],
         generation_config: GenerationConfig {
-            temperature: config.temperature,
-            max_output_tokens: config.max_tokens,
-            thinking_config: config.model.starts_with("gemini-2.5-flash").then_some(
-                ThinkingConfig {
-                    thinking_budget: if config.thinking { -1 } else { 0 },
-                },
-            ),
+            temperature: generation.temperature,
+            max_output_tokens: generation.max_tokens,
+            thinking_config: model
+                .starts_with("gemini-2.5-flash")
+                .then_some(ThinkingConfig {
+                    thinking_budget: if generation.thinking { -1 } else { 0 },
+                }),
             response_mime_type: "application/json",
             response_json_schema: schema,
         },

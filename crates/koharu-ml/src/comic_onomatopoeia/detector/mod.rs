@@ -4,16 +4,15 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::processor::Detection;
 
 use self::{config::Config, model::Model, processor::Processor};
 
-koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/coo-comic-onomatopoeia-safetensors" => "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" => "mtsv3/model.safetensors",
-}
+model_repository!("mayocream/coo-comic-onomatopoeia-safetensors" @ "b5d31460573b6f61c1d4bdaea5fe4e18425e6a61" {
+    WEIGHTS = "mtsv3/model.safetensors"
+});
 
 /// COO's reported-best MTSv3 comic onomatopoeia detector.
 #[derive(Debug)]
@@ -26,7 +25,8 @@ pub struct ComicOnomatopoeiaDetector {
 impl ComicOnomatopoeiaDetector {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve COO MTSv3 weights")?;
         let config = Config::default();

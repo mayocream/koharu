@@ -1,34 +1,25 @@
-//! Generic, versioned record/component storage for Koharu.
+//! Durable single-file storage for Koharu documents.
 //!
-//! Storage owns identities, opaque component envelopes, immutable snapshots,
-//! flat optimistic patches, explicit read observations, content-addressed
-//! bytes, SQLite durability, and revision history. Domain schemas and typed
-//! codecs belong in crates such as `koharu-scene`.
+//! Storage owns revision ordering, opaque commits and checkpoints,
+//! content-addressed blobs, redb transactions, and durability. It deliberately
+//! does not interpret a document's in-memory model. Scene semantics, indexes,
+//! validation, conflict detection, and undo operations belong to
+//! `koharu-scene`.
 
 mod blob;
-mod component;
-mod edit;
 mod error;
 mod history;
 mod id;
-mod patch;
 mod session;
 mod snapshot;
-mod state;
 mod storage;
 
 pub use blob::{BlobAttachment, BlobBatch};
-pub use component::{
-    ComponentAddress, ComponentKey, ComponentKind, ComponentRecord, ComponentSlot,
-};
-pub use edit::{Edit, EditView};
 pub use error::{Error, Result};
-pub use history::{ChangeSet, ComponentChange, RecordChange, ValueChangeKind};
-pub use id::{BlobId, DocumentId, PatchId, RecordId, Revision};
-pub use patch::{BaseRevision, Patch, PatchEffects};
+pub use history::{Commit, CommitRequest, Recovery, Refresh};
+pub use id::{BlobId, DocumentId, PatchId, Revision};
 pub use session::{CommitResult, GcReport, Options, Session};
 pub use snapshot::Snapshot;
-pub use state::RecordRef;
 
 #[cfg(test)]
 mod tests;

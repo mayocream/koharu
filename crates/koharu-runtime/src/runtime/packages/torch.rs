@@ -1,0 +1,267 @@
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
+
+use anyhow::{Context, Result};
+use strum::EnumProperty;
+
+use crate::{
+    Hardware, Store,
+    downloads::Transfer,
+    runtime::{
+        DiscoverablePackage, Package, RuntimePackage,
+        graph::Component,
+        loader,
+        packages::{Cuda, Rocm, rocm},
+        sealed,
+    },
+    source::extract,
+};
+
+const VERSION: &str = "2.12.1";
+const ROCM_TORCH_VERSION: &str = "2.12.0";
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Torch(Backend);
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::EnumProperty)]
+enum Backend {
+    #[strum(
+        serialize = "cpu",
+        props(
+            windows = "libiomp5md.dll,libiompstubs5md.dll,uv.dll,c10.dll,torch_global_deps.dll,torch_cpu.dll,shm.dll,torch.dll",
+            linux = "libgomp.so.1,libc10.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch.so",
+            macos = "libtorch.dylib,libshm.dylib,libtorch_global_deps.dylib,libtorch_cpu.dylib,libc10.dylib,libomp.dylib"
+        )
+    )]
+    Cpu,
+    #[strum(
+        serialize = "cuda-13",
+        props(
+            windows = "libiomp5md.dll,libiompstubs5md.dll,zlibwapi.dll,uv.dll,c10.dll,c10_cuda.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_cuda.dll,shm.dll,torch.dll",
+            linux = "libgomp.so.1,libc10.so,libc10_cuda.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_nvshmem.so,libtorch_cuda.so,libtorch_cuda_linalg.so,libtorch.so"
+        )
+    )]
+    Cuda13,
+    #[strum(
+        serialize = "rocm-7.14",
+        props(
+            windows = "libomp140.x86_64.dll,uv.dll,dl.dll,liblzma.dll,c10.dll,c10_hip.dll,aotriton_v2.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_hip.dll,shm.dll,torch.dll"
+        )
+    )]
+    Rocm714(Rocm),
+}
+
+impl Torch {
+    pub const CPU: Self = Self(Backend::Cpu);
+
+    fn libraries(self) -> Result<impl Iterator<Item = &'static str>> {
+        let property = if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            "macos"
+        } else {
+            anyhow::bail!("Torch does not support this target")
+        };
+        Ok(self
+            .0
+            .get_str(property)
+            .with_context(|| format!("Torch {self} does not support this target"))?
+            .split(','))
+    }
+
+    fn complete(self, root: &Path, rocm: Option<Rocm>) -> bool {
+        let library = root.join("libtorch/lib");
+        self.libraries()
+            .is_ok_and(|names| names.into_iter().all(|name| library.join(name).is_file()))
+            && rocm.is_none_or(|target| {
+                root.join("libtorch/.kpack")
+                    .join(format!("torch_{target}.kpack"))
+                    .is_file()
+            })
+    }
+
+    fn selected_rocm(self) -> Option<Rocm> {
+        match self.0 {
+            Backend::Rocm714(target) => Some(target),
+            Backend::Cpu | Backend::Cuda13 => None,
+        }
+    }
+
+    fn urls(self, target: Option<Rocm>) -> Result<Vec<String>> {
+        if matches!(self.0, Backend::Rocm714(_)) {
+            let target = target.context("ROCm Torch requires a device target")?;
+            let mut urls = vec![
+                format!(
+                    "{}/torch-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
+                    rocm::INDEX,
+                    rocm::VERSION
+                ),
+                format!(
+                    "{}/amd_torch_device_{target}-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
+                    rocm::INDEX,
+                    rocm::VERSION
+                ),
+            ];
+            if let Some(family) = target.torch_family() {
+                urls.push(format!(
+                    "{}/amd_torch_device_{family}-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
+                    rocm::INDEX,
+                    rocm::VERSION
+                ));
+            }
+            return Ok(urls);
+        }
+
+        let backend = match self.0 {
+            Backend::Cpu => "cpu",
+            Backend::Cuda13 => "cu130",
+            Backend::Rocm714(_) => unreachable!(),
+        };
+        if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+            Ok(vec![format!(
+                "https://download.pytorch.org/whl/{backend}/torch-{VERSION}%2B{backend}-cp312-cp312-win_amd64.whl"
+            )])
+        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            Ok(vec![format!(
+                "https://download.pytorch.org/whl/{backend}/torch-{VERSION}%2B{backend}-cp312-cp312-manylinux_2_28_x86_64.whl"
+            )])
+        } else if cfg!(all(target_os = "macos", target_arch = "aarch64"))
+            && matches!(self.0, Backend::Cpu)
+        {
+            Ok(vec![format!(
+                "https://download.pytorch.org/whl/cpu/torch-{VERSION}-cp312-cp312-macosx_14_0_arm64.whl"
+            )])
+        } else {
+            anyhow::bail!("Torch {self} does not support this target")
+        }
+    }
+}
+
+impl fmt::Display for Torch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self.0 {
+            Backend::Cpu => "cpu",
+            Backend::Cuda13 => "cuda-13",
+            Backend::Rocm714(_) => "rocm-7.14",
+        })
+    }
+}
+
+impl sealed::Sealed for Torch {}
+
+impl Package for Torch {
+    async fn install(self) -> Result<PathBuf> {
+        let rocm = self.selected_rocm();
+        let version = if matches!(self.0, Backend::Rocm714(_)) {
+            format!("{ROCM_TORCH_VERSION}+rocm{}", rocm::VERSION)
+        } else {
+            VERSION.to_owned()
+        };
+        let target = Store::root()
+            .join("torch")
+            .join(version)
+            .join(rocm.map_or_else(|| self.to_string(), |target| format!("rocm-{target}")));
+        let urls = self.urls(rocm)?;
+        let libraries = self.libraries()?.collect::<Vec<_>>();
+        let mut patterns = libraries
+            .iter()
+            .map(|name| format!("torch/lib/{name}"))
+            .collect::<Vec<_>>();
+        if rocm.is_some() {
+            patterns.push("torch/.kpack/**/*".to_owned());
+        } else if matches!(self.0, Backend::Cpu) {
+            patterns.extend([
+                "torch/include/**/*".to_owned(),
+                "torch/share/cmake/**/*".to_owned(),
+                "torch/lib/*.lib".to_owned(),
+            ]);
+        }
+
+        Store::directory(
+            target,
+            move |path| self.complete(path, rocm),
+            move |stage| async move {
+                let transfer = Transfer::new()?;
+                let patterns = patterns.iter().map(String::as_str).collect::<Vec<_>>();
+                for url in urls {
+                    let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
+                    transfer.fetch(&url, archive.path()).await?;
+                    extract(archive.path(), &stage, &patterns)?;
+                }
+                std::fs::rename(stage.join("torch"), stage.join("libtorch"))?;
+                Ok(())
+            },
+        )
+        .await
+    }
+}
+
+impl DiscoverablePackage for Torch {
+    fn discover(hardware: &Hardware) -> Result<Self> {
+        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            return Ok(Self::CPU);
+        }
+        if !cfg!(any(
+            all(target_os = "windows", target_arch = "x86_64"),
+            all(target_os = "linux", target_arch = "x86_64")
+        )) {
+            anyhow::bail!("Torch does not support this target")
+        }
+        if hardware
+            .cuda_driver()
+            .is_some_and(|version| version >= 13000)
+        {
+            return Ok(Self(Backend::Cuda13));
+        }
+        if cfg!(target_os = "windows")
+            && let Ok(target) = Rocm::discover(hardware)
+        {
+            return Ok(Self(Backend::Rocm714(target)));
+        }
+        tracing::warn!("no supported Torch accelerator was discovered; using CPU");
+        Ok(Self::CPU)
+    }
+}
+
+impl RuntimePackage for Torch {
+    const NAME: &'static str = "Torch";
+
+    fn dependencies(self, _hardware: &Hardware) -> Result<Vec<Component>> {
+        match self.0 {
+            Backend::Cpu => Ok(Vec::new()),
+            Backend::Rocm714(target) => Ok(vec![Component::Rocm(target)]),
+            Backend::Cuda13 => {
+                let packages = [
+                    Cuda::Runtime13,
+                    Cuda::JitLink13,
+                    Cuda::Rtc13,
+                    Cuda::Blas13,
+                    Cuda::Fft12,
+                    Cuda::Rand10,
+                    Cuda::Sparse12,
+                    Cuda::Solver12,
+                    Cuda::Dnn920,
+                    Cuda::Profiler13,
+                ];
+                let packages = packages.into_iter();
+                #[cfg(target_os = "linux")]
+                let packages =
+                    packages.chain([Cuda::SparseLt08, Cuda::Collective229, Cuda::SharedMemory34]);
+                Ok(packages.map(Component::Cuda).collect())
+            }
+        }
+    }
+
+    async fn activate(self) -> Result<()> {
+        let libraries = self.libraries()?.collect::<Vec<_>>();
+        let directory = self.install().await?.join("libtorch/lib");
+        for library in libraries {
+            loader::load(directory.join(library))?;
+        }
+        Ok(())
+    }
+}

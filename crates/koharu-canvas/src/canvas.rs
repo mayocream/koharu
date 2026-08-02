@@ -5,24 +5,28 @@ use std::{
 };
 
 use koharu_renderer::RenderTheme;
-use koharu_scene::{BlobId, EntityChange, Revision, SceneChangeSet, SceneSnapshot};
+use koharu_scene::{
+    BlobId, Change, Component, ComponentOwner, EntityChange, Revision, Snapshot, Typography,
+    Visibility,
+};
+use vello::wgpu;
 use vello::{
     Scene,
-    kurbo::{Affine, Rect, Vec2},
+    kurbo::{Affine, BezPath, Circle, Rect, Stroke, Vec2},
     peniko::{Color as VelloColor, Fill, Mix},
 };
 
 use crate::damage::RenderDamage;
 use crate::{
-    ActiveStroke, ActiveTransform, Brush, CanvasDiagnostic, CanvasElement, CanvasGpu,
-    CanvasOptions, CanvasPage, ElementFrame, ElementId, ElementSceneContext, ElementScenes, Error,
-    GpuRenderer, MaskCommit, MaskPlane, MaskState, PageId, PagePoint, PageView, PhysicalPoint,
-    PhysicalSize, ResourceEvent, ResourceKind, Resources, Result, TransformCommit,
+    ActiveStroke, ActiveTransform, Brush, CanvasDiagnostic, CanvasGpu, CanvasOptions, CanvasPage,
+    ElementFrame, ElementId, ElementSceneContext, ElementScenes, Error, GpuRenderer, MaskCommit,
+    MaskPlane, MaskState, PageId, PagePoint, PageView, PhysicalPoint, PhysicalSize,
+    RasterStrokeCommit, ResourceEvent, ResourceKind, Resources, Result, StrokeMode,
+    TransformCommit,
 };
 
 pub struct CanvasFrame<'a> {
-    /// Final Vello pixels for the desktop surface. React draws all editor
-    /// chrome in the transparent webview above this texture.
+    /// Final Vello pixels for the desktop surface.
     pub texture: &'a wgpu::TextureView,
     pub size: PhysicalSize,
     /// Changes only after a new output texture image has been composed.
@@ -38,7 +42,8 @@ struct ImageTransition {
     duration: Duration,
 }
 
-/// Rust-owned editor viewport. The desktop host only presents the returned texture.
+/// Native scene viewport. React owns interaction policy; the desktop host
+/// presents the returned texture and invokes semantic preview operations.
 pub struct Canvas {
     // GPU details are intentionally hidden behind one backend.
     gpu: GpuRenderer,
@@ -50,7 +55,7 @@ pub struct Canvas {
     render_size: PhysicalSize,
     render_origin: PhysicalPoint,
     render_target_explicit: bool,
-    snapshot: Option<SceneSnapshot>,
+    snapshot: Option<Snapshot>,
     page: Option<CanvasPage>,
     revision: Revision,
 
@@ -63,6 +68,7 @@ pub struct Canvas {
 
     // At most one low-latency editing operation is active for each category.
     stroke: Option<ActiveStroke>,
+    raster_stroke: Option<RasterStrokeCommit>,
     transform: Option<ActiveTransform>,
 
     diagnostics: Vec<CanvasDiagnostic>,
@@ -102,6 +108,7 @@ impl Canvas {
             transition: None,
             reported_fallback: None,
             stroke: None,
+            raster_stroke: None,
             transform: None,
             diagnostics: Vec::new(),
             damage: RenderDamage::initial(),
@@ -109,7 +116,7 @@ impl Canvas {
         })
     }
 
-    pub fn show_page(&mut self, snapshot: &SceneSnapshot, page: PageId) -> Result<()> {
+    pub fn show_page(&mut self, snapshot: &Snapshot, page: PageId) -> Result<()> {
         let next = CanvasPage::load(snapshot, page)?;
         let source_id = next
             .assets
@@ -121,6 +128,7 @@ impl Canvas {
         self.page = Some(next);
         self.revision = snapshot.revision();
         self.stroke = None;
+        self.raster_stroke = None;
         self.transform = None;
         self.masks.clear();
         self.element_scenes.clear();
@@ -132,15 +140,43 @@ impl Canvas {
             MaskState::empty(self.page.as_ref().expect("page was set").size),
         );
         self.masks.insert(
-            MaskPlane::Brush,
+            MaskPlane::Inpaint,
             MaskState::empty(self.page.as_ref().expect("page was set").size),
         );
         self.resources
             .request(source_id, ResourceKind::Color, source);
         self.request_page_resources(snapshot);
+        // Decoded images and Vello atlas entries have independent lifetimes.
+        // Refresh resident pixels whenever a cached page becomes active again.
+        let ready_images = self
+            .page
+            .as_ref()
+            .into_iter()
+            .flat_map(|page| {
+                [page.assets.source, page.assets.rendered]
+                    .into_iter()
+                    .flatten()
+                    .chain(page.elements.iter().filter_map(|element| element.image))
+            })
+            .filter_map(|blob| self.resources.color(blob))
+            .collect::<Vec<_>>();
+        for image in ready_images {
+            self.gpu.mark_image_dirty(&image);
+        }
         self.sync_ready_masks()?;
         self.damage.content();
         Ok(())
+    }
+
+    pub fn show_snapshot(&mut self, snapshot: &Snapshot, page: Option<PageId>) -> Result<()> {
+        if let Some(page) = page {
+            self.show_page(snapshot, page)
+        } else {
+            self.clear_page();
+            self.snapshot = Some(snapshot.clone());
+            self.revision = snapshot.revision();
+            Ok(())
+        }
     }
 
     pub fn clear_page(&mut self) {
@@ -153,11 +189,12 @@ impl Canvas {
         self.transition = None;
         self.reported_fallback = None;
         self.stroke = None;
+        self.raster_stroke = None;
         self.transform = None;
         self.damage.content();
     }
 
-    pub fn sync(&mut self, snapshot: &SceneSnapshot, changes: &SceneChangeSet) -> Result<()> {
+    pub fn sync(&mut self, snapshot: &Snapshot, changes: &Change) -> Result<()> {
         let Some(current) = self.page.as_ref().map(|page| page.id) else {
             self.snapshot = Some(snapshot.clone());
             self.revision = snapshot.revision();
@@ -182,14 +219,52 @@ impl Canvas {
             return Ok(());
         }
 
-        let affected = changes.pages_changed
-            || !changes.entities.is_empty()
+        let affected = !changes.entities.is_empty()
+            || changes.hierarchy.iter().any(|entity| {
+                *entity == current
+                    || self
+                        .page
+                        .as_ref()
+                        .is_some_and(|page| page.contains(*entity))
+            })
             || !changes.relations.is_empty()
-            || changes.components.iter().any(|change| {
-                self.page
-                    .as_ref()
-                    .is_some_and(|page| page.contains(change.entity))
+            || changes.components.iter().any(|change| match change.owner {
+                ComponentOwner::Project | ComponentOwner::Relation(_) => true,
+                ComponentOwner::Entity(entity) => {
+                    self.page.as_ref().is_some_and(|page| page.contains(entity))
+                }
             });
+        let presentation_only = changes.entities.is_empty()
+            && changes.hierarchy.is_empty()
+            && changes.relations.is_empty()
+            && !changes.components.is_empty()
+            && changes
+                .components
+                .iter()
+                .all(|change| change.kind == Visibility::KIND);
+        let hierarchy_only = changes.entities.is_empty()
+            && changes.relations.is_empty()
+            && changes.components.is_empty()
+            && !changes.hierarchy.is_empty();
+        let typography_entities = (changes.entities.is_empty()
+            && changes.hierarchy.is_empty()
+            && changes.relations.is_empty()
+            && !changes.components.is_empty()
+            && changes
+                .components
+                .iter()
+                .all(|change| change.kind == Typography::KIND))
+        .then(|| {
+            changes
+                .components
+                .iter()
+                .filter_map(|change| match change.owner {
+                    ComponentOwner::Entity(entity) => Some(entity),
+                    ComponentOwner::Project | ComponentOwner::Relation(_) => None,
+                })
+                .collect::<HashSet<_>>()
+        })
+        .filter(|entities| !entities.is_empty());
         self.snapshot = Some(snapshot.clone());
         self.revision = changes.to;
         if !affected {
@@ -199,9 +274,28 @@ impl Canvas {
         self.transform = None;
         let next = CanvasPage::load(snapshot, current)?;
         self.verify_mask_replacement(&next)?;
+        let same_elements = hierarchy_only
+            && self.page.as_ref().is_some_and(|page| {
+                page.elements.len() == next.elements.len()
+                    && page
+                        .elements
+                        .iter()
+                        .map(|element| element.id)
+                        .collect::<HashSet<_>>()
+                        == next
+                            .elements
+                            .iter()
+                            .map(|element| element.id)
+                            .collect::<HashSet<_>>()
+            });
         self.page = Some(next);
-        self.element_scenes
-            .retain_page(self.page.as_ref().expect("active page was refreshed"));
+        if presentation_only || same_elements {
+            self.element_scenes.recompose();
+        } else if let Some(entities) = typography_entities {
+            self.element_scenes.invalidate_text_entities(entities);
+        } else {
+            self.element_scenes.clear();
+        }
         self.request_page_resources(snapshot);
         self.sync_ready_masks()?;
         self.damage.content();
@@ -220,6 +314,7 @@ impl Canvas {
             self.element_scenes.recompose();
         }
         if self.view.display.page != view.display.page {
+            self.element_scenes.recompose();
             self.reported_fallback = None;
         }
         if let Some(transition) = self.transition.as_mut() {
@@ -236,6 +331,11 @@ impl Canvas {
             }
         }
         self.view = view;
+    }
+
+    #[must_use]
+    pub const fn view(&self) -> &crate::ViewState {
+        &self.view
     }
 
     /// Configures the full-window Vello target while keeping camera and pointer
@@ -257,13 +357,6 @@ impl Canvas {
         self.invalidate_text_scenes();
     }
 
-    pub fn set_locale(&mut self, locale: Option<koharu_scene::LanguageTag>) {
-        if self.options.locale != locale {
-            self.options.locale = locale;
-            self.invalidate_text_scenes();
-        }
-    }
-
     /// Call after the host installs or removes fonts used by the active project.
     pub fn invalidate_fonts(&mut self) {
         self.invalidate_text_scenes();
@@ -281,6 +374,39 @@ impl Canvas {
         }
     }
 
+    pub fn preview_opacity(&mut self, element: ElementId, opacity: Option<f32>) -> Result<()> {
+        let opacity = match opacity {
+            Some(opacity) if opacity.is_finite() && (0.0..=1.0).contains(&opacity) => opacity,
+            Some(_) => {
+                return Err(Error::Invalid(
+                    "opacity preview must be between zero and one".into(),
+                ));
+            }
+            None => self
+                .snapshot
+                .as_ref()
+                .ok_or(Error::NoPage)?
+                .component::<Visibility>(element)?
+                .map_or(1.0, |visibility| visibility.opacity),
+        };
+        let element = self
+            .page
+            .as_mut()
+            .ok_or(Error::NoPage)?
+            .elements
+            .iter_mut()
+            .find(|candidate| candidate.id == element)
+            .ok_or_else(|| {
+                Error::Invalid("opacity preview element is not on the active page".into())
+            })?;
+        if element.opacity != opacity {
+            element.opacity = opacity;
+            self.element_scenes.recompose();
+            self.damage.content();
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn screen_to_page(&self, point: PhysicalPoint) -> Option<PagePoint> {
         self.page.as_ref()?;
@@ -295,7 +421,115 @@ impl Canvas {
         self.view.camera.page_to_screen(point)
     }
 
-    pub fn begin_transform(&mut self, selected: &[ElementId]) -> Result<()> {
+    #[must_use]
+    pub fn page_id(&self) -> Option<PageId> {
+        self.page.as_ref().map(|page| page.id)
+    }
+
+    #[must_use]
+    pub const fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    pub(crate) fn page_size(&self) -> Option<PhysicalSize> {
+        self.page.as_ref().map(|page| page.size)
+    }
+
+    fn contains_page_point(&self, point: PagePoint) -> bool {
+        self.page.as_ref().is_some_and(|page| {
+            point.x >= 0.0
+                && point.y >= 0.0
+                && point.x < f64::from(page.size.width)
+                && point.y < f64::from(page.size.height)
+        })
+    }
+
+    pub fn begin_raster_stroke(
+        &mut self,
+        layer: Option<ElementId>,
+        brush: Brush,
+        point: PagePoint,
+    ) -> Result<()> {
+        if self.raster_stroke.is_some() {
+            return Err(Error::Invalid("a raster stroke is already active".into()));
+        }
+        if self.stroke.is_some() || self.transform.is_some() {
+            return Err(Error::Invalid(
+                "raster painting cannot start during another canvas edit".into(),
+            ));
+        }
+        if !brush.diameter.is_finite() || !(1.0..=512.0).contains(&brush.diameter) {
+            return Err(Error::Invalid(
+                "brush diameter must be between 1 and 512 pixels".into(),
+            ));
+        }
+        if !point.x.is_finite() || !point.y.is_finite() || !self.contains_page_point(point) {
+            return Err(Error::Invalid(
+                "raster stroke must begin inside the active page".into(),
+            ));
+        }
+        if let Some(layer) = layer
+            && self
+                .page
+                .as_ref()
+                .and_then(|page| page.element(layer))
+                .is_none_or(|element| element.raster.is_none())
+        {
+            return Err(Error::Invalid(
+                "raster target is not an active pixel layer".into(),
+            ));
+        }
+        self.raster_stroke = Some(RasterStrokeCommit {
+            page: self.page_id().ok_or(Error::NoPage)?,
+            layer,
+            mode: brush.mode,
+            color: brush.color,
+            diameter: brush.diameter,
+            points: vec![point],
+        });
+        self.damage.content();
+        Ok(())
+    }
+
+    pub fn extend_raster_stroke(&mut self, points: &[PagePoint]) -> Result<()> {
+        let size = self.page_size().ok_or(Error::NoPage)?;
+        let zoom = self.view.camera.zoom().max(f64::EPSILON);
+        let stroke = self.raster_stroke.as_mut().ok_or(Error::NoStroke)?;
+        for point in points {
+            if !point.x.is_finite() || !point.y.is_finite() {
+                return Err(Error::Invalid("drawing points must be finite".into()));
+            }
+            let point = PagePoint::new(
+                point.x.clamp(0.0, f64::from(size.width)),
+                point.y.clamp(0.0, f64::from(size.height)),
+            );
+            if stroke
+                .points
+                .last()
+                .is_none_or(|last| (last.x - point.x).hypot(last.y - point.y) >= 0.25 / zoom)
+            {
+                stroke.points.push(point);
+            }
+        }
+        if !points.is_empty() {
+            self.damage.content();
+        }
+        Ok(())
+    }
+
+    pub fn finish_raster_stroke(&mut self) -> Result<RasterStrokeCommit> {
+        let stroke = self.raster_stroke.take().ok_or(Error::NoStroke)?;
+        self.damage.content();
+        Ok(stroke)
+    }
+
+    pub fn cancel_raster_stroke(&mut self) {
+        if self.raster_stroke.take().is_some() {
+            self.damage.content();
+        }
+    }
+
+    pub fn begin_transform(&mut self, controls: &[ElementFrame]) -> Result<()> {
         if self.transform.is_some() {
             return Err(Error::Invalid(
                 "an element transform is already active".into(),
@@ -307,15 +541,7 @@ impl Canvas {
             ));
         }
         let page = self.page.as_ref().ok_or(Error::NoPage)?;
-        let selectable = selected
-            .iter()
-            .copied()
-            .filter(|element| {
-                page.element(*element)
-                    .is_some_and(CanvasElement::selectable)
-            })
-            .collect::<Vec<_>>();
-        self.transform = Some(ActiveTransform::new(page, &selectable)?);
+        self.transform = Some(ActiveTransform::new(page, controls)?);
         Ok(())
     }
 
@@ -346,11 +572,26 @@ impl Canvas {
         }
     }
 
+    /// Returns renderer-resolved control frames for editable text.
+    ///
+    /// Other elements continue to use their scene geometry directly.
+    pub fn element_frames(&mut self) -> Vec<ElementFrame> {
+        let (Some(snapshot), Some(page)) = (self.snapshot.clone(), self.page.clone()) else {
+            return Vec::new();
+        };
+        self.element_scenes.element_frames(
+            &snapshot,
+            &page,
+            &self.options.text,
+            &mut self.diagnostics,
+        )
+    }
+
     pub fn begin_mask_stroke(
         &mut self,
         plane: MaskPlane,
         brush: Brush,
-        point: PhysicalPoint,
+        point: PagePoint,
     ) -> Result<()> {
         if self.stroke.is_some() {
             return Err(Error::Invalid("a mask stroke is already active".into()));
@@ -361,7 +602,10 @@ impl Canvas {
             ));
         }
         let page = self.page.as_ref().ok_or(Error::NoPage)?;
-        let mut page_point = self.screen_to_page(point).ok_or(Error::NoPage)?;
+        if !point.x.is_finite() || !point.y.is_finite() {
+            return Err(Error::Invalid("stroke point must be finite".into()));
+        }
+        let mut page_point = point;
         page_point.x = page_point.x.clamp(0.0, f64::from(page.size.width));
         page_point.y = page_point.y.clamp(0.0, f64::from(page.size.height));
         let mut stroke = ActiveStroke::new(plane, brush, page_point);
@@ -381,25 +625,47 @@ impl Canvas {
         Ok(())
     }
 
-    pub fn extend_mask_stroke(&mut self, point: PhysicalPoint) -> Result<()> {
+    pub fn extend_mask_stroke(&mut self, plane: MaskPlane, points: &[PagePoint]) -> Result<()> {
         let page = self.page.as_ref().ok_or(Error::NoPage)?;
-        if !point.x.is_finite() || !point.y.is_finite() {
-            return Err(Error::Invalid("stroke point must be finite".into()));
-        }
-        let mut next = self.view.camera.screen_to_page(point);
-        next.x = next.x.clamp(0.0, f64::from(page.size.width));
-        next.y = next.y.clamp(0.0, f64::from(page.size.height));
         let stroke = self.stroke.as_mut().ok_or(Error::NoStroke)?;
+        if stroke.plane != plane {
+            return Err(Error::Invalid(format!(
+                "active mask stroke is {}, not {}",
+                stroke.plane.name(),
+                plane.name()
+            )));
+        }
         let state = self.masks.get_mut(&stroke.plane).ok_or(Error::NoStroke)?;
-        let dirty = state.paint(stroke.last, next, stroke.brush, &mut stroke.before);
-        stroke.dirty = stroke.dirty.union(dirty);
-        stroke.last = next;
-        self.damage.content();
+        for point in points {
+            if !point.x.is_finite() || !point.y.is_finite() {
+                return Err(Error::Invalid("stroke points must be finite".into()));
+            }
+            let next = PagePoint::new(
+                point.x.clamp(0.0, f64::from(page.size.width)),
+                point.y.clamp(0.0, f64::from(page.size.height)),
+            );
+            let dirty = state.paint(stroke.last, next, stroke.brush, &mut stroke.before);
+            stroke.dirty = stroke.dirty.union(dirty);
+            stroke.last = next;
+        }
+        if !points.is_empty() {
+            self.damage.content();
+        }
         Ok(())
     }
 
-    pub fn finish_mask_stroke(&mut self) -> Result<Option<MaskCommit>> {
+    pub fn finish_mask_stroke(&mut self, plane: MaskPlane) -> Result<Option<MaskCommit>> {
         let page = self.page.as_ref().ok_or(Error::NoPage)?.id;
+        if self
+            .stroke
+            .as_ref()
+            .is_some_and(|stroke| stroke.plane != plane)
+        {
+            return Err(Error::Invalid(format!(
+                "active mask stroke is not {}",
+                plane.name()
+            )));
+        }
         let stroke = self.stroke.take().ok_or(Error::NoStroke)?;
         if stroke.dirty.is_empty() || stroke.before.is_empty() {
             return Ok(None);
@@ -408,11 +674,32 @@ impl Canvas {
         Ok(Some(state.finish(page, stroke.plane, stroke.dirty)))
     }
 
-    pub fn cancel_mask_stroke(&mut self) {
+    pub fn cancel_mask_stroke(&mut self, plane: MaskPlane) -> Result<()> {
+        if self
+            .stroke
+            .as_ref()
+            .is_some_and(|stroke| stroke.plane != plane)
+        {
+            return Err(Error::Invalid(format!(
+                "active mask stroke is not {}",
+                plane.name()
+            )));
+        }
         if let Some(stroke) = self.stroke.take()
             && let Some(state) = self.masks.get_mut(&stroke.plane)
         {
             state.restore(stroke.before);
+            self.damage.content();
+        }
+        Ok(())
+    }
+
+    pub fn clear_inpaint_mask(&mut self) {
+        if let Some(size) = self.page_size() {
+            self.masks
+                .entry(MaskPlane::Inpaint)
+                .or_insert_with(|| MaskState::empty(size))
+                .replace(None, None, size);
             self.damage.content();
         }
     }
@@ -459,7 +746,7 @@ impl Canvas {
         let needs_redraw = self.transition.is_some();
 
         if self.damage.content_pending() {
-            let scene = self.build_scene(now);
+            let scene = self.build_scene(now, true);
             self.gpu
                 .render_content(&scene, self.options.workspace_color)?;
             self.damage.clear_content();
@@ -481,12 +768,32 @@ impl Canvas {
         std::mem::take(&mut self.diagnostics)
     }
 
+    pub fn sample_color(&mut self, point: PhysicalPoint) -> Result<[u8; 4]> {
+        self.drain_resources()?;
+        if self.damage.target_pending() {
+            self.gpu.resize(self.render_size);
+            self.damage.clear_target();
+        }
+        if self.render_size.is_empty() {
+            return Err(Error::Invalid("cannot sample an empty canvas".into()));
+        }
+        self.update_transition(Instant::now());
+        let scene = self.build_scene(Instant::now(), false);
+        self.gpu
+            .render_content(&scene, self.options.workspace_color)?;
+        let x = self.render_origin.x + point.x;
+        let y = self.render_origin.y + point.y;
+        let color = self.gpu.read_pixel(x, y)?;
+        self.damage.content();
+        Ok(color)
+    }
+
     #[cfg(test)]
     pub(crate) fn read_output_for_test(&self) -> Vec<u8> {
         self.gpu.read_output()
     }
 
-    fn request_page_resources(&mut self, snapshot: &SceneSnapshot) {
+    fn request_page_resources(&mut self, snapshot: &Snapshot) {
         let Some(page) = self.page.as_ref() else {
             return;
         };
@@ -500,15 +807,15 @@ impl Canvas {
             ResourceKind::Color,
         )];
         resources.extend(
-            [page.assets.clean, page.assets.rendered]
+            [page.assets.rendered]
                 .into_iter()
                 .flatten()
                 .map(|blob| (blob, ResourceKind::Color)),
         );
         resources.extend(
-            [page.assets.text_mask, page.assets.brush_mask]
+            page.assets
+                .text_mask
                 .into_iter()
-                .flatten()
                 .map(|blob| (blob, ResourceKind::Gray)),
         );
         resources.extend(
@@ -544,14 +851,9 @@ impl Canvas {
                 .expect("CanvasPage requires a source asset"),
         );
         active.extend(
-            [
-                page.assets.clean,
-                page.assets.rendered,
-                page.assets.text_mask,
-                page.assets.brush_mask,
-            ]
-            .into_iter()
-            .flatten(),
+            [page.assets.rendered, page.assets.text_mask]
+                .into_iter()
+                .flatten(),
         );
         active.extend(page.elements.iter().filter_map(|element| element.image));
         active
@@ -594,25 +896,24 @@ impl Canvas {
             return Ok(());
         };
         let image = self.resources.gray(id);
-        for plane in [MaskPlane::Text, MaskPlane::Brush] {
-            if page.assets.mask(plane) != Some(id) {
-                continue;
-            }
-            let state = self
-                .masks
-                .entry(plane)
-                .or_insert_with(|| MaskState::empty(page.size));
-            if state.source == Some(id) {
-                continue;
-            }
-            if state.has_uncommitted() {
-                return Err(Error::MaskConflict {
-                    page: page.id,
-                    plane: plane.name(),
-                });
-            }
-            state.replace(Some(id), image.as_deref(), page.size);
+        let plane = MaskPlane::Text;
+        if page.assets.mask(plane) != Some(id) {
+            return Ok(());
         }
+        let state = self
+            .masks
+            .entry(plane)
+            .or_insert_with(|| MaskState::empty(page.size));
+        if state.source == Some(id) {
+            return Ok(());
+        }
+        if state.has_uncommitted() {
+            return Err(Error::MaskConflict {
+                page: page.id,
+                plane: plane.name(),
+            });
+        }
+        state.replace(Some(id), image.as_deref(), page.size);
         Ok(())
     }
 
@@ -620,32 +921,31 @@ impl Canvas {
         let Some(current) = self.page.as_ref() else {
             return Ok(());
         };
-        for plane in [MaskPlane::Text, MaskPlane::Brush] {
-            let before = current.assets.mask(plane);
-            let after = next.assets.mask(plane);
-            if before != after
-                && self
-                    .masks
-                    .get(&plane)
-                    .is_some_and(MaskState::has_uncommitted)
-                && self.masks.get(&plane).and_then(|state| state.source) != after
-            {
-                return Err(Error::MaskConflict {
-                    page: current.id,
-                    plane: plane.name(),
-                });
-            }
-            if before != after
-                && self
-                    .stroke
-                    .as_ref()
-                    .is_some_and(|stroke| stroke.plane == plane)
-            {
-                return Err(Error::MaskConflict {
-                    page: current.id,
-                    plane: plane.name(),
-                });
-            }
+        let plane = MaskPlane::Text;
+        let before = current.assets.mask(plane);
+        let after = next.assets.mask(plane);
+        if before != after
+            && self
+                .masks
+                .get(&plane)
+                .is_some_and(MaskState::has_uncommitted)
+            && self.masks.get(&plane).and_then(|state| state.source) != after
+        {
+            return Err(Error::MaskConflict {
+                page: current.id,
+                plane: plane.name(),
+            });
+        }
+        if before != after
+            && self
+                .stroke
+                .as_ref()
+                .is_some_and(|stroke| stroke.plane == plane)
+        {
+            return Err(Error::MaskConflict {
+                page: current.id,
+                plane: plane.name(),
+            });
         }
         Ok(())
     }
@@ -656,36 +956,35 @@ impl Canvas {
         };
         let size = page.size;
         let id = page.id;
-        for plane in [MaskPlane::Text, MaskPlane::Brush] {
-            let desired = page.assets.mask(plane);
-            let state = self
-                .masks
-                .entry(plane)
-                .or_insert_with(|| MaskState::empty(size));
-            if state.source == desired {
-                continue;
-            }
-            if state.has_uncommitted() {
-                return Err(Error::MaskConflict {
-                    page: id,
-                    plane: plane.name(),
-                });
-            }
-            match desired {
-                None => state.replace(None, None, size),
-                Some(blob) => {
-                    if let Some(image) = self.resources.gray(blob) {
-                        state.replace(Some(blob), Some(&image), size);
-                    } else if state.source.is_some() {
-                        state.replace(None, None, size);
-                    }
+        let plane = MaskPlane::Text;
+        let desired = page.assets.mask(plane);
+        let state = self
+            .masks
+            .entry(plane)
+            .or_insert_with(|| MaskState::empty(size));
+        if state.source == desired {
+            return Ok(());
+        }
+        if state.has_uncommitted() {
+            return Err(Error::MaskConflict {
+                page: id,
+                plane: plane.name(),
+            });
+        }
+        match desired {
+            None => state.replace(None, None, size),
+            Some(blob) => {
+                if let Some(image) = self.resources.gray(blob) {
+                    state.replace(Some(blob), Some(&image), size);
+                } else if state.source.is_some() {
+                    state.replace(None, None, size);
                 }
             }
         }
         Ok(())
     }
 
-    fn build_scene(&mut self, now: Instant) -> Scene {
+    fn build_scene(&mut self, now: Instant, include_previews: bool) -> Scene {
         // Everything in page_scene uses page coordinates. React and Rust share
         // a viewport-relative camera; render_origin moves that viewport into
         // the full desktop target without changing interaction coordinates.
@@ -699,18 +998,30 @@ impl Canvas {
         let mut page_scene = Scene::new();
         self.draw_base(&mut page_scene, &page, now);
         if self.view.display.page.is_editable() {
-            self.draw_masks(&mut page_scene);
+            if include_previews {
+                self.draw_masks(&mut page_scene);
+            }
             let elements = self.element_scenes.scene(ElementSceneContext {
                 snapshot: &snapshot,
                 page: &page,
                 resources: &mut self.resources,
                 text: &self.options.text,
-                locale: self.options.locale.as_ref(),
                 transform: self.transform.as_ref(),
                 show_text: self.view.display.show_text,
                 diagnostics: &mut self.diagnostics,
             });
             page_scene.append(elements, None);
+            if include_previews
+                && let Some(stroke) = self.raster_stroke.as_ref()
+                && stroke.mode == StrokeMode::Paint
+            {
+                draw_freehand(
+                    &mut page_scene,
+                    &stroke.points,
+                    stroke.diameter,
+                    stroke.color,
+                );
+            }
         }
         let page_rect = Rect::new(
             0.0,
@@ -791,9 +1102,20 @@ impl Canvas {
     }
 
     fn draw_masks(&mut self, scene: &mut Scene) {
+        let active = self.stroke.as_ref().map(|stroke| stroke.plane);
         let displays = [
-            (MaskPlane::Text, self.view.display.text_mask),
-            (MaskPlane::Brush, self.view.display.brush_mask),
+            (
+                MaskPlane::Text,
+                self.view.display.text_mask.or_else(|| {
+                    (active == Some(MaskPlane::Text))
+                        .then_some(crate::MaskOverlay::new([244, 63, 94, 210], 0.55))
+                }),
+            ),
+            (
+                MaskPlane::Inpaint,
+                (active == Some(MaskPlane::Inpaint))
+                    .then_some(crate::MaskOverlay::new([168, 85, 247, 210], 0.55)),
+            ),
         ];
         for (plane, overlay) in displays {
             let Some(overlay) = overlay else {
@@ -857,8 +1179,7 @@ impl Canvas {
     fn resolved_base(&mut self) -> BlobId {
         let page = self.page.as_ref().expect("resolved base requires a page");
         let (optional, view) = match self.view.display.page {
-            PageView::EditableSource => (page.assets.source, None),
-            PageView::EditableClean => (page.assets.clean, Some(PageView::EditableClean)),
+            PageView::Editable => (page.assets.source, None),
             PageView::Rendered => (page.assets.rendered, Some(PageView::Rendered)),
         };
         if let Some(blob) = optional
@@ -883,4 +1204,33 @@ impl Canvas {
             .source
             .expect("CanvasPage requires a source asset")
     }
+}
+
+fn draw_freehand(scene: &mut Scene, points: &[PagePoint], diameter: f32, color: [u8; 4]) {
+    let Some(first) = points.first() else {
+        return;
+    };
+    let color = VelloColor::from_rgba8(color[0], color[1], color[2], color[3]);
+    if points.len() == 1 {
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            color,
+            None,
+            &Circle::new((first.x, first.y), f64::from(diameter) * 0.5),
+        );
+        return;
+    }
+    let mut path = BezPath::new();
+    path.move_to((first.x, first.y));
+    for point in &points[1..] {
+        path.line_to((point.x, point.y));
+    }
+    scene.stroke(
+        &Stroke::new(f64::from(diameter)),
+        Affine::IDENTITY,
+        color,
+        None,
+        &path,
+    );
 }

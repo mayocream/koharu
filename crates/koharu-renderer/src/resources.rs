@@ -9,8 +9,8 @@ use std::{
 };
 
 use anyhow::{Context, Result as AnyResult};
-use fontique::Attributes;
-use koharu_scene::{Asset, BlobId, LanguageTag, SceneSnapshot};
+use fontique::{Attributes, FontWeight};
+use koharu_scene::{Asset, BlobId, LanguageTag, Snapshot};
 use parking_lot::Mutex;
 
 use crate::{
@@ -63,9 +63,8 @@ impl FontManager {
     }
 
     pub fn available_fonts(&self) -> Vec<FontFaceInfo> {
-        let mut faces = self
-            .system
-            .lock()
+        let mut system = self.system.lock();
+        let mut faces = system
             .system_faces()
             .into_iter()
             .map(|face| FontFaceInfo {
@@ -77,6 +76,19 @@ impl FontManager {
                 source: FontSource::System,
             })
             .collect::<Vec<_>>();
+        faces.extend(
+            system
+                .registered_faces()
+                .into_iter()
+                .map(|face| FontFaceInfo {
+                    family_name: face.family_name,
+                    post_script_name: face.post_script_name,
+                    weight: face.weight,
+                    stretch: face.stretch,
+                    style: face.style,
+                    source: FontSource::Registered,
+                }),
+        );
         faces.sort();
         faces.dedup();
         faces
@@ -88,18 +100,25 @@ impl FontManager {
         text: &str,
         language: Option<&LanguageTag>,
     ) -> Result<String> {
-        self.resolve(preferred_font, &[], text, language.map(LanguageTag::as_str))
-            .map_err(Error::FontResource)?
-            .into_iter()
-            .next()
-            .map(|font| font.post_script_name().to_owned())
-            .context("no usable fonts are installed")
-            .map_err(Error::FontResource)
+        self.resolve(
+            preferred_font,
+            None,
+            &[],
+            text,
+            language.map(LanguageTag::as_str),
+        )
+        .map_err(Error::FontResource)?
+        .into_iter()
+        .next()
+        .map(|font| font.post_script_name().to_owned())
+        .context("no usable fonts are installed")
+        .map_err(Error::FontResource)
     }
 
     pub(crate) fn resolve(
         &self,
         preferred_font: Option<&str>,
+        font_weight: Option<u16>,
         theme_families: &[String],
         text: &str,
         language: Option<&str>,
@@ -117,10 +136,20 @@ impl FontManager {
                 families.push(family.clone());
             }
         }
+        if !families
+            .iter()
+            .any(|family| family.eq_ignore_ascii_case("Arial"))
+        {
+            families.push("Arial".to_owned());
+        }
+        let mut attributes = Attributes::default();
+        if let Some(weight) = font_weight {
+            attributes.weight = FontWeight::new(f32::from(weight));
+        }
         self.system.lock().resolve_with_fallback_families(
             &families,
             self.fallback_policy.symbol_families(),
-            Attributes::default(),
+            attributes,
             &fontique_scripts(text),
             language,
         )
@@ -171,11 +200,7 @@ impl RenderResources {
         self.images.lock().clear();
     }
 
-    pub(crate) fn image(
-        &self,
-        snapshot: &SceneSnapshot,
-        asset: &Asset,
-    ) -> Result<Arc<DecodedImage>> {
+    pub(crate) fn image(&self, snapshot: &Snapshot, asset: &Asset) -> Result<Arc<DecodedImage>> {
         if let Some(image) = self.images.lock().get(asset.blob) {
             return Ok(image);
         }
@@ -298,6 +323,18 @@ impl DecodedImageCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn available_fonts_include_registered_faces() {
+        let fonts = FontManager::new().available_fonts();
+
+        assert!(fonts.iter().any(|font| {
+            font.family_name == "CC Wild Words" && font.source == FontSource::Registered
+        }));
+        assert!(fonts.iter().any(|font| {
+            font.family_name == "Komika Hand" && font.source == FontSource::Registered
+        }));
+    }
 
     fn image(bytes: usize) -> Arc<DecodedImage> {
         Arc::new(DecodedImage {

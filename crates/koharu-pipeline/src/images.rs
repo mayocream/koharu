@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use koharu_scene::{Asset, BlobId, EntityId, SceneSnapshot};
+use koharu_scene::{AssetRole, BlobId, EntityId, Snapshot};
 
 #[derive(Default)]
 pub(crate) struct ImageCache {
@@ -14,11 +14,12 @@ pub(crate) struct ImageCache {
 impl ImageCache {
     pub(crate) fn get(
         &self,
-        scene: &SceneSnapshot,
+        scene: &Snapshot,
         entity: EntityId,
         role: &str,
     ) -> Result<Option<Arc<image::DynamicImage>>> {
-        let Some(asset) = scene.component::<Asset>(entity, role)? else {
+        let role = AssetRole::new(role)?;
+        let Some(asset) = scene.asset(entity, &role)? else {
             return Ok(None);
         };
         if let Some(image) = self
@@ -32,10 +33,12 @@ impl ImageCache {
         }
 
         let bytes = scene.read_blob(asset.blob)?;
-        let image = Arc::new(
-            image::load_from_memory(&bytes)
-                .with_context(|| format!("failed to decode {role} image for entity {entity}"))?,
-        );
+        let image = Arc::new(image::load_from_memory(&bytes).with_context(|| {
+            format!(
+                "failed to decode {} image for entity {entity}",
+                role.as_str()
+            )
+        })?);
         let image = self
             .decoded
             .lock()

@@ -57,8 +57,8 @@ jobs:
       - run: bun install
       - uses: actions/cache@v6
         with:
-          path: ${{ github.workspace }}/ui/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('ui/**/*.js', 'ui/**/*.jsx', 'ui/**/*.ts', 'ui/**/*.tsx') }}
+          path: ${{ github.workspace }}/packages/koharu/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('packages/**/*.js', 'packages/**/*.jsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
       - run: bun tauri build --no-bundle

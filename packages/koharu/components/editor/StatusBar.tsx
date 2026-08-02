@@ -1,0 +1,36 @@
+'use client'
+
+import { dispatch } from '@/lib/backend'
+import { commands } from '@/lib/protocol'
+import { usePage } from '@/lib/queries'
+import { useKoharuStore } from '@/lib/store'
+import { Slider } from '@koharu/ui/components/slider'
+
+export function StatusBar() {
+  const page = usePage().data
+  const camera = useKoharuStore((state) => state.camera)
+  const zoom = Math.round(camera.zoom * 100)
+
+  return (
+    <footer className='flex h-7 shrink-0 items-center gap-3 border-t border-border/80 bg-[var(--surface-toolbar)] px-2.5 text-[10px] text-muted-foreground'>
+      <div className='flex w-36 shrink-0 items-center gap-2'>
+        <Slider
+          aria-label='Zoom'
+          min={10}
+          max={800}
+          step={5}
+          value={Math.min(800, Math.max(10, zoom))}
+          className='w-24 shrink-0 [&_[data-slot=slider-thumb]]:size-2'
+          onValueChange={(value) => dispatch(commands.setZoom, value / 100)}
+        />
+        <span className='w-9 shrink-0 text-right text-foreground tabular-nums'>{zoom}%</span>
+      </div>
+      <div className='flex-1' />
+      {page && (
+        <span className='tabular-nums'>
+          {page.size.width} × {page.size.height} px
+        </span>
+      )}
+    </footer>
+  )
+}

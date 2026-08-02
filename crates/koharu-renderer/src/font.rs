@@ -407,8 +407,24 @@ impl FontSystem {
         if let Some(faces) = &self.system_faces {
             return faces.clone();
         }
+        let faces = self.faces_for_families(self.system_families.clone());
+        self.system_faces = Some(faces.clone());
+        faces
+    }
+
+    pub(crate) fn registered_faces(&mut self) -> Vec<FontFace> {
+        let families = self
+            .registered
+            .values()
+            .flatten()
+            .cloned()
+            .collect::<HashSet<_>>();
+        self.faces_for_families(families)
+    }
+
+    fn faces_for_families(&mut self, families: impl IntoIterator<Item = String>) -> Vec<FontFace> {
         let mut faces = Vec::new();
-        for family_name in self.system_families.clone() {
+        for family_name in families {
             let Some(family) = self.collection.family_by_name(&family_name) else {
                 continue;
             };
@@ -439,7 +455,6 @@ impl FontSystem {
                 });
             }
         }
-        self.system_faces = Some(faces.clone());
         faces
     }
 }
@@ -458,7 +473,13 @@ mod tests {
     fn embedded_fonts_are_registered_automatically() {
         let mut fonts = FontSystem::new();
 
-        for family in ["Komika Hand", "Komika Jam", "Komika Slick", "Komika Slim"] {
+        for family in [
+            "CC Wild Words",
+            "Komika Hand",
+            "Komika Jam",
+            "Komika Slick",
+            "Komika Slim",
+        ] {
             let font = fonts.query_family(family).unwrap();
             assert_eq!(font.family_name(), family);
         }

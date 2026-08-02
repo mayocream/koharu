@@ -240,7 +240,6 @@ impl Camera {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn frame_corners(frame: Frame) -> [PagePoint; 4] {
     let center = PagePoint::new(
         f64::from(frame.x + frame.width * 0.5),
@@ -257,19 +256,6 @@ pub(crate) fn frame_corners(frame: Frame) -> [PagePoint; 4] {
         (-half_width, half_height),
     ]
     .map(|(x, y)| PagePoint::new(center.x + x * cos - y * sin, center.y + x * sin + y * cos))
-}
-
-#[cfg(test)]
-pub(crate) fn frame_contains(frame: Frame, point: PagePoint) -> bool {
-    let center_x = f64::from(frame.x + frame.width * 0.5);
-    let center_y = f64::from(frame.y + frame.height * 0.5);
-    let angle = -f64::from(frame.angle_degrees).to_radians();
-    let (sin, cos) = angle.sin_cos();
-    let x = point.x - center_x;
-    let y = point.y - center_y;
-    let local_x = x * cos - y * sin;
-    let local_y = x * sin + y * cos;
-    local_x.abs() <= f64::from(frame.width) * 0.5 && local_y.abs() <= f64::from(frame.height) * 0.5
 }
 
 #[cfg(test)]
@@ -294,19 +280,6 @@ mod tests {
         let after = camera.screen_to_page(anchor);
         assert!((before.x - after.x).abs() < 1e-9);
         assert!((before.y - after.y).abs() < 1e-9);
-    }
-
-    #[test]
-    fn rotated_frame_hit_test_uses_local_coordinates() {
-        let frame = Frame {
-            x: 10.0,
-            y: 20.0,
-            width: 100.0,
-            height: 20.0,
-            angle_degrees: 90.0,
-        };
-        assert!(frame_contains(frame, PagePoint::new(60.0, 70.0)));
-        assert!(!frame_contains(frame, PagePoint::new(105.0, 30.0)));
     }
 
     #[test]

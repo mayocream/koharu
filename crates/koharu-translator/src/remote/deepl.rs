@@ -4,25 +4,24 @@
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use specta::Type;
+use serde::Deserialize;
 use url::Url;
 
 use super::send_json;
-use crate::{Error, Language, RemoteProviderKind, Result, TranslationRequest};
+use crate::{Error, Language, Model, Provider, Result, TranslationRequest};
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(default, deny_unknown_fields)]
 pub struct DeepLConfig {
     pub base_url: Option<Url>,
 }
 
-impl DeepLConfig {
-    #[must_use]
-    pub fn with_base_url(mut self, base_url: Url) -> Self {
-        self.base_url = Some(base_url);
-        self
-    }
+pub(super) async fn models() -> Result<Vec<Model>> {
+    Ok(if koharu_secrets::get("deepl")?.is_some() {
+        vec![Model::service(Provider::DeepL, "DeepL")]
+    } else {
+        Vec::new()
+    })
 }
 
 pub(super) async fn translate(
@@ -30,10 +29,7 @@ pub(super) async fn translate(
     config: &DeepLConfig,
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
-    let provider = RemoteProviderKind::DeepL;
-    let api_key = koharu_secrets::get(provider.id())?
-        .filter(|value| !value.expose_secret().trim().is_empty())
-        .with_context(|| format!("{} API key is not configured", provider.id()))?;
+    let api_key = koharu_secrets::get("deepl")?.context("deepl API key is not configured")?;
     let target = target(request.target_language).ok_or(Error::UnsupportedLanguage {
         provider: "deepl",
         language: request.target_language,

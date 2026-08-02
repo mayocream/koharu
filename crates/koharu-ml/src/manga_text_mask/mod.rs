@@ -3,16 +3,15 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::processor::{MangaTextMask, MangaTextMaskCleaningOptions};
 
 use self::{model::Model, processor::Processor};
 
-koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/manga-text-segmentation-2025" => "efd866e3ac6595ea20722f35ae343c403056ba76" => "model.safetensors",
-}
+model_repository!("mayocream/manga-text-segmentation-2025" @ "efd866e3ac6595ea20722f35ae343c403056ba76" {
+    WEIGHTS = "model.safetensors"
+});
 
 #[derive(Debug)]
 pub struct MangaTextMaskGenerator {
@@ -23,7 +22,8 @@ pub struct MangaTextMaskGenerator {
 impl MangaTextMaskGenerator {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve manga text segmentation weights")?;
         let mut model = Model::new(device);

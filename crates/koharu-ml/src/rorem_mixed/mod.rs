@@ -13,7 +13,6 @@ use image::{DynamicImage, GrayImage, RgbImage};
 use koharu_diffusion::{
     GuidanceParams, ImageGenerationParams, SampleMethod, SampleParams, Scheduler,
 };
-use koharu_runtime::package::huggingface;
 
 use self::{
     model::{Model, ModelPaths},
@@ -25,13 +24,15 @@ pub use self::processor::RoremMixedOptions;
 pub const DEFAULT_PROMPT: &str = "clean manga illustration, crisp black line art, flat colors, seamless original background, clean white speech bubble, no text";
 pub const DEFAULT_NEGATIVE_PROMPT: &str = "text, letters, words, symbols, watermark, signature, blurry, smudged, dirty, gray artifacts, extra objects, photorealistic";
 
-koharu_runtime::huggingface! {
-    DIFFUSION_MODEL => "mayocream/RORem-mixed-GGUF" => "62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56" => "rorem-mixed-unet-q4_K.gguf",
-    SDXL_VERSION_MARKER => "mayocream/RORem-mixed-GGUF" => "62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56" => "sdxl-version-marker.safetensors",
-    VAE_MODEL => "diffusers/stable-diffusion-xl-1.0-inpainting-0.1" => "115134f363124c53c7d878647567d04daf26e41e" => "vae/diffusion_pytorch_model.fp16.safetensors",
-    CLIP_L_MODEL => "diffusers/stable-diffusion-xl-1.0-inpainting-0.1" => "115134f363124c53c7d878647567d04daf26e41e" => "text_encoder/model.fp16.safetensors",
-    CLIP_G_MODEL => "diffusers/stable-diffusion-xl-1.0-inpainting-0.1" => "115134f363124c53c7d878647567d04daf26e41e" => "text_encoder_2/model.fp16.safetensors",
-}
+model_repository!("mayocream/RORem-mixed-GGUF" @ "62c75b3e6f078a19e2698b0f677e8a4aa4c9ea56" {
+    DIFFUSION_MODEL = "rorem-mixed-unet-q4_K.gguf",
+    SDXL_VERSION_MARKER = "sdxl-version-marker.safetensors",
+});
+model_repository!("diffusers/stable-diffusion-xl-1.0-inpainting-0.1" @ "115134f363124c53c7d878647567d04daf26e41e" {
+    VAE_MODEL = "vae/diffusion_pytorch_model.fp16.safetensors",
+    CLIP_L_MODEL = "text_encoder/model.fp16.safetensors",
+    CLIP_G_MODEL = "text_encoder_2/model.fp16.safetensors",
+});
 
 #[derive(Debug)]
 pub struct RoremMixed {
@@ -41,11 +42,11 @@ pub struct RoremMixed {
 impl RoremMixed {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (diffusion_model, version_marker, vae, clip_l, clip_g) = tokio::try_join!(
-            huggingface::resolve(DIFFUSION_MODEL),
-            huggingface::resolve(SDXL_VERSION_MARKER),
-            huggingface::resolve(VAE_MODEL),
-            huggingface::resolve(CLIP_L_MODEL),
-            huggingface::resolve(CLIP_G_MODEL),
+            DIFFUSION_MODEL.resolve(),
+            SDXL_VERSION_MARKER.resolve(),
+            VAE_MODEL.resolve(),
+            CLIP_L_MODEL.resolve(),
+            CLIP_G_MODEL.resolve(),
         )
         .context("failed to resolve RORem mixed model assets")?;
         let model = Model::new(

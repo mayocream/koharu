@@ -4,7 +4,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -17,10 +16,10 @@ pub use self::{
 
 use self::model::Model;
 
-koharu_runtime::huggingface! {
-    CONFIG => "mayocream/manga109-segmentation-bubble" => "4c9d7cbfa9905f7003677fa1130b48b93365a16a" => "config.json",
-    WEIGHTS => "mayocream/manga109-segmentation-bubble" => "4c9d7cbfa9905f7003677fa1130b48b93365a16a" => "model.safetensors",
-}
+model_repository!("mayocream/manga109-segmentation-bubble" @ "4c9d7cbfa9905f7003677fa1130b48b93365a16a" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+});
 
 #[derive(Debug)]
 pub struct Yolo11nSpeechBubbleSegmenter {
@@ -33,10 +32,12 @@ pub struct Yolo11nSpeechBubbleSegmenter {
 impl Yolo11nSpeechBubbleSegmenter {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve YOLO11n speech bubble config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve YOLO11n speech bubble weights")?;
         let config = Yolo11nSpeechBubbleConfig::from_file(&config_path)

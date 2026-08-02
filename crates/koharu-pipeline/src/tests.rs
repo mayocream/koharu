@@ -6,36 +6,9 @@ fn configuration_rejects_unknown_fields() {
     assert!(result.is_err());
 }
 
-#[test]
-fn construction_rejects_an_unknown_local_translation_model() {
-    let translation = koharu_translator::TranslationConfig {
-        model: koharu_translator::Providers::Local(koharu_translator::LocalConfig {
-            model: "missing-model".to_owned(),
-        }),
-        ..Default::default()
-    };
-
-    assert!(Pipeline::new(PipelineConfig::default(), translation).is_err());
-}
-
-#[test]
-fn reconfiguration_builds_a_new_immutable_pipeline() {
-    let pipeline = Pipeline::new(PipelineConfig::default(), Default::default()).unwrap();
-    let translation = koharu_translator::TranslationConfig {
-        target_language: "ja-JP".to_owned(),
-        ..Default::default()
-    };
-    let replacement = pipeline
-        .reconfigured(PipelineConfig::default(), translation)
-        .unwrap();
-
-    assert_eq!(pipeline.configuration().1.target_language, "en-US");
-    assert_eq!(replacement.configuration().1.target_language, "ja-JP");
-}
-
 #[tokio::test]
 async fn stop_is_a_successful_partial_result() {
-    let pipeline = Pipeline::new(PipelineConfig::default(), Default::default()).unwrap();
+    let pipeline = pipeline(Default::default());
     let stop = StopToken::default();
     stop.stop();
     let request = Request {
@@ -46,7 +19,7 @@ async fn stop_is_a_successful_partial_result() {
 
     let report = pipeline
         .execute(
-            koharu_scene::SceneSession::memory().unwrap().snapshot(),
+            koharu_scene::Session::memory().unwrap().snapshot(),
             request,
             &mut committer,
         )
@@ -59,12 +32,16 @@ async fn stop_is_a_successful_partial_result() {
 
 #[tokio::test]
 async fn stop_after_a_page_keeps_completed_progress() {
-    let translation = koharu_translator::TranslationConfig {
-        model: koharu_translator::Providers::OpenAi(Default::default()),
+    let translation = TranslationConfig {
+        model: koharu_translator::ModelSelection {
+            provider: koharu_translator::Provider::OpenAi,
+            model: Some("gpt-5.6-luna".to_owned()),
+            quantization: None,
+        },
         ..Default::default()
     };
-    let pipeline = Pipeline::new(PipelineConfig::default(), translation).unwrap();
-    let mut session = koharu_scene::SceneSession::memory().unwrap();
+    let pipeline = pipeline(translation);
+    let mut session = koharu_scene::Session::memory().unwrap();
     let patch = session
         .snapshot()
         .patch(|edit| {
@@ -83,7 +60,9 @@ async fn stop_after_a_page_keeps_completed_progress() {
     let stop = StopToken::default();
     let progress_stop = stop.clone();
     let request = Request {
-        operation: Operation::Only(Stage::Translation),
+        operation: Operation::Only {
+            stage: Stage::Translation,
+        },
         stop,
         progress: Some(std::sync::Arc::new(move |event| {
             if matches!(event, Progress::Skipped { .. }) {
@@ -106,12 +85,22 @@ async fn stop_after_a_page_keeps_completed_progress() {
 
 struct RejectCommitter;
 
+fn pipeline(translation: TranslationConfig) -> Pipeline {
+    let config = PipelineConfig {
+        translation,
+        ..PipelineConfig::default()
+    };
+    Pipeline::from_config(
+        koharu_config::Config::memory(config),
+        koharu_config::Config::memory(koharu_translator::ProvidersConfig::default()),
+        koharu_ml::Device::cpu(),
+    )
+    .unwrap()
+}
+
 #[async_trait::async_trait]
 impl Committer for RejectCommitter {
-    async fn commit(
-        &mut self,
-        _output: StageOutput,
-    ) -> anyhow::Result<koharu_scene::SceneSnapshot> {
+    async fn commit(&mut self, _output: StageOutput) -> anyhow::Result<koharu_scene::Snapshot> {
         anyhow::bail!("stopped execution must not commit")
     }
 }
@@ -119,15 +108,35 @@ impl Committer for RejectCommitter {
 #[test]
 fn operations_expand_to_the_supported_workflows() {
     assert_eq!(
-        Operation::Through(Stage::Translation).stages(),
-        vec![Stage::Detection, Stage::Ocr, Stage::Translation]
+        Operation::Through {
+            stage: Stage::Translation,
+        }
+        .stages()
+        .unwrap(),
+        vec![Stage::Detection, Stage::Ocr, Stage::Translation],
     );
     assert_eq!(
-        Operation::Through(Stage::Inpainting).stages(),
-        vec![Stage::Detection, Stage::Inpainting]
+        Operation::Through {
+            stage: Stage::Inpainting,
+        }
+        .stages()
+        .unwrap(),
+        vec![Stage::Detection, Stage::Inpainting],
     );
     assert_eq!(
-        Operation::Only(Stage::Translation).stages(),
-        vec![Stage::Translation]
+        Operation::Only {
+            stage: Stage::Translation,
+        }
+        .stages()
+        .unwrap(),
+        vec![Stage::Translation],
+    );
+    assert_eq!(
+        Operation::Stages {
+            stages: vec![Stage::Translation, Stage::Detection, Stage::Translation],
+        }
+        .stages()
+        .unwrap(),
+        vec![Stage::Detection, Stage::Translation],
     );
 }

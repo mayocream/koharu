@@ -4,7 +4,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -17,10 +16,10 @@ pub use self::{
 
 use self::model::Model;
 
-koharu_runtime::huggingface! {
-    CONFIG => "mayocream/speech-bubble-segmentation" => "387bc1e93f3d24702bc8609798b6a13b37420edc" => "config.json",
-    WEIGHTS => "mayocream/speech-bubble-segmentation" => "387bc1e93f3d24702bc8609798b6a13b37420edc" => "model.safetensors",
-}
+model_repository!("mayocream/speech-bubble-segmentation" @ "387bc1e93f3d24702bc8609798b6a13b37420edc" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+});
 
 #[derive(Debug)]
 pub struct YoloV8mSpeechBubbleSegmenter {
@@ -33,10 +32,12 @@ pub struct YoloV8mSpeechBubbleSegmenter {
 impl YoloV8mSpeechBubbleSegmenter {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve speech bubble segmentation config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve speech bubble segmentation weights")?;
         let config = YoloV8mSpeechBubbleConfig::from_file(&config_path)

@@ -11,195 +11,121 @@ mod openai_compatible;
 mod openrouter;
 
 use anyhow::Context;
-use async_trait::async_trait;
+use futures::{FutureExt, future::BoxFuture, future::join_all};
 use reqwest::{Client, RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 
-pub use atlas_cloud::{AtlasCloudConfig, discover_atlas_cloud_models};
+pub use atlas_cloud::AtlasCloudConfig;
 pub use caiyun::CaiyunConfig;
 pub use claude::ClaudeConfig;
 pub use deepl::DeepLConfig;
 pub use deepseek::DeepSeekConfig;
 pub use gemini::GeminiConfig;
 pub use google_cloud::GoogleCloudConfig;
-pub use lm_studio::{LmStudioConfig, discover_lm_studio_models};
+pub use lm_studio::LmStudioConfig;
 pub use openai::OpenAiConfig;
-pub use openai_compatible::{OpenAiCompatibleConfig, discover_openai_compatible_models};
-pub use openrouter::{OpenRouterConfig, discover_openrouter_models};
+pub use openai_compatible::OpenAiCompatibleConfig;
+pub use openrouter::OpenRouterConfig;
 
-use crate::{Error, RemoteProviderKind, Result, Translation, TranslationRequest, Translator};
+use crate::{
+    Error, GenerationConfig, Model, ModelSelection, Provider, ProvidersConfig, Result,
+    TranslationRequest,
+};
 
-#[derive(Debug, Clone)]
-pub enum RemoteProvider {
-    AtlasCloud(AtlasCloudConfig),
-    OpenAi(OpenAiConfig),
-    Gemini(GeminiConfig),
-    Claude(ClaudeConfig),
-    DeepSeek(DeepSeekConfig),
-    OpenAiCompatible(OpenAiCompatibleConfig),
-    OpenRouter(OpenRouterConfig),
-    LmStudio(LmStudioConfig),
-    DeepL(DeepLConfig),
-    GoogleCloudTranslation(GoogleCloudConfig),
-    Caiyun(CaiyunConfig),
-}
-
-impl RemoteProvider {
-    #[must_use]
-    pub const fn kind(&self) -> RemoteProviderKind {
-        match self {
-            Self::AtlasCloud(_) => RemoteProviderKind::AtlasCloud,
-            Self::OpenAi(_) => RemoteProviderKind::OpenAi,
-            Self::Gemini(_) => RemoteProviderKind::Gemini,
-            Self::Claude(_) => RemoteProviderKind::Claude,
-            Self::DeepSeek(_) => RemoteProviderKind::DeepSeek,
-            Self::OpenAiCompatible(_) => RemoteProviderKind::OpenAiCompatible,
-            Self::OpenRouter(_) => RemoteProviderKind::OpenRouter,
-            Self::LmStudio(_) => RemoteProviderKind::LmStudio,
-            Self::DeepL(_) => RemoteProviderKind::DeepL,
-            Self::GoogleCloudTranslation(_) => RemoteProviderKind::GoogleCloudTranslation,
-            Self::Caiyun(_) => RemoteProviderKind::Caiyun,
+pub(crate) async fn translate(
+    client: &Client,
+    providers: &ProvidersConfig,
+    selection: &ModelSelection,
+    generation: &GenerationConfig,
+    request: &TranslationRequest,
+) -> Result<Vec<String>> {
+    let model = || {
+        selection
+            .model
+            .as_deref()
+            .with_context(|| format!("{} requires a selected model", selection.provider))
+    };
+    match selection.provider {
+        Provider::AtlasCloud => {
+            atlas_cloud::translate(
+                client,
+                &providers.atlas_cloud,
+                model()?,
+                generation,
+                request,
+            )
+            .await
         }
-    }
-}
-
-/// Optional generation controls used by hosted chat models.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct RemoteGenerationOptions {
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub thinking: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct RemoteTranslator {
-    client: Client,
-    provider: RemoteProvider,
-}
-
-impl RemoteTranslator {
-    #[must_use]
-    pub fn new(provider: RemoteProvider) -> Self {
-        Self::with_client(Client::new(), provider)
-    }
-
-    #[must_use]
-    pub fn with_client(client: Client, provider: RemoteProvider) -> Self {
-        Self { client, provider }
-    }
-
-    #[must_use]
-    pub fn with_generation_options(mut self, options: RemoteGenerationOptions) -> Self {
-        match &mut self.provider {
-            RemoteProvider::AtlasCloud(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-            }
-            RemoteProvider::OpenAi(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-                config.thinking = options.thinking;
-            }
-            RemoteProvider::Gemini(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-                config.thinking = options.thinking;
-            }
-            RemoteProvider::Claude(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-                config.thinking = options.thinking;
-            }
-            RemoteProvider::DeepSeek(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-                config.thinking = options.thinking;
-            }
-            RemoteProvider::OpenAiCompatible(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-            }
-            RemoteProvider::OpenRouter(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-                config.thinking = options.thinking;
-            }
-            RemoteProvider::LmStudio(config) => {
-                config.temperature = options.temperature;
-                config.max_tokens = options.max_tokens;
-                config.thinking = options.thinking;
-            }
-            RemoteProvider::DeepL(_)
-            | RemoteProvider::GoogleCloudTranslation(_)
-            | RemoteProvider::Caiyun(_) => {}
+        Provider::OpenAi => {
+            openai::translate(client, &providers.openai, model()?, generation, request).await
         }
-        self
-    }
-
-    #[must_use]
-    pub fn configuration(&self) -> &RemoteProvider {
-        &self.provider
+        Provider::Gemini => {
+            gemini::translate(client, &providers.gemini, model()?, generation, request).await
+        }
+        Provider::Claude => {
+            claude::translate(client, &providers.claude, model()?, generation, request).await
+        }
+        Provider::DeepSeek => {
+            deepseek::translate(client, &providers.deepseek, model()?, generation, request).await
+        }
+        Provider::OpenAiCompatible => {
+            openai_compatible::compatible(
+                client,
+                &providers.openai_compatible,
+                model()?,
+                generation,
+                request,
+            )
+            .await
+        }
+        Provider::OpenRouter => {
+            openrouter::translate(client, &providers.openrouter, model()?, generation, request)
+                .await
+        }
+        Provider::LmStudio => {
+            lm_studio::translate(client, &providers.lm_studio, model()?, generation, request).await
+        }
+        Provider::DeepL => deepl::translate(client, &providers.deepl, request).await,
+        Provider::GoogleCloudTranslation => {
+            google_cloud::translate(client, &providers.google_cloud_translation, request).await
+        }
+        Provider::Caiyun => caiyun::translate(client, &providers.caiyun, request).await,
+        Provider::Local => unreachable!("local translation has its own backend"),
     }
 }
 
-#[async_trait]
-impl Translator for RemoteTranslator {
-    fn provider(&self) -> &'static str {
-        self.provider.kind().id()
+pub(crate) async fn models(client: &Client, providers: &ProvidersConfig) -> Vec<Model> {
+    let mut models = Vec::new();
+    let pending: Vec<BoxFuture<'_, Result<Vec<Model>>>> = vec![
+        atlas_cloud::models(client).boxed(),
+        openai::models().boxed(),
+        gemini::models().boxed(),
+        claude::models().boxed(),
+        deepseek::models().boxed(),
+        openai_compatible::models(client, &providers.openai_compatible).boxed(),
+        openrouter::models(client).boxed(),
+        lm_studio::models(client, &providers.lm_studio).boxed(),
+        deepl::models().boxed(),
+        google_cloud::models().boxed(),
+        caiyun::models().boxed(),
+    ];
+    for result in join_all(pending).await {
+        append_models(&mut models, result);
     }
+    models.sort_by(|left, right| {
+        left.provider
+            .to_string()
+            .cmp(&right.provider.to_string())
+            .then_with(|| left.model.cmp(&right.model))
+    });
+    models.dedup_by(|left, right| left.provider == right.provider && left.model == right.model);
+    models
+}
 
-    async fn translate(&self, request: TranslationRequest) -> Result<Translation> {
-        if request.segments.is_empty() {
-            return Ok(Translation {
-                segments: Vec::new(),
-            });
-        }
-
-        let expected = request.segments.len();
-        let segments = match &self.provider {
-            RemoteProvider::AtlasCloud(config) => {
-                atlas_cloud::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::OpenAi(config) => {
-                openai::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::Gemini(config) => {
-                gemini::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::Claude(config) => {
-                claude::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::DeepSeek(config) => {
-                deepseek::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::OpenAiCompatible(config) => {
-                openai_compatible::compatible(&self.client, config, &request).await?
-            }
-            RemoteProvider::OpenRouter(config) => {
-                openrouter::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::LmStudio(config) => {
-                lm_studio::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::DeepL(config) => {
-                deepl::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::GoogleCloudTranslation(config) => {
-                google_cloud::translate(&self.client, config, &request).await?
-            }
-            RemoteProvider::Caiyun(config) => {
-                caiyun::translate(&self.client, config, &request).await?
-            }
-        };
-
-        if segments.len() != expected {
-            return Err(Error::SegmentCount {
-                provider: self.provider(),
-                expected,
-                actual: segments.len(),
-            });
-        }
-        Ok(Translation { segments })
+fn append_models(models: &mut Vec<Model>, result: Result<Vec<Model>>) {
+    match result {
+        Ok(mut provider_models) => models.append(&mut provider_models),
+        Err(error) => tracing::warn!(%error, "failed to list translation models"),
     }
 }
 
@@ -237,32 +163,4 @@ pub(super) async fn send_json<T: DeserializeOwned>(
     serde_json::from_str(&text)
         .with_context(|| format!("failed to decode {provider} response"))
         .map_err(Into::into)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn provider_ids_are_credential_keys() {
-        assert_eq!(RemoteProviderKind::AtlasCloud.id(), "atlas-cloud");
-        assert_eq!(RemoteProviderKind::OpenAi.id(), "openai");
-        assert_eq!(RemoteProviderKind::OpenRouter.id(), "openrouter");
-        assert_eq!(RemoteProviderKind::LmStudio.id(), "lm-studio");
-        assert_eq!(
-            RemoteProviderKind::GoogleCloudTranslation.id(),
-            "google-cloud-translation"
-        );
-    }
-
-    #[test]
-    fn thinking_is_disabled_by_default() {
-        assert!(!OpenAiConfig::default().thinking);
-        assert!(!GeminiConfig::default().thinking);
-        assert!(!ClaudeConfig::default().thinking);
-        assert!(!DeepSeekConfig::default().thinking);
-        assert!(!OpenRouterConfig::default().thinking);
-        assert!(!LmStudioConfig::default().thinking);
-        assert!(!RemoteGenerationOptions::default().thinking);
-    }
 }

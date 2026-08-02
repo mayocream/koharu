@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use super::{ModelRef, StageInput, StageProcessor, finish, generation, observe_page_hierarchy};
+use super::{ModelRef, StageInput, StageProcessor, finish, generation};
 use crate::{ModelCell, OcrModel, scope::geometry_extents};
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -11,7 +11,8 @@ use koharu_ml::{
     paddle_ocr_vl::{PaddleOCRVL, PaddleOCRVLTask},
 };
 use koharu_scene::{
-    Asset, Authored, Geometry, LanguageTag, OcrAnalysis, Origin, Region, SourceText, TextDirection,
+    Authored, EntityId, Geometry, LanguageTag, OcrAnalysis, Origin, RecognizedFrom, Region,
+    RegionSpec, SourceText, TextDirection, TextRegion,
 };
 
 const PRODUCER: &str = "dev.koharu.pipeline.ocr";
@@ -49,7 +50,7 @@ impl StageProcessor for Processor {
             .await
     }
 
-    async fn process(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
+    async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         self.model
             .lock()
             .await
@@ -81,7 +82,7 @@ impl Model {
         }
     }
 
-    async fn run(&self, input: StageInput) -> Result<koharu_scene::ScenePatch> {
+    async fn run(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         let model_name = match self {
             Self::Manga(_) => "manga-ocr",
             Self::Baberu(_) => "baberu-ocr",
@@ -94,31 +95,40 @@ impl Model {
             .get(&input.scene, page, "source")?
             .ok_or_else(|| anyhow!("page {page} has no source image"))?;
         for entity in input.scene.descendants(page)? {
-            let id = entity.id();
-            if !input.contains_entity(id)? {
-                continue;
-            }
-            let source_text = input.scene.component::<SourceText>(id, "default")?;
-            if source_text
-                .as_ref()
-                .is_some_and(|value| matches!(value.text.origin, Origin::User))
-            {
+            let region = entity.id();
+            if !input.contains_entity(region)? {
                 continue;
             }
             let is_text_region = input
                 .scene
-                .component::<Region>(id, "default")?
-                .is_some_and(|region| region.kind.as_str() == "dev.koharu.region.text");
-            if !is_text_region && source_text.is_none() {
+                .component::<Region>(region)?
+                .is_some_and(|value| value.kind == TextRegion::kind());
+            if !is_text_region {
                 continue;
             }
             let geometry = input
                 .scene
-                .component::<Geometry>(id, "default")?
-                .ok_or_else(|| anyhow!("text entity {id} has no geometry"))?;
+                .component::<Geometry>(region)?
+                .ok_or_else(|| anyhow!("text region {region} has no geometry"))?;
             let crop = crop(&source, &geometry)
-                .with_context(|| format!("text entity {id} is outside its source image"))?;
-            targets.push((id, geometry, source_text, crop));
+                .with_context(|| format!("text region {region} is outside its source image"))?;
+            for relation in input.scene.relations_to_as::<RecognizedFrom>(region) {
+                let content = relation.value().source;
+                let previous = input.scene.component::<SourceText>(content)?;
+                if previous
+                    .as_ref()
+                    .is_some_and(|value| matches!(value.text.origin, Origin::User))
+                {
+                    continue;
+                }
+                targets.push(OcrTarget {
+                    content,
+                    region,
+                    geometry: geometry.clone(),
+                    previous,
+                    image: crop.clone(),
+                });
+            }
         }
 
         let results = match self {
@@ -144,29 +154,28 @@ impl Model {
 
         let generation = generation(PRODUCER, model_name)?;
         let mut edit = input.scene.edit_as(generation.clone());
-        edit.observe::<Asset>(page, "source")?;
-        for entity in observe_page_hierarchy(&mut edit, &input.scene, page)? {
-            edit.observe::<Region>(entity, "default")?;
-            edit.observe::<SourceText>(entity, "default")?;
-            edit.observe::<Geometry>(entity, "default")?;
+        edit.observe_assets(page)?;
+        for result in &results {
+            edit.observe::<Region>(result.region)?;
+            edit.observe::<Geometry>(result.region)?;
+            edit.observe::<SourceText>(result.content)?;
         }
-        for (entity, geometry, previous, text) in results {
-            let language = previous
+        for result in results {
+            let language = result
+                .previous
                 .and_then(|value| value.language)
                 .or_else(|| LanguageTag::new("ja-JP").ok());
-            edit.set_source_text(
-                entity,
-                SourceText {
-                    text: Authored::generated(text, generation.clone()),
+            edit.set(
+                result.content,
+                &SourceText {
+                    text: Authored::generated(result.text, generation.clone()),
                     language,
                 },
             )?;
-            let (_, min_y, _, max_y) = geometry_extents(&geometry)
-                .ok_or_else(|| anyhow!("text entity {entity} has empty geometry"))?;
-            let (min_x, _, max_x, _) = geometry_extents(&geometry).unwrap();
+            let (min_x, min_y, max_x, max_y) = geometry_extents(&result.geometry)
+                .ok_or_else(|| anyhow!("text region {} has empty geometry", result.region))?;
             edit.set(
-                entity,
-                "default",
+                result.region,
                 &OcrAnalysis {
                     origin: Origin::Generated(generation.clone()),
                     direction: if max_y - min_y >= (max_x - min_x) * 1.15 {
@@ -183,32 +192,41 @@ impl Model {
     }
 }
 
-type Target = (
-    koharu_scene::EntityId,
-    Geometry,
-    Option<SourceText>,
-    DynamicImage,
-);
-type ResultTarget = (koharu_scene::EntityId, Geometry, Option<SourceText>, String);
+struct OcrTarget {
+    content: EntityId,
+    region: EntityId,
+    geometry: Geometry,
+    previous: Option<SourceText>,
+    image: DynamicImage,
+}
+
+struct OcrResult {
+    content: EntityId,
+    region: EntityId,
+    geometry: Geometry,
+    previous: Option<SourceText>,
+    text: String,
+}
 
 async fn infer_text<M: Send + 'static>(
     model: Arc<Mutex<M>>,
-    targets: Vec<Target>,
+    targets: Vec<OcrTarget>,
     inference: impl Fn(&M, &DynamicImage) -> Result<String> + Send + Sync + 'static,
-) -> Result<Vec<ResultTarget>> {
+) -> Result<Vec<OcrResult>> {
     tokio::task::spawn_blocking(move || {
         let model = model
             .lock()
             .map_err(|_| anyhow!("OCR model lock is poisoned"))?;
         targets
             .into_iter()
-            .map(|(entity, geometry, previous, image)| {
-                Ok((
-                    entity,
-                    geometry,
-                    previous,
-                    normalize_ocr_text(inference(&model, &image)?),
-                ))
+            .map(|target| {
+                Ok(OcrResult {
+                    content: target.content,
+                    region: target.region,
+                    geometry: target.geometry,
+                    previous: target.previous,
+                    text: normalize_ocr_text(inference(&model, &target.image)?),
+                })
             })
             .collect()
     })

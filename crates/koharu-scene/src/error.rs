@@ -8,9 +8,9 @@ pub enum Error {
     Storage(#[from] koharu_storage::Error),
     #[error(transparent)]
     Codec(#[from] revision::Error),
-    #[error("invalid scene: {0}")]
+    #[error("invalid project: {0}")]
     Invalid(String),
-    #[error("entity {0} is not part of the scene hierarchy")]
+    #[error("entity {0} is not part of the project hierarchy")]
     EntityNotFound(EntityId),
     #[error("relation {0} was not found")]
     RelationNotFound(RelationId),
@@ -24,12 +24,10 @@ pub enum Error {
     IncidentRelations(EntityId),
     #[error("component authorship conflict: {0}")]
     Authorship(String),
-    #[error("component {kind}@{slot} has unsupported schema {schema}")]
-    UnsupportedComponent {
-        kind: String,
-        slot: String,
-        schema: u32,
-    },
+    #[error("patch conflict: {0}")]
+    PatchConflict(String),
+    #[error("component {kind} has unsupported schema {schema}")]
+    UnsupportedComponent { kind: String, schema: u32 },
     #[error("component reference envelope does not match its decoded value: {0}")]
     ReferenceMismatch(String),
 }

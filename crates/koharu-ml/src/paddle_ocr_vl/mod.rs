@@ -7,7 +7,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -17,12 +16,12 @@ pub use self::{
 
 use self::{model::Model, processor::Processor};
 
-koharu_runtime::huggingface! {
-    CONFIG => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "config.json",
-    WEIGHTS => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "model.safetensors",
-    PROCESSOR => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "preprocessor_config.json",
-    TOKENIZER => "PaddlePaddle/PaddleOCR-VL-1.6" => "66317acc4c9fc17bd154591ce650735cd2855f3e" => "tokenizer.json",
-}
+model_repository!("PaddlePaddle/PaddleOCR-VL-1.6" @ "66317acc4c9fc17bd154591ce650735cd2855f3e" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+    PROCESSOR = "preprocessor_config.json",
+    TOKENIZER = "tokenizer.json",
+});
 
 #[derive(Debug)]
 pub struct PaddleOCRVL {
@@ -34,16 +33,20 @@ pub struct PaddleOCRVL {
 impl PaddleOCRVL {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve PaddleOCR-VL-1.6 config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve PaddleOCR-VL-1.6 weights")?;
-        let processor_path = huggingface::resolve(PROCESSOR)
+        let processor_path = PROCESSOR
+            .resolve()
             .await
             .context("failed to resolve PaddleOCR-VL-1.6 image processor")?;
-        let tokenizer_path = huggingface::resolve(TOKENIZER)
+        let tokenizer_path = TOKENIZER
+            .resolve()
             .await
             .context("failed to resolve PaddleOCR-VL-1.6 tokenizer")?;
 

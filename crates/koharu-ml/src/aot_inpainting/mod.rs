@@ -5,14 +5,13 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbImage};
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 use self::{model::Model, processor::Processor};
 
-koharu_runtime::huggingface! {
-    WEIGHTS => "mayocream/aot-inpainting" => "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" => "model.safetensors",
-}
+model_repository!("mayocream/aot-inpainting" @ "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" {
+    WEIGHTS = "model.safetensors"
+});
 
 #[derive(Debug)]
 pub struct AotInpainting {
@@ -23,7 +22,8 @@ pub struct AotInpainting {
 impl AotInpainting {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve AOT inpainting weights")?;
         let mut model = Model::new(device);

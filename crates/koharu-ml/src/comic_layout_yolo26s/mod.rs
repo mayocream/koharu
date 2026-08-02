@@ -9,7 +9,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -22,10 +21,10 @@ pub use self::{
 
 use self::model::Model;
 
-koharu_runtime::huggingface! {
-    CONFIG => "mayocream/comic-layout-yolo26s" => "90f556d6973a8abdefacaace1e7eed4adbcd33a8" => "config.json",
-    WEIGHTS => "mayocream/comic-layout-yolo26s" => "90f556d6973a8abdefacaace1e7eed4adbcd33a8" => "model.safetensors",
-}
+model_repository!("mayocream/comic-layout-yolo26s" @ "90f556d6973a8abdefacaace1e7eed4adbcd33a8" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+});
 
 #[derive(Debug)]
 pub struct ComicLayoutYolo26sSegmenter {
@@ -37,10 +36,12 @@ pub struct ComicLayoutYolo26sSegmenter {
 impl ComicLayoutYolo26sSegmenter {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve comic-layout-yolo26s config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve comic-layout-yolo26s weights")?;
         let config = ComicLayoutYolo26sConfig::from_file(&config_path)

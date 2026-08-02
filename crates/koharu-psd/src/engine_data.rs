@@ -1,3 +1,10 @@
+//! Photoshop text EngineData serialization shaped for GIMP's text-data parser.
+//!
+//! GIMP reference: EngineData token and binary-string parsing:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-util.c#L1240-L1550
+//! GIMP reference: `TySh` transform, descriptors, and bounds consumed by the importer:
+//! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-layer-res-load.c#L1230-L1315
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextOrientation {
     Horizontal,

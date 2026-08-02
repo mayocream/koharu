@@ -13,4 +13,6 @@ publish.workspace = true
 
 [dependencies]
 image = { workspace = true }
+koharu-renderer = { workspace = true }
+koharu-scene = { workspace = true }
 thiserror = { workspace = true }

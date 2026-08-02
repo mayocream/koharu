@@ -16,12 +16,14 @@ mod stage;
 mod stage_runner;
 mod stages;
 
-pub use config::{DetectionModel, InpaintingModel, OcrModel, PipelineConfig};
+pub use config::{
+    DetectionModel, InpaintingModel, OcrModel, PipelineConfig, ProcessorConfig, TranslationConfig,
+};
 pub use error::{ErrorKind, PipelineError};
 pub use pipeline::Pipeline;
 pub use progress::{Progress, ProgressSink};
 pub use report::{Committer, Report, RunStatus, StageOutput};
-pub use request::{Operation, Request, StopToken};
+pub use request::{InpaintingMask, Operation, Request, StopToken};
 pub use resources::{DeviceResources, ResourceSnapshot};
 pub use scope::{Bounds, Scope};
 pub use stage::Stage;

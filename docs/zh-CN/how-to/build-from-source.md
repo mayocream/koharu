@@ -11,7 +11,7 @@ title: 从源码构建
 一次完整的桌面构建包括：
 
 - `koharu/` 中的 Rust 应用
-- `ui/` 中嵌入的界面
+- `packages/koharu/` 中嵌入的界面
 - GUI 和 headless 模式共用的本地 HTTP、RPC 和 MCP 服务
 
 默认桌面构建会根据平台自动选择特性路径：

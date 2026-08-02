@@ -12,7 +12,6 @@ use image::{DynamicImage, RgbImage};
 use koharu_diffusion::{
     GuidanceParams, ImageGenerationParams, SampleMethod, SampleParams, Scheduler,
 };
-use koharu_runtime::package::huggingface;
 
 use self::{
     model::{Model, ModelPaths},
@@ -21,11 +20,15 @@ use self::{
 
 pub use self::processor::{Flux2KleinInpaintOptions, Flux2KleinOptions};
 
-koharu_runtime::huggingface! {
-    TRANSFORMER_WEIGHTS => "unsloth/FLUX.2-klein-4B-GGUF" => "0084d1df98e2e2137fe776d55170bc4792ec1d66" => "flux-2-klein-4b-Q4_K_M.gguf",
-    VAE_WEIGHTS => "black-forest-labs/FLUX.2-small-decoder" => "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a" => "full_encoder_small_decoder.safetensors",
-    TEXT_ENCODER_WEIGHTS => "unsloth/Qwen3-4B-GGUF" => "22c9fc8a8c7700b76a1789366280a6a5a1ad1120" => "Qwen3-4B-Q4_K_M.gguf",
-}
+model_repository!("unsloth/FLUX.2-klein-4B-GGUF" @ "0084d1df98e2e2137fe776d55170bc4792ec1d66" {
+    TRANSFORMER_WEIGHTS = "flux-2-klein-4b-Q4_K_M.gguf"
+});
+model_repository!("black-forest-labs/FLUX.2-small-decoder" @ "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a" {
+    VAE_WEIGHTS = "full_encoder_small_decoder.safetensors"
+});
+model_repository!("unsloth/Qwen3-4B-GGUF" @ "22c9fc8a8c7700b76a1789366280a6a5a1ad1120" {
+    TEXT_ENCODER_WEIGHTS = "Qwen3-4B-Q4_K_M.gguf"
+});
 
 #[derive(Debug)]
 pub struct Flux2Klein {
@@ -35,9 +38,9 @@ pub struct Flux2Klein {
 impl Flux2Klein {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (transformer, text_encoder, vae) = tokio::try_join!(
-            huggingface::resolve(TRANSFORMER_WEIGHTS),
-            huggingface::resolve(TEXT_ENCODER_WEIGHTS),
-            huggingface::resolve(VAE_WEIGHTS),
+            TRANSFORMER_WEIGHTS.resolve(),
+            TEXT_ENCODER_WEIGHTS.resolve(),
+            VAE_WEIGHTS.resolve(),
         )
         .context("failed to resolve FLUX.2 Klein model assets")?;
         let model = Model::new(
@@ -127,9 +130,9 @@ pub struct Flux2KleinInpaint {
 impl Flux2KleinInpaint {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (transformer, text_encoder, vae) = tokio::try_join!(
-            huggingface::resolve(TRANSFORMER_WEIGHTS),
-            huggingface::resolve(TEXT_ENCODER_WEIGHTS),
-            huggingface::resolve(VAE_WEIGHTS),
+            TRANSFORMER_WEIGHTS.resolve(),
+            TEXT_ENCODER_WEIGHTS.resolve(),
+            VAE_WEIGHTS.resolve(),
         )
         .context("failed to resolve FLUX.2 Klein model assets")?;
         let model = Model::new(

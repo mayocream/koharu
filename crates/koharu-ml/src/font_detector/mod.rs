@@ -8,17 +8,16 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use processor::{FontPrediction, NamedFontPrediction, TextDirection, TopFont};
 
 use self::{model::Model, processor::Processor};
 
-koharu_runtime::huggingface! {
-    WEIGHTS => "fffonion/yuzumarker-font-detection" => "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" => "yuzumarker-font-detection.safetensors",
-    LABELS => "fffonion/yuzumarker-font-detection" => "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" => "font-labels-ex.json",
-}
+model_repository!("fffonion/yuzumarker-font-detection" @ "7484242bb840f39e27f10df8ade1f8a9a8fa8f53" {
+    WEIGHTS = "yuzumarker-font-detection.safetensors",
+    LABELS = "font-labels-ex.json",
+});
 
 #[derive(Debug)]
 pub struct FontDetector {
@@ -30,10 +29,12 @@ pub struct FontDetector {
 impl FontDetector {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve YuzuMarker font detector weights")?;
-        let labels_path = huggingface::resolve(LABELS)
+        let labels_path = LABELS
+            .resolve()
             .await
             .context("failed to resolve YuzuMarker font labels")?;
 

@@ -1,5 +1,12 @@
-use koharu_renderer::{PreparedPage, RenderPlan, RenderRequest, RenderResources, RenderTheme};
-use koharu_scene::{BlobId, LanguageTag, SceneSnapshot};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
+
+use koharu_renderer::{
+    Compositor, Frame as RenderFrame, LayerPresentation, RenderRequest, RenderTheme, SceneRenderer,
+};
+use koharu_scene::{BlobId, EntityId, Snapshot};
 use vello::{
     Scene,
     kurbo::{Affine, Rect, Vec2},
@@ -7,25 +14,26 @@ use vello::{
 };
 
 use crate::{
-    ActiveTransform, CanvasDiagnostic, CanvasElement, CanvasPage, Resources, Result,
-    transform::frame_transform,
+    ActiveTransform, CanvasDiagnostic, CanvasElement, CanvasPage, ElementFrame, Resources, Result,
 };
 
-/// Cached renderer preparation plus the cheap ordered composition used by the
-/// interactive viewport. Text shaping is repeated only after a scene, locale,
-/// theme, or font change. Image data stays in the canvas resource cache.
+/// Cached vector frame plus the cheap ordered composition used by the
+/// interactive viewport. Text shaping is repeated only after a scene, theme,
+/// or font change. Image data stays in the canvas resource cache.
 pub(crate) struct ElementScenes {
-    renderer_resources: RenderResources,
-    prepared_text: Option<PreparedPage>,
+    compositor: Compositor,
+    scene_renderer: SceneRenderer,
+    text_frame: Option<Arc<RenderFrame>>,
+    text_overrides: HashMap<EntityId, Option<Arc<RenderFrame>>>,
+    dirty_text: BTreeSet<EntityId>,
     combined: Option<Scene>,
 }
 
 pub(crate) struct ElementSceneContext<'a> {
-    pub snapshot: &'a SceneSnapshot,
+    pub snapshot: &'a Snapshot,
     pub page: &'a CanvasPage,
     pub resources: &'a mut Resources,
     pub text: &'a RenderTheme,
-    pub locale: Option<&'a LanguageTag>,
     pub transform: Option<&'a ActiveTransform>,
     pub show_text: bool,
     pub diagnostics: &'a mut Vec<CanvasDiagnostic>,
@@ -34,14 +42,19 @@ pub(crate) struct ElementSceneContext<'a> {
 impl ElementScenes {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            renderer_resources: RenderResources::new(),
-            prepared_text: None,
+            compositor: Compositor::new(),
+            scene_renderer: SceneRenderer::new(),
+            text_frame: None,
+            text_overrides: HashMap::new(),
+            dirty_text: BTreeSet::new(),
             combined: None,
         })
     }
 
     pub fn clear(&mut self) {
-        self.prepared_text = None;
+        self.text_frame = None;
+        self.text_overrides.clear();
+        self.dirty_text.clear();
         self.combined = None;
     }
 
@@ -49,12 +62,15 @@ impl ElementScenes {
         self.combined = None;
     }
 
-    pub fn retain_page(&mut self, _page: &CanvasPage) {
-        self.clear();
+    pub fn invalidate_text(&mut self) {
+        self.text_frame = None;
+        self.text_overrides.clear();
+        self.dirty_text.clear();
+        self.recompose();
     }
 
-    pub fn invalidate_text(&mut self) {
-        self.prepared_text = None;
+    pub fn invalidate_text_entities(&mut self, entities: impl IntoIterator<Item = EntityId>) {
+        self.dirty_text.extend(entities);
         self.recompose();
     }
 
@@ -63,8 +79,13 @@ impl ElementScenes {
     }
 
     pub fn scene(&mut self, mut context: ElementSceneContext<'_>) -> &Scene {
-        if context.show_text && self.prepared_text.is_none() {
-            self.prepare_text(&mut context);
+        if context.show_text {
+            self.ensure_text(
+                context.snapshot,
+                context.page,
+                context.text,
+                context.diagnostics,
+            );
         }
         if self.combined.is_none() {
             self.combined = Some(self.compose(&mut context));
@@ -74,32 +95,107 @@ impl ElementScenes {
             .expect("element scene was composed above")
     }
 
-    fn prepare_text(&mut self, context: &mut ElementSceneContext<'_>) {
-        let Some(locale) = context.locale else {
+    pub fn element_frames(
+        &mut self,
+        snapshot: &Snapshot,
+        page: &CanvasPage,
+        text: &RenderTheme,
+        diagnostics: &mut Vec<CanvasDiagnostic>,
+    ) -> Vec<ElementFrame> {
+        self.ensure_text(snapshot, page, text, diagnostics);
+        page.elements
+            .iter()
+            .filter(|element| element.has_text)
+            .filter_map(|element| {
+                let text = self.visual_text(element.id)?;
+                let bounds = text.rendered_bounds;
+                Some(ElementFrame {
+                    element: element.id,
+                    frame: crate::Frame {
+                        x: bounds.x,
+                        y: bounds.y,
+                        width: bounds.width,
+                        height: bounds.height,
+                        angle_degrees: text.angle_degrees,
+                    },
+                })
+            })
+            .collect()
+    }
+
+    fn ensure_text(
+        &mut self,
+        snapshot: &Snapshot,
+        page: &CanvasPage,
+        text: &RenderTheme,
+        diagnostics: &mut Vec<CanvasDiagnostic>,
+    ) {
+        if self.text_frame.is_none() {
+            self.dirty_text.clear();
+            self.render_text(snapshot, page, text, diagnostics, None);
             return;
-        };
-        let mut request = RenderRequest::transparent(context.page.id);
+        }
+        if !self.dirty_text.is_empty() {
+            let entities = std::mem::take(&mut self.dirty_text);
+            self.render_text(snapshot, page, text, diagnostics, Some(entities));
+        }
+    }
+
+    fn render_text(
+        &mut self,
+        snapshot: &Snapshot,
+        page: &CanvasPage,
+        text: &RenderTheme,
+        diagnostics: &mut Vec<CanvasDiagnostic>,
+        entities: Option<BTreeSet<EntityId>>,
+    ) {
+        let mut request = RenderRequest::transparent(page.id);
         request.include_images = false;
-        request.locale = Some(locale.clone());
+        request.text_entities = entities.clone();
+        request.presentation = LayerPresentation::Deferred;
         request.fallback_to_source_text = false;
-        request.theme = context.text.clone();
-        let prepared = RenderPlan::compile(context.snapshot, &request).and_then(|plan| {
-            PreparedPage::prepare(
-                &plan,
-                context.snapshot,
-                &self.renderer_resources,
-                &request.theme,
-            )
-        });
-        match prepared {
-            Ok(prepared) => self.prepared_text = Some(prepared),
-            Err(error) => context.diagnostics.push(CanvasDiagnostic {
-                page: Some(context.page.id),
+        request.theme = text.clone();
+        let frame = self
+            .compositor
+            .compile(snapshot, &request)
+            .and_then(|composition| self.scene_renderer.render(snapshot, &composition));
+        match frame {
+            Ok(frame) => match entities {
+                Some(entities) => {
+                    for entity in entities {
+                        let rendered = frame.layers().iter().any(|layer| layer.entity == entity);
+                        self.text_overrides
+                            .insert(entity, rendered.then(|| frame.clone()));
+                    }
+                }
+                None => {
+                    self.text_frame = Some(frame);
+                    self.text_overrides.clear();
+                }
+            },
+            Err(error) => diagnostics.push(CanvasDiagnostic {
+                page: Some(page.id),
                 element: None,
                 blob: None,
-                message: format!("failed to prepare page text: {error}"),
+                message: format!("failed to render page text: {error}"),
             }),
         }
+    }
+
+    fn text_frame_for(&self, entity: EntityId) -> Option<&Arc<RenderFrame>> {
+        match self.text_overrides.get(&entity) {
+            Some(frame) => frame.as_ref(),
+            None => self.text_frame.as_ref(),
+        }
+    }
+
+    fn visual_text(&self, entity: EntityId) -> Option<&koharu_renderer::VisualText> {
+        self.text_frame_for(entity)?
+            .layers()
+            .iter()
+            .find(|layer| layer.entity == entity)?
+            .text
+            .as_ref()
     }
 
     fn compose(&self, context: &mut ElementSceneContext<'_>) -> Scene {
@@ -108,21 +204,36 @@ impl ElementScenes {
             if !element.visible || element.opacity <= 0.0 {
                 continue;
             }
-            let preview = context
+            let transform = context
                 .transform
-                .and_then(|transform| transform.preview(element.id));
-            let frame = preview.unwrap_or(element.frame);
+                .and_then(|transform| transform.affine(element.id));
             if let Some(blob) = element.image
                 && let Some(image) = context.resources.color(blob)
             {
-                append_image(&mut combined, element, frame, &image);
+                append_image(&mut combined, element, &image, transform);
             }
             if context.show_text
                 && element.has_text
-                && let Some(prepared) = &self.prepared_text
+                && let Some(frame) = self.text_frame_for(element.id)
             {
-                let transform = preview.map(|preview| frame_transform(element.frame, preview));
-                prepared.append_entity_to(element.id, &mut combined, transform);
+                if element.opacity < 1.0 {
+                    combined.push_layer(
+                        Fill::NonZero,
+                        Mix::Normal,
+                        element.opacity,
+                        Affine::IDENTITY,
+                        &Rect::new(
+                            0.0,
+                            0.0,
+                            f64::from(context.page.size.width),
+                            f64::from(context.page.size.height),
+                        ),
+                    );
+                }
+                frame.append_entity_to(element.id, &mut combined, transform);
+                if element.opacity < 1.0 {
+                    combined.pop_layer();
+                }
             }
         }
         combined
@@ -132,10 +243,13 @@ impl ElementScenes {
 fn append_image(
     scene: &mut Scene,
     element: &CanvasElement,
-    frame: crate::Frame,
     image: &vello::peniko::ImageData,
+    preview: Option<Affine>,
 ) {
-    let transform = image_transform(frame, image.width, image.height);
+    let transform = preview.map_or_else(
+        || image_transform(element.frame, image.width, image.height),
+        |preview| preview * image_transform(element.frame, image.width, image.height),
+    );
     if element.opacity < 1.0 {
         scene.push_layer(
             Fill::NonZero,
@@ -168,8 +282,7 @@ fn image_transform(frame: crate::Frame, width: u32, height: u32) -> Affine {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{Frame, frame_corners};
+    use crate::{Frame, frame_corners, transform::frame_transform};
     use vello::kurbo::Point;
 
     #[test]

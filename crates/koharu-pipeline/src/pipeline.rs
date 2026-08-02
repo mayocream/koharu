@@ -5,8 +5,10 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
+use arc_swap::ArcSwap;
 use futures::{StreamExt as _, stream::FuturesUnordered};
-use koharu_scene::{EntityId, SceneSnapshot};
+use koharu_config::Config;
+use koharu_scene::{EntityId, Snapshot};
 
 use crate::{
     Committer, ErrorKind, PipelineConfig, PipelineError, Progress, ProgressSink, Report, Request,
@@ -20,63 +22,60 @@ use crate::{
     stages::StageInput,
 };
 
+#[derive(Clone)]
 pub struct Pipeline {
-    config: Arc<PipelineConfig>,
-    translation: Arc<koharu_translator::TranslationConfig>,
-    device: koharu_ml::Device,
-    runner: StageRunner,
+    current: Arc<ArcSwap<StageRunner>>,
     resources: Arc<ResourceMonitor>,
-    execution: tokio::sync::Mutex<()>,
+    execution: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Pipeline {
-    pub fn new(
-        config: PipelineConfig,
-        translation: koharu_translator::TranslationConfig,
-    ) -> Result<Self> {
-        let device = koharu_ml::device(false);
-        let resources = ResourceMonitor::new(&device);
-        Self::build(config, translation, device, resources)
-    }
-
-    fn build(
-        config: PipelineConfig,
-        translation: koharu_translator::TranslationConfig,
-        device: koharu_ml::Device,
-        resources: Arc<ResourceMonitor>,
-    ) -> Result<Self> {
-        let runner = StageRunner::new(&config, &translation, &device, resources.clone())?;
-        Ok(Self {
-            config: Arc::new(config),
-            translation: Arc::new(translation),
+    pub fn load(device: koharu_ml::Device) -> Result<Self> {
+        Self::from_config(
+            PipelineConfig::load()?,
+            koharu_translator::ProvidersConfig::load()?,
             device,
-            runner,
-            resources,
-            execution: tokio::sync::Mutex::new(()),
-        })
-    }
-
-    pub fn reconfigured(
-        &self,
-        config: PipelineConfig,
-        translation: koharu_translator::TranslationConfig,
-    ) -> Result<Self> {
-        Self::build(
-            config,
-            translation,
-            self.device.clone(),
-            self.resources.clone(),
         )
     }
 
-    #[must_use]
-    pub fn configuration(
-        &self,
-    ) -> (
-        Arc<PipelineConfig>,
-        Arc<koharu_translator::TranslationConfig>,
-    ) {
-        (self.config.clone(), self.translation.clone())
+    pub fn from_config(
+        config: Config<PipelineConfig>,
+        providers: Config<koharu_translator::ProvidersConfig>,
+        device: koharu_ml::Device,
+    ) -> Result<Self> {
+        let translator = koharu_translator::Translator::from_config(device.clone(), providers)?;
+        let resources = ResourceMonitor::new(&device);
+        let runner = {
+            let value = config.read()?;
+            StageRunner::new(&value, translator.clone(), &device, resources.clone())?
+        };
+        let current = Arc::new(ArcSwap::from_pointee(runner));
+        let watched = current.clone();
+        let watched_resources = resources.clone();
+        let _watcher = tokio::runtime::Handle::try_current()
+            .context("pipeline requires a Tokio runtime")?
+            .spawn(async move {
+                let mut changes = config.subscribe();
+                while changes.changed().await.is_ok() {
+                    let runner = config.read().and_then(|value| {
+                        StageRunner::new(
+                            &value,
+                            translator.clone(),
+                            &device,
+                            watched_resources.clone(),
+                        )
+                    });
+                    match runner {
+                        Ok(runner) => watched.store(Arc::new(runner)),
+                        Err(error) => tracing::error!(%error, "failed to reload pipeline"),
+                    }
+                }
+            });
+        Ok(Self {
+            current,
+            resources,
+            execution: Arc::new(tokio::sync::Mutex::new(())),
+        })
     }
 
     pub fn subscribe_resources(&self) -> tokio::sync::watch::Receiver<ResourceSnapshot> {
@@ -86,46 +85,67 @@ impl Pipeline {
 
     pub async fn execute(
         &self,
-        snapshot: SceneSnapshot,
+        snapshot: Snapshot,
         request: Request,
         committer: &mut dyn Committer,
     ) -> std::result::Result<Report, PipelineError> {
         let _execution = self.execution.lock().await;
-        Execution::new(self, snapshot, request, committer)?
-            .run()
-            .await
+        Execution::new(
+            self.current.load_full(),
+            self.resources.clone(),
+            snapshot,
+            request,
+            committer,
+        )?
+        .run()
+        .await
     }
 }
 
 struct Execution<'a> {
-    pipeline: &'a Pipeline,
+    runner: Arc<StageRunner>,
+    resources: Arc<ResourceMonitor>,
     committer: &'a mut dyn Committer,
     stop: StopToken,
     progress: Option<ProgressSink>,
     scope: NormalizedScope,
     scheduler: Scheduler,
-    scene: SceneSnapshot,
+    scene: Snapshot,
     images: BTreeMap<EntityId, Arc<ImageCache>>,
     busy_stages: BTreeSet<Stage>,
     completed: usize,
     failure: Option<PipelineError>,
     base: koharu_scene::Revision,
     started: Instant,
+    inpainting_mask: Option<crate::InpaintingMask>,
 }
 
 impl<'a> Execution<'a> {
     fn new(
-        pipeline: &'a Pipeline,
-        snapshot: SceneSnapshot,
+        runner: Arc<StageRunner>,
+        resources: Arc<ResourceMonitor>,
+        snapshot: Snapshot,
         request: Request,
         committer: &'a mut dyn Committer,
     ) -> std::result::Result<Self, PipelineError> {
         let started = Instant::now();
         let base = snapshot.revision();
-        let stages = request.operation.stages();
+        let stages = request
+            .operation
+            .stages()
+            .map_err(|error| PipelineError::new(ErrorKind::InvalidInput, None, error))?;
         let scope = NormalizedScope::new(&snapshot, &request.scope, &stages)
             .map_err(|error| PipelineError::new(ErrorKind::InvalidInput, None, error))?;
         let pages = scope.pages().to_vec();
+        if let Some(mask) = request.inpainting_mask.as_ref()
+            && (!pages.contains(&mask.page) || !stages.contains(&Stage::Inpainting))
+        {
+            return Err(PipelineError::new(
+                ErrorKind::InvalidInput,
+                Some(Stage::Inpainting),
+                anyhow::anyhow!("the inpainting mask page is outside the inpainting scope"),
+            ));
+        }
         progress::emit(
             request.progress.as_ref(),
             Progress::Started {
@@ -135,7 +155,8 @@ impl<'a> Execution<'a> {
         );
 
         Ok(Self {
-            pipeline,
+            runner,
+            resources,
             committer,
             stop: request.stop,
             progress: request.progress,
@@ -148,6 +169,7 @@ impl<'a> Execution<'a> {
             failure: None,
             base,
             started,
+            inpainting_mask: request.inpainting_mask,
         })
     }
 
@@ -156,14 +178,14 @@ impl<'a> Execution<'a> {
             return Ok(self.report(RunStatus::Stopped));
         }
 
-        self.pipeline.resources.start();
-        self.pipeline.resources.wait_for_sample().await;
+        self.resources.start();
+        self.resources.wait_for_sample().await;
 
-        let pipeline = self.pipeline;
+        let runner = self.runner.clone();
         let mut running = FuturesUnordered::new();
         loop {
             while let Some(job) = self.take_ready_job() {
-                running.push(pipeline.runner.run(job));
+                running.push(runner.run(job));
             }
 
             let Some(completion) = running.next().await else {
@@ -200,6 +222,10 @@ impl<'a> Execution<'a> {
                 self.scope.entities(),
                 self.scope.region(page),
                 images,
+                self.inpainting_mask
+                    .as_ref()
+                    .filter(|mask| stage == Stage::Inpainting && mask.page == page)
+                    .cloned(),
             ),
             self.stop.clone(),
             self.progress.clone(),
@@ -246,7 +272,7 @@ impl<'a> Execution<'a> {
         &mut self,
         page: EntityId,
         stage: Stage,
-        patch: koharu_scene::ScenePatch,
+        patch: koharu_scene::Patch,
     ) -> std::result::Result<bool, PipelineError> {
         let patch = patch
             .rebase_on(&self.scene)
@@ -318,7 +344,7 @@ impl<'a> Execution<'a> {
     }
 }
 
-fn validate_commit(previous: &SceneSnapshot, next: &SceneSnapshot) -> Result<()> {
+fn validate_commit(previous: &Snapshot, next: &Snapshot) -> Result<()> {
     ensure!(
         previous.project_id() == next.project_id(),
         "committer returned a snapshot from another project"

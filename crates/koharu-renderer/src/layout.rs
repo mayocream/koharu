@@ -2212,13 +2212,8 @@ mod tests {
 
     #[test]
     fn font_size_search_handles_non_monotonic_balloon_fit() -> anyhow::Result<()> {
-        let fitted = largest_fitting_font_size(
-            9.0,
-            24.0,
-            |size| Ok(size),
-            |size| (10.0..=12.0).contains(size),
-        )?
-        .expect("the larger fitting range should be found");
+        let fitted = largest_fitting_font_size(9.0, 24.0, Ok, |size| (10.0..=12.0).contains(size))?
+            .expect("the larger fitting range should be found");
 
         assert!((11.99..=12.0).contains(&fitted));
         Ok(())

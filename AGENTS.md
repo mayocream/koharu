@@ -1,56 +1,62 @@
 # Koharu Project Rules
 
-Document only repository-specific constraints here. Normal Rust, TypeScript, testing, formatting, and Git practices are assumed.
+Document only durable, repository-specific constraints here. Do not record current file layouts, temporary paths, model inventories, helper names, or other implementation details that may change during a refactor. Normal Rust, TypeScript, testing, formatting, and Git practices are assumed.
+
+## Change Policy
+
+- Never add backward compatibility. When an API, schema, configuration, or ownership boundary changes, update every in-repository consumer and remove the replaced form.
+- Prefer a coherent ownership redesign over aliases, forwarding layers, compatibility parsers, or cosmetic renaming.
+- Keep responsibilities self-contained. Defaults and provider-specific behavior belong to the component that owns them rather than a central list of special cases.
+- Remove dead abstractions and one-use helpers when direct code is clearer.
 
 ## Source Boundaries
 
-- `temp/` contains read-only upstream checkouts used to port and compare implementations. Never modify or commit it.
-- `data/`, `models/`, and `runs/` are local inputs, weights, and outputs. Never commit them.
-- Public safe wrappers belong in `koharu-llama`, `koharu-diffusion`, and `koharu-torch`. Raw handles, dynamic loading, build logic, and `unsafe` FFI belong in the matching `*-sys` crate.
+- Keep safe public APIs separate from unsafe FFI, dynamic loading, and build integration.
+- Do not hand-edit generated or derived source. Change its authoritative input and run the generator.
+- Do not commit credentials, model weights, datasets, generated outputs, or machine-specific artifacts.
 
-## Generated Code
+## ML Architecture
 
-The following are also generated or derived and should be changed through their generator or authoritative input:
-
-- `crates/koharu-torch/src/wrappers/*generated.rs`
-- `crates/koharu-torch-sys/libtch/torch_api_generated.{h,cpp}`
-- bindings emitted by `crates/koharu-bindgen` from `*-sys/build.rs`
-
-## ML Model Interface
-
-Every model under `crates/koharu-ml/src` uses the same outer shape:
-
-- The public model type exposes `pub async fn load(device: crate::Device) -> Result<Self>`.
-- The public model type exposes `pub fn inference(...) -> Result<...>`; model-specific arguments are allowed.
-- A private `model::Model` owns the Torch modules and `VarStore`s and implements `new`, weight loading, and `forward`.
-- `processor` owns preprocessing, postprocessing, crop/slice logic, and public detection/result types.
-- `config` exists only when the upstream architecture is configuration-driven.
-
-Use `Model` for the private network and `Output` for a multi-tensor forward result unless the upstream API has a meaningful, more specific name. Do not add pass-through types or helpers such as `PreparedInput`, `load_with_config`, or an extra `inpaint_model` layer. Keep one-use model sizes and crop margins inline instead of extracting constants merely to name the literal.
-
-All model loaders accept `Device`, never `cpu: bool`. Convert it once to the Torch device and keep tensors there through preprocessing, forward, and postprocessing where practical. Copy to CPU only for the final caller-facing output.
-
-Resolve model assets with `koharu_runtime::huggingface!`. Construct and register the complete module tree before loading weights. Load `.safetensors` and other supported formats with the model's `koharu_torch::nn::VarStore::load`; do not add a custom SafeTensors reader, tensor-copy loader, or generic checkpoint helper unless `VarStore::load` is proven unable to load the required checkpoint.
-
-Run inference inside `koharu_torch::no_grad`.
+- Keep a consistent public lifecycle across models while allowing model-specific inputs and outputs.
+- Separate network ownership and weight loading from preprocessing, postprocessing, slicing, and public result types.
+- Avoid pass-through types and layers that do not own a real responsibility.
+- Accept a device abstraction at the model boundary, convert it once, and avoid unnecessary transfers or synchronization.
+- Use the established runtime and variable-store loading paths unless they are proven insufficient.
+- Disable gradient tracking during inference.
 
 ## Upstream Alignment
 
-Ports must remain structurally traceable to the authoritative implementation, especially Hugging Face Transformers, IOPaint, BallonsTranslator, and comic-translate references under `temp/`.
+- Keep ports structurally traceable to a commit-pinned authoritative implementation.
+- Preserve checkpoint-affecting names, construction order, parameter paths, tensor layouts, execution order, and postprocessing semantics.
+- Treat missing or unexpected weights as an architecture or parameter-name mismatch before changing the loader.
+- Explain intentional divergences next to the affected code.
+- Compare ports on identical inputs using structured outputs such as shapes, ranges, boxes, scores, masks, and ordering.
 
-- Match upstream module, struct, field, layer, and model names where Rust permits.
-- Preserve module construction, parameter paths, execution order, tensor layouts, interpolation modes, padding, thresholds, crop behavior, and postprocessing semantics.
-- Add a commit-pinned URL to the exact upstream file or symbol above each ported module or non-obvious algorithm.
-- Keep checkpoint-affecting upstream quirks. Explain intentional divergences next to the code.
-- Treat missing or unexpected weights as a model-tree/parameter-name mismatch first, not a loader problem.
-- For alignment work, run both implementations on identical inputs and compare structured outputs—shapes, ranges, boxes, scores, masks, and ordering—not just rendered images.
+## Performance
 
-Comments in ported code should explain mapping, invariants, or deliberate divergence. Do not narrate straightforward Rust.
+- Optimize and benchmark the actual target device with representative inputs.
+- Remove redundant transfers, synchronization, allocations, and per-pixel host loops before adding concurrency or caching.
+- Account for asynchronous accelerator execution when timing work.
+- Load assets and warm models outside measured regions.
+- Report the device, input size, baseline, result, and correctness difference.
 
-## GPU Performance
+## Verification
 
-- Optimize and benchmark the actual target device. Do not use CPU timings to evaluate CUDA work.
-- Keep preprocessing and postprocessing on the GPU when supported; first remove redundant transfers, synchronizations, allocations, and per-pixel CPU loops.
-- CUDA execution is asynchronous. Benchmarks must synchronize immediately before and after the timed inference.
-- Load weights, decode fixtures, and warm up the model outside the measured loop.
-- Use representative inputs, including the checked-in 4K LaMa fixture, and report the device, input size, baseline, result, and correctness difference.
+- Optimize for fast development and iteration. By default, run the smallest relevant check or focused test once using the debug profile.
+- Do not run full test suites, repeatedly rerun unchanged tests or builds, or build and test profiles other than debug unless the user explicitly requests it.
+- Run end-to-end tests only when the user explicitly asks for them.
+
+## Desktop UI Debugging
+
+- The default Windows debugging setup must define `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=4000` before launching Koharu. Treat `http://127.0.0.1:4000` as the default local CDP endpoint.
+- Connect `chrome-devtools-mcp` with `--browser-url=http://127.0.0.1:4000` and prefer its tools for WebView inspection and automation. Use semantic targets and observable conditions instead of coordinate-only actions or fixed delays.
+- Use a lower-level CDP client only when `chrome-devtools-mcp` does not expose a required protocol operation. Use native window capture when CDP cannot observe the composited desktop output.
+
+## Desktop Rendering
+
+- Koharu composites native WGPU-rendered canvas pixels beneath a transparent WebView. Preserve WebView transparency wherever native output must remain visible, keep interface rendering in the WebView and canvas rendering in WGPU, and validate their final composition through the desktop window rather than either layer alone.
+
+## Documentation
+
+- Comments should explain ownership, invariants, upstream mapping, or deliberate divergence; do not narrate straightforward code.
+- Keep this file focused on long-lived decision rules rather than the current implementation.

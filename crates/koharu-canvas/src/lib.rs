@@ -1,4 +1,4 @@
-//! Rust-owned, WGPU-backed editor viewport for Koharu scenes.
+//! WGPU-backed scene viewport and semantic edit preview for Koharu scenes.
 //!
 //! The crate is split into three layers:
 //!
@@ -32,9 +32,9 @@ pub use error::{Error, Result};
 pub use geometry::{Camera, Frame, PagePoint, PhysicalPoint, PhysicalSize, PixelRect, PixelSize};
 pub use mask::MaskCommit;
 pub use state::{
-    BaseImage, Brush, CanvasDiagnostic, CanvasGpu, CanvasOptions, Color, DisplayState,
-    ElementFrame, ElementId, ElementPreview, MaskOverlay, MaskPlane, PageId, PageView, StrokeMode,
-    TransformCommit, ViewState,
+    Brush, CanvasDiagnostic, CanvasGpu, CanvasOptions, Color, DisplayState, ElementFrame,
+    ElementId, ElementPreview, MaskOverlay, MaskPlane, PageId, PageView, RasterStrokeCommit,
+    StrokeMode, TransformCommit, ViewState,
 };
 
 use elements::{ElementSceneContext, ElementScenes};

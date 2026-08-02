@@ -4,7 +4,6 @@ mod processor;
 
 use anyhow::{Context, Result, ensure};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::config::BaberuOcrConfig;
@@ -15,14 +14,16 @@ use self::{
     processor::{BaberuImageProcessor, Tokenizer},
 };
 
-koharu_runtime::huggingface! {
-    CONFIG => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "config.json",
-    GENERATION_CONFIG => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "generation_config.json",
-    WEIGHTS => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "model.safetensors",
-    VOCABULARY => "genshiai-daichi/baberu-ocr" => "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" => "tokenizer/vocab.json",
-    VISION_CONFIG => "facebook/dinov2-base" => "f9e44c814b77203eaa57a6bdbbd535f21ede1415" => "config.json",
-    VISION_PROCESSOR => "facebook/dinov2-base" => "f9e44c814b77203eaa57a6bdbbd535f21ede1415" => "preprocessor_config.json",
-}
+model_repository!("genshiai-daichi/baberu-ocr" @ "d9cc13153e9a1cd8fdfa3b7b1cc329da2020aeae" {
+    CONFIG = "config.json",
+    GENERATION_CONFIG = "generation_config.json",
+    WEIGHTS = "model.safetensors",
+    VOCABULARY = "tokenizer/vocab.json",
+});
+model_repository!("facebook/dinov2-base" @ "f9e44c814b77203eaa57a6bdbbd535f21ede1415" {
+    VISION_CONFIG = "config.json",
+    VISION_PROCESSOR = "preprocessor_config.json",
+});
 
 #[derive(Debug)]
 pub struct BaberuOcr {
@@ -44,32 +45,38 @@ impl BaberuOcr {
             vision_processor_path,
         ) = tokio::try_join!(
             async {
-                huggingface::resolve(CONFIG)
+                CONFIG
+                    .resolve()
                     .await
                     .context("failed to resolve Baberu OCR config")
             },
             async {
-                huggingface::resolve(GENERATION_CONFIG)
+                GENERATION_CONFIG
+                    .resolve()
                     .await
                     .context("failed to resolve Baberu OCR generation config")
             },
             async {
-                huggingface::resolve(WEIGHTS)
+                WEIGHTS
+                    .resolve()
                     .await
                     .context("failed to resolve Baberu OCR weights")
             },
             async {
-                huggingface::resolve(VOCABULARY)
+                VOCABULARY
+                    .resolve()
                     .await
                     .context("failed to resolve Baberu OCR vocabulary")
             },
             async {
-                huggingface::resolve(VISION_CONFIG)
+                VISION_CONFIG
+                    .resolve()
                     .await
                     .context("failed to resolve DINOv2 config")
             },
             async {
-                huggingface::resolve(VISION_PROCESSOR)
+                VISION_PROCESSOR
+                    .resolve()
                     .await
                     .context("failed to resolve DINOv2 image processor")
             },

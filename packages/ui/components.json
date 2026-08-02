@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "menuAccent": "subtle",
+  "menuColor": "default-translucent",
+  "aliases": {
+    "components": "@koharu/ui/components",
+    "utils": "@koharu/ui/lib/utils",
+    "ui": "@koharu/ui/components",
+    "lib": "@koharu/ui/lib",
+    "hooks": "@koharu/ui/hooks"
+  },
+  "registries": {}
+}

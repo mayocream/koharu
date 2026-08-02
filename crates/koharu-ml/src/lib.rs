@@ -1,10 +1,26 @@
 use anyhow::Context;
 use koharu_llama::llama_backend::LlamaBackend;
-use koharu_runtime::package::{
-    PreloadablePackage, libtorch::Libtorch, llama_cpp::LlamaCpp,
-    stable_diffusion_cpp::StableDiffusionCpp,
-};
+use koharu_runtime::{Feature, Runtime};
 use tokio::sync::OnceCell;
+
+macro_rules! model_repository {
+    ($repository:literal @ $revision:literal { $($name:ident = $filename:literal),+ $(,)? }) => {
+        $(
+            const $name: koharu_runtime::HuggingFaceFile<'static> =
+                koharu_runtime::HuggingFaceFile::pinned(
+                    $repository,
+                    $revision,
+                    $filename,
+                );
+        )+
+    };
+    ($repository:literal { $($name:ident = $filename:literal),+ $(,)? }) => {
+        $(
+            const $name: koharu_runtime::HuggingFaceFile<'static> =
+                koharu_runtime::HuggingFaceFile::latest($repository, $filename);
+        )+
+    };
+}
 
 mod device;
 
@@ -35,7 +51,6 @@ pub use koharu_torch as torch;
 
 static LLAMA: OnceCell<LlamaBackend> = OnceCell::const_new();
 static DIFFUSION: OnceCell<()> = OnceCell::const_new();
-static TORCH: OnceCell<()> = OnceCell::const_new();
 static READY: OnceCell<()> = OnceCell::const_new();
 
 /// Initializes every process-wide native runtime used by Koharu.
@@ -47,52 +62,24 @@ static READY: OnceCell<()> = OnceCell::const_new();
 pub async fn init() -> anyhow::Result<()> {
     READY
         .get_or_try_init(|| async {
-            tokio::try_join!(init_torch(), init_llama(), init_diffusion())?;
-            Ok::<(), anyhow::Error>(())
-        })
-        .await?;
-    Ok(())
-}
-
-async fn init_llama() -> anyhow::Result<()> {
-    LLAMA
-        .get_or_try_init(|| async {
-            let llama_cpp = LlamaCpp::for_current_target()?;
-            llama_cpp
-                .preload()
+            Runtime::discover([Feature::Torch, Feature::Llama, Feature::Diffusion])?
+                .initialize()
                 .await
-                .context("failed to initialize llama.cpp runtime")?;
-            koharu_llama::send_logs_to_tracing(koharu_llama::LogOptions::default());
-            let backend = LlamaBackend::init().context("failed to initialize llama.cpp backend")?;
-            Ok::<LlamaBackend, anyhow::Error>(backend)
-        })
-        .await?;
-    Ok(())
-}
+                .context("failed to initialize runtimes")?;
 
-async fn init_diffusion() -> anyhow::Result<()> {
-    DIFFUSION
-        .get_or_try_init(|| async {
-            let sd_cpp = StableDiffusionCpp::for_current_target()?;
-            sd_cpp
-                .preload()
-                .await
-                .context("failed to initialize stable-diffusion.cpp runtime")?;
-            koharu_diffusion::send_logs_to_tracing()
-                .context("failed to redirect stable-diffusion.cpp logs")?;
-            Ok::<(), anyhow::Error>(())
-        })
-        .await?;
-    Ok(())
-}
-
-async fn init_torch() -> anyhow::Result<()> {
-    TORCH
-        .get_or_try_init(|| async {
-            Libtorch::for_current_target()?
-                .preload()
-                .await
-                .context("failed to initialize LibTorch runtime")?;
+            LLAMA
+                .get_or_try_init(|| async {
+                    koharu_llama::send_logs_to_tracing(koharu_llama::LogOptions::default());
+                    LlamaBackend::init().context("failed to initialize llama.cpp backend")
+                })
+                .await?;
+            DIFFUSION
+                .get_or_try_init(|| async {
+                    koharu_diffusion::send_logs_to_tracing()
+                        .context("failed to redirect stable-diffusion.cpp logs")?;
+                    Ok::<(), anyhow::Error>(())
+                })
+                .await?;
             Ok::<(), anyhow::Error>(())
         })
         .await?;

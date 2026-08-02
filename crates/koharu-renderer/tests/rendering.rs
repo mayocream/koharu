@@ -1,9 +1,13 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
-use koharu_renderer::{Font, FontSystem, RenderOptions, TextLayout, WgpuRenderer, WritingMode};
+use anyhow::{Result, bail};
+use koharu_renderer::{
+    Font, FontSystem, LayoutRun, RasterOptions, Rasterizer, TextLayout, TextRenderOptions,
+    TextRenderer, WritingMode,
+};
 use once_cell::sync::OnceCell;
 use unicode_bidi::BidiInfo;
+use vello::{Scene, kurbo::Affine};
 
 const SAMPLE_TEXT: &str = "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。";
 const SAMPLE_TEXT_ZH_CN: &str = "《我是猫》是日本作家夏目漱石创作的长篇小说，也是其代表作，它确立了夏目漱石在文学史上的地位。作品淋漓尽致地反映了二十世纪初，日本中小资产阶级的思想和生活，尖锐地揭露和批判了明治“文明开化”的资本主义社会。小说采用幽默、讽刺、滑稽的手法，借助一只猫的视觉、听觉、感觉，嘲笑了明治时代知识分子空虚的精神生活，小说构思奇巧，描写夸张，结构灵活，具有鲜明的艺术特色。";
@@ -20,9 +24,78 @@ fn font(family_name: &str) -> Result<Font> {
     FontSystem::new().query_family(family_name)
 }
 
-fn wgpu_renderer() -> Result<&'static WgpuRenderer> {
-    static INSTANCE: OnceCell<WgpuRenderer> = OnceCell::new();
-    let renderer = INSTANCE.get_or_try_init(WgpuRenderer::new)?;
+struct TestRenderer {
+    text: TextRenderer,
+    rasterizer: Rasterizer,
+}
+
+#[derive(Clone)]
+struct TestRenderOptions {
+    color: [u8; 4],
+    background: Option<[u8; 4]>,
+    padding: f32,
+}
+
+impl Default for TestRenderOptions {
+    fn default() -> Self {
+        Self {
+            color: [0, 0, 0, 255],
+            background: None,
+            padding: 0.0,
+        }
+    }
+}
+
+impl TestRenderer {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            text: TextRenderer::new(),
+            rasterizer: Rasterizer::new()?,
+        })
+    }
+
+    fn render(
+        &self,
+        layout: &LayoutRun<'_>,
+        writing_mode: WritingMode,
+        options: &TestRenderOptions,
+    ) -> Result<image::RgbaImage> {
+        let draw_options = TextRenderOptions {
+            color: options.color,
+            padding: options.padding,
+            ..TextRenderOptions::default()
+        };
+        let width = dimension(layout.width, draw_options.padding)?;
+        let height = dimension(layout.height, draw_options.padding)?;
+        let mut scene = Scene::new();
+        self.text.render(
+            &mut scene,
+            layout,
+            writing_mode,
+            &draw_options,
+            Affine::IDENTITY,
+        );
+        Ok(self.rasterizer.rasterize_scene(
+            &scene,
+            width,
+            height,
+            options.background.unwrap_or([0, 0, 0, 0]),
+            RasterOptions::default(),
+        )?)
+    }
+}
+
+fn dimension(content: f32, padding: f32) -> Result<u32> {
+    let value = content + padding * 2.0;
+    if !value.is_finite() || value <= 0.0 || value > u32::MAX as f32 {
+        bail!("invalid render surface dimension: {value}");
+    }
+    Ok(value.ceil() as u32)
+}
+
+fn test_renderer() -> Result<&'static TestRenderer> {
+    static INSTANCE: OnceCell<TestRenderer> = OnceCell::new();
+    let renderer = INSTANCE.get_or_try_init(TestRenderer::new)?;
     Ok(renderer)
 }
 
@@ -51,11 +124,10 @@ fn render_horizontal() -> Result<()> {
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -77,11 +149,10 @@ fn render_vertical() -> Result<()> {
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -107,11 +178,10 @@ fn vertical_flows_top_to_bottom() -> Result<()> {
         .with_max_height(10_000.0)
         .run(&text)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &layout,
         WritingMode::VerticalRl,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -146,11 +216,10 @@ fn render_horizontal_simplified_chinese() -> Result<()> {
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -172,11 +241,10 @@ fn render_vertical_simplified_chinese() -> Result<()> {
         .with_max_height(1000.0)
         .run(SAMPLE_TEXT_ZH_CN)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &lines,
         WritingMode::VerticalRl,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -197,15 +265,13 @@ fn render_rgba_text() -> Result<()> {
         .with_max_width(1000.0)
         .run(SAMPLE_TEXT)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             color: [237, 178, 6, 255],
-            ..Default::default()
         },
     )?;
 
@@ -225,11 +291,10 @@ fn render_with_fallback_fonts() -> Result<()> {
         .with_fallback_fonts(&fallback_fonts)
         .run("Here is a smiley: 😊 and a star: ★ and a heart: ♥")?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &lines,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 0.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -301,11 +366,10 @@ fn mixed_bidi_render() -> Result<()> {
             .collect::<Vec<_>>()
     );
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -336,11 +400,10 @@ fn rtl_multiline() -> Result<()> {
         );
     }
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -364,11 +427,10 @@ fn rtl_alignment() -> Result<()> {
         .with_alignment(koharu_renderer::TextAlign::Left)
         .run(text)?;
 
-    let img_left = wgpu_renderer()?.render(
+    let img_left = test_renderer()?.render(
         &layout_left,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -383,11 +445,10 @@ fn rtl_alignment() -> Result<()> {
         .with_alignment(koharu_renderer::TextAlign::Right)
         .run(text)?;
 
-    let img_right = wgpu_renderer()?.render(
+    let img_right = test_renderer()?.render(
         &layout_right,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -417,11 +478,10 @@ fn rtl_punctuation_numbers() -> Result<()> {
             .collect::<Vec<_>>()
     );
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -440,11 +500,10 @@ fn rtl_mixed_complex() -> Result<()> {
     let text = "The word for 'Apple' is تفاحة in Arabic.";
     let layout = TextLayout::new(&font).with_font_size(24.0).run(text)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([255, 255, 255, 255]),
             ..Default::default()
@@ -466,11 +525,10 @@ fn rtl_user_reported_string() -> Result<()> {
         .with_max_width(200.0) // Narrow width to force multiline
         .run(text)?;
 
-    let img = wgpu_renderer()?.render(
+    let img = test_renderer()?.render(
         &layout,
         WritingMode::Horizontal,
-        &RenderOptions {
-            font_size: 24.0,
+        &TestRenderOptions {
             padding: 20.0,
             background: Some([173, 216, 230, 255]), // Light blue to match screenshot
             ..Default::default()

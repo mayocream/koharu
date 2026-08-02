@@ -8,16 +8,15 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use clap::{Parser, ValueEnum};
+use koharu_config::Config;
 use koharu_pipeline::{
     Committer, DetectionModel, Flux2KleinConfig, InpaintingModel, KoharuLayoutRFDetrSeg2XLConfig,
     OcrModel, Operation, Pipeline, PipelineConfig, Progress, Request, RoremMixedConfig, Scope,
-    StageOutput,
+    StageOutput, TranslationConfig,
 };
-use koharu_renderer::{RenderRequest, Renderer};
-use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, LanguageTag, PageDraft, SceneSession,
-};
-use koharu_translator::{LocalConfig, Providers, TranslationConfig};
+use koharu_renderer::{Compositor, RasterOptions, Rasterizer, RenderRequest, SceneRenderer};
+use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft, Session};
+use koharu_translator::{GenerationConfig, Language, ModelSelection, Provider, ProvidersConfig};
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Run Koharu's complete in-process pipeline")]
@@ -41,20 +40,23 @@ struct Arguments {
     inpainting: InpaintingChoice,
 
     #[arg(long, default_value = "en-US")]
-    target_language: String,
+    target_language: Language,
 
     #[arg(long)]
     translation_instructions: Option<String>,
 
     #[arg(long, default_value = "gemma4-12b-it")]
     llm: String,
+
+    #[arg(long)]
+    cpu: bool,
 }
 
-struct SessionCommitter<'a>(&'a mut SceneSession);
+struct SessionCommitter<'a>(&'a mut Session);
 
 #[async_trait::async_trait]
 impl Committer for SessionCommitter<'_> {
-    async fn commit(&mut self, output: StageOutput) -> Result<koharu_scene::SceneSnapshot> {
+    async fn commit(&mut self, output: StageOutput) -> Result<koharu_scene::Snapshot> {
         Ok(self.0.commit(output.patch)?.snapshot)
     }
 }
@@ -102,6 +104,16 @@ impl Arguments {
                 OcrChoice::MangaOcr => OcrModel::MangaOcr,
                 OcrChoice::BaberuOcr => OcrModel::BaberuOcr,
             },
+            translation: TranslationConfig {
+                model: ModelSelection {
+                    provider: Provider::Local,
+                    model: Some(self.llm.clone()),
+                    quantization: None,
+                },
+                generation: GenerationConfig::default(),
+                target_language: self.target_language,
+                instructions: self.translation_instructions.clone(),
+            },
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa {},
                 InpaintingChoice::AotInpainting => InpaintingModel::AotInpainting {},
@@ -112,16 +124,7 @@ impl Arguments {
                     InpaintingModel::RoremMixed(RoremMixedConfig::default())
                 }
             },
-        }
-    }
-
-    fn translation_config(&self) -> TranslationConfig {
-        TranslationConfig {
-            model: Providers::Local(LocalConfig {
-                model: self.llm.clone(),
-            }),
-            target_language: self.target_language.clone(),
-            instructions: self.translation_instructions.clone(),
+            processor: Default::default(),
         }
     }
 }
@@ -139,7 +142,7 @@ async fn main() -> Result<()> {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("input");
-    let mut session = SceneSession::memory()?;
+    let mut session = Session::memory()?;
     let mut page = None;
     let patch = session.snapshot().patch(|edit| {
         let id = edit.add_page(
@@ -169,7 +172,12 @@ async fn main() -> Result<()> {
     session.commit(patch)?;
     let page = page.expect("page ID is assigned by the edit");
 
-    let pipeline = Pipeline::new(arguments.pipeline_config(), arguments.translation_config())?;
+    let device = koharu_ml::device(arguments.cpu);
+    let pipeline = Pipeline::from_config(
+        Config::memory(arguments.pipeline_config()),
+        Config::memory(ProvidersConfig::default()),
+        device,
+    )?;
     let snapshot = session.snapshot();
     let mut committer = SessionCommitter(&mut session);
     let report = pipeline
@@ -190,14 +198,18 @@ async fn main() -> Result<()> {
         .await?;
     eprintln!("pipeline finished in {:.2}s", report.elapsed.as_secs_f64());
 
-    let renderer = Renderer::new()?;
+    let compositor = Compositor::new();
+    let scene_renderer = SceneRenderer::new();
+    let rasterizer = Rasterizer::new()?;
     let mut request = RenderRequest::new(page);
-    request.locale = Some(LanguageTag::new(arguments.target_language)?);
     request.theme.font_families = arguments.font_families;
     let render_started = Instant::now();
-    let rendered = renderer.render(&session.snapshot(), &request)?;
+    let snapshot = session.snapshot();
+    let composition = compositor.compile(&snapshot, &request)?;
+    let frame = scene_renderer.render(&snapshot, &composition)?;
+    let raster = rasterizer.rasterize(&frame, RasterOptions::default())?;
     let render_elapsed = render_started.elapsed();
-    rendered
+    raster
         .image
         .save(&arguments.output)
         .with_context(|| format!("failed to write {}", arguments.output.display()))?;

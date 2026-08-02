@@ -1,0 +1,49 @@
+{
+  "name": "@koharu/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "oxlint -c .oxlintrc.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
+  },
+  "dependencies": {
+    "@koharu/ui": "workspace:*",
+    "@tanstack/react-query": "^5.83.0",
+    "@tanstack/react-virtual": "^3.14.9",
+    "@tauri-apps/api": "^2.11.1",
+    "i18next": "^26.3.3",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "i18next-localstorage-backend": "^4.3.1",
+    "lucide-react": "^1.21.0",
+    "next": "^16.2.12",
+    "next-themes": "^0.4.6",
+    "react": "^19.2.7",
+    "react-colorful": "^5.7.0",
+    "react-dom": "^19.2.7",
+    "react-i18next": "^17.0.8",
+    "react-moveable": "^0.56.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.9.4",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/ui": "^4.1.9",
+    "jsdom": "^29.1.1",
+    "oxlint": "^1.71.0",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

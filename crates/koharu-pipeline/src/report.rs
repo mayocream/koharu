@@ -25,10 +25,10 @@ pub struct Report {
 pub struct StageOutput {
     pub page: koharu_scene::EntityId,
     pub stage: Stage,
-    pub patch: koharu_scene::ScenePatch,
+    pub patch: koharu_scene::Patch,
 }
 
 #[async_trait]
 pub trait Committer: Send {
-    async fn commit(&mut self, output: StageOutput) -> Result<koharu_scene::SceneSnapshot>;
+    async fn commit(&mut self, output: StageOutput) -> Result<koharu_scene::Snapshot>;
 }

@@ -1,95 +1,81 @@
 use std::sync::Arc;
 
 use crate::{
-    BlobId, ComponentSlot, EntityId, Error, ProjectId, RelationId, RelationKind, Result,
-    SceneComponent, SceneEdit, ScenePatch, ValidationContext,
-    component::{decode, key},
-    index::{Parent, SceneIndex},
+    Asset, AssetRole, BlobId, Edit, EntityId, Error, FunctionalRelation, Patch, ProjectId,
+    RelationId, RelationKind, RelationSpec, Result,
+    component::{Component, ValidationContext, decode, key},
+    components::Assets,
+    state::State,
 };
 
 #[derive(Clone, Debug)]
-pub struct SceneSnapshot {
-    pub(crate) storage: koharu_storage::Snapshot,
-    pub(crate) index: Arc<SceneIndex>,
+pub struct Snapshot {
+    pub(crate) state: Arc<State>,
+    pub(crate) blobs: koharu_storage::Snapshot,
 }
 
-impl SceneSnapshot {
-    pub(crate) fn from_storage(storage: koharu_storage::Snapshot) -> Result<Self> {
-        let index = Arc::new(SceneIndex::build(&storage)?);
-        Ok(Self { storage, index })
-    }
-
-    pub(crate) fn from_parts(storage: koharu_storage::Snapshot, index: Arc<SceneIndex>) -> Self {
-        Self { storage, index }
+impl Snapshot {
+    pub(crate) fn new(state: Arc<State>, blobs: koharu_storage::Snapshot) -> Result<Self> {
+        if state.document != blobs.document_id() || state.revision != blobs.revision() {
+            return Err(Error::invalid(
+                "scene state and blob snapshot identify different revisions",
+            ));
+        }
+        Ok(Self { state, blobs })
     }
 
     #[must_use]
     pub fn project_id(&self) -> ProjectId {
-        ProjectId(self.storage.document_id())
+        ProjectId(self.state.document)
     }
 
     #[must_use]
     pub fn revision(&self) -> crate::Revision {
-        self.storage.revision()
+        self.state.revision
     }
 
     pub fn pages(&self) -> impl ExactSizeIterator<Item = PageRef<'_>> {
-        self.index
-            .pages
+        self.state
+            .page_order
             .iter()
             .copied()
             .map(|id| PageRef { snapshot: self, id })
     }
 
     pub fn entities(&self) -> impl ExactSizeIterator<Item = EntityRef<'_>> {
-        self.index
-            .entities
+        let ids = self
+            .state
+            .page_order
             .iter()
-            .copied()
-            .map(|id| EntityRef { snapshot: self, id })
+            .flat_map(|page| self.state.pages[page].ordered_ids())
+            .collect::<Vec<_>>();
+        ids.into_iter().map(|id| EntityRef { snapshot: self, id })
     }
 
     pub fn subtree(&self, root: EntityId) -> Result<impl Iterator<Item = EntityRef<'_>> + '_> {
-        if !self.index.parents.contains_key(&root) {
-            return Err(Error::EntityNotFound(root));
-        }
-        let included = self.index.descendants(root);
-        Ok(self
-            .index
-            .entities
-            .iter()
-            .copied()
-            .filter(move |id| included.contains(id))
-            .map(|id| EntityRef { snapshot: self, id }))
+        let ids = self.state.page_containing(root)?.descendants(root)?;
+        Ok(ids.into_iter().map(|id| EntityRef { snapshot: self, id }))
     }
 
     pub fn descendants(&self, root: EntityId) -> Result<impl Iterator<Item = EntityRef<'_>> + '_> {
         Ok(self.subtree(root)?.filter(move |entity| entity.id != root))
     }
 
-    pub fn entities_with<T: SceneComponent>(
+    pub fn entities_with<T: Component>(
         &self,
-        slot: impl Into<ComponentSlot>,
     ) -> Result<impl ExactSizeIterator<Item = EntityRef<'_>>> {
-        let component = key::<T>(slot.into())?;
-        let query = (
-            component.kind().as_str().to_owned(),
-            component.slot().as_str().to_owned(),
-        );
+        let key = key::<T>()?;
         let ids = self
-            .index
-            .component_entities
-            .get(&query)
-            .map(AsRef::as_ref)
-            .unwrap_or(&[]);
-        Ok(ids
+            .state
+            .page_order
             .iter()
-            .copied()
-            .map(|id| EntityRef { snapshot: self, id }))
+            .flat_map(|page| self.state.pages[page].entities_with(&key))
+            .collect::<Vec<_>>();
+        Ok(ids.into_iter().map(|id| EntityRef { snapshot: self, id }))
     }
 
     pub fn page(&self, id: EntityId) -> Result<PageRef<'_>> {
-        if self.index.pages.contains(&id) {
+        if self.state.pages.contains_key(&id) {
             Ok(PageRef { snapshot: self, id })
         } else {
             Err(Error::EntityNotFound(id))
@@ -97,7 +83,7 @@ impl SceneSnapshot {
     }
 
     pub fn entity(&self, id: EntityId) -> Result<EntityRef<'_>> {
-        if self.index.parents.contains_key(&id) {
+        if self.state.contains_entity(id) {
             Ok(EntityRef { snapshot: self, id })
         } else {
             Err(Error::EntityNotFound(id))
@@ -105,7 +91,7 @@ impl SceneSnapshot {
     }
 
     pub fn relation(&self, id: RelationId) -> Result<RelationRef<'_>> {
-        if self.index.relations.contains_key(&id) {
+        if self.state.relations.contains_key(&id) {
             Ok(RelationRef { snapshot: self, id })
         } else {
             Err(Error::RelationNotFound(id))
@@ -113,59 +99,54 @@ impl SceneSnapshot {
     }
 
     pub fn parent(&self, id: EntityId) -> Result<Option<EntityId>> {
-        match self.index.parents.get(&id).copied() {
-            Some(Parent::Project) => Ok(None),
-            Some(Parent::Entity(parent)) => Ok(Some(parent)),
-            None => Err(Error::EntityNotFound(id)),
+        let page_id = self.state.page_for(id)?;
+        if id == page_id {
+            return Ok(None);
         }
+        let page = self.state.page(page_id)?;
+        let key = page.key(id)?;
+        Ok(page.entities[key]
+            .parent
+            .map(|parent| page.entities[parent].id))
     }
 
     pub fn children(&self, id: EntityId) -> Result<impl ExactSizeIterator<Item = EntityId> + '_> {
-        if !self.index.parents.contains_key(&id) {
-            return Err(Error::EntityNotFound(id));
-        }
+        let page = self.state.page_containing(id)?;
+        let entity = page.entity(id)?;
+        Ok(entity.children.iter().map(|child| page.entities[*child].id))
+    }
+
+    pub fn component<T: Component>(&self, entity: EntityId) -> Result<Option<T>> {
+        let key = key::<T>()?;
+        self.decode(self.state.component(entity, &key)?)
+    }
+
+    pub fn project_component<T: Component>(&self) -> Result<Option<T>> {
+        let key = key::<T>()?;
+        self.decode(self.state.project_component(&key))
+    }
+
+    pub fn asset(&self, entity: EntityId, role: &AssetRole) -> Result<Option<Asset>> {
         Ok(self
-            .index
-            .children
-            .get(&id)
-            .map(AsRef::as_ref)
-            .unwrap_or(&[])
-            .iter()
-            .copied())
+            .component::<Assets>(entity)?
+            .and_then(|assets| assets.values.get(role).cloned()))
     }
 
-    pub fn component<T: SceneComponent>(
-        &self,
-        entity: EntityId,
-        slot: impl Into<ComponentSlot>,
-    ) -> Result<Option<T>> {
-        if !self.index.parents.contains_key(&entity) {
-            return Err(Error::EntityNotFound(entity));
-        }
-        self.component_on_record(entity.storage(), slot)
+    fn relation_component<T: Component>(&self, relation: RelationId) -> Result<Option<T>> {
+        let key = key::<T>()?;
+        self.decode(self.state.relation_component(relation, &key)?)
     }
 
-    pub fn project_component<T: SceneComponent>(
+    fn decode<T: Component>(
         &self,
-        slot: impl Into<ComponentSlot>,
+        raw: Option<&crate::component::ComponentRecord>,
     ) -> Result<Option<T>> {
-        self.component_on_record(self.storage.root(), slot)
-    }
-
-    fn component_on_record<T: SceneComponent>(
-        &self,
-        record: koharu_storage::RecordId,
-        slot: impl Into<ComponentSlot>,
-    ) -> Result<Option<T>> {
-        let slot = slot.into();
-        let key = key::<T>(slot.clone())?;
-        let Some(raw) = self.storage.component(record, &key)? else {
+        let Some(raw) = raw else {
             return Ok(None);
         };
-        let record_exists = |id: EntityId| self.storage.contains_record(id.storage());
-        let blob_exists = |id| self.storage.has_blob(id);
-        let context = ValidationContext::new(&record_exists, &blob_exists);
-        decode::<T>(slot.as_str(), raw, &context).map(Some)
+        let record_exists = |id| self.state.contains_entity(id);
+        let blob_exists = |id| self.blobs.has_blob(id);
+        decode::<T>(raw, &ValidationContext::new(&record_exists, &blob_exists)).map(Some)
     }
 
     pub fn relations_from<'a>(
@@ -173,12 +154,12 @@ impl SceneSnapshot {
         entity: EntityId,
         kind: Option<&'a RelationKind>,
     ) -> impl Iterator<Item = RelationRef<'a>> + 'a {
-        self.index
+        self.state
             .outgoing
             .get(&entity)
             .into_iter()
             .flat_map(|ids| ids.iter().copied())
-            .filter(move |id| kind.is_none_or(|kind| self.index.relations[id].kind == *kind))
+            .filter(move |id| kind.is_none_or(|kind| self.state.relations[id].value.kind == *kind))
             .map(|id| RelationRef { snapshot: self, id })
     }
 
@@ -187,62 +168,85 @@ impl SceneSnapshot {
         entity: EntityId,
         kind: Option<&'a RelationKind>,
     ) -> impl Iterator<Item = RelationRef<'a>> + 'a {
-        self.index
+        self.state
             .incoming
             .get(&entity)
             .into_iter()
             .flat_map(|ids| ids.iter().copied())
-            .filter(move |id| kind.is_none_or(|kind| self.index.relations[id].kind == *kind))
+            .filter(move |id| kind.is_none_or(|kind| self.state.relations[id].value.kind == *kind))
             .map(|id| RelationRef { snapshot: self, id })
     }
 
+    pub fn relations_from_as<R: RelationSpec>(
+        &self,
+        entity: EntityId,
+    ) -> impl Iterator<Item = RelationRef<'_>> {
+        let kind = R::kind();
+        self.relations_from(entity, None)
+            .filter(move |relation| relation.value().kind == kind)
+    }
+
+    pub fn relations_to_as<R: RelationSpec>(
+        &self,
+        entity: EntityId,
+    ) -> impl Iterator<Item = RelationRef<'_>> {
+        let kind = R::kind();
+        self.relations_to(entity, None)
+            .filter(move |relation| relation.value().kind == kind)
+    }
+
+    pub fn relation_from<R: FunctionalRelation>(
+        &self,
+        entity: EntityId,
+    ) -> Result<Option<RelationRef<'_>>> {
+        let mut relations = self.relations_from_as::<R>(entity);
+        let relation = relations.next();
+        if relations.next().is_some() {
+            return Err(Error::invalid(format!(
+                "entity {entity} has multiple {} relations",
+                R::KIND
+            )));
+        }
+        Ok(relation)
+    }
+
     pub fn read_blob(&self, id: BlobId) -> Result<Arc<[u8]>> {
-        self.storage.read_blob(id).map_err(Into::into)
+        self.blobs.read_blob(id).map_err(Into::into)
     }
 
     pub fn read_blobs(&self, ids: impl IntoIterator<Item = BlobId>) -> Result<crate::BlobBatch> {
-        self.storage.read_blobs(ids).map_err(Into::into)
+        self.blobs.read_blobs(ids).map_err(Into::into)
     }
 
     #[must_use]
-    pub fn edit(&self) -> SceneEdit {
-        SceneEdit::new(self.clone(), None)
+    pub fn edit(&self) -> Edit {
+        Edit::new(self.clone(), None)
     }
 
     #[must_use]
-    pub fn edit_as(&self, generation: crate::Generation) -> SceneEdit {
-        SceneEdit::new(self.clone(), Some(generation))
+    pub fn edit_as(&self, generation: crate::Generation) -> Edit {
+        Edit::new(self.clone(), Some(generation))
     }
 
-    pub fn patch(&self, f: impl FnOnce(&mut SceneEdit) -> Result<()>) -> Result<ScenePatch> {
+    pub fn patch(&self, f: impl FnOnce(&mut Edit) -> Result<()>) -> Result<Patch> {
         let mut edit = self.edit();
         f(&mut edit)?;
         edit.finish()
     }
 
-    pub fn preview<'a>(&self, patches: impl IntoIterator<Item = &'a ScenePatch>) -> Result<Self> {
+    pub fn preview<'a>(&self, patches: impl IntoIterator<Item = &'a Patch>) -> Result<Self> {
         let mut current = self.clone();
         for patch in patches {
-            let exact_input = patch.storage.has_exact_input(&current.storage);
-            let storage = current.storage.preview([&patch.storage])?;
-            let index = if exact_input {
-                patch.result_index.clone().map_or_else(
-                    || {
-                        current
-                            .index
-                            .after_patch(&storage, &patch.storage.effects())
-                            .map(Arc::new)
-                    },
-                    Ok,
-                )?
-            } else {
-                Arc::new(
-                    current
-                        .index
-                        .after_patch(&storage, &patch.storage.effects())?,
-                )
-            };
-            current = Self::from_parts(storage, index);
+            let patch = patch.rebase_on(&current)?;
+            let mut state = (*patch.state).clone();
+            state.revision = current.state.revision;
+            let state = Arc::new(state);
+            let blobs = current.blobs.preview(
+                state.revision,
+                patch.attachments.iter().cloned(),
+                state.referenced_blobs(),
+            )?;
+            current = Self { state, blobs };
         }
         Ok(current)
     }
@@ -250,7 +254,7 @@ impl SceneSnapshot {
 
 #[derive(Copy, Clone, Debug)]
 pub struct EntityRef<'snapshot> {
-    snapshot: &'snapshot SceneSnapshot,
+    snapshot: &'snapshot Snapshot,
     id: EntityId,
 }
 
@@ -260,8 +264,8 @@ impl<'snapshot> EntityRef<'snapshot> {
         self.id
     }
 
-    pub fn component<T: SceneComponent>(self, slot: impl Into<ComponentSlot>) -> Result<Option<T>> {
-        self.snapshot.component(self.id, slot)
+    pub fn component<T: Component>(self) -> Result<Option<T>> {
+        self.snapshot.component(self.id)
     }
 
     pub fn parent(self) -> Result<Option<EntityId>> {
@@ -271,7 +275,7 @@ impl<'snapshot> EntityRef<'snapshot> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct PageRef<'snapshot> {
-    pub(crate) snapshot: &'snapshot SceneSnapshot,
+    pub(crate) snapshot: &'snapshot Snapshot,
     pub(crate) id: EntityId,
 }
 
@@ -283,7 +287,7 @@ impl<'snapshot> PageRef<'snapshot> {
 
     pub fn page(self) -> Result<crate::Page> {
         self.snapshot
-            .component(self.id, "default")?
+            .component(self.id)?
             .ok_or_else(|| Error::invalid("page component is missing"))
     }
 
@@ -298,7 +302,7 @@ impl<'snapshot> PageRef<'snapshot> {
 
 #[derive(Copy, Clone, Debug)]
 pub struct RelationRef<'snapshot> {
-    pub(crate) snapshot: &'snapshot SceneSnapshot,
+    pub(crate) snapshot: &'snapshot Snapshot,
     pub(crate) id: RelationId,
 }
 
@@ -310,10 +314,10 @@ impl<'snapshot> RelationRef<'snapshot> {
 
     #[must_use]
     pub fn value(self) -> &'snapshot crate::Relation {
-        &self.snapshot.index.relations[&self.id]
+        &self.snapshot.state.relations[&self.id].value
     }
 
-    pub fn component<T: SceneComponent>(self, slot: impl Into<ComponentSlot>) -> Result<Option<T>> {
-        self.snapshot.component_on_record(self.id.storage(), slot)
+    pub fn component<T: Component>(self) -> Result<Option<T>> {
+        self.snapshot.relation_component(self.id)
     }
 }

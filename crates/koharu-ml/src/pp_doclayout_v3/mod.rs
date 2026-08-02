@@ -4,7 +4,6 @@ mod processor;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use koharu_runtime::package::huggingface;
 use koharu_torch::Device;
 
 pub use self::{
@@ -16,11 +15,11 @@ pub use self::{
 
 use self::model::Model;
 
-koharu_runtime::huggingface! {
-    CONFIG => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "97d101e6db2642e162a1d05392d1b0231c91033e" => "config.json",
-    WEIGHTS => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "97d101e6db2642e162a1d05392d1b0231c91033e" => "model.safetensors",
-    PROCESSOR => "PaddlePaddle/PP-DocLayoutV3_safetensors" => "97d101e6db2642e162a1d05392d1b0231c91033e" => "preprocessor_config.json",
-}
+model_repository!("PaddlePaddle/PP-DocLayoutV3_safetensors" @ "97d101e6db2642e162a1d05392d1b0231c91033e" {
+    CONFIG = "config.json",
+    WEIGHTS = "model.safetensors",
+    PROCESSOR = "preprocessor_config.json",
+});
 
 #[derive(Debug)]
 pub struct PPDocLayoutV3 {
@@ -33,13 +32,16 @@ impl PPDocLayoutV3 {
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
 
-        let config_path = huggingface::resolve(CONFIG)
+        let config_path = CONFIG
+            .resolve()
             .await
             .context("failed to resolve PP-DocLayout-V3 config")?;
-        let weights_path = huggingface::resolve(WEIGHTS)
+        let weights_path = WEIGHTS
+            .resolve()
             .await
             .context("failed to resolve PP-DocLayout-V3 weights")?;
-        let processor_path = huggingface::resolve(PROCESSOR)
+        let processor_path = PROCESSOR
+            .resolve()
             .await
             .context("failed to resolve PP-DocLayout-V3 image processor")?;
 

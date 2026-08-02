@@ -1,9 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
 use koharu_renderer::RenderTheme;
-use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag};
+use koharu_scene::{BlobId, EntityId, Geometry};
+use vello::wgpu;
 
-use crate::{Camera, Frame, PhysicalSize};
+use crate::{Camera, Frame, PagePoint, PhysicalSize};
 
 pub type PageId = EntityId;
 pub type ElementId = EntityId;
@@ -24,7 +25,6 @@ pub struct CanvasOptions {
     pub max_decoded_bytes: usize,
     pub workspace_color: Color,
     pub text: RenderTheme,
-    pub locale: Option<LanguageTag>,
 }
 
 impl Default for CanvasOptions {
@@ -33,36 +33,19 @@ impl Default for CanvasOptions {
             max_decoded_bytes: 512 * 1024 * 1024,
             workspace_color: [245, 245, 245, 255],
             text: RenderTheme::default(),
-            locale: None,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum BaseImage {
-    #[default]
-    Source,
-    Clean,
 }
 
 /// Selects either editable live layers or the flattened rendered artifact.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum PageView {
     #[default]
-    EditableSource,
-    EditableClean,
+    Editable,
     Rendered,
 }
 
 impl PageView {
-    #[must_use]
-    pub const fn editable(base: BaseImage) -> Self {
-        match base {
-            BaseImage::Source => Self::EditableSource,
-            BaseImage::Clean => Self::EditableClean,
-        }
-    }
-
     #[must_use]
     pub const fn is_editable(self) -> bool {
         !matches!(self, Self::Rendered)
@@ -88,17 +71,15 @@ pub struct DisplayState {
     pub page: PageView,
     pub show_text: bool,
     pub text_mask: Option<MaskOverlay>,
-    pub brush_mask: Option<MaskOverlay>,
     pub transition: Option<Duration>,
 }
 
 impl Default for DisplayState {
     fn default() -> Self {
         Self {
-            page: PageView::EditableSource,
+            page: PageView::Editable,
             show_text: true,
             text_mask: None,
-            brush_mask: None,
             transition: Some(Duration::from_millis(180)),
         }
     }
@@ -140,22 +121,22 @@ pub struct TransformCommit {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MaskPlane {
     Text,
-    Brush,
+    Inpaint,
 }
 
 impl MaskPlane {
     #[must_use]
-    pub const fn slot(self) -> &'static str {
+    pub const fn asset_role(self) -> &'static str {
         match self {
             Self::Text => "text-mask",
-            Self::Brush => "brush-mask",
+            Self::Inpaint => "inpaint",
         }
     }
 
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::Text => "text",
-            Self::Brush => "brush",
+            Self::Inpaint => "inpaint",
         }
     }
 }
@@ -169,7 +150,18 @@ pub enum StrokeMode {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Brush {
     pub diameter: f32,
+    pub color: Color,
     pub mode: StrokeMode,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RasterStrokeCommit {
+    pub page: PageId,
+    pub layer: Option<ElementId>,
+    pub mode: StrokeMode,
+    pub color: Color,
+    pub diameter: f32,
+    pub points: Vec<PagePoint>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -61,8 +61,6 @@ macro_rules! uuid_id {
 }
 
 uuid_id!(DocumentId);
-uuid_id!(RecordId);
-
 #[revisioned(revision = 1)]
 #[derive(
     Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
@@ -83,7 +81,7 @@ impl Revision {
         self.0
     }
 
-    pub(crate) fn next(self) -> Option<Self> {
+    pub fn next(self) -> Option<Self> {
         self.0.checked_add(1).map(Self)
     }
 }
@@ -141,7 +139,8 @@ impl BlobId {
 }
 
 impl PatchId {
-    pub(crate) fn for_bytes(bytes: &[u8]) -> Self {
+    #[must_use]
+    pub fn for_bytes(bytes: &[u8]) -> Self {
         Self(*blake3::hash(bytes).as_bytes())
     }
 }

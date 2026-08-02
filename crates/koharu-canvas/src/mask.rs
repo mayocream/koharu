@@ -45,6 +45,7 @@ struct MaskSnapshot {
 pub struct MaskCommit {
     pub page: PageId,
     pub plane: MaskPlane,
+    pub base: Option<BlobId>,
     pub dirty: PixelRect,
     pub generation: u64,
     snapshot: MaskSnapshot,
@@ -56,6 +57,7 @@ impl std::fmt::Debug for MaskCommit {
             .debug_struct("MaskCommit")
             .field("page", &self.page)
             .field("plane", &self.plane)
+            .field("base", &self.base)
             .field("dirty", &self.dirty)
             .field("generation", &self.generation)
             .field("size", &self.snapshot.size)
@@ -177,6 +179,7 @@ impl MaskState {
         MaskCommit {
             page,
             plane,
+            base: self.source,
             dirty,
             generation: self.generation,
             snapshot: self.buffer.snapshot(),
@@ -400,7 +403,7 @@ mod tests {
     use super::*;
 
     fn page_id() -> PageId {
-        let session = koharu_scene::SceneSession::memory().unwrap();
+        let session = koharu_scene::Session::memory().unwrap();
         let mut page = None;
         session
             .snapshot()
@@ -428,6 +431,7 @@ mod tests {
             PagePoint::new(30.0, 10.0),
             Brush {
                 diameter: 8.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut before,
@@ -448,6 +452,7 @@ mod tests {
             PagePoint::new(8.0, 8.0),
             Brush {
                 diameter: 4.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut before,
@@ -472,6 +477,7 @@ mod tests {
             PagePoint::new(8.0, 8.0),
             Brush {
                 diameter: 4.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut before,
@@ -484,6 +490,7 @@ mod tests {
             PagePoint::new(16.0, 16.0),
             Brush {
                 diameter: 4.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut second_before,
@@ -506,12 +513,13 @@ mod tests {
             PagePoint::new(508.0, 508.0),
             Brush {
                 diameter: 6.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut before,
         );
         let encoded = state
-            .finish(page, MaskPlane::Brush, dirty)
+            .finish(page, MaskPlane::Inpaint, dirty)
             .encode_png()
             .unwrap();
         let pixels = image::load_from_memory(&encoded).unwrap().into_luma8();
@@ -530,6 +538,7 @@ mod tests {
             PagePoint::new(16.0, 16.0),
             Brush {
                 diameter: 8.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut paint_before,
@@ -540,6 +549,7 @@ mod tests {
             PagePoint::new(16.0, 16.0),
             Brush {
                 diameter: 4.0,
+                color: [0; 4],
                 mode: StrokeMode::Erase,
             },
             &mut erase_before,
@@ -548,7 +558,7 @@ mod tests {
         assert!(dirty.y.saturating_add(dirty.height) <= 32);
         let pixels = image::load_from_memory(
             &state
-                .finish(page, MaskPlane::Brush, dirty)
+                .finish(page, MaskPlane::Inpaint, dirty)
                 .encode_png()
                 .unwrap(),
         )
@@ -570,6 +580,7 @@ mod tests {
             PagePoint::new(8.0, 8.0),
             Brush {
                 diameter: 4.0,
+                color: [0; 4],
                 mode: StrokeMode::Paint,
             },
             &mut before,

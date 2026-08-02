@@ -58,7 +58,7 @@ Koharu は Rust ワークスペースに Tauri シェルと Next.js UI を組み
 - **`koharu-renderer/`** — テキストシェーピングとレンダリング
 - **`koharu-psd/`** — レイヤー付き PSD エクスポート
 - **`koharu-runtime/`** — ランタイムとモデルダウンロードの管理
-- **`ui/`** — Next.js 製 Web UI
+- **`packages/koharu/`** — Next.js 製 Web UI
 - **`tests/`** — Playwright による E2E テスト
 - **`docs/`** — ドキュメントサイト (English, 日本語, 简体中文, Português)
 

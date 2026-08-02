@@ -1,7 +1,12 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    sync::Arc,
+};
 
 use anyhow::{Result, bail};
-use koharu_scene::{EntityId, Geometry, SceneSnapshot};
+use koharu_scene::{
+    EntityId, FitsTo, Geometry, Inside, Presents, RecognizedFrom, RelationSpec, Snapshot,
+};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -62,7 +67,7 @@ pub(crate) struct NormalizedScope {
 }
 
 impl NormalizedScope {
-    pub(crate) fn new(snapshot: &SceneSnapshot, scope: &Scope, stages: &[Stage]) -> Result<Self> {
+    pub(crate) fn new(snapshot: &Snapshot, scope: &Scope, stages: &[Stage]) -> Result<Self> {
         if matches!(scope, Scope::Entities(_))
             && stages
                 .iter()
@@ -115,6 +120,7 @@ impl NormalizedScope {
                     snapshot.entity(*entity)?;
                     page_set.insert(containing_page(snapshot, *entity)?);
                 }
+                let entities = semantic_closure(snapshot, requested);
                 let pages = snapshot
                     .pages()
                     .map(|page| page.id())
@@ -122,7 +128,7 @@ impl NormalizedScope {
                     .collect::<Arc<[_]>>();
                 Ok(Self {
                     pages,
-                    entities: Some(Arc::new(requested)),
+                    entities: Some(Arc::new(entities)),
                     region: None,
                 })
             }
@@ -144,8 +150,36 @@ impl NormalizedScope {
     }
 }
 
+fn semantic_closure(snapshot: &Snapshot, mut entities: BTreeSet<EntityId>) -> BTreeSet<EntityId> {
+    let mut pending = entities.iter().copied().collect::<VecDeque<_>>();
+    while let Some(entity) = pending.pop_front() {
+        for relation in snapshot
+            .relations_from(entity, None)
+            .chain(snapshot.relations_to(entity, None))
+        {
+            let value = relation.value();
+            if ![
+                Presents::KIND,
+                RecognizedFrom::KIND,
+                FitsTo::KIND,
+                Inside::KIND,
+            ]
+            .contains(&value.kind.as_str())
+            {
+                continue;
+            }
+            for related in [value.source, value.target] {
+                if entities.insert(related) {
+                    pending.push_back(related);
+                }
+            }
+        }
+    }
+    entities
+}
+
 pub(crate) fn contains_entity(
-    snapshot: &SceneSnapshot,
+    snapshot: &Snapshot,
     page: EntityId,
     entities: Option<&BTreeSet<EntityId>>,
     region: Option<Bounds>,
@@ -161,11 +195,11 @@ pub(crate) fn contains_entity(
         return Ok(true);
     };
     Ok(snapshot
-        .component::<Geometry>(entity, "default")?
+        .component::<Geometry>(entity)?
         .is_some_and(|geometry| bounds.intersects(&geometry)))
 }
 
-fn containing_page(snapshot: &SceneSnapshot, mut entity: EntityId) -> Result<EntityId> {
+fn containing_page(snapshot: &Snapshot, mut entity: EntityId) -> Result<EntityId> {
     loop {
         if snapshot.page(entity).is_ok() {
             return Ok(entity);
