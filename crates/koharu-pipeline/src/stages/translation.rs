@@ -57,16 +57,18 @@ impl StageProcessor for Processor {
 
     async fn process(&self, input: StageInput) -> Result<koharu_scene::Patch> {
         let mut targets = Vec::new();
-        for entity in input.scene.subtree(input.page)? {
-            let id = entity.id();
-            if !input.contains_entity(id)? {
-                continue;
-            }
-            let Some(source) = entity.component::<SourceText>()? else {
-                continue;
-            };
-            if !source.text.value.trim().is_empty() {
-                targets.push((id, source.text.value));
+        if let Some(group) = input.scene.page(input.page)?.text_group()? {
+            for layer in group.text_layers()? {
+                if !input.contains_entity(layer.id())? {
+                    continue;
+                }
+                let content = layer.content()?;
+                let Some(source) = content.source()? else {
+                    continue;
+                };
+                if !source.text.value.trim().is_empty() {
+                    targets.push((content.id(), source.text.value));
+                }
             }
         }
         let mut request = TranslationRequest::new(

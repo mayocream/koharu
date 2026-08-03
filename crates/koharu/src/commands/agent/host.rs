@@ -371,7 +371,7 @@ impl Host for KoharuHost {
                     Ok((
                         project.set_geometry(vec![GeometryUpdate {
                             layer: element,
-                            points,
+                            points: Some(points),
                         }])?,
                         json!({ "element": element }),
                     ))

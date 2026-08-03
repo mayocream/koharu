@@ -159,6 +159,61 @@ describe('canvas interaction adapter', () => {
     )
   })
 
+  it('shows the fit region behind the selected text controls', () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        {
+          type: 'text',
+          id: 'element',
+          parent: 'page',
+          geometry: null,
+          visibility: { visible: true, opacity: 1 },
+          content: {
+            id: 'content',
+            source: { text: 'Source', language: 'en' },
+            translation: { text: 'Rendered', language: null },
+            role: null,
+            source_region: null,
+          },
+          typography: null,
+          layout: 'paragraph',
+          fit_region: 'bubble',
+        },
+      ],
+      regions: [
+        {
+          id: 'bubble',
+          parent: 'page',
+          geometry: {
+            points: [
+              { x: 20, y: 30 },
+              { x: 100, y: 30 },
+              { x: 100, y: 90 },
+              { x: 20, y: 90 },
+            ],
+          },
+          kind: 'bubble',
+          label: null,
+        },
+      ],
+    }))
+    useKoharuStore.setState({
+      selectedLayers: ['element'],
+      layerFrames: {
+        element: { x: 30, y: 40, width: 50, height: 20, angle_degrees: 0 },
+      },
+    })
+
+    renderWorkspace()
+
+    expect(screen.getByTestId('text-fit-region').querySelector('polygon')).toHaveAttribute(
+      'points',
+      '20,30 100,30 100,90 20,90',
+    )
+  })
+
   it('targets the selected raster layer with the eraser', async () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({

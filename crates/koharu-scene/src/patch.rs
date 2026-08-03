@@ -358,6 +358,10 @@ pub(crate) enum Observation {
         page: EntityId,
         epoch: Option<u64>,
     },
+    Children {
+        parent: EntityId,
+        children: Vec<EntityId>,
+    },
     Component {
         owner: ComponentOwner,
         key: ComponentKey,
@@ -379,6 +383,13 @@ impl Observation {
                 if state.pages.get(page).map(|page| page.epoch) != *epoch {
                     return Err(Error::PatchConflict(format!(
                         "observed page {page} changed"
+                    )));
+                }
+            }
+            Self::Children { parent, children } => {
+                if !state.contains_entity(*parent) || state.child_ids(*parent)? != *children {
+                    return Err(Error::PatchConflict(format!(
+                        "children of entity {parent} changed"
                     )));
                 }
             }

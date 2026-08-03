@@ -120,7 +120,11 @@ impl NormalizedScope {
                     snapshot.entity(*entity)?;
                     page_set.insert(containing_page(snapshot, *entity)?);
                 }
-                let entities = semantic_closure(snapshot, requested);
+                let mut hierarchy = BTreeSet::new();
+                for entity in requested {
+                    hierarchy.extend(snapshot.subtree(entity)?.map(|entity| entity.id()));
+                }
+                let entities = semantic_closure(snapshot, hierarchy);
                 let pages = snapshot
                     .pages()
                     .map(|page| page.id())

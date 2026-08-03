@@ -3,9 +3,9 @@ use std::collections::{BTreeSet, HashSet};
 use smallvec::SmallVec;
 
 use crate::{
-    Asset, AssetInput, AssetRole, ComponentOwner, EntityId, EntityOrigin, Error, Generation,
+    Asset, AssetInput, AssetRole, ComponentOwner, EntityId, EntityOrigin, Error, Generation, Group,
     Origin, Page, PageDraft, Patch, Relation, RelationId, RelationKind, RelationSpec, Result,
-    Snapshot,
+    Snapshot, TextGroup, Visibility,
     component::{Component, ComponentKey, ComponentRecord, ValidationContext, decode, encode, key},
     components::Assets,
     patch::{Observation, Operation},
@@ -113,7 +113,7 @@ impl Edit {
 
     pub fn add_entity(&mut self, parent: EntityId, at: At) -> Result<EntityId> {
         let page = self.state.page_for(parent)?;
-        self.observe_page_write(page);
+        self.observe_children_write(parent)?;
         let siblings = self
             .state
             .page(page)?
@@ -202,9 +202,11 @@ impl Edit {
         if before_parent == parent && before_position == position {
             return Ok(());
         }
-        self.observe_page_write(page);
-        self.observe_page_write(target_page);
+        self.observe_children_write(before_parent)?;
+        self.observe_children_write(parent)?;
         self.state.move_entity(entity, parent, position)?;
+        self.validate_entities
+            .extend([entity, before_parent, parent]);
         self.operations.push(Operation::MoveEntity {
             id: entity,
             before_page: page,
@@ -219,6 +221,14 @@ impl Edit {
 
     pub fn remove_entity(&mut self, entity: EntityId, policy: RemovePolicy) -> Result<()> {
         let page = self.state.page_for(entity)?;
+        if entity != page
+            && self
+                .state
+                .component(entity, &key::<TextGroup>()?)?
+                .is_some()
+        {
+            return Err(Error::invalid("the page text group cannot be removed"));
+        }
         self.observe_page_write(page);
         if entity == page {
             self.observe_page_order_write();
@@ -290,7 +300,10 @@ impl Edit {
         if !self.state.contains_entity(entity) {
             return Err(Error::EntityNotFound(entity));
         }
-        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
+        if matches!(
+            T::KIND,
+            Relation::KIND | Page::KIND | EntityOrigin::KIND | TextGroup::KIND
+        ) {
             return Err(Error::invalid(
                 "structural components use dedicated scene methods",
             ));
@@ -306,7 +319,10 @@ impl Edit {
     }
 
     pub fn set_project<T: Component>(&mut self, value: &T) -> Result<()> {
-        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
+        if matches!(
+            T::KIND,
+            Relation::KIND | Page::KIND | EntityOrigin::KIND | Group::KIND | TextGroup::KIND
+        ) {
             return Err(Error::invalid("project cannot carry structural components"));
         }
         let value = self.prepare_value(ComponentOwner::Project, value)?;
@@ -323,7 +339,10 @@ impl Edit {
     }
 
     pub fn remove<T: Component>(&mut self, entity: EntityId) -> Result<()> {
-        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
+        if matches!(
+            T::KIND,
+            Relation::KIND | Page::KIND | EntityOrigin::KIND | TextGroup::KIND
+        ) {
             return Err(Error::invalid(
                 "required structural component cannot be removed",
             ));
@@ -504,7 +523,10 @@ impl Edit {
         if !self.state.relations.contains_key(&relation) {
             return Err(Error::RelationNotFound(relation));
         }
-        if matches!(T::KIND, Relation::KIND | Page::KIND | EntityOrigin::KIND) {
+        if matches!(
+            T::KIND,
+            Relation::KIND | Page::KIND | EntityOrigin::KIND | Group::KIND | TextGroup::KIND
+        ) {
             return Err(Error::invalid(
                 "relation structural component is managed directly",
             ));
@@ -672,6 +694,59 @@ impl Edit {
         Ok((key::<T>()?, self.encode_value(value)?))
     }
 
+    pub(crate) fn ensure_text_group(&mut self, page: EntityId) -> Result<EntityId> {
+        self.state.page(page)?;
+        let marker = key::<TextGroup>()?;
+        let children = self
+            .state
+            .page(page)?
+            .entity(page)?
+            .children
+            .iter()
+            .map(|child| self.state.pages[&page].entities[*child].id)
+            .collect::<Vec<_>>();
+        let mut groups = Vec::new();
+        for child in children {
+            if self.state.component(child, &marker)?.is_some() {
+                groups.push(child);
+            }
+        }
+        match groups.as_slice() {
+            [group] => {
+                if self.generation.is_none() {
+                    self.promote_entity_to_user(*group)?;
+                }
+                return Ok(*group);
+            }
+            [] => {}
+            _ => return Err(Error::invalid("page contains multiple text groups")),
+        }
+
+        let group = self.add_entity(page, At::End)?;
+        self.set(
+            group,
+            &Group {
+                origin: self.lifecycle_origin(),
+                name: "Text".to_owned(),
+            },
+        )?;
+        self.set(
+            group,
+            &Visibility {
+                origin: self.lifecycle_origin(),
+                visible: true,
+                opacity: 1.0,
+            },
+        )?;
+        self.replace_component(
+            ComponentOwner::Entity(group),
+            marker,
+            Some(self.encode_value(&TextGroup {})?),
+        )?;
+        self.validate_entities.insert(group);
+        Ok(group)
+    }
+
     fn encode_value<T: Component>(&self, value: &T) -> Result<ComponentRecord> {
         let record_exists = |id| self.state.contains_entity(id);
         let blob_exists = |id| {
@@ -830,6 +905,16 @@ impl Edit {
                 epoch: Some(page.epoch),
             });
         }
+    }
+
+    fn observe_children_write(&mut self, parent: EntityId) -> Result<()> {
+        if self.base.state.contains_entity(parent) {
+            self.observations.insert(Observation::Children {
+                parent,
+                children: self.base.state.child_ids(parent)?,
+            });
+        }
+        Ok(())
     }
 }
 

@@ -225,26 +225,11 @@ impl TextRenderer {
             ..TextRenderOptions::default()
         };
         let mut scene = Scene::new();
-        if !layer.point_text {
-            scene.push_clip_layer(
-                Fill::NonZero,
-                rotation,
-                &Rect::new(
-                    f64::from(bounds.x),
-                    f64::from(bounds.y),
-                    f64::from(bounds.x + bounds.width),
-                    f64::from(bounds.y + bounds.height),
-                ),
-            );
-        }
         if let Some(mut stroke) = layer.stroke.or(theme.text_stroke) {
             stroke.color = with_alpha(stroke.color, layer.opacity);
             options.stroke = Some(stroke);
         }
         self.render(&mut scene, &layout, layer.writing_mode, &options, transform);
-        if !layer.point_text {
-            scene.pop_layer();
-        }
         let rendered_bounds = rotation.transform_rect_bbox(layout_rect);
         let mut diagnostics = Vec::new();
         if layout.font_size + f32::EPSILON < theme.minimum_font_size {

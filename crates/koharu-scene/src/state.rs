@@ -502,6 +502,16 @@ impl State {
         self.page_containing(id)?.entity(id)
     }
 
+    pub(crate) fn child_ids(&self, parent: EntityId) -> Result<Vec<EntityId>> {
+        let page = self.page_containing(parent)?;
+        Ok(page
+            .entity(parent)?
+            .children
+            .iter()
+            .map(|child| page.entities[*child].id)
+            .collect())
+    }
+
     pub(crate) fn component(
         &self,
         id: EntityId,

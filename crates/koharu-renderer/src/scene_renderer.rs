@@ -764,6 +764,7 @@ mod tests {
             diagnostic,
             RenderDiagnostic::TextOverflow { entity: found, .. } if *found == entity
         )));
+        assert_eq!(frame.entity_scenes[&entity][0].encoding().n_clips, 0);
     }
 
     #[test]

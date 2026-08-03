@@ -6,6 +6,7 @@
 
 mod analysis;
 mod assets;
+mod groups;
 mod layers;
 mod provenance;
 mod spatial;
@@ -17,6 +18,7 @@ pub use analysis::{
 };
 pub(crate) use assets::Assets;
 pub use assets::{Asset, AssetInput, AssetMetadata, AssetRole};
+pub use groups::{Group, TextGroup};
 pub use layers::{
     RasterLayer, RasterLayerKind, TextAlignment, TextLayout, TextLayoutKind, Typography,
     WritingMode,
@@ -24,4 +26,4 @@ pub use layers::{
 pub use provenance::{Authored, Generation, Origin};
 pub use spatial::{Geometry, Point, Visibility};
 pub use structure::{EntityOrigin, Page, PageDraft, Project, Relation, RelationKind};
-pub use text::{LanguageTag, ReadingOrder, SourceText, TextContent, TextRole, Translation};
+pub use text::{LanguageTag, SourceText, TextContent, TextRole, Translation};

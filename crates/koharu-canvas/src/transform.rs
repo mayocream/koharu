@@ -49,11 +49,7 @@ impl ActiveTransform {
                 Ok(ElementPreview {
                     element: control.element,
                     frame,
-                    geometry: if value.has_text {
-                        geometry_from_frame(frame, value.geometry.origin.clone())
-                    } else {
-                        value.geometry.clone()
-                    },
+                    geometry: value.geometry.clone(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -167,19 +163,6 @@ fn transformed_geometry(original: &ElementPreview, preview: Frame) -> Geometry {
     }
 }
 
-fn geometry_from_frame(frame: Frame, origin: koharu_scene::Origin) -> Geometry {
-    Geometry {
-        origin,
-        points: crate::geometry::frame_corners(frame)
-            .into_iter()
-            .map(|point| Point {
-                x: point.x,
-                y: point.y,
-            })
-            .collect(),
-    }
-}
-
 pub(crate) fn frame_transform(original: Frame, preview: Frame) -> Affine {
     let original_angle = f64::from(original.angle_degrees).to_radians();
     let preview_angle = f64::from(preview.angle_degrees).to_radians();
@@ -255,6 +238,8 @@ mod tests {
                 frame,
                 visible: true,
                 opacity: 1.0,
+                local_opacity: 1.0,
+                groups: Vec::new(),
                 image: None,
                 raster: None,
                 has_text: true,
@@ -267,6 +252,7 @@ mod tests {
                 assets: PageAssets::default(),
                 members: ids.iter().copied().collect(),
                 elements,
+                group_opacities: Default::default(),
             },
             ids,
         )
@@ -352,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn rendered_text_control_becomes_the_explicit_text_geometry() {
+    fn rendered_text_control_translates_the_resolved_text_geometry() {
         let source = Frame::new(10.0, 20.0, 80.0, 50.0);
         let (page, ids) = page_with_frames(&[source]);
         let control = Frame::new(30.0, 35.0, 40.0, 20.0);
@@ -379,7 +365,7 @@ mod tests {
             .unwrap();
 
         let commit = transform.finish().unwrap();
-        let expected = crate::frame_corners(Frame::new(42.0, 28.0, 40.0, 20.0));
+        let expected = crate::frame_corners(Frame::new(22.0, 13.0, 80.0, 50.0));
         for (actual, expected) in commit.elements[0].geometry.points.iter().zip(expected) {
             assert!((actual.x - expected.x).abs() < 1e-5);
             assert!((actual.y - expected.y).abs() < 1e-5);

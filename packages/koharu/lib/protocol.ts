@@ -46,7 +46,7 @@ export const commands = {
 	setSourceText: (layer: EntityId, text: string) => __TAURI_INVOKE<null>("set_source_text", { layer, text }),
 	setTranslation: (layer: EntityId, text: string | null) => __TAURI_INVOKE<null>("set_translation", { layer, text }),
 	setTypography: (updates: TypographyUpdate[]) => __TAURI_INVOKE<null>("set_typography", { updates: updates.map(i=>({...i,typography:({...i.typography,size:i.typography.size==null?i.typography.size:i.typography.size,stroke_width:i.typography.stroke_width==null?i.typography.stroke_width:i.typography.stroke_width})})) }),
-	setGeometry: (updates: GeometryUpdate[]) => __TAURI_INVOKE<null>("set_geometry", { updates: updates.map(i=>({...i,points:i.points.map(i=>i)})) }),
+	setGeometry: (updates: GeometryUpdate[]) => __TAURI_INVOKE<null>("set_geometry", { updates: updates.map(i=>({...i,points:i.points==null?i.points:i.points.map(i=>i)})) }),
 	setVisibility: (layers: EntityId[], visible: boolean | null, opacity: number | null) => __TAURI_INVOKE<null>("set_visibility", { layers, visible, opacity: opacity==null?opacity:opacity }),
 	deleteLayers: (layers: EntityId[]) => __TAURI_INVOKE<null>("delete_layers", { layers }),
 	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
@@ -237,10 +237,12 @@ export type Geometry = {
 
 export type GeometryUpdate = {
 	layer: EntityId,
-	points: Point[],
+	points: Point[] | null,
 };
 
 export type GoogleCloudConfig = Record<string, never>;
+
+export type GroupRole = "text";
 
 export type InpaintingModel = { model: "lama" } | { model: "aot-inpainting" } | {
 	model: "flux2-klein",
@@ -274,7 +276,7 @@ export type LanguageChoice = {
 	name: string,
 };
 
-export type Layer = { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; visibility: LayerVisibility; content: TextContent; typography: Typography | null; layout: TextLayoutKind; fit_region: EntityId | null } | { type: "raster"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; image: string | null; name: string; kind: RasterLayerKind } | { type: "image"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string } | { type: "artwork"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string };
+export type Layer = { type: "group"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; name: string; role: GroupRole | null } | { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; visibility: LayerVisibility; content: TextContent; typography: Typography | null; layout: TextLayoutKind; fit_region: EntityId | null } | { type: "raster"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; image: string | null; name: string; kind: RasterLayerKind } | { type: "image"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string } | { type: "artwork"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string };
 
 export type LayerCommit = {
 	revision: Revision,

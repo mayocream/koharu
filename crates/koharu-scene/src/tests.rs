@@ -89,7 +89,8 @@ fn built_in_component_schemas_remain_revision_one() {
             schema::<Translation>(),
             schema::<TextRole>(),
             schema::<OcrAnalysis>(),
-            schema::<ReadingOrder>(),
+            schema::<Group>(),
+            schema::<TextGroup>(),
             schema::<Typography>(),
             schema::<Region>(),
             schema::<DetectionAnalysis>(),
@@ -98,7 +99,7 @@ fn built_in_component_schemas_remain_revision_one() {
             schema::<crate::components::Assets>(),
             schema::<Relation>(),
         ],
-        [1; 18]
+        [1; 19]
     );
 }
 
@@ -118,7 +119,8 @@ fn built_in_component_kinds_express_domain_ownership() {
             SourceText::KIND,
             Translation::KIND,
             TextRole::KIND,
-            ReadingOrder::KIND,
+            Group::KIND,
+            TextGroup::KIND,
             Typography::KIND,
             Region::KIND,
             DetectionAnalysis::KIND,
@@ -138,7 +140,8 @@ fn built_in_component_kinds_express_domain_ownership() {
             "dev.koharu.text.source",
             "dev.koharu.text.translation",
             "dev.koharu.text.role",
-            "dev.koharu.text.reading-order",
+            "dev.koharu.group",
+            "dev.koharu.text.group",
             "dev.koharu.text.typography",
             "dev.koharu.analysis.region",
             "dev.koharu.analysis.detection",
@@ -243,6 +246,44 @@ fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
         .unwrap()
         .snapshot;
     assert!(conflicting.rebase_on(&current).is_err());
+}
+
+#[test]
+fn hierarchy_insertion_rebases_across_component_edits_but_not_sibling_changes() {
+    let mut session = Session::memory().unwrap();
+    let mut ids = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let content = edit.add_text_content(page, At::End)?;
+            ids = Some((page, content));
+            Ok(())
+        })
+        .unwrap();
+    let base = session.commit(create).unwrap().snapshot;
+    let (page, content) = ids.unwrap();
+
+    let insert = base
+        .patch(|edit| {
+            edit.add_entity(page, At::Start)?;
+            Ok(())
+        })
+        .unwrap();
+    let component_edit = base
+        .patch(|edit| edit.set(content, &source("translated")))
+        .unwrap();
+    let current = base.preview([&component_edit]).unwrap();
+    assert!(insert.rebase_on(&current).is_ok());
+
+    let sibling_insert = base
+        .patch(|edit| {
+            edit.add_entity(page, At::End)?;
+            Ok(())
+        })
+        .unwrap();
+    let current = base.preview([&sibling_insert]).unwrap();
+    assert!(insert.rebase_on(&current).is_err());
 }
 
 #[test]
@@ -492,6 +533,69 @@ fn text_analysis_content_and_presentation_have_distinct_ownership() {
         snapshot.patch(|edit| edit.set(content, &Geometry::rectangle(0.0, 0.0, 10.0, 10.0))),
         Err(Error::Invalid(_))
     ));
+}
+
+#[test]
+fn text_group_owns_the_canonical_text_order() {
+    let mut session = Session::memory().unwrap();
+    let mut ids = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let first_content = edit.add_text_content(page, At::End)?;
+            let first = edit.add_text_layer(
+                page,
+                At::End,
+                first_content,
+                &TextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                },
+            )?;
+            let second_content = edit.add_text_content(page, At::End)?;
+            let second = edit.add_text_layer(
+                page,
+                At::End,
+                second_content,
+                &TextLayout {
+                    origin: Origin::User,
+                    kind: TextLayoutKind::Paragraph,
+                },
+            )?;
+            ids = Some((page, first, second));
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).unwrap().snapshot;
+    let (page, first, second) = ids.unwrap();
+    let group = snapshot.page(page).unwrap().text_group().unwrap().unwrap();
+    assert_eq!(
+        group
+            .text_layers()
+            .unwrap()
+            .map(TextLayerRef::id)
+            .collect::<Vec<_>>(),
+        vec![first, second]
+    );
+
+    let patch = snapshot
+        .patch(|edit| edit.move_entity(second, Some(group.id()), At::Start))
+        .unwrap();
+    let snapshot = session.commit(patch).unwrap().snapshot;
+    assert_eq!(
+        snapshot
+            .page(page)
+            .unwrap()
+            .text_group()
+            .unwrap()
+            .unwrap()
+            .text_layers()
+            .unwrap()
+            .map(TextLayerRef::id)
+            .collect::<Vec<_>>(),
+        vec![second, first]
+    );
 }
 
 #[test]
@@ -1075,14 +1179,6 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
         },
     )
     .unwrap();
-    edit.set(
-        first,
-        &ReadingOrder {
-            origin: Origin::User,
-            index: 3,
-        },
-    )
-    .unwrap();
     let snapshot = session.commit(edit.finish().unwrap()).unwrap().snapshot;
     assert!(matches!(
         snapshot
@@ -1092,14 +1188,6 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
             .origin,
         Origin::Generated(_)
     ));
-    assert_eq!(
-        snapshot
-            .component::<ReadingOrder>(first)
-            .unwrap()
-            .unwrap()
-            .index,
-        3
-    );
 }
 
 #[test]

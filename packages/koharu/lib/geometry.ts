@@ -1,4 +1,4 @@
-import { isTextLayer } from './document'
+import { effectiveLayerVisibility, isTextLayer } from './document'
 import type { EntityId, Frame, Layer, Point, TransformFrame } from './protocol'
 
 const minimumFrameSize = 1e-6
@@ -49,7 +49,10 @@ export function selectableLayer(layer: Layer): boolean {
 }
 
 export function layerFrame(layer: Layer): Frame | null {
-  const points = layer.type === 'raster' ? null : layer.geometry?.points
+  const points =
+    layer.type === 'text' || layer.type === 'image' || layer.type === 'artwork'
+      ? layer.geometry?.points
+      : null
   if (!points?.length || points.some((point) => !finite(point.x, point.y))) return null
   if (points.length === 4) {
     const [topLeft, topRight, bottomRight, bottomLeft] = points
@@ -108,8 +111,8 @@ export function hitTestLayers(
 ): Layer | null {
   for (let index = layers.length - 1; index >= 0; index -= 1) {
     const layer = layers[index]
-    if (!selectableLayer(layer) || !layer.visibility.visible || layer.visibility.opacity <= 0)
-      continue
+    const visibility = effectiveLayerVisibility(layers, layer)
+    if (!selectableLayer(layer) || !visibility.visible || visibility.opacity <= 0) continue
     const frame = controlFrame(layer, frames)
     if (frame && frameContains(frame, point)) return layer
   }

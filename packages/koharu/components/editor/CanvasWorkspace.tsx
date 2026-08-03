@@ -8,6 +8,7 @@ import { CanvasOverlay } from '@/components/editor/CanvasOverlay'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { call, dispatch, updateViewport } from '@/lib/backend'
+import { expandLayerSelection } from '@/lib/document'
 import {
   controlFrame,
   draftFrame,
@@ -231,7 +232,7 @@ export function CanvasWorkspace() {
     physicalPoint(clientX, clientY, surface.current!.getBoundingClientRect())
 
   const framesFor = (layers: string[]): TransformFrame[] =>
-    layers.flatMap((id) => {
+    expandLayerSelection(page?.layers ?? [], layers).flatMap((id) => {
       const layer = page?.layers.find((candidate) => candidate.id === id)
       const frame = layer && selectableLayer(layer) ? controlFrame(layer, layerFrames) : null
       return frame ? [{ element: id, frame }] : []

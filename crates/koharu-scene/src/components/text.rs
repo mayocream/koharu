@@ -220,27 +220,3 @@ impl Component for TextRole {
         true
     }
 }
-
-#[revisioned(revision = 1)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-pub struct ReadingOrder {
-    pub origin: Origin,
-    pub index: u32,
-}
-
-impl Component for ReadingOrder {
-    const KIND: &'static str = "dev.koharu.text.reading-order";
-
-    fn validate(&self, _context: &ValidationContext<'_>) -> Result<()> {
-        self.origin.validate()
-    }
-
-    fn origin(&self) -> Option<&Origin> {
-        Some(&self.origin)
-    }
-
-    fn set_origin(&mut self, origin: Origin) -> bool {
-        self.origin = origin;
-        true
-    }
-}

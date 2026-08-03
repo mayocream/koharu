@@ -11,9 +11,9 @@ import Moveable, {
   type OnRotateStart,
 } from 'react-moveable'
 
-import { isTextLayer } from '@/lib/document'
+import { effectiveLayerVisibility, expandLayerSelection, isTextLayer } from '@/lib/document'
 import { controlFrame, cssFrame, selectableLayer, type Camera } from '@/lib/geometry'
-import type { EntityId, Frame, Page, Point, TransformFrame } from '@/lib/protocol'
+import type { EntityId, Frame, Geometry, Page, Point, TransformFrame } from '@/lib/protocol'
 
 interface CanvasOverlayProps {
   page: Page
@@ -55,13 +55,18 @@ export function CanvasOverlay({
   const moveable = useRef<Moveable | null>(null)
   const gesture = useRef<ControlGesture | null>(null)
   const [targets, setTargets] = useState<HTMLElement[]>([])
-  const selectedIds = useMemo(() => new Set(selected), [selected])
+  const expandedSelection = useMemo(
+    () => expandLayerSelection(page.layers, selected),
+    [page.layers, selected],
+  )
+  const selectedIds = useMemo(() => new Set(expandedSelection), [expandedSelection])
   const layers = useMemo(
     () =>
       page.layers.flatMap((layer) => {
-        if (!layer.visibility.visible || layer.visibility.opacity <= 0) return []
+        const visibility = effectiveLayerVisibility(page.layers, layer)
+        if (!visibility.visible || visibility.opacity <= 0) return []
         const frame = previews[layer.id] ?? controlFrame(layer, frames)
-        return frame ? [{ layer, frame }] : []
+        return frame ? [{ layer, frame, opacity: visibility.opacity }] : []
       }),
     [page.layers, previews, frames],
   )
@@ -74,7 +79,7 @@ export function CanvasOverlay({
         ? Array.from(root.current.querySelectorAll<HTMLElement>('[data-moveable-target]'))
         : [],
     )
-  }, [page.id, selected])
+  }, [page.id, expandedSelection])
 
   useLayoutEffect(() => {
     moveable.current?.updateRect()
@@ -88,9 +93,14 @@ export function CanvasOverlay({
     return () => resize.disconnect()
   }, [])
 
-  const selectedText =
-    selected.length === 1 &&
-    page.layers.some((layer) => layer.id === selected[0] && isTextLayer(layer))
+  const selectedLayer =
+    expandedSelection.length === 1
+      ? page.layers.find((layer) => layer.id === expandedSelection[0])
+      : undefined
+  const selectedTextLayer = selectedLayer && isTextLayer(selectedLayer) ? selectedLayer : undefined
+  const fitRegion = selectedTextLayer?.fit_region
+    ? page.regions.find((region) => region.id === selectedTextLayer.fit_region)
+    : undefined
   const scale = camera.zoom / window.devicePixelRatio
 
   const start = (target: HTMLElement): ControlGesture | null => {
@@ -147,7 +157,8 @@ export function CanvasOverlay({
 
   return (
     <div ref={root} className='pointer-events-none absolute inset-0 overflow-hidden' aria-hidden>
-      {layers.map(({ layer, frame }) => {
+      {fitRegion && <FitRegionOverlay geometry={fitRegion.geometry} camera={camera} />}
+      {layers.map(({ layer, frame, opacity }) => {
         const position = cssFrame(frame, camera)
         const selected = selectedIds.has(layer.id) && selectableLayer(layer)
         const highlighted = !selected && hovered === layer.id
@@ -165,7 +176,7 @@ export function CanvasOverlay({
               transform: `rotate(${position.angle}deg)`,
               transformOrigin: '50% 50%',
               border: highlighted ? '1px solid var(--primary)' : undefined,
-              opacity: layer.visibility.opacity,
+              opacity,
               willChange: selected ? 'left, top, width, height, transform' : undefined,
             }}
           />
@@ -189,15 +200,15 @@ export function CanvasOverlay({
         ref={moveable}
         target={targets.length === 1 ? targets[0] : targets}
         flushSync={flushSync}
-        className={selectedText ? 'koharu-moveable koharu-moveable-text' : 'koharu-moveable'}
+        className={selectedTextLayer ? 'koharu-moveable koharu-moveable-text' : 'koharu-moveable'}
         draggable={false}
         resizable={targets.length === 1}
         rotatable={targets.length === 1}
         origin={false}
         throttleResize={0}
         throttleRotate={0}
-        renderDirections={selectedText ? false : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']}
-        edge={selectedText}
+        renderDirections={selectedTextLayer ? false : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']}
+        edge={Boolean(selectedTextLayer)}
         rotationPosition='top'
         onResizeStart={resizeStart}
         onResize={resize}
@@ -207,6 +218,31 @@ export function CanvasOverlay({
         onRotateEnd={end}
       />
     </div>
+  )
+}
+
+function FitRegionOverlay({ geometry, camera }: { geometry: Geometry; camera: Camera }) {
+  const dpr = window.devicePixelRatio
+  const points = geometry.points
+    .map(
+      (point) =>
+        `${(point.x * camera.zoom + camera.translation[0]) / dpr},${(point.y * camera.zoom + camera.translation[1]) / dpr}`,
+    )
+    .join(' ')
+  if (!points) return null
+
+  return (
+    <svg className='absolute inset-0 size-full overflow-hidden' data-testid='text-fit-region'>
+      <polygon
+        points={points}
+        fill='color-mix(in srgb, var(--primary) 7%, transparent)'
+        stroke='color-mix(in srgb, var(--primary) 58%, transparent)'
+        strokeWidth='1'
+        strokeDasharray='4 3'
+        strokeLinejoin='round'
+        vectorEffect='non-scaling-stroke'
+      />
+    </svg>
   )
 }
 

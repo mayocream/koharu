@@ -10,16 +10,13 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  Folder,
   Image as ImageIcon,
   Layers3,
-  ListFilter,
   Lock,
-  MessageCircle,
   Minus,
-  PanelsTopLeft,
   Plus,
-  Shapes,
-  Sparkles,
+  RotateCcw,
   Trash2,
   Type,
 } from 'lucide-react'
@@ -29,10 +26,16 @@ import { ColorWell } from '@/components/controls/ColorWell'
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
 import { FontPicker } from '@/components/controls/FontPicker'
 import { call, dispatch } from '@/lib/backend'
-import { isLockedLayer, isTextLayer, layerName } from '@/lib/document'
+import {
+  expandLayerSelection,
+  isGroupLayer,
+  isLockedLayer,
+  isTextLayer,
+  layerChildren,
+  layerName,
+} from '@/lib/document'
 import {
   commands,
-  type AnalysisRegion,
   type EntityId,
   type FontChoice,
   type Layer,
@@ -45,7 +48,6 @@ import { useKoharuStore } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -90,23 +92,6 @@ const defaultTypography: Typography = {
   writing_mode: null,
 }
 
-type LayerType = 'text' | 'image' | 'onomatopoeia' | 'bubble' | 'panel' | 'other'
-
-const layerTypes: ReadonlyArray<{
-  value: LayerType
-  label: string
-  icon: typeof Type
-}> = [
-  { value: 'text', label: 'Text', icon: Type },
-  { value: 'image', label: 'Image', icon: ImageIcon },
-  { value: 'onomatopoeia', label: 'Onomatopoeia', icon: Sparkles },
-  { value: 'bubble', label: 'Bubble', icon: MessageCircle },
-  { value: 'panel', label: 'Panel', icon: PanelsTopLeft },
-  { value: 'other', label: 'Other', icon: Shapes },
-]
-
-const defaultLayerTypes: readonly LayerType[] = ['text', 'image']
-
 export function Inspector() {
   return (
     <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-panel)]'>
@@ -130,8 +115,9 @@ function TypeInspector() {
   const page = usePage().data
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
   const availableFonts = useKoharuStore((state) => state.preferences?.fonts ?? [])
+  const expandedSelection = page ? expandLayerSelection(page.layers, selectedIds) : []
   const selected =
-    page?.layers.filter(isTextLayer).filter((layer) => selectedIds.includes(layer.id)) ?? []
+    page?.layers.filter(isTextLayer).filter((layer) => expandedSelection.includes(layer.id)) ?? []
   const current = selected[0]
   const [draft, setDraft] = useState<{ layer: EntityId; typography: Typography } | null>(null)
   const updateSequence = useRef(0)
@@ -326,11 +312,25 @@ function TypeInspector() {
   )
 }
 
+function displayedLayers(layers: Layer[], page: EntityId) {
+  const indexes = new Map(layers.map((layer, index) => [layer.id, index]))
+  const rows: { layer: Layer; index: number; depth: number }[] = []
+  const append = (layer: Layer, depth: number) => {
+    rows.push({ layer, index: indexes.get(layer.id) ?? 0, depth })
+    if (!isGroupLayer(layer)) return
+    const children = layerChildren(layers, layer.id)
+    const ordered = layer.role === 'text' ? children : [...children].reverse()
+    for (const child of ordered) append(child, depth + 1)
+  }
+  const roots = layers.filter((layer) => (layer.parent ?? page) === page).reverse()
+  for (const layer of roots) append(layer, 0)
+  return rows
+}
+
 function LayersInspector() {
   const page = usePage().data
   const selected = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
-  const [selectedTypes, setSelectedTypes] = useState(() => new Set<LayerType>(defaultLayerTypes))
   const [expandedLayer, setExpandedLayer] = useState<EntityId | null>(
     selected.length === 1 ? (selected[0] ?? null) : null,
   )
@@ -340,44 +340,26 @@ function LayersInspector() {
     setExpandedLayer(selected.length === 1 ? (selected[0] ?? null) : null)
   }, [selected])
 
-  const layers = useMemo(() => {
-    if (!page) return []
-    return page.layers
-      .map((layer, index) => ({ layer, index }))
-      .reverse()
-      .filter(({ layer }) => selectedTypes.has(layerType(layer, page.regions)))
-  }, [page, selectedTypes])
+  const layers = useMemo(() => (page ? displayedLayers(page.layers, page.id) : []), [page])
 
   if (!page) return <EmptyInspector>Select a page to inspect its layers.</EmptyInspector>
 
-  const filterLabel = layerTypeFilterLabel(selectedTypes)
-
-  const toggleType = (type: LayerType, checked: boolean) => {
-    setSelectedTypes((current) => {
-      const next = new Set(current)
-      if (checked) next.add(type)
-      else next.delete(type)
-      return next
-    })
-  }
-
-  const move = (layer: Layer, delta: number) => {
+  const move = (layer: Layer, displayDelta: number) => {
     if (movingLayer !== null || isLockedLayer(layer)) return
     const parent = layer.parent ?? page.id
-    const siblings = page.layers.filter(
+    const storedSiblings = page.layers.filter(
       (candidate) => !isLockedLayer(candidate) && (candidate.parent ?? page.id) === parent,
     )
-    const visibleSiblings = siblings.filter((candidate) =>
-      selectedTypes.has(layerType(candidate, page.regions)),
-    )
-    const visibleSource = visibleSiblings.findIndex((candidate) => candidate.id === layer.id)
-    const visibleTarget = visibleSource + delta
-    if (visibleSource < 0 || visibleTarget < 0 || visibleTarget >= visibleSiblings.length) return
-    const source = siblings.findIndex((candidate) => candidate.id === layer.id)
-    const target = siblings.findIndex(
-      (candidate) => candidate.id === visibleSiblings[visibleTarget]?.id,
-    )
-    if (source < 0 || target < 0) return
+    const parentLayer = page.layers.find((candidate) => candidate.id === parent)
+    const shownSiblings =
+      parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+        ? storedSiblings
+        : [...storedSiblings].reverse()
+    const shownSource = shownSiblings.findIndex((candidate) => candidate.id === layer.id)
+    const shownTarget = shownSource + displayDelta
+    const targetLayer = shownSiblings[shownTarget]
+    if (shownSource < 0 || !targetLayer) return
+    const target = storedSiblings.findIndex((candidate) => candidate.id === targetLayer.id)
 
     setMovingLayer(layer.id)
     void call(commands.moveLayer, layer.id, parent, target).then(
@@ -415,59 +397,32 @@ function LayersInspector() {
       <header className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
         <Layers3 className='size-3 text-primary' />
         <h2 className='text-[10px] font-semibold'>Layers</h2>
-        <span className='text-[9px] text-muted-foreground tabular-nums'>{page.layers.length}</span>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                className='ml-auto h-5 w-24 justify-start gap-1 rounded-md px-1.5 text-[9px] font-normal'
-                aria-label={`Filter layers by type: ${filterLabel}`}
-                title={filterLabel}
-              />
-            }
-          >
-            <ListFilter className='size-3 text-muted-foreground' />
-            <span className='min-w-0 flex-1 truncate text-left'>{filterLabel}</span>
-            <ChevronDown className='size-3 text-muted-foreground' />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align='end'
-            className='w-40 border border-border/50 p-0.5 shadow-sm ring-0'
-          >
-            {layerTypes.map(({ value, label, icon: Icon }) => (
-              <DropdownMenuCheckboxItem
-                key={value}
-                checked={selectedTypes.has(value)}
-                closeOnClick={false}
-                className='min-h-7 gap-1.5 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-                onCheckedChange={(checked) => toggleType(value, checked)}
-              >
-                <Icon className='size-3.5 text-muted-foreground' />
-                {label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <span className='text-[9px] text-muted-foreground tabular-nums'>
+          {page.layers.filter((layer) => !isGroupLayer(layer)).length}
+        </span>
       </header>
 
       <ScrollArea className='min-h-0 flex-1'>
         <div className='py-0.5'>
-          {layers.map(({ layer, index }) => {
+          {layers.map(({ layer, index, depth }) => {
             const locked = isLockedLayer(layer)
-            const visibleSiblings = page.layers.filter(
+            const storedSiblings = page.layers.filter(
               (candidate) =>
                 !isLockedLayer(candidate) &&
-                (candidate.parent ?? page.id) === (layer.parent ?? page.id) &&
-                selectedTypes.has(layerType(candidate, page.regions)),
+                (candidate.parent ?? page.id) === (layer.parent ?? page.id),
             )
+            const parentLayer = page.layers.find((candidate) => candidate.id === layer.parent)
+            const siblings =
+              parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+                ? storedSiblings
+                : [...storedSiblings].reverse()
+            const position = siblings.findIndex((candidate) => candidate.id === layer.id)
             return (
               <LayerRow
                 key={`${layer.type}:${layer.id}`}
                 layer={layer}
                 index={index}
+                depth={depth}
                 selected={selected.includes(layer.id)}
                 expanded={!locked && expandedLayer === layer.id}
                 locked={locked}
@@ -478,16 +433,14 @@ function LayersInspector() {
                     .catch(() => undefined)
                 }
                 onMove={(delta) => move(layer, delta)}
-                canMoveUp={!locked && visibleSiblings.at(-1)?.id !== layer.id}
-                canMoveDown={!locked && visibleSiblings[0]?.id !== layer.id}
+                canMoveUp={!locked && position > 0}
+                canMoveDown={!locked && position >= 0 && position < siblings.length - 1}
                 reordering={movingLayer !== null}
-                onDelete={() => deleteLayer(layer.id)}
+                onDelete={isGroupLayer(layer) ? undefined : () => deleteLayer(layer.id)}
               />
             )
           })}
-          {layers.length === 0 && (
-            <EmptyInspector>No layers match the selected types.</EmptyInspector>
-          )}
+          {layers.length === 0 && <EmptyInspector>No layers yet.</EmptyInspector>}
         </div>
       </ScrollArea>
     </div>
@@ -497,6 +450,7 @@ function LayersInspector() {
 function LayerRow({
   layer,
   index,
+  depth,
   selected,
   expanded,
   locked,
@@ -510,6 +464,7 @@ function LayerRow({
 }: {
   layer: Layer
   index: number
+  depth: number
   selected: boolean
   expanded: boolean
   locked: boolean
@@ -519,13 +474,13 @@ function LayerRow({
   canMoveUp: boolean
   canMoveDown: boolean
   reordering: boolean
-  onDelete: () => void
+  onDelete?: () => void
 }) {
   const name = layerName(layer, index)
   const detail = layerKind(layer)
   const Icon = layerIcon(layer)
   return (
-    <div className='group min-w-0 px-1 py-px'>
+    <div className='group min-w-0 px-1 py-px' style={{ paddingLeft: `${depth * 10 + 4}px` }}>
       <div
         data-selected={selected}
         data-expanded={expanded}
@@ -557,7 +512,7 @@ function LayerRow({
                 aria-label={`Move ${name} up`}
                 disabled={reordering || !canMoveUp}
                 className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
-                onClick={() => onMove(1)}
+                onClick={() => onMove(-1)}
               >
                 <ArrowUp className='size-3' />
               </button>
@@ -566,7 +521,7 @@ function LayerRow({
                 aria-label={`Move ${name} down`}
                 disabled={reordering || !canMoveDown}
                 className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
-                onClick={() => onMove(-1)}
+                onClick={() => onMove(1)}
               >
                 <ArrowDown className='size-3' />
               </button>
@@ -611,7 +566,7 @@ function LayerRow({
   )
 }
 
-function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete: () => void }) {
+function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void }) {
   const name = layerName(layer, 0)
   const [opacity, setOpacity] = useState(layer.visibility.opacity * 100)
 
@@ -631,6 +586,13 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete: () => void }
   const previewOpacity = (next: number) => {
     setOpacity(next)
     dispatch(commands.previewOpacity, layer.id, next / 100)
+  }
+
+  const resetTextFrame = () => {
+    if (!isTextLayer(layer) || !layer.fit_region || !layer.geometry) return
+    void call(commands.setGeometry, [{ layer: layer.id, points: null }])
+      .then(() => refresh(projectKey, pageKey))
+      .catch(() => undefined)
   }
 
   return (
@@ -654,20 +616,44 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete: () => void }
             {Math.round(opacity)}%
           </span>
         </div>
-        <Button
-          type='button'
-          variant='ghost'
-          size='icon-xs'
-          aria-label={`Delete ${name}`}
-          title={`Delete ${name}`}
-          className='size-5 rounded-md text-muted-foreground hover:text-foreground'
-          onClick={onDelete}
-        >
-          <Trash2 className='size-3' />
-        </Button>
+        {onDelete && (
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon-xs'
+            aria-label={`Delete ${name}`}
+            title={`Delete ${name}`}
+            className='size-5 rounded-md text-muted-foreground hover:text-foreground'
+            onClick={onDelete}
+          >
+            <Trash2 className='size-3' />
+          </Button>
+        )}
       </div>
       {isTextLayer(layer) && (
         <>
+          <div className='flex h-5 min-w-0 items-center gap-1.5'>
+            <span className='text-[8px] font-medium text-muted-foreground uppercase'>
+              Placement
+            </span>
+            <span className='rounded-md bg-foreground/[0.055] px-1.5 py-0.5 text-[9px] leading-none text-foreground/75'>
+              {layer.geometry ? 'Custom frame' : layer.fit_region ? 'Auto fit' : 'Unplaced'}
+            </span>
+            {layer.geometry && layer.fit_region && (
+              <Button
+                type='button'
+                variant='ghost'
+                size='xs'
+                aria-label='Reset to auto fit'
+                title='Reset to auto fit'
+                className='ml-auto h-5 gap-1 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
+                onClick={resetTextFrame}
+              >
+                <RotateCcw className='size-3' />
+                Reset
+              </Button>
+            )}
+          </div>
           <InspectorField label='Source'>
             <CommitTextarea
               data-testid={`edit-source-${layer.id}`}
@@ -834,33 +820,18 @@ function hexToRgba(hex: string): [number, number, number, number] {
 }
 
 function layerIcon(layer: Layer): typeof Type {
+  if (layer.type === 'group') return Folder
   if (layer.type === 'raster') return Brush
   if (layer.type === 'text') return Type
   return ImageIcon
 }
 
-function layerType(layer: Layer, regions: AnalysisRegion[]): LayerType {
-  if (layer.type !== 'text') return 'image'
-  const role = layer.content.role?.split('.').at(-1)?.toLocaleLowerCase()
-  if (role === 'onomatopoeia') return role
-  const regionId = layer.fit_region ?? layer.content.source_region
-  const region = regions.find(({ id }) => id === regionId)
-  const kind =
-    region?.label?.toLocaleLowerCase() ?? region?.kind.split('.').at(-1)?.toLocaleLowerCase()
-  if (kind === 'onomatopoeia' || kind === 'bubble' || kind === 'panel') return kind
-  return 'text'
-}
-
-function layerTypeFilterLabel(selected: ReadonlySet<LayerType>): string {
-  const labels = layerTypes.filter(({ value }) => selected.has(value)).map(({ label }) => label)
-  if (labels.length === layerTypes.length) return 'All types'
-  if (labels.length === 0) return 'No types'
-  if (labels.length <= 2) return labels.join(', ')
-  return `${labels.length} types`
-}
-
 function layerKind(layer: Layer): string {
+  if (layer.type === 'group') return layer.role === 'text' ? 'text group' : 'group'
   if (layer.type === 'raster') return layer.kind
-  if (layer.type === 'text') return layer.content.role?.split('.').at(-1) ?? 'text'
+  if (layer.type === 'text') {
+    const role = layer.content.role?.split('.').at(-1)
+    return role === 'dialogue' || role === 'free-text' ? role : 'text'
+  }
   return 'image'
 }

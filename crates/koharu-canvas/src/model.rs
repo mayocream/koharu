@@ -1,8 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use koharu_scene::{
-    AssetRole, BlobId, EntityId, Geometry, RasterLayer, RasterLayerKind, Snapshot, TextLayout,
-    Visibility,
+    AssetRole, BlobId, EntityId, Geometry, Group, RasterLayer, RasterLayerKind, Snapshot,
+    TextLayout, Visibility,
 };
 
 use crate::{Error, Frame, PhysicalSize, Result};
@@ -33,6 +33,8 @@ pub(crate) struct CanvasElement {
     pub frame: Frame,
     pub visible: bool,
     pub opacity: f32,
+    pub local_opacity: f32,
+    pub groups: Vec<EntityId>,
     pub image: Option<BlobId>,
     pub has_text: bool,
     pub raster: Option<RasterLayerKind>,
@@ -51,6 +53,7 @@ pub(crate) struct CanvasPage {
     pub assets: PageAssets,
     pub members: HashSet<EntityId>,
     pub elements: Vec<CanvasElement>,
+    pub group_opacities: HashMap<EntityId, f32>,
 }
 
 impl CanvasPage {
@@ -77,59 +80,26 @@ impl CanvasPage {
             return Err(Error::Invalid(format!("page {id} has no source asset")));
         }
 
-        let mut members = HashSet::new();
-        let mut elements = Vec::new();
-        for entity in snapshot.subtree(id)?.skip(1) {
-            let entity = entity.id();
-            members.insert(entity);
-            if let Some(raster) = snapshot.component::<RasterLayer>(entity)? {
-                let image = asset_blob(snapshot, entity, &AssetRole::new("source")?)?;
-                let visibility = visibility(snapshot, entity)?;
-                let geometry =
-                    Geometry::rectangle(0.0, 0.0, f64::from(size.width), f64::from(size.height));
-                elements.push(CanvasElement {
-                    id: entity,
-                    frame: Frame::new(0.0, 0.0, size.width as f32, size.height as f32),
-                    geometry,
-                    visible: visibility.visible,
-                    opacity: visibility.opacity,
-                    image,
-                    has_text: false,
-                    raster: Some(raster.kind),
-                });
-                continue;
-            }
-            let has_text = snapshot.component::<TextLayout>(entity)?.is_some();
-            let geometry = if has_text {
-                text_geometry(snapshot, entity)?
-            } else {
-                snapshot.component::<Geometry>(entity)?
-            };
-            let Some(geometry) = geometry else {
-                continue;
-            };
-            let Some(frame) = geometry_frame(&geometry) else {
-                continue;
-            };
-            let visibility = visibility(snapshot, entity)?;
-            elements.push(CanvasElement {
-                id: entity,
-                geometry,
-                frame,
-                visible: visibility.visible,
-                opacity: visibility.opacity,
-                image: asset_blob(snapshot, entity, &AssetRole::new("source")?)?,
-                has_text,
-                raster: None,
-            });
-        }
+        let members = snapshot
+            .subtree(id)?
+            .skip(1)
+            .map(|entity| entity.id())
+            .collect();
+        let mut collector = ElementCollector {
+            snapshot,
+            size,
+            group_opacities: HashMap::new(),
+            elements: Vec::new(),
+        };
+        collector.collect(id, true, 1.0, &mut Vec::new())?;
 
         Ok(Self {
             id,
             size,
             assets,
             members,
-            elements,
+            elements: collector.elements,
+            group_opacities: collector.group_opacities,
         })
     }
 
@@ -139,6 +109,81 @@ impl CanvasPage {
 
     pub(crate) fn contains(&self, id: EntityId) -> bool {
         id == self.id || self.members.contains(&id)
+    }
+}
+
+struct ElementCollector<'a> {
+    snapshot: &'a Snapshot,
+    size: PhysicalSize,
+    group_opacities: HashMap<EntityId, f32>,
+    elements: Vec<CanvasElement>,
+}
+
+impl ElementCollector<'_> {
+    fn collect(
+        &mut self,
+        parent: EntityId,
+        inherited_visible: bool,
+        inherited_opacity: f32,
+        groups: &mut Vec<EntityId>,
+    ) -> Result<()> {
+        for entity in self.snapshot.children(parent)? {
+            let visibility = visibility(self.snapshot, entity)?;
+            let visible = inherited_visible && visibility.visible;
+            let opacity = inherited_opacity * visibility.opacity;
+            if self.snapshot.component::<Group>(entity)?.is_some() {
+                self.group_opacities.insert(entity, visibility.opacity);
+                groups.push(entity);
+                self.collect(entity, visible, opacity, groups)?;
+                groups.pop();
+                continue;
+            }
+            if let Some(raster) = self.snapshot.component::<RasterLayer>(entity)? {
+                self.elements.push(CanvasElement {
+                    id: entity,
+                    frame: Frame::new(0.0, 0.0, self.size.width as f32, self.size.height as f32),
+                    geometry: Geometry::rectangle(
+                        0.0,
+                        0.0,
+                        f64::from(self.size.width),
+                        f64::from(self.size.height),
+                    ),
+                    visible,
+                    opacity,
+                    local_opacity: visibility.opacity,
+                    groups: groups.clone(),
+                    image: asset_blob(self.snapshot, entity, &AssetRole::new("source")?)?,
+                    has_text: false,
+                    raster: Some(raster.kind),
+                });
+                continue;
+            }
+            let has_text = self.snapshot.component::<TextLayout>(entity)?.is_some();
+            let geometry = if has_text {
+                text_geometry(self.snapshot, entity)?
+            } else {
+                self.snapshot.component::<Geometry>(entity)?
+            };
+            let Some(geometry) = geometry else {
+                continue;
+            };
+            let Some(frame) = geometry_frame(&geometry) else {
+                continue;
+            };
+            self.elements.push(CanvasElement {
+                id: entity,
+                geometry,
+                frame,
+                visible,
+                opacity,
+                local_opacity: visibility.opacity,
+                groups: groups.clone(),
+                image: asset_blob(self.snapshot, entity, &AssetRole::new("source")?)?,
+                has_text,
+                raster: None,
+            });
+        }
+        Ok(())
     }
 }
 
@@ -303,9 +348,11 @@ mod tests {
                     &Geometry::rectangle(10.0, 20.0, 30.0, 40.0),
                     Some("bubble".into()),
                 )?;
-                let text = edit.add_entity(page, At::End)?;
-                edit.set(
-                    text,
+                let content = edit.add_text_content(page, At::End)?;
+                let text = edit.add_text_layer(
+                    page,
+                    At::End,
+                    content,
                     &TextLayout {
                         origin: Origin::User,
                         kind: TextLayoutKind::Paragraph,
@@ -331,6 +378,8 @@ mod tests {
             frame,
             visible: true,
             opacity: 1.0,
+            local_opacity: 1.0,
+            groups: Vec::new(),
             image: None,
             raster: None,
             has_text: false,

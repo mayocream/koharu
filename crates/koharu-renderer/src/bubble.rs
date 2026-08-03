@@ -48,16 +48,7 @@ pub(crate) fn resolve(
         return Ok(None);
     };
     let balloon_contour = if region.region()?.kind == BubbleRegion::kind() {
-        let bounds = frame.bounds;
-        Some(if geometry.points.len() <= MAX_CONTOUR_POINTS {
-            geometry
-                .points
-                .iter()
-                .map(|point| (point.x as f32 - bounds.x, point.y as f32 - bounds.y))
-                .collect()
-        } else {
-            Vec::new()
-        })
+        Some(contour(&geometry, frame))
     } else {
         None
     };
@@ -67,6 +58,28 @@ pub(crate) fn resolve(
         relation: relation.id(),
         region: value.target,
     }))
+}
+
+pub(crate) fn contour(geometry: &Geometry, frame: GeometryFrame) -> Vec<(f32, f32)> {
+    if geometry.points.len() > MAX_CONTOUR_POINTS {
+        return Vec::new();
+    }
+    let bounds = frame.bounds;
+    let center_x = bounds.x + bounds.width * 0.5;
+    let center_y = bounds.y + bounds.height * 0.5;
+    let (sin, cos) = (-frame.angle_degrees.to_radians()).sin_cos();
+    geometry
+        .points
+        .iter()
+        .map(|point| {
+            let x = point.x as f32 - center_x;
+            let y = point.y as f32 - center_y;
+            (
+                x * cos - y * sin + center_x - bounds.x,
+                x * sin + y * cos + center_y - bounds.y,
+            )
+        })
+        .collect()
 }
 
 pub(crate) fn geometry_bounds(geometry: &Geometry) -> Option<LayoutBox> {

@@ -259,6 +259,64 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith('element', 'corrected OCR'))
   })
 
+  it('shows actual layers with only the useful text-role distinction', () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        ...page.layers.map((layer) =>
+          layer.type === 'text'
+            ? { ...layer, content: { ...layer.content, role: 'dev.koharu.text.onomatopoeia' } }
+            : layer,
+        ),
+        {
+          ...textLayer,
+          id: 'dialogue',
+          content: {
+            ...textLayer.content,
+            id: 'dialogue-content',
+            translation: { text: 'Dialogue line', language: null },
+            role: 'dev.koharu.text.dialogue',
+          },
+        },
+        {
+          ...textLayer,
+          id: 'free-text',
+          content: {
+            ...textLayer.content,
+            id: 'free-text-content',
+            translation: { text: 'Caption', language: null },
+            role: 'dev.koharu.text.free-text',
+          },
+        },
+      ],
+    }))
+    render(<Inspector />)
+
+    expect(screen.queryByRole('button', { name: /Filter layers by type/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit Hello' })).toHaveTextContent('text')
+    expect(screen.getByRole('button', { name: 'Edit Dialogue line' })).toHaveTextContent('dialogue')
+    expect(screen.getByRole('button', { name: 'Edit Caption' })).toHaveTextContent('free-text')
+    expect(screen.queryByText('Onomatopoeia')).not.toBeInTheDocument()
+  })
+
+  it('resets a custom text frame to its automatic fit region', async () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: page.layers.map((layer) =>
+        layer.type === 'text' ? { ...layer, fit_region: 'bubble' } : layer,
+      ),
+    }))
+    const reset = vi.spyOn(commands, 'setGeometry').mockResolvedValue(null)
+    render(<Inspector />)
+
+    expect(screen.getByText('Custom frame')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to auto fit' }))
+
+    await waitFor(() => expect(reset).toHaveBeenCalledWith([{ layer: 'element', points: null }]))
+  })
+
   it('shows zoom before page size without a fit control', () => {
     installProject()
     useKoharuStore.setState({ camera: { zoom: 1.25, translation: [0, 0], fitted: false } })

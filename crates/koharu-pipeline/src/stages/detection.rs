@@ -21,8 +21,8 @@ use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, BubbleRegion, DetectionAnalysis, DetectionLabel,
     EntityId, EntityOrigin, FitsTo, Generation, Geometry, Inside, Origin, PanelRegion, Point,
-    Presents, ReadingOrder, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy,
-    TextLayout, TextLayoutKind, TextRegion, TextRole, Typography, WritingMode,
+    Presents, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy, TextLayout,
+    TextLayoutKind, TextRegion, TextRole, Typography, WritingMode,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -370,7 +370,16 @@ fn write_regions(
     reused_contents: &mut BTreeSet<EntityId>,
 ) -> Result<PageRegions> {
     let mut regions = PageRegions::default();
-    for (order, detection) in detections.iter().enumerate() {
+    let text_group = snapshot.page(page)?.text_group()?;
+    let managed_text_group = if let Some(group) = text_group {
+        snapshot
+            .component::<EntityOrigin>(group.id())?
+            .is_some_and(|origin| origin.origin != Origin::User)
+            .then_some(group.id())
+    } else {
+        None
+    };
+    for detection in detections {
         let previous = (detection.label == "text")
             .then(|| take_previous_text(previous_texts, detection.bbox))
             .flatten();
@@ -380,16 +389,19 @@ fn write_regions(
             page,
             image,
             detection,
-            order as u32,
             generation,
             previous,
             reused_contents,
         )?;
         match detection.label.as_str() {
             "bubble" => regions.bubbles.push(detected),
-            "text" => regions
-                .texts
-                .push(text.expect("text detections create text semantics")),
+            "text" => {
+                let text = text.expect("text detections create text semantics");
+                if let Some(group) = managed_text_group {
+                    edit.move_entity(text.layer, Some(group), At::End)?;
+                }
+                regions.texts.push(text);
+            }
             _ => {}
         }
     }
@@ -402,7 +414,6 @@ fn write_region(
     page: EntityId,
     image: &RgbImage,
     detection: &KoharuLayoutDetection,
-    order: u32,
     generation: &Generation,
     previous: Option<PreviousText>,
     reused_contents: &mut BTreeSet<EntityId>,
@@ -467,19 +478,6 @@ fn write_region(
     )?;
     if !created {
         reused_contents.insert(content);
-    }
-    if created
-        || snapshot
-            .component::<ReadingOrder>(content)?
-            .is_none_or(|value| value.origin != Origin::User)
-    {
-        edit.set(
-            content,
-            &ReadingOrder {
-                origin: Origin::Generated(generation.clone()),
-                index: order,
-            },
-        )?;
     }
     if created
         || snapshot

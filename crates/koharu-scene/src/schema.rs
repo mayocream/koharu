@@ -5,10 +5,10 @@
 //! relation endpoints.
 
 use crate::{
-    DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, OcrAnalysis, Page, Project,
-    RasterLayer, ReadingOrder, Region, Relation, Result, SourceText, TextContent, TextLayout,
+    DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis, Page, Project,
+    RasterLayer, Region, Relation, Result, SourceText, TextContent, TextGroup, TextLayout,
     TextRole, Translation, Typography, Visibility,
-    component::{Component, ComponentRecord, ValidationContext, decode},
+    component::{Component, ComponentRecord, ValidationContext, decode, key},
     components::Assets,
     state::{Components, State},
 };
@@ -31,20 +31,72 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
     let has_translation = has(Translation::KIND);
     let has_region = has(Region::KIND);
     let has_geometry = has(Geometry::KIND);
+    let has_raster = has(RasterLayer::KIND);
+    let has_assets = has(Assets::KIND);
     let has_layout = has(TextLayout::KIND);
     let has_typography = has(Typography::KIND);
     let has_detection = has(DetectionAnalysis::KIND);
     let has_ocr = has(OcrAnalysis::KIND);
+    let has_group = has(Group::KIND);
+    let has_text_group = has(TextGroup::KIND);
+    let parent = state.parent_and_position(id)?.0;
+    let parent_is_text_group = parent.is_some_and(|parent| {
+        state.entity(parent).is_ok_and(|entity| {
+            entity
+                .components
+                .iter()
+                .any(|(key, _)| key.kind == TextGroup::KIND)
+        })
+    });
 
-    if (has_source || has_translation || has(TextRole::KIND) || has(ReadingOrder::KIND))
-        && !has_content
-    {
+    if (has_source || has_translation || has(TextRole::KIND)) && !has_content {
         Err(Error::invalid(format!(
             "entity {id} carries text content data but is not text content"
         )))
     } else if has_translation && !has_source {
         Err(Error::invalid(format!(
             "entity {id} has a translation but no source text"
+        )))
+    } else if has_text_group && !has_group {
+        Err(Error::invalid(format!(
+            "text group {id} does not carry the group component"
+        )))
+    } else if has_group
+        && (has(Page::KIND)
+            || has_content
+            || has_region
+            || has_geometry
+            || has_raster
+            || has_assets
+            || has_layout
+            || has_typography
+            || has_detection
+            || has_ocr)
+    {
+        Err(Error::invalid(format!(
+            "group {id} also carries content, analysis, or layer components"
+        )))
+    } else if has_text_group {
+        let page = state.page_for(id)?;
+        if parent != Some(page) {
+            return Err(Error::invalid(format!(
+                "text group {id} is not a direct child of its page"
+            )));
+        }
+        let groups = state.page(page)?.entities_with(&key::<TextGroup>()?);
+        if groups.len() != 1 {
+            return Err(Error::invalid(format!(
+                "page {page} must not contain multiple text groups"
+            )));
+        }
+        Ok(())
+    } else if parent_is_text_group && !has_layout {
+        Err(Error::invalid(format!(
+            "text group child {id} is not a text layer"
+        )))
+    } else if has_layout && !parent_is_text_group {
+        Err(Error::invalid(format!(
+            "text layer {id} is not contained by the page text group"
         )))
     } else if has_content
         && (has_region || has_geometry || has_layout || has_typography || has_detection || has_ocr)
@@ -192,6 +244,8 @@ fn validate_component(
     }
     validate!(Project);
     validate!(Page);
+    validate!(Group);
+    validate!(TextGroup);
     validate!(Geometry);
     validate!(RasterLayer);
     validate!(Visibility);
@@ -201,7 +255,6 @@ fn validate_component(
     validate!(OcrAnalysis);
     validate!(Translation);
     validate!(TextRole);
-    validate!(ReadingOrder);
     validate!(Typography);
     validate!(Region);
     validate!(DetectionAnalysis);

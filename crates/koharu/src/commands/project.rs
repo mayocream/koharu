@@ -4,11 +4,11 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
-    Geometry as SceneGeometry, Origin, PageDraft, Point as ScenePoint, Presents,
-    RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion, RemovePolicy,
-    Revision, Session, Snapshot, SourceText as SceneSourceText, TextLayout as SceneTextLayout,
-    TextLayoutKind, Translation as SceneTranslation, Typography as SceneTypography,
-    Visibility as SceneVisibility,
+    Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
+    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion,
+    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText,
+    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
+    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -66,6 +66,13 @@ pub struct PageAssets {
 #[derive(Clone, Debug, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Layer {
+    Group {
+        id: EntityId,
+        parent: Option<EntityId>,
+        visibility: LayerVisibility,
+        name: String,
+        role: Option<GroupRole>,
+    },
     Text {
         id: EntityId,
         parent: Option<EntityId>,
@@ -98,6 +105,12 @@ pub enum Layer {
         visibility: LayerVisibility,
         image: String,
     },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupRole {
+    Text,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -247,7 +260,7 @@ impl Project {
                 let source_asset = Self::asset_id(snapshot, page.id(), "source")?;
                 let layer_count = snapshot
                     .descendants(page.id())?
-                    .map(|entity| Self::is_layer(snapshot, entity.id()))
+                    .map(|entity| Self::is_content_layer(snapshot, entity.id()))
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
                     .filter(|present| *present)
@@ -472,11 +485,17 @@ impl Project {
         let updates = updates
             .into_iter()
             .map(|update| {
-                let content = snapshot
+                let text = snapshot
                     .component::<SceneTextLayout>(update.layer)?
-                    .is_some()
+                    .is_some();
+                let content = text
                     .then(|| Self::text_content(&snapshot, update.layer))
                     .transpose()?;
+                if update.points.is_none()
+                    && (!text || snapshot.text_layer(update.layer)?.fit_target()?.is_none())
+                {
+                    bail!("only text fitted to an analysis region can reset its geometry");
+                }
                 Ok((update, content))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -486,20 +505,22 @@ impl Project {
                 if let Some(content) = content {
                     edit.promote_entity_to_user(content)?;
                 }
-                edit.set(
-                    update.layer,
-                    &SceneGeometry {
-                        origin: Origin::User,
-                        points: update
-                            .points
-                            .into_iter()
-                            .map(|point| ScenePoint {
-                                x: point.x,
-                                y: point.y,
-                            })
-                            .collect(),
-                    },
-                )?;
+                match update.points {
+                    Some(points) => edit.set(
+                        update.layer,
+                        &SceneGeometry {
+                            origin: Origin::User,
+                            points: points
+                                .into_iter()
+                                .map(|point| ScenePoint {
+                                    x: point.x,
+                                    y: point.y,
+                                })
+                                .collect(),
+                        },
+                    )?,
+                    None => edit.remove::<SceneGeometry>(update.layer)?,
+                }
             }
             Ok(())
         })?;
@@ -553,7 +574,15 @@ impl Project {
 
     pub(crate) fn delete_layers(&mut self, layers: Vec<EntityId>) -> Result<Commit> {
         let snapshot = self.snapshot();
-        let layers = Self::unique_roots(&snapshot, layers)?;
+        let mut expanded = Vec::new();
+        for layer in layers {
+            if snapshot.component::<SceneTextGroup>(layer)?.is_some() {
+                expanded.extend(snapshot.children(layer)?);
+            } else {
+                expanded.push(layer);
+            }
+        }
+        let layers = Self::unique_roots(&snapshot, expanded)?;
         let mut orphaned_contents = Vec::new();
         for layer in &layers {
             let Some(relation) = snapshot.relation_from::<Presents>(*layer)? else {
@@ -591,10 +620,6 @@ impl Project {
     ) -> Result<Commit> {
         let _span = tracing::info_span!("prepare_move_patch").entered();
         let snapshot = self.snapshot();
-        let text = snapshot.component::<SceneTextLayout>(layer)?.is_some();
-        let content = text
-            .then(|| Self::text_content(&snapshot, layer))
-            .transpose()?;
         let siblings = snapshot
             .children(parent)?
             .map(|candidate| Ok(Self::is_layer(&snapshot, candidate)?.then_some(candidate)))
@@ -605,8 +630,8 @@ impl Project {
         let at = Self::placement(&siblings, layer, index);
         let patch = snapshot.patch(|edit| {
             edit.promote_entity_to_user(layer)?;
-            if let Some(content) = content {
-                edit.promote_entity_to_user(content)?;
+            if snapshot.component::<SceneTextGroup>(parent)?.is_some() {
+                edit.promote_entity_to_user(parent)?;
             }
             edit.move_entity(layer, Some(parent), at)
         })?;
@@ -730,7 +755,11 @@ impl Project {
                 }
                 layer
             } else {
-                let layer = edit.add_entity(page, At::End)?;
+                let at = snapshot
+                    .page(page)?
+                    .text_group()?
+                    .map_or(At::End, |group| At::Before(group.id()));
+                let layer = edit.add_entity(page, at)?;
                 edit.set(
                     layer,
                     &SceneRasterLayer {
@@ -824,17 +853,8 @@ impl Project {
     pub(crate) fn page(snapshot: &Snapshot, page: EntityId) -> Result<Page> {
         let value = snapshot.page(page)?.page()?;
         let source = Self::asset_id(snapshot, page, "source")?;
-        let mut layers = snapshot
-            .descendants(page)?
-            .map(|entity| {
-                let id = entity.id();
-                Ok(Self::is_layer(snapshot, id)?.then_some(id))
-            })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .map(|layer| Self::layer_view(snapshot, layer))
-            .collect::<Result<Vec<_>>>()?;
+        let mut layers = Vec::new();
+        Self::collect_layer_views(snapshot, page, &mut layers)?;
         if let Some(image) = source.clone() {
             layers.insert(
                 0,
@@ -901,6 +921,17 @@ impl Project {
     fn layer_view(snapshot: &Snapshot, layer: EntityId) -> Result<Layer> {
         let parent = snapshot.parent(layer)?;
         let visibility = Self::layer_visibility(snapshot, layer)?;
+        if let Some(group) = snapshot.component::<SceneGroup>(layer)? {
+            return Ok(Layer::Group {
+                id: layer,
+                parent,
+                visibility,
+                name: group.name,
+                role: snapshot
+                    .component::<SceneTextGroup>(layer)?
+                    .map(|_| GroupRole::Text),
+            });
+        }
         if let Some(layout) = snapshot.component::<SceneTextLayout>(layer)? {
             let text_layer = snapshot.text_layer(layer)?;
             let content = text_layer.content()?;
@@ -919,7 +950,9 @@ impl Project {
             return Ok(Layer::Text {
                 id: layer,
                 parent,
-                geometry: text_layer.frame()?.map(Self::geometry_view),
+                geometry: snapshot
+                    .component::<SceneGeometry>(layer)?
+                    .map(Self::geometry_view),
                 visibility,
                 content: TextContent {
                     id: content.id(),
@@ -1023,12 +1056,38 @@ impl Project {
     }
 
     fn is_layer(snapshot: &Snapshot, entity: EntityId) -> Result<bool> {
-        Ok(snapshot.component::<SceneTextLayout>(entity)?.is_some()
+        Ok(snapshot.component::<SceneGroup>(entity)?.is_some()
+            || snapshot.component::<SceneTextLayout>(entity)?.is_some()
             || snapshot.component::<SceneRasterLayer>(entity)?.is_some()
             || (snapshot.component::<SceneGeometry>(entity)?.is_some()
                 && snapshot
                     .asset(entity, &AssetRole::new("source")?)?
                     .is_some()))
+    }
+
+    fn is_content_layer(snapshot: &Snapshot, entity: EntityId) -> Result<bool> {
+        Ok(
+            snapshot.component::<SceneGroup>(entity)?.is_none()
+                && Self::is_layer(snapshot, entity)?,
+        )
+    }
+
+    fn collect_layer_views(
+        snapshot: &Snapshot,
+        parent: EntityId,
+        layers: &mut Vec<Layer>,
+    ) -> Result<()> {
+        for child in snapshot.children(parent)? {
+            if !Self::is_layer(snapshot, child)? {
+                continue;
+            }
+            let group = snapshot.component::<SceneGroup>(child)?.is_some();
+            layers.push(Self::layer_view(snapshot, child)?);
+            if group {
+                Self::collect_layer_views(snapshot, child, layers)?;
+            }
+        }
+        Ok(())
     }
 
     fn text_content(snapshot: &Snapshot, layer: EntityId) -> Result<EntityId> {

@@ -52,7 +52,11 @@ Compilation is read-only and deterministic for a snapshot and request.
 - `layout` shapes and lays out text through `TextLayout`;
 - `render` records a `LayoutRun` into a caller-owned `vello::Scene`;
 - the scene renderer uses the same component for font fallback, auto-fit,
-  bubble-safe layout, clipping, rotation, fill, and stroke policy.
+  bubble-safe layout, overflow diagnostics, rotation, fill, and stroke policy.
+
+Text regions constrain layout and auto-fit but never clip painted glyphs. This
+keeps authored overflow visible and editable while still reporting it through
+`RenderDiagnostic::TextOverflow`.
 
 This keeps direct text rendering available without making the compositor or
 rasterizer understand glyphs.

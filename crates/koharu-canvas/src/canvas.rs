@@ -396,18 +396,33 @@ impl Canvas {
                 .component::<Visibility>(element)?
                 .map_or(1.0, |visibility| visibility.opacity),
         };
-        let element = self
-            .page
-            .as_mut()
-            .ok_or(Error::NoPage)?
+        let page = self.page.as_mut().ok_or(Error::NoPage)?;
+        let changed = if let Some(group_opacity) = page.group_opacities.get_mut(&element) {
+            let changed = *group_opacity != opacity;
+            *group_opacity = opacity;
+            changed
+        } else if let Some(candidate) = page
             .elements
             .iter_mut()
             .find(|candidate| candidate.id == element)
-            .ok_or_else(|| {
-                Error::Invalid("opacity preview element is not on the active page".into())
-            })?;
-        if element.opacity != opacity {
-            element.opacity = opacity;
+        {
+            let changed = candidate.local_opacity != opacity;
+            candidate.local_opacity = opacity;
+            changed
+        } else {
+            return Err(Error::Invalid(
+                "opacity preview element is not on the active page".into(),
+            ));
+        };
+        if changed {
+            for candidate in &mut page.elements {
+                candidate.opacity = candidate.local_opacity
+                    * candidate
+                        .groups
+                        .iter()
+                        .map(|group| page.group_opacities.get(group).copied().unwrap_or(1.0))
+                        .product::<f32>();
+            }
             self.element_scenes.recompose();
             self.damage.content();
         }

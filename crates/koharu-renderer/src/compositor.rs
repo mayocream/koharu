@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use koharu_scene::{
-    Asset, BlobId, EntityId, Geometry, LanguageTag, OcrAnalysis, Page, RasterLayer,
+    Asset, BlobId, EntityId, Geometry, Group, LanguageTag, OcrAnalysis, Page, RasterLayer,
     RasterLayerKind, RelationId, Revision, Snapshot, SourceText, TextAlignment, TextDirection,
     TextLayout as SceneTextLayout, TextLayoutKind, Translation, Typography, Visibility,
 };
@@ -165,23 +165,15 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
         });
     }
 
-    for entity_ref in snapshot.subtree(request.page)?.skip(1) {
-        let entity = entity_ref.id();
-        dependencies.insert(RenderDependency::Entity(entity));
-        let mut visibility = snapshot
-            .component::<Visibility>(entity)?
-            .unwrap_or(Visibility {
-                origin: koharu_scene::Origin::User,
-                visible: true,
-                opacity: 1.0,
-            });
-        if request.presentation == LayerPresentation::Deferred {
-            visibility.visible = true;
-            visibility.opacity = 1.0;
-        }
-        if !visibility.visible || visibility.opacity <= 0.0 {
-            continue;
-        }
+    let mut visual_entities = Vec::new();
+    VisualTraversal {
+        snapshot,
+        presentation: request.presentation,
+        dependencies: &mut dependencies,
+        output: &mut visual_entities,
+    }
+    .collect(request.page, 1.0)?;
+    for (entity, opacity) in visual_entities {
         if let Some(raster) = snapshot.component::<RasterLayer>(entity)? {
             if request.include_images
                 && let Some(asset) = snapshot.asset(entity, &request.image_asset)?
@@ -201,7 +193,7 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
                         width: width as f32,
                         height: height as f32,
                     },
-                    opacity: visibility.opacity,
+                    opacity,
                     is_base: false,
                 }));
             }
@@ -224,17 +216,24 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
             dependencies.insert(RenderDependency::Entity(content));
 
             let geometry = snapshot.component::<Geometry>(entity)?;
+            let fit = crate::bubble::resolve(snapshot, entity, &page_entities)?;
+            if let Some(fit) = fit.as_ref() {
+                dependencies.insert(RenderDependency::Relation(fit.relation));
+                dependencies.insert(RenderDependency::Entity(fit.region));
+            }
             let (text_frame, balloon_contour) = if let Some(geometry) = geometry.as_ref() {
                 let Some(frame) = geometry_frame(geometry) else {
                     continue;
                 };
-                (frame, None)
+                let contour = fit
+                    .as_ref()
+                    .and_then(|fit| fit.balloon_contour.as_ref())
+                    .map(|_| crate::bubble::contour(geometry, frame));
+                (frame, contour)
             } else {
-                let Some(fit) = crate::bubble::resolve(snapshot, entity, &page_entities)? else {
+                let Some(fit) = fit else {
                     continue;
                 };
-                dependencies.insert(RenderDependency::Relation(fit.relation));
-                dependencies.insert(RenderDependency::Entity(fit.region));
                 (fit.frame, fit.balloon_contour)
             };
 
@@ -273,7 +272,7 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
                 language,
                 bounds: text_frame.bounds,
                 balloon_contour,
-                opacity: visibility.opacity,
+                opacity,
                 preferred_font: typography
                     .as_ref()
                     .and_then(|value| value.preferred_font.clone()),
@@ -306,7 +305,7 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
                 name: None,
                 kind: crate::VisualLayerKind::Image,
                 bounds,
-                opacity: visibility.opacity,
+                opacity,
                 is_base: false,
             }));
         }
@@ -322,6 +321,42 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
         diagnostics,
         request: request.clone(),
     })
+}
+
+struct VisualTraversal<'a> {
+    snapshot: &'a Snapshot,
+    presentation: LayerPresentation,
+    dependencies: &'a mut BTreeSet<RenderDependency>,
+    output: &'a mut Vec<(EntityId, f32)>,
+}
+
+impl VisualTraversal<'_> {
+    fn collect(&mut self, parent: EntityId, inherited_opacity: f32) -> Result<()> {
+        for entity in self.snapshot.children(parent)? {
+            self.dependencies.insert(RenderDependency::Entity(entity));
+            let visibility = self
+                .snapshot
+                .component::<Visibility>(entity)?
+                .unwrap_or(Visibility {
+                    origin: koharu_scene::Origin::User,
+                    visible: true,
+                    opacity: 1.0,
+                });
+            let (visible, opacity) = if self.presentation == LayerPresentation::Deferred {
+                (true, 1.0)
+            } else {
+                (visibility.visible, inherited_opacity * visibility.opacity)
+            };
+            if self.snapshot.component::<Group>(entity)?.is_some() {
+                if visible && opacity > 0.0 {
+                    self.collect(entity, opacity)?;
+                }
+            } else if visible && opacity > 0.0 {
+                self.output.push((entity, opacity));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -626,6 +661,40 @@ mod tests {
     }
 
     #[test]
+    fn text_group_visibility_is_inherited_by_its_layers() {
+        let fixture = fixture(true);
+        let group = fixture
+            .snapshot
+            .page(fixture.page)
+            .unwrap()
+            .text_group()
+            .unwrap()
+            .unwrap()
+            .id();
+        let patch = fixture
+            .snapshot
+            .patch(|edit| {
+                edit.set(
+                    group,
+                    &Visibility {
+                        origin: Origin::User,
+                        visible: true,
+                        opacity: 0.4,
+                    },
+                )
+            })
+            .unwrap();
+        let snapshot = fixture.snapshot.preview([&patch]).unwrap();
+        let composition = Compositor::new()
+            .compile(&snapshot, &RenderRequest::transparent(fixture.page))
+            .unwrap();
+        let Layer::Text(text) = &composition.layers[0] else {
+            panic!("expected a text layer");
+        };
+        assert_eq!(text.opacity, 0.4);
+    }
+
+    #[test]
     fn compiles_translation_and_explicit_bubble_relation() {
         let fixture = fixture(true);
         let request = RenderRequest::transparent(fixture.page);
@@ -809,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn manual_text_frame_overrides_automatic_region_fitting() {
+    fn authored_text_geometry_preserves_bubble_shaped_layout() {
         let fixture = fixture_with_visibility(true, None, Some(18.0), true);
         let composition = Compositor::new()
             .compile(&fixture.snapshot, &RenderRequest::transparent(fixture.page))
@@ -819,7 +888,7 @@ mod tests {
         };
 
         assert_eq!(text.font_size, Some(18.0));
-        assert!(text.balloon_contour.is_none());
+        assert!(text.balloon_contour.is_some());
         assert_eq!(text.bounds.width, 80.0);
         assert_eq!(text.angle_degrees, 12.5);
     }

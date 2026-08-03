@@ -15,7 +15,7 @@ use crate::desktop::Desktop;
 #[derive(Clone, Debug, Deserialize, Type)]
 pub struct GeometryUpdate {
     pub layer: EntityId,
-    pub points: Vec<Point>,
+    pub points: Option<Vec<Point>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
