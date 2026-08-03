@@ -89,7 +89,12 @@ fn parse(value: &Value) -> Option<CodexModel> {
                     _ => None,
                 })
         })
-        .collect::<Vec<_>>();
+        .fold(Vec::new(), |mut levels, level| {
+            if !levels.contains(&level) {
+                levels.push(level);
+            }
+            levels
+        });
     Some(CodexModel {
         id: id.to_owned(),
         name: value
@@ -100,4 +105,30 @@ fn parse(value: &Value) -> Option<CodexModel> {
             .to_owned(),
         reasoning,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn reasoning_aliases_are_normalized_once() {
+        let model = parse(&json!({
+            "slug": "codex",
+            "supported_reasoning_levels": ["low", "medium", "high", "xhigh", "max", "ultra"]
+        }))
+        .unwrap();
+
+        assert_eq!(
+            model.reasoning,
+            [
+                Reasoning::Low,
+                Reasoning::Medium,
+                Reasoning::High,
+                Reasoning::Xhigh,
+            ]
+        );
+    }
 }
