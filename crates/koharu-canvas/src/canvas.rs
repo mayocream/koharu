@@ -65,6 +65,7 @@ pub struct Canvas {
     displayed_base: Option<BlobId>,
     transition: Option<ImageTransition>,
     reported_fallback: Option<(PageId, PageView)>,
+    failed_source: Option<BlobId>,
 
     // At most one low-latency editing operation is active for each category.
     stroke: Option<ActiveStroke>,
@@ -107,6 +108,7 @@ impl Canvas {
             displayed_base: None,
             transition: None,
             reported_fallback: None,
+            failed_source: None,
             stroke: None,
             raster_stroke: None,
             transform: None,
@@ -135,6 +137,7 @@ impl Canvas {
         self.displayed_base = None;
         self.transition = None;
         self.reported_fallback = None;
+        self.failed_source = None;
         self.masks.insert(
             MaskPlane::Text,
             MaskState::empty(self.page.as_ref().expect("page was set").size),
@@ -188,6 +191,7 @@ impl Canvas {
         self.displayed_base = None;
         self.transition = None;
         self.reported_fallback = None;
+        self.failed_source = None;
         self.stroke = None;
         self.raster_stroke = None;
         self.transform = None;
@@ -273,6 +277,9 @@ impl Canvas {
 
         self.transform = None;
         let next = CanvasPage::load(snapshot, current)?;
+        if self.page.as_ref().and_then(|page| page.assets.source) != next.assets.source {
+            self.failed_source = None;
+        }
         self.verify_mask_replacement(&next)?;
         let same_elements = hierarchy_only
             && self.page.as_ref().is_some_and(|page| {
@@ -745,7 +752,7 @@ impl Canvas {
         self.update_transition(now);
         let needs_redraw = self.transition.is_some();
 
-        if self.damage.content_pending() {
+        if self.damage.content_pending() && !self.source_is_pending() {
             let scene = self.build_scene(now, true);
             self.gpu
                 .render_content(&scene, self.options.workspace_color)?;
@@ -874,12 +881,21 @@ impl Canvas {
                     match kind {
                         ResourceKind::Gray => self.install_gray_resource(id)?,
                         ResourceKind::Color => {
+                            if self.failed_source == Some(id) {
+                                self.failed_source = None;
+                            }
                             self.element_scenes.invalidate_image(id);
                         }
                     }
                     self.damage.content();
                 }
                 ResourceEvent::Failed { id, kind, message } => {
+                    if kind == ResourceKind::Color
+                        && self.page.as_ref().and_then(|page| page.assets.source) == Some(id)
+                    {
+                        self.failed_source = Some(id);
+                        self.damage.content();
+                    }
                     self.diagnostics.push(CanvasDiagnostic::resource(
                         self.page.as_ref().map(|page| page.id),
                         id,
@@ -889,6 +905,13 @@ impl Canvas {
             }
         }
         Ok(())
+    }
+
+    fn source_is_pending(&self) -> bool {
+        let Some(source) = self.page.as_ref().and_then(|page| page.assets.source) else {
+            return false;
+        };
+        self.failed_source != Some(source) && !self.resources.contains(source, ResourceKind::Color)
     }
 
     fn install_gray_resource(&mut self, id: BlobId) -> Result<()> {
