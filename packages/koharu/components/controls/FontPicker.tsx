@@ -30,30 +30,43 @@ export function FontPicker({
   const families = useMemo(() => {
     const choices = new Map<string, FontChoice>()
     for (const font of fonts) {
-      const current = choices.get(font.family)
+      const family = normalizeFontName(font.family)
+      const current = choices.get(family)
       if (
         !current ||
         (font.style === 'normal' && current.style !== 'normal') ||
         (font.style === current.style &&
-          Math.abs(font.weight - 400) < Math.abs(current.weight - 400))
+          (Math.abs(font.weight - 400) < Math.abs(current.weight - 400) ||
+            (Math.abs(font.weight - 400) === Math.abs(current.weight - 400) &&
+              font.source === 'registered' &&
+              current.source !== 'registered')))
       ) {
-        choices.set(font.family, font)
+        choices.set(family, font)
       }
     }
-    return [...choices.values()]
-  }, [fonts])
+
+    const preferred = normalizeFontName(value)
+    const faces = new Set<string>()
+    return [...choices.entries()]
+      .sort(([left], [right]) => Number(right === preferred) - Number(left === preferred))
+      .filter(([, font]) => {
+        const face = normalizeFontName(font.postscript_name)
+        if (faces.has(face)) return false
+        faces.add(face)
+        return true
+      })
+      .map(([, font]) => font)
+      .sort((left, right) => left.family.localeCompare(right.family))
+  }, [fonts, value])
   const results = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase()
+    const normalized = normalizeFontName(query)
     return normalized
-      ? families.filter((font) => font.family.toLocaleLowerCase().includes(normalized))
+      ? families.filter((font) => normalizeFontName(font.family).includes(normalized))
       : families
   }, [families, query])
   const selectedFont = useMemo(
-    () =>
-      fonts.find(
-        (font) => font.family === value && font.weight === 400 && font.style === 'normal',
-      ) ?? fonts.find((font) => font.family === value),
-    [fonts, value],
+    () => families.find((font) => normalizeFontName(font.family) === normalizeFontName(value)),
+    [families, value],
   )
   return (
     <Popover
@@ -126,7 +139,7 @@ function FontList({
   const virtualizer = useVirtualizer({
     count: fonts.length,
     getScrollElement: () => list.current,
-    getItemKey: (index) => fonts[index]?.postscript_name ?? index,
+    getItemKey: (index) => normalizeFontName(fonts[index]?.family ?? String(index)),
     estimateSize: () => rowHeight,
     overscan: 6,
     initialOffset: 0,
@@ -149,7 +162,7 @@ function FontList({
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const font = fonts[virtualRow.index]
           if (!font) return null
-          const selected = font.family === value
+          const selected = normalizeFontName(font.family) === normalizeFontName(value)
           return (
             <button
               key={virtualRow.key}
@@ -189,6 +202,10 @@ function FontList({
 
 function cssFontFamily(family: string): string {
   return `"${family.replaceAll('"', '\\"')}", Arial, sans-serif`
+}
+
+function normalizeFontName(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function fontPreviewStyle(font: FontChoice): CSSProperties {

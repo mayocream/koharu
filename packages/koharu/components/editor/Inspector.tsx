@@ -160,7 +160,7 @@ function TypeInspector() {
       ? draft.typography
       : (current?.typography ?? defaultTypography)
   const disabled = !current
-  const fonts = uniqueFonts(availableFonts, typography.preferred_font)
+  const fonts = useMemo(() => [...availableFonts, defaultFont], [availableFonts])
   const size = Math.round((typography.size ?? 24) * 100) / 100
   const weight = typography.font_weight ?? 400
   const strokeWidth = typography.stroke_width ?? 0
@@ -815,18 +815,6 @@ function EmptyInspector({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   )
-}
-
-function uniqueFonts(fonts: FontChoice[], preferred: string | null): FontChoice[] {
-  const families = new Map<string, FontChoice>()
-  for (const font of [...fonts, defaultFont]) {
-    const current = families.get(font.family)
-    if (!current || font.weight === 400) families.set(font.family, font)
-  }
-  if (preferred && !families.has(preferred)) {
-    families.set(preferred, { ...defaultFont, family: preferred, postscript_name: preferred })
-  }
-  return [...families.values()].sort((left, right) => left.family.localeCompare(right.family))
 }
 
 function rgbaToHex([red, green, blue]: [number, number, number, number]): string {
