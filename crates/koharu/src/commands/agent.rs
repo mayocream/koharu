@@ -134,30 +134,11 @@ pub(crate) async fn logout_agent(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn save_agent_config(
+pub(crate) fn save_agent_config(
     config: Config,
     state: State<'_, AgentState>,
-) -> std::result::Result<AgentStatus, Error> {
-    let models = state.agent.models().await?;
-    let model = match config.model.as_deref() {
-        Some(model) => models
-            .iter()
-            .find(|available| available.id == model)
-            .ok_or_else(|| anyhow!("Codex model {model} is not available for this account"))?,
-        None => models
-            .first()
-            .context("the Codex account has no available models")?,
-    };
-    if !model.reasoning.is_empty() && !model.reasoning.contains(&config.reasoning) {
-        return Err(anyhow!(
-            "Codex model {} does not support {:?} reasoning",
-            model.id,
-            config.reasoning
-        )
-        .into());
-    }
-    state.agent.save_config(config)?;
-    Ok(state.status().await?)
+) -> std::result::Result<Config, Error> {
+    Ok(state.agent.save_config(config)?)
 }
 
 #[tauri::command]

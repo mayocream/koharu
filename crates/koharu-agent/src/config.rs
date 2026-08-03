@@ -22,6 +22,8 @@ pub enum Reasoning {
     Medium,
     High,
     Xhigh,
+    Max,
+    Ultra,
 }
 
 impl Reasoning {
@@ -31,6 +33,8 @@ impl Reasoning {
             Self::Medium => "medium",
             Self::High => "high",
             Self::Xhigh => "xhigh",
+            Self::Max => "max",
+            Self::Ultra => "ultra",
         }
     }
 }

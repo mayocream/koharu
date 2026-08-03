@@ -19,7 +19,9 @@
         "low": "Low",
         "medium": "Medium",
         "high": "High",
-        "xhigh": "Extra high"
+        "xhigh": "Extra high",
+        "max": "Max",
+        "ultra": "Ultra"
       },
       "emptyTitle": "What should Koharu do?",
       "emptyDescription": "Ask the agent to inspect, translate, edit, or process this project. It will view page images only when needed.",

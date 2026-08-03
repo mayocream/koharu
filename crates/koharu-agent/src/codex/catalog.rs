@@ -85,7 +85,9 @@ fn parse(value: &Value) -> Option<CodexModel> {
                     "low" => Some(Reasoning::Low),
                     "medium" => Some(Reasoning::Medium),
                     "high" => Some(Reasoning::High),
-                    "xhigh" | "max" | "ultra" => Some(Reasoning::Xhigh),
+                    "xhigh" => Some(Reasoning::Xhigh),
+                    "max" => Some(Reasoning::Max),
+                    "ultra" => Some(Reasoning::Ultra),
                     _ => None,
                 })
         })
@@ -128,6 +130,8 @@ mod tests {
                 Reasoning::Medium,
                 Reasoning::High,
                 Reasoning::Xhigh,
+                Reasoning::Max,
+                Reasoning::Ultra,
             ]
         );
     }

@@ -134,10 +134,12 @@ where
         self.codex.models().await
     }
 
-    pub fn save_config(&self, config: Config) -> Result<()> {
+    pub fn save_config(&self, config: Config) -> Result<Config> {
         let mut current = self.config.write()?;
         *current = config;
-        current.save()
+        let saved = current.clone();
+        current.save()?;
+        Ok(saved)
     }
 
     pub async fn clear(&self) {

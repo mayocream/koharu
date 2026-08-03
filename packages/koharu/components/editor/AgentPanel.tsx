@@ -278,7 +278,8 @@ export function AgentPanel() {
   }
 
   async function saveConfig(config: Config) {
-    setStatus(await call(commands.saveAgentConfig, config))
+    const saved = await call(commands.saveAgentConfig, config)
+    setStatus((current) => (current ? { ...current, config: saved } : current))
   }
 
   async function send() {
