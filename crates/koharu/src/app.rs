@@ -11,7 +11,8 @@ use crate::commands::{
     agent::AgentState,
     canvas::{CanvasChannel, CanvasView},
     lifecycle::{
-        Download, DownloadChannel, DownloadState, Initialization, ModelResources, ResourceChannel,
+        Download, DownloadChannel, DownloadState, Initialization, ModelResources, ProjectChannel,
+        ResourceChannel,
     },
     processing::{JobChannel, Processing},
     project::{CurrentProject, Project},
@@ -57,11 +58,47 @@ pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
 }
 
 pub fn run(initial_path: Option<PathBuf>, context: tauri::Context<tauri::Wry>) -> Result<()> {
-    let project = initial_path.map(Project::open).transpose()?;
-
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|handle, arguments, cwd| {
+            let cwd = PathBuf::from(cwd);
+            let project = arguments.into_iter().skip(1).find_map(|argument| {
+                let path = PathBuf::from(argument);
+                path.extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("khr"))
+                    .then(|| if path.is_absolute() { path } else { cwd.join(path) })
+            });
+            let handle = handle.clone();
+            drop(tauri::async_runtime::spawn(async move {
+                if let Some(path) = project {
+                    let opened =
+                        crate::commands::lifecycle::open_project_path(&handle, path.clone()).await;
+                    if let Err(error) = opened {
+                        tracing::error!(%error, path = %path.display(), "could not open the forwarded project");
+                    }
+                }
+                if let Some(window) = handle.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }));
+        }))
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
+            let project = initial_path.map(Project::open).transpose()?;
             application.manage(CurrentProject {
                 project: Mutex::new(project),
             });
@@ -73,6 +110,7 @@ pub fn run(initial_path: Option<PathBuf>, context: tauri::Context<tauri::Wry>) -
             application.manage(JobChannel::default());
             application.manage(DownloadChannel::default());
             application.manage(ResourceChannel::default());
+            application.manage(ProjectChannel::default());
             application.manage(Initialization::default());
 
             let handle = application.handle().clone();

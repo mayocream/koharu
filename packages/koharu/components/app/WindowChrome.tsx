@@ -2,16 +2,37 @@
 
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Copy, Minus, Square, X } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export function WindowControls() {
   const { t } = useTranslation()
   const [maximized, setMaximized] = useState(false)
 
-  const toggleMaximize = () => {
-    void getCurrentWindow().toggleMaximize()
-    setMaximized((value) => !value)
+  useEffect(() => {
+    const window = getCurrentWindow()
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    const synchronize = () => {
+      void window.isMaximized().then((value) => {
+        if (!disposed) setMaximized(value)
+      })
+    }
+    synchronize()
+    void window.onResized(synchronize).then((stop) => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [])
+
+  const toggleMaximize = async () => {
+    const window = getCurrentWindow()
+    await window.toggleMaximize()
+    setMaximized(await window.isMaximized())
   }
 
   return (
@@ -26,7 +47,7 @@ export function WindowControls() {
         label={t(maximized ? 'native.window.restore' : 'native.window.maximize', {
           defaultValue: maximized ? 'Restore' : 'Maximize',
         })}
-        onClick={toggleMaximize}
+        onClick={() => void toggleMaximize()}
       >
         {maximized ? <Copy /> : <Square />}
       </WindowButton>

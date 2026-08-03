@@ -2,8 +2,11 @@
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "identifier": "Koharu",
   "bundle": {
-    "resources": [
-      "../../target/release/koharu-torch.dll"
-    ]
+    "windows": {
+      "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
+    },
+    "resources": {
+      "../../target/release/koharu-torch.dll": "koharu-torch.dll"
+    }
   }
 }

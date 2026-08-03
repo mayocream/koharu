@@ -42,6 +42,10 @@ sentry = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-process = { workspace = true }
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+tauri-plugin-window-state = { workspace = true }
 tauri-specta = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

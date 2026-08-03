@@ -2,8 +2,22 @@
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "identifier": "Koharu",
   "bundle": {
-    "resources": [
-      "../../target/release/libkoharu-torch.so"
-    ]
+    "linux": {
+      "appimage": {
+        "files": {
+          "/usr/bin/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
+        }
+      },
+      "deb": {
+        "files": {
+          "/usr/bin/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/bin/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
+        }
+      }
+    }
   }
 }

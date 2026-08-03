@@ -6,7 +6,7 @@ default-members = ["crates/koharu"]
 resolver = "3"
 
 [workspace.package]
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 edition = "2024"
 description = "Manga translation tools"
 license = "GPL-3.0-only"
@@ -21,25 +21,25 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
 [workspace.dependencies]
-koharu-bindgen = { path = "crates/koharu-bindgen", version = "0.62.0-alpha.1", default-features = false }
-koharu-config = { path = "crates/koharu-config", version = "0.62.0-alpha.1", default-features = false }
-koharu-storage = { path = "crates/koharu-storage", version = "0.62.0-alpha.1", default-features = false }
-koharu-scene = { path = "crates/koharu-scene", version = "0.62.0-alpha.1", default-features = false }
-koharu-diffusion = { path = "crates/koharu-diffusion", version = "0.62.0-alpha.1", default-features = false }
-koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", version = "0.62.0-alpha.1", default-features = false }
-koharu-llama = { path = "crates/koharu-llama", version = "0.62.0-alpha.1", default-features = false }
-koharu-llama-sys = { path = "crates/koharu-llama-sys", version = "0.62.0-alpha.1", default-features = false }
-koharu-runtime = { path = "crates/koharu-runtime", version = "0.62.0-alpha.1", default-features = false }
-koharu-torch = { path = "crates/koharu-torch", version = "0.62.0-alpha.1", default-features = false }
-koharu-torch-sys = { path = "crates/koharu-torch-sys", version = "0.62.0-alpha.1", default-features = false }
-koharu-agent = { path = "crates/koharu-agent", version = "0.62.0-alpha.1", default-features = false }
-koharu-ml = { path = "crates/koharu-ml", version = "0.62.0-alpha.1", default-features = false }
-koharu-pipeline = { path = "crates/koharu-pipeline", version = "0.62.0-alpha.1", default-features = false }
-koharu-translator = { path = "crates/koharu-translator", version = "0.62.0-alpha.1", default-features = false }
-koharu-psd = { path = "crates/koharu-psd", version = "0.62.0-alpha.1", default-features = false }
-koharu-renderer = { path = "crates/koharu-renderer", version = "0.62.0-alpha.1", default-features = false }
-koharu-canvas = { path = "crates/koharu-canvas", version = "0.62.0-alpha.1", default-features = false }
-koharu-secrets = { path = "crates/koharu-secrets", version = "0.62.0-alpha.1", default-features = false }
+koharu-bindgen = { path = "crates/koharu-bindgen", version = "0.62.0", default-features = false }
+koharu-config = { path = "crates/koharu-config", version = "0.62.0", default-features = false }
+koharu-storage = { path = "crates/koharu-storage", version = "0.62.0", default-features = false }
+koharu-scene = { path = "crates/koharu-scene", version = "0.62.0", default-features = false }
+koharu-diffusion = { path = "crates/koharu-diffusion", version = "0.62.0", default-features = false }
+koharu-diffusion-sys = { path = "crates/koharu-diffusion-sys", version = "0.62.0", default-features = false }
+koharu-llama = { path = "crates/koharu-llama", version = "0.62.0", default-features = false }
+koharu-llama-sys = { path = "crates/koharu-llama-sys", version = "0.62.0", default-features = false }
+koharu-runtime = { path = "crates/koharu-runtime", version = "0.62.0", default-features = false }
+koharu-torch = { path = "crates/koharu-torch", version = "0.62.0", default-features = false }
+koharu-torch-sys = { path = "crates/koharu-torch-sys", version = "0.62.0", default-features = false }
+koharu-agent = { path = "crates/koharu-agent", version = "0.62.0", default-features = false }
+koharu-ml = { path = "crates/koharu-ml", version = "0.62.0", default-features = false }
+koharu-pipeline = { path = "crates/koharu-pipeline", version = "0.62.0", default-features = false }
+koharu-translator = { path = "crates/koharu-translator", version = "0.62.0", default-features = false }
+koharu-psd = { path = "crates/koharu-psd", version = "0.62.0", default-features = false }
+koharu-renderer = { path = "crates/koharu-renderer", version = "0.62.0", default-features = false }
+koharu-canvas = { path = "crates/koharu-canvas", version = "0.62.0", default-features = false }
+koharu-secrets = { path = "crates/koharu-secrets", version = "0.62.0", default-features = false }
 
 # external dependencies
 alphanumeric-sort = "1.5.8"
@@ -155,6 +155,10 @@ tauri = { version = "=2.11.5", default-features = false, features = [
     "x11",
 ] }
 tauri-build = "=2.6.3"
+tauri-plugin-process = "=2.3.1"
+tauri-plugin-single-instance = "=2.4.3"
+tauri-plugin-updater = "=2.10.1"
+tauri-plugin-window-state = "=2.4.1"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.18", features = ["v4", "v7", "serde"] }

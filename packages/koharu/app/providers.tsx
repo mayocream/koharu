@@ -6,6 +6,7 @@ import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 
 import { StartupView } from '@/components/app/StartupView'
+import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
 import { refreshTranslationModels } from '@/lib/backend'
 import i18n from '@/lib/i18n'
@@ -15,6 +16,7 @@ import {
   type Download,
   type Job,
   type ModelResources,
+  type ProjectInfo,
 } from '@/lib/protocol'
 import { pageKey, pagesKey, projectKey, queryClient, refresh } from '@/lib/queries'
 import {
@@ -52,6 +54,18 @@ export function Providers({ children }: { children: ReactNode }) {
         }),
         channel<Download>(receiveDownload),
         channel<ModelResources>(receiveResources),
+        channel<ProjectInfo | null>((project) => {
+          queryClient.setQueryData(projectKey, project)
+          const store = useKoharuStore.getState()
+          store.selectPages([])
+          store.selectLayers([])
+          if (project) {
+            void refresh(pagesKey, pageKey).catch(() => undefined)
+          } else {
+            queryClient.setQueryData(pagesKey, [])
+            queryClient.setQueryData(pageKey, null)
+          }
+        }),
       )
       .then((state) => {
         if (active) receiveStartupState(state)
@@ -89,7 +103,14 @@ export function Providers({ children }: { children: ReactNode }) {
 
 function StartupBoundary({ children }: { children: ReactNode }) {
   const initialized = useKoharuStore((state) => state.initialized)
-  return initialized ? children : <StartupView />
+  return initialized ? (
+    <>
+      {children}
+      <Updater />
+    </>
+  ) : (
+    <StartupView />
+  )
 }
 
 export default Providers

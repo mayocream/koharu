@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
 import { commands } from '@/lib/protocol'
-import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 
@@ -57,9 +56,7 @@ export function StartView() {
               className='h-16 justify-start gap-3 rounded-xl bg-primary px-3 text-left hover:bg-primary/90'
               aria-label='New project'
               onClick={() =>
-                void call(commands.createProject)
-                  .then(() => refresh(projectKey, pagesKey, pageKey))
-                  .catch(() => undefined)
+                void call(commands.createProject).catch(() => undefined)
               }
             >
               <span className='grid size-9 shrink-0 place-items-center rounded-lg bg-primary-foreground/15'>
@@ -85,9 +82,7 @@ export function StartView() {
               className='h-16 justify-start gap-3 rounded-xl border-border bg-background px-3 text-left hover:border-primary/35 hover:bg-accent/50'
               aria-label='Open project'
               onClick={() =>
-                void call(commands.openProject)
-                  .then(() => refresh(projectKey, pagesKey, pageKey))
-                  .catch(() => undefined)
+                void call(commands.openProject).catch(() => undefined)
               }
             >
               <span className='grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--surface-well)] text-foreground'>

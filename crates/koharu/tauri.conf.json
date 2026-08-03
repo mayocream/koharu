@@ -52,12 +52,6 @@
         }
       }
     ],
-    "windows": {
-      "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
-    },
-    "macOS": {
-      "entitlements": "./Entitlements.plist"
-    },
     "createUpdaterArtifacts": true
   },
   "plugins": {

@@ -13,7 +13,6 @@ import {
   pageKey,
   pagesKey,
   projectKey,
-  queryClient,
   refresh,
   useImportPages,
   usePage,
@@ -44,7 +43,6 @@ export function TitleBar() {
   const page = project ? (pageQuery.data ?? null) : null
   const selectedPages = useKoharuStore((state) => state.selectedPages)
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
-  const selectPages = useKoharuStore((state) => state.selectPages)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
@@ -56,29 +54,14 @@ export function TitleBar() {
       stage ? { operation: 'through', stage } : { operation: 'full' },
     ).catch(() => undefined)
 
-  const closeProject = () =>
-    void call(commands.closeProject)
-      .then(async () => {
-        await Promise.all([
-          queryClient.cancelQueries({ queryKey: projectKey }),
-          queryClient.cancelQueries({ queryKey: pagesKey }),
-          queryClient.cancelQueries({ queryKey: pageKey }),
-        ])
-        queryClient.setQueryData(projectKey, null)
-        queryClient.setQueryData(pagesKey, [])
-        queryClient.setQueryData(pageKey, null)
-        selectPages([])
-        selectLayers([])
-      })
-      .catch(() => undefined)
+  const closeProject = () => void call(commands.closeProject).catch(() => undefined)
 
   return (
     <header
-      data-tauri-drag-region
+      data-tauri-drag-region='deep'
       className='flex h-10 shrink-0 items-center bg-[var(--surface-titlebar)] text-[12px]'
     >
       <div
-        data-tauri-drag-region
         className='flex h-full w-10 shrink-0 items-center justify-center rounded-br-lg'
       >
         <Image
@@ -97,9 +80,7 @@ export function TitleBar() {
           <MenubarContent>
             <MenubarItem
               onClick={() =>
-                void call(commands.createProject)
-                  .then(() => refresh(projectKey, pagesKey, pageKey))
-                  .catch(() => undefined)
+                void call(commands.createProject).catch(() => undefined)
               }
             >
               {t('native.menu.newProject', { defaultValue: 'New Project…' })}
@@ -107,9 +88,7 @@ export function TitleBar() {
             </MenubarItem>
             <MenubarItem
               onClick={() =>
-                void call(commands.openProject)
-                  .then(() => refresh(projectKey, pagesKey, pageKey))
-                  .catch(() => undefined)
+                void call(commands.openProject).catch(() => undefined)
               }
             >
               {t('native.menu.openProject', { defaultValue: 'Open Project…' })}
@@ -264,7 +243,6 @@ export function TitleBar() {
       </Menubar>
 
       <div
-        data-tauri-drag-region
         className='flex h-full min-w-16 flex-1 items-center justify-center px-3 text-[11px] text-muted-foreground select-none'
       >
         {project ? (

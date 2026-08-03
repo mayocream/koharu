@@ -107,6 +107,11 @@ pub(crate) struct ResourceChannel {
     pub(crate) channel: Mutex<Option<Channel<ModelResources>>>,
 }
 
+#[derive(Default)]
+pub(crate) struct ProjectChannel {
+    pub(crate) channel: Mutex<Option<Channel<Option<ProjectInfo>>>>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Type)]
 pub struct DeviceResources {
     pub name: String,
@@ -147,6 +152,7 @@ pub(crate) async fn subscribe(
     on_job: Channel<Job>,
     on_download: Channel<Download>,
     on_resources: Channel<ModelResources>,
+    on_project: Channel<Option<ProjectInfo>>,
 ) -> std::result::Result<StartupState, Error> {
     handle.state::<Initialization>().wait().await?;
 
@@ -154,6 +160,7 @@ pub(crate) async fn subscribe(
     *handle.state::<JobChannel>().channel.lock() = Some(on_job);
     *handle.state::<DownloadChannel>().channel.lock() = Some(on_download);
     *handle.state::<ResourceChannel>().channel.lock() = Some(on_resources);
+    *handle.state::<ProjectChannel>().channel.lock() = Some(on_project);
 
     let canvas = handle
         .state::<Desktop>()
@@ -171,6 +178,51 @@ pub(crate) async fn subscribe(
             .collect(),
         canvas,
     })
+}
+
+async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
+    let snapshot = opened.snapshot();
+    let page = opened.active_page();
+    let info = opened.info();
+
+    handle.state::<AgentState>().reset().await;
+    let processing = handle.state::<Processing>();
+    for stop in processing.stops.lock().values() {
+        stop.stop();
+    }
+    processing.stops.lock().clear();
+    processing.jobs.lock().clear();
+
+    let previous = {
+        let current = handle.state::<CurrentProject>();
+        let mut current = current.project.lock();
+        if let Some(project) = current.as_ref() {
+            project.flush()?;
+        }
+        current.replace(opened)
+    };
+
+    handle
+        .state::<CanvasView>()
+        .fitted
+        .store(true, Ordering::Release);
+    let canvas = {
+        let desktop = handle.state::<Desktop>();
+        let mut desktop = desktop.lock();
+        desktop.show_page(&snapshot, page)?;
+        desktop.canvas_state(true)
+    };
+    drop(previous);
+    handle.state::<CanvasChannel>().channel.publish(canvas);
+    handle.state::<ProjectChannel>().channel.publish(Some(info));
+    Ok(())
+}
+
+pub(crate) async fn open_project_path(handle: &AppHandle, path: std::path::PathBuf) -> Result<()> {
+    let opened = tokio::task::spawn_blocking(move || Project::open(path))
+        .await
+        .context("project open worker stopped unexpectedly")??;
+    replace_project(handle, opened).await
 }
 
 #[tauri::command]
@@ -214,15 +266,7 @@ pub(crate) fn get_page(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn create_project(
-    window: WebviewWindow,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
-    processing: State<'_, Processing>,
-    canvas_channel: State<'_, CanvasChannel>,
-    agent: State<'_, AgentState>,
-) -> std::result::Result<(), Error> {
+pub(crate) async fn create_project(window: WebviewWindow) -> std::result::Result<(), Error> {
     let mut dialog = rfd::AsyncFileDialog::new()
         .add_filter("Koharu project", &["khr"])
         .set_parent(&window);
@@ -241,44 +285,16 @@ pub(crate) async fn create_project(
     if path.extension().is_none() {
         path.set_extension("khr");
     }
-    let opened = Project::create(path)?;
-    let snapshot = opened.snapshot();
-    let page = opened.active_page();
-    agent.reset().await;
-    for stop in processing.stops.lock().values() {
-        stop.stop();
-    }
-    processing.stops.lock().clear();
-    processing.jobs.lock().clear();
-    let previous = {
-        let mut current = project.project.lock();
-        if let Some(project) = current.as_ref() {
-            project.flush()?;
-        }
-        current.replace(opened)
-    };
-    canvas_view.fitted.store(true, Ordering::Release);
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.show_page(&snapshot, page)?;
-        desktop.canvas_state(true)
-    };
-    drop(previous);
-    canvas_channel.channel.publish(canvas);
+    let opened = tokio::task::spawn_blocking(move || Project::create(path))
+        .await
+        .context("project create worker stopped unexpectedly")??;
+    replace_project(window.app_handle(), opened).await?;
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn open_project(
-    window: WebviewWindow,
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
-    processing: State<'_, Processing>,
-    canvas_channel: State<'_, CanvasChannel>,
-    agent: State<'_, AgentState>,
-) -> std::result::Result<(), Error> {
+pub(crate) async fn open_project(window: WebviewWindow) -> std::result::Result<(), Error> {
     let mut dialog = rfd::AsyncFileDialog::new()
         .add_filter("Koharu project", &["khr"])
         .set_parent(&window);
@@ -288,65 +304,41 @@ pub(crate) async fn open_project(
     let Some(file) = dialog.pick_file().await else {
         return Ok(());
     };
-    let path = file.path().to_owned();
-    let opened = Project::open(path)?;
-    let snapshot = opened.snapshot();
-    let page = opened.active_page();
-    agent.reset().await;
-    for stop in processing.stops.lock().values() {
-        stop.stop();
-    }
-    processing.stops.lock().clear();
-    processing.jobs.lock().clear();
-    let previous = {
-        let mut current = project.project.lock();
-        if let Some(project) = current.as_ref() {
-            project.flush()?;
-        }
-        current.replace(opened)
-    };
-    canvas_view.fitted.store(true, Ordering::Release);
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.show_page(&snapshot, page)?;
-        desktop.canvas_state(true)
-    };
-    drop(previous);
-    canvas_channel.channel.publish(canvas);
+    open_project_path(window.app_handle(), file.path().to_owned()).await?;
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn close_project(
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
-    processing: State<'_, Processing>,
-    canvas_channel: State<'_, CanvasChannel>,
-    agent: State<'_, AgentState>,
-) -> std::result::Result<(), Error> {
-    agent.reset().await;
+pub(crate) async fn close_project(handle: AppHandle) -> std::result::Result<(), Error> {
+    handle.state::<AgentState>().reset().await;
+    let processing = handle.state::<Processing>();
     for stop in processing.stops.lock().values() {
         stop.stop();
     }
     processing.stops.lock().clear();
     processing.jobs.lock().clear();
     let previous = {
-        let mut current = project.project.lock();
+        let current = handle.state::<CurrentProject>();
+        let mut current = current.project.lock();
         if let Some(project) = current.as_ref() {
             project.flush()?;
         }
         current.take()
     };
-    canvas_view.fitted.store(true, Ordering::Release);
+    handle
+        .state::<CanvasView>()
+        .fitted
+        .store(true, Ordering::Release);
     let result = {
+        let desktop = handle.state::<Desktop>();
         let mut desktop = desktop.lock();
         desktop.canvas().clear_page();
         desktop.canvas_state(true)
     };
     drop(previous);
-    canvas_channel.channel.publish(result);
+    handle.state::<CanvasChannel>().channel.publish(result);
+    handle.state::<ProjectChannel>().channel.publish(None);
     Ok(())
 }
 

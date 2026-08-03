@@ -2,8 +2,9 @@
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
   "identifier": "Koharu",
   "bundle": {
-    "resources": [
-      "../../target/release/libkoharu-torch.dylib"
-    ]
+    "macOS": {
+      "entitlements": "./Entitlements.plist",
+      "frameworks": ["../../target/release/libkoharu-torch.dylib"]
+    }
   }
 }

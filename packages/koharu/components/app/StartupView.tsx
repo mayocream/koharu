@@ -12,10 +12,10 @@ export function StartupView() {
   return (
     <div className='relative flex h-screen w-screen flex-col overflow-hidden bg-[var(--surface-titlebar)] text-foreground'>
       <header
-        data-tauri-drag-region
+        data-tauri-drag-region='deep'
         className='grid h-10 shrink-0 grid-cols-[132px_1fr_132px] items-center border-b border-border/80 bg-[var(--surface-titlebar)] shadow-[var(--shadow-titlebar)]'
       >
-        <div data-tauri-drag-region className='grid h-full w-10 place-items-center rounded-br-lg'>
+        <div className='grid h-full w-10 place-items-center rounded-br-lg'>
           <Image
             className='pointer-events-none'
             src='/icon.png'
@@ -27,7 +27,6 @@ export function StartupView() {
           />
         </div>
         <div
-          data-tauri-drag-region
           className='grid h-full place-items-center text-[11px] text-muted-foreground select-none'
         >
           Koharu

@@ -100,30 +100,69 @@ fn loader_tokens(library_names: &[String]) -> TokenStream {
             }
         }
 
+        fn __koharu_bindgen_bundled_library_paths(
+            library_file_name: &str,
+        ) -> ::std::vec::Vec<::std::path::PathBuf> {
+            // A bundled app's working directory is not necessarily its executable directory.
+            let Some(directory) = ::std::env::current_exe()
+                .ok()
+                .and_then(|executable| executable.parent().map(::std::path::Path::to_owned))
+            else {
+                return ::std::vec::Vec::new();
+            };
+
+            let mut paths = ::std::vec::Vec::new();
+            #[cfg(target_os = "macos")]
+            if let Some(contents) = directory.parent() {
+                paths.push(contents.join("Frameworks").join(library_file_name));
+            }
+            paths.push(directory.join(library_file_name));
+            paths
+        }
+
+        #[cfg(target_os = "windows")]
+        fn __koharu_bindgen_already_loaded_library(
+            library_file_name: &str,
+        ) -> ::std::option::Option<::libloading::Library> {
+            ::libloading::os::windows::Library::open_already_loaded(library_file_name)
+                .ok()
+                .map(::std::convert::Into::into)
+        }
+
+        #[cfg(target_os = "linux")]
+        fn __koharu_bindgen_already_loaded_library(
+            library_file_name: &str,
+        ) -> ::std::option::Option<::libloading::Library> {
+            unsafe {
+                ::libloading::os::unix::Library::open(
+                    Some(library_file_name),
+                    ::libloading::os::unix::RTLD_LAZY | ::libc::RTLD_NOLOAD,
+                )
+            }
+            .ok()
+            .map(::std::convert::Into::into)
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        fn __koharu_bindgen_already_loaded_library(
+            _library_file_name: &str,
+        ) -> ::std::option::Option<::libloading::Library> {
+            None
+        }
+
         unsafe fn __koharu_bindgen_open_library(
             library_file_name: &str,
         ) -> ::std::result::Result<::libloading::Library, ::std::string::String> {
-            #[cfg(target_os = "windows")]
-            {
-                if let Ok(library) =
-                    ::libloading::os::windows::Library::open_already_loaded(library_file_name)
-                {
-                    return Ok(library.into());
-                }
+            // Reuse a library brought into the process by another dependency first.
+            if let Some(library) = __koharu_bindgen_already_loaded_library(library_file_name) {
+                return Ok(library);
             }
 
-            #[cfg(target_os = "linux")]
-            {
-                if let Ok(library) = unsafe {
-                    ::libloading::os::unix::Library::open(
-                        Some(library_file_name),
-                        ::libloading::os::unix::RTLD_LAZY | ::libc::RTLD_NOLOAD,
-                    )
-                } {
-                    return Ok(library.into());
+            for path in __koharu_bindgen_bundled_library_paths(library_file_name) {
+                if let Ok(library) = unsafe { ::libloading::Library::new(path) } {
+                    return Ok(library);
                 }
             }
-
             unsafe { ::libloading::Library::new(library_file_name) }
                 .map_err(|error| error.to_string())
         }

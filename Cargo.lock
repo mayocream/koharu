@@ -402,6 +402,9 @@ name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
+dependencies = [
+ "derive_arbitrary",
+]
 
 [[package]]
 name = "arc-swap"
@@ -1828,6 +1831,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "derive_arbitrary"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -4015,7 +4029,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -4047,6 +4061,10 @@ dependencies = [
  "specta-typescript",
  "tauri",
  "tauri-build",
+ "tauri-plugin-process",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
  "tauri-specta",
  "thiserror 2.0.18",
  "tokio",
@@ -4060,7 +4078,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4080,7 +4098,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4093,7 +4111,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "image 0.25.10",
@@ -4108,7 +4126,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "atomicwrites",
@@ -4121,7 +4139,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "image 0.25.10",
  "koharu-diffusion-sys",
@@ -4131,7 +4149,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4141,7 +4159,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -4156,7 +4174,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4166,7 +4184,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -4197,7 +4215,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4226,7 +4244,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "image 0.25.10",
  "koharu-renderer",
@@ -4236,7 +4254,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "criterion",
@@ -4264,7 +4282,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "cudarc",
@@ -4292,7 +4310,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-scene"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "blake3",
  "criterion",
@@ -4311,7 +4329,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-secrets"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "keyring",
@@ -4323,7 +4341,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-storage"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "blake3",
  "criterion",
@@ -4340,7 +4358,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "half",
@@ -4357,7 +4375,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "cmake",
@@ -4370,7 +4388,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-translator"
-version = "0.62.0-alpha.1"
+version = "0.62.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4770,6 +4788,12 @@ name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+
+[[package]]
+name = "minisign-verify"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22f9645cb765ea72b8111f36c522475d2daa0d22c957a9826437e97534bc4e9e"
 
 [[package]]
 name = "miniz_oxide"
@@ -5450,6 +5474,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-osa-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f112d1746737b0da274ef79a23aac283376f335f4095a083a267a082f21db0c0"
+dependencies = [
+ "bitflags 2.13.0",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+]
+
+[[package]]
 name = "objc2-quartz-core"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5726,6 +5762,20 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "serde",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "osakit"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "732c71caeaa72c065bb69d7ea08717bd3f4863a4f451402fc9513e29dbd5261b"
+dependencies = [
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "objc2-osa-kit",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7031,6 +7081,7 @@ checksum = "6b92b125634d9b795e7beca796cc790df15a7fb38323bf3196fda83292d06b1f"
 dependencies = [
  "aws-lc-rs",
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",
@@ -8329,6 +8380,96 @@ dependencies = [
  "syn 2.0.118",
  "tauri-codegen",
  "tauri-utils",
+]
+
+[[package]]
+name = "tauri-plugin"
+version = "2.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74be5dd4bed9afbd145e5716b5fa2ec28cbc29c34ffa61c258c9273d896c8020"
+dependencies = [
+ "anyhow",
+ "glob",
+ "plist",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tauri-utils",
+ "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-process"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d55511a7bf6cd70c8767b02c97bf8134fa434daf3926cfc1be0a0f94132d165a"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3214becf9ef5783c0ae99a3bb25adf5353a7a16ebf53e74b909e29205735c6c"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "windows-sys 0.60.2",
+ "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-updater"
+version = "2.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "806d9dac662c2e4594ff03c647a552f2c9bd544e7d0f683ec58f872f952ce4af"
+dependencies = [
+ "base64 0.22.1",
+ "dirs",
+ "flate2",
+ "futures-util",
+ "http 1.4.2",
+ "infer",
+ "log",
+ "minisign-verify",
+ "osakit",
+ "percent-encoding",
+ "reqwest",
+ "rustls",
+ "semver",
+ "serde",
+ "serde_json",
+ "tar",
+ "tauri",
+ "tauri-plugin",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "url",
+ "windows-sys 0.60.2",
+ "zip 4.6.1",
+]
+
+[[package]]
+name = "tauri-plugin-window-state"
+version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73736611e14142408d15353e21e3cca2f12a3cfb523ad0ce85999b6d2ef1a704"
+dependencies = [
+ "bitflags 2.13.0",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -10850,6 +10991,18 @@ dependencies = [
  "sha1",
  "time",
  "zstd 0.11.2+zstd.1.5.2",
+]
+
+[[package]]
+name = "zip"
+version = "4.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
+dependencies = [
+ "arbitrary",
+ "crc32fast",
+ "indexmap 2.14.0",
+ "memchr",
 ]
 
 [[package]]
