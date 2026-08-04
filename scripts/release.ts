@@ -1,4 +1,5 @@
-// @ts-nocheck
+#!/usr/bin/env bun
+
 import { exec as execCallback } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
