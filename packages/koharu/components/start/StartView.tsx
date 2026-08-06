@@ -1,13 +1,23 @@
 'use client'
 
-import { Folder, Plus, Settings, Trash2 } from 'lucide-react'
-import Image from 'next/image'
+import { Folder, FolderPlus, Plus, Settings, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
 import { commands, type ProjectSummary } from '@/lib/protocol'
 import { useKoharuStore } from '@/lib/store'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@koharu/ui/components/alert-dialog'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 
@@ -17,6 +27,7 @@ export function StartView() {
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [name, setName] = useState('')
   const [busy, setBusy] = useState<string | null>('list')
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setBusy('list')
@@ -54,109 +65,195 @@ export function StartView() {
     }
   }
 
-  const deleteProject = async (projectName: string) => {
-    if (busy || !window.confirm(`Delete “${projectName}” and all of its pages?`)) return
+  const deleteProject = async () => {
+    const projectName = projectToDelete
+    if (busy || !projectName) return
     setBusy(projectName)
     try {
       await call(commands.deleteProject, projectName)
       await reload()
+      setProjectToDelete(null)
     } finally {
       setBusy(null)
     }
   }
 
   return (
-    <main className='grid min-h-0 flex-1 place-items-center overflow-auto bg-[var(--surface-canvas)] px-4 py-6 sm:px-8'>
-      <section className='w-full max-w-[520px]' aria-labelledby='start-title'>
-        <header className='flex items-center gap-2.5 px-1'>
-          <span className='grid size-9 shrink-0 place-items-center rounded-xl bg-accent'>
-            <Image src='/icon.png' alt='' width={19} height={19} draggable={false} priority />
-          </span>
-          <div className='min-w-0'>
-            <h1 className='text-[13px] font-semibold tracking-[-0.02em]'>Koharu</h1>
-            <p className='text-[10px] text-muted-foreground'>Manga translation workspace</p>
-          </div>
-          <Button
-            type='button'
-            variant='ghost'
-            size='sm'
-            className='ml-auto h-8 gap-1.5 px-2.5 text-[10px] text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className='size-3' />
-            {t('native.menu.settings', { defaultValue: 'Settings' })}
-          </Button>
-        </header>
-
-        <div className='mt-4 overflow-hidden rounded-2xl bg-[var(--surface-panel)] shadow-[var(--shadow-panel)]'>
-          <div className='border-b border-border/70 px-5 py-4'>
-            <h2 id='start-title' className='text-[18px] font-semibold tracking-[-0.025em]'>
-              Projects
-            </h2>
-            <p className='mt-1 text-[11px] leading-4 text-muted-foreground'>
-              Projects stay in your Documents folder and are managed by Koharu.
-            </p>
-          </div>
-
-          <form className='flex gap-2 border-b border-border/70 p-3' onSubmit={createProject}>
-            <Input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder='Project name'
-              aria-label='Project name'
-              autoComplete='off'
-              disabled={busy !== null}
-            />
-            <Button type='submit' size='sm' className='gap-1.5' disabled={!name.trim() || busy !== null}>
-              <Plus className='size-3.5' />
-              Create
-            </Button>
-          </form>
-
-          <div className='max-h-72 min-h-28 overflow-y-auto p-2' aria-busy={busy === 'list'}>
-            {busy === 'list' && projects.length === 0 ? (
-              <p className='grid min-h-24 place-items-center text-[11px] text-muted-foreground'>
-                Loading projects…
+    <AlertDialog
+      open={projectToDelete !== null}
+      onOpenChange={(open) => {
+        if (!open && busy === null) setProjectToDelete(null)
+      }}
+    >
+      <main className='min-h-0 flex-1 overflow-auto bg-[var(--surface-canvas)]'>
+        <section
+          className='mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-10 sm:px-10 sm:py-14'
+          aria-labelledby='start-title'
+        >
+          <header className='flex items-start justify-between gap-6'>
+            <div>
+              <h1 id='start-title' className='text-[24px] font-semibold tracking-[-0.03em]'>
+                Projects
+              </h1>
+              <p className='mt-1 text-[12px] leading-5 text-muted-foreground'>
+                Open a workspace or start a new translation.
               </p>
-            ) : projects.length === 0 ? (
-              <div className='grid min-h-24 place-items-center text-center' role='status'>
-                <div>
-                  <Folder className='mx-auto size-5 text-muted-foreground/70' />
-                  <p className='mt-2 text-[11px] font-medium'>No projects yet</p>
-                  <p className='mt-0.5 text-[10px] text-muted-foreground'>Create one above to begin.</p>
-                </div>
+            </div>
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon-sm'
+              className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
+              aria-label={t('native.menu.settings', { defaultValue: 'Settings' })}
+              title={t('native.menu.settings', { defaultValue: 'Settings' })}
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className='size-4' />
+            </Button>
+          </header>
+
+          <div className='mt-7 grid min-h-[390px] overflow-hidden rounded-2xl border border-border/80 bg-[var(--surface-panel)] md:grid-cols-[300px_minmax(0,1fr)]'>
+            <aside className='flex flex-col border-b border-border/80 bg-[var(--surface-titlebar)]/55 p-6 md:border-r md:border-b-0'>
+              <span className='grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground'>
+                <FolderPlus className='size-[18px]' />
+              </span>
+              <h2 className='mt-5 text-[15px] font-semibold tracking-[-0.02em]'>New project</h2>
+              <p className='mt-1 max-w-[30ch] text-[11px] leading-[1.6] text-muted-foreground'>
+                Create a clean workspace for your pages, translations, and exports.
+              </p>
+
+              <form className='mt-6 grid gap-2.5' onSubmit={createProject}>
+                <label htmlFor='project-name' className='text-[10px] font-medium text-foreground'>
+                  Project name
+                </label>
+                <Input
+                  id='project-name'
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder='My new project'
+                  aria-label='Project name'
+                  autoComplete='off'
+                  disabled={busy !== null}
+                  className='h-9 bg-background text-[11px]'
+                />
+                <Button
+                  type='submit'
+                  size='sm'
+                  className='h-9 justify-center gap-1.5 text-[11px]'
+                  disabled={!name.trim() || busy !== null}
+                >
+                  <Plus className='size-3.5' />
+                  Create
+                </Button>
+              </form>
+
+              <p className='mt-auto pt-8 text-[10px] leading-4 text-muted-foreground'>
+                Projects are stored locally in your Documents folder.
+              </p>
+            </aside>
+
+            <section
+              className='flex min-h-[320px] min-w-0 flex-col'
+              aria-labelledby='project-list-title'
+            >
+              <header className='flex h-14 shrink-0 items-center border-b border-border/70 px-5'>
+                <h2 id='project-list-title' className='text-[12px] font-semibold'>
+                  Your projects
+                </h2>
+                <span className='ml-2 rounded-full bg-muted px-2 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
+                  {projects.length}
+                </span>
+              </header>
+
+              <div className='min-h-0 flex-1 overflow-y-auto p-2' aria-busy={busy === 'list'}>
+                {busy === 'list' && projects.length === 0 ? (
+                  <p className='grid min-h-full place-items-center text-[11px] text-muted-foreground'>
+                    Loading projects…
+                  </p>
+                ) : projects.length === 0 ? (
+                  <div
+                    className='grid min-h-full place-items-center px-6 text-center'
+                    role='status'
+                  >
+                    <div>
+                      <span className='mx-auto grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground'>
+                        <Folder className='size-[18px]' />
+                      </span>
+                      <p className='mt-3 text-[12px] font-medium'>No projects yet</p>
+                      <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
+                        Create your first project to start importing pages.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <ul className='grid gap-0.5' aria-label='Projects'>
+                    {projects.map((project) => (
+                      <li
+                        key={project.name}
+                        className='group flex items-center rounded-lg hover:bg-foreground/[0.045]'
+                      >
+                        <button
+                          type='button'
+                          className='flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
+                          onClick={() => void openProject(project.name).catch(() => undefined)}
+                          disabled={busy !== null}
+                        >
+                          <span className='grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground'>
+                            <Folder className='size-4' />
+                          </span>
+                          <span className='min-w-0'>
+                            <span className='block truncate text-[11px] font-medium'>
+                              {project.name}
+                            </span>
+                            <span className='mt-0.5 block text-[9px] text-muted-foreground'>
+                              Koharu project
+                            </span>
+                          </span>
+                        </button>
+                        <Button
+                          type='button'
+                          size='icon-sm'
+                          variant='ghost'
+                          className='mr-2 size-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100'
+                          aria-label={`Delete ${project.name}`}
+                          onClick={() => setProjectToDelete(project.name)}
+                          disabled={busy !== null}
+                        >
+                          <Trash2 className='size-3.5' />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            ) : (
-              <ul className='grid gap-1' aria-label='Projects'>
-                {projects.map((project) => (
-                  <li key={project.name} className='group flex items-center rounded-lg hover:bg-accent/60'>
-                    <button
-                      type='button'
-                      className='flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                      onClick={() => void openProject(project.name).catch(() => undefined)}
-                      disabled={busy !== null}
-                    >
-                      <Folder className='size-4 shrink-0 text-muted-foreground' />
-                      <span className='truncate text-[11px] font-medium'>{project.name}</span>
-                    </button>
-                    <Button
-                      type='button'
-                      size='icon-sm'
-                      variant='ghost'
-                      className='mr-1 size-7 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-                      aria-label={`Delete ${project.name}`}
-                      onClick={() => void deleteProject(project.name).catch(() => undefined)}
-                      disabled={busy !== null}
-                    >
-                      <Trash2 className='size-3.5' />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            </section>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia className='bg-destructive/10 text-destructive'>
+            <Trash2 className='size-5' />
+          </AlertDialogMedia>
+          <AlertDialogTitle>Delete project?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes “{projectToDelete}” and all of its pages. This action cannot be
+            undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant='destructive'
+            disabled={busy !== null}
+            aria-busy={busy !== null}
+            onClick={() => void deleteProject().catch(() => undefined)}
+          >
+            {busy !== null ? 'Deleting…' : 'Delete project'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
