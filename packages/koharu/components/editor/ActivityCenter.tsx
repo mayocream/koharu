@@ -13,9 +13,11 @@ export function ActivityCenter() {
   const visibleJobs = Object.values(jobs).filter(
     (job) => job.state === 'running' || job.state === 'failed',
   )
-  const visibleDownloads = Object.values(downloads).filter(
-    (download) => download.state === 'running' || download.state === 'failed',
+  const runningDownloads = Object.values(downloads).filter(
+    (download) => download.state === 'running',
   )
+  const failedDownloads = Object.values(downloads).filter((download) => download.state === 'failed')
+  const visibleDownloads = [...runningDownloads, ...failedDownloads]
   if (visibleJobs.length === 0 && visibleDownloads.length === 0) return null
 
   return (
@@ -23,13 +25,44 @@ export function ActivityCenter() {
       <div className='border-b px-3 py-2'>
         <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>Activity</span>
       </div>
-      {visibleDownloads.map((download) => (
+      {runningDownloads.length > 1 ? (
+        <DownloadGroup downloads={runningDownloads} />
+      ) : (
+        runningDownloads.map((download) => <DownloadItem key={download.id} download={download} />)
+      )}
+      {failedDownloads.map((download) => (
         <DownloadItem key={download.id} download={download} />
       ))}
       {visibleJobs.map((job) => (
         <JobItem key={job.id} job={job} />
       ))}
     </aside>
+  )
+}
+
+function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
+  const hasKnownTotal = downloads.every((download) => download.total > 0)
+  const percent = hasKnownTotal
+    ? progress(
+        downloads.reduce((sum, download) => sum + download.completed, 0),
+        downloads.reduce((sum, download) => sum + download.total, 0),
+      )
+    : null
+
+  return (
+    <div className='border-b p-3 last:border-b-0'>
+      <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
+        <Download className='mt-0.5 size-3.5 justify-self-center text-primary' />
+        <span className='truncate text-[11px]'>Downloading {downloads.length} files</span>
+        <span className='text-right text-[10px] tabular-nums'>
+          {percent !== null ? `${percent}%` : null}
+        </span>
+        <span aria-hidden='true' />
+        <div className='col-start-2 col-end-4'>
+          <Progress value={percent} />
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -117,7 +150,13 @@ function Failure({ message, onDismiss }: { message: string; onDismiss: () => voi
 
 function Progress({ value }: { value: number | null }) {
   return (
-    <div className='mt-2 h-1 overflow-hidden rounded-full bg-muted'>
+    <div
+      role='progressbar'
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value ?? undefined}
+      className='mt-2 h-1 overflow-hidden rounded-full bg-muted'
+    >
       <div
         className={`h-full rounded-full bg-primary ${value === null ? 'w-1/2' : ''}`}
         style={value === null ? undefined : { width: `${value}%` }}

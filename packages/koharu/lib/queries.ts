@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-query'
 
 import { call } from './backend'
-import { commands, type FontChoice, type PageImportSource } from './protocol'
+import { commands, type FontFace, type PageImportSource } from './protocol'
 
 export const projectKey = ['project'] as const
 export const pagesKey = ['pages'] as const
@@ -65,11 +65,18 @@ export function useFonts(enabled = true) {
   return useQuery({ ...fontsQuery, enabled })
 }
 
-export function useFontPreview(font: FontChoice, enabled = true) {
+export function useFontPreview(font: FontFace | undefined, enabled = true) {
   return useQuery({
-    queryKey: ['font-preview', font.postscript_name],
-    queryFn: async () => new Uint8Array(await call(commands.getFontPreview, font.postscript_name)),
-    enabled,
+    queryKey: ['font-preview', font?.postscript_name],
+    queryFn: async () => {
+      if (!font) return null
+      try {
+        return new Uint8Array(await commands.getFontPreview(font.postscript_name))
+      } catch {
+        return null
+      }
+    },
+    enabled: enabled && font !== undefined,
     gcTime: 5 * 60 * 1000,
   })
 }

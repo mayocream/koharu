@@ -60,6 +60,7 @@ export function CanvasOverlay({
     [page.layers, selected],
   )
   const selectedIds = useMemo(() => new Set(expandedSelection), [expandedSelection])
+  const multipleSelected = expandedSelection.length > 1
   const layers = useMemo(
     () =>
       page.layers.flatMap((layer) => {
@@ -166,7 +167,7 @@ export function CanvasOverlay({
           <div
             key={layer.id}
             data-element={layer.id}
-            data-moveable-target={selected || undefined}
+            data-moveable-target={(selected && !multipleSelected) || undefined}
             className='absolute box-border bg-transparent'
             style={{
               left: position.left,
@@ -175,7 +176,10 @@ export function CanvasOverlay({
               height: position.height,
               transform: `rotate(${position.angle}deg)`,
               transformOrigin: '50% 50%',
-              border: highlighted ? '1px solid var(--primary)' : undefined,
+              border:
+                highlighted || (selected && multipleSelected)
+                  ? '1px solid var(--canvas-selection)'
+                  : undefined,
               opacity,
               willChange: selected ? 'left, top, width, height, transform' : undefined,
             }}
@@ -198,7 +202,7 @@ export function CanvasOverlay({
 
       <Moveable
         ref={moveable}
-        target={targets.length === 1 ? targets[0] : targets}
+        target={targets[0] ?? null}
         flushSync={flushSync}
         className={selectedTextLayer ? 'koharu-moveable koharu-moveable-text' : 'koharu-moveable'}
         draggable={false}
@@ -235,8 +239,8 @@ function FitRegionOverlay({ geometry, camera }: { geometry: Geometry; camera: Ca
     <svg className='absolute inset-0 size-full overflow-hidden' data-testid='text-fit-region'>
       <polygon
         points={points}
-        fill='color-mix(in srgb, var(--primary) 7%, transparent)'
-        stroke='color-mix(in srgb, var(--primary) 58%, transparent)'
+        fill='color-mix(in srgb, var(--canvas-selection) 7%, transparent)'
+        stroke='color-mix(in srgb, var(--canvas-selection) 58%, transparent)'
         strokeWidth='1'
         strokeDasharray='4 3'
         strokeLinejoin='round'

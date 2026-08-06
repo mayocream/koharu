@@ -1,7 +1,7 @@
 //! System discovery, lazy bundled-font loading, fallback, and bounded byte caching.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
     future::Future,
     sync::{
@@ -12,8 +12,8 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use fontique::{
-    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontStyle, GenericFamily,
-    Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
+    GenericFamily, Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
 use harfrust::{ShaperData, ShaperInstance, Variation};
 use koharu_runtime::HuggingFaceFile;
@@ -24,7 +24,7 @@ use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use crate::{
     script::fontique_scripts,
-    types::{FontFaceInfo, FontFaceStyle, FontSource},
+    types::{FontAxisRange, FontFaceInfo, FontFaceStyle, FontFamilyInfo, FontSource},
 };
 
 const FONT_REPOSITORY: &str = "mayocream/fonts";
@@ -59,6 +59,7 @@ pub struct Font {
     data: Blob<u8>,
     index: u32,
     family_name: String,
+    font_name: String,
     post_script_name: String,
     synthesis: fontique::Synthesis,
     shaper_data: Arc<ShaperData>,
@@ -73,6 +74,7 @@ impl fmt::Debug for Font {
             .debug_struct("Font")
             .field("index", &self.index)
             .field("family_name", &self.family_name)
+            .field("font_name", &self.font_name)
             .field("post_script_name", &self.post_script_name)
             .field("synthesis", &self.synthesis)
             .finish_non_exhaustive()
@@ -109,6 +111,12 @@ impl Font {
             .iter()
             .map(|coord| coord.to_bits())
             .collect();
+        let font_name = skrifa_font
+            .localized_strings(StringId::new(4))
+            .english_or_first()
+            .map(|name| name.to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| family_name.clone());
         let post_script_name = skrifa_font
             .localized_strings(StringId::new(6))
             .english_or_first()
@@ -120,6 +128,7 @@ impl Font {
             data: font.blob,
             index: font.index,
             family_name,
+            font_name,
             post_script_name,
             synthesis: font.synthesis,
             shaper_data,
@@ -218,6 +227,7 @@ pub(crate) fn font_key(font: &Font) -> usize {
 #[derive(Clone, Debug)]
 pub(crate) struct FontFace {
     pub(crate) family_name: String,
+    pub(crate) font_name: String,
     pub(crate) post_script_name: String,
     pub(crate) weight: u16,
     pub(crate) stretch: u16,
@@ -438,6 +448,7 @@ impl FontSystem {
                 };
                 faces.push(FontFace {
                     family_name: family_name.clone(),
+                    font_name: font.font_name,
                     post_script_name: font.post_script_name,
                     weight: info.weight().value().round().clamp(1.0, 1000.0) as u16,
                     stretch: info.width().percentage().round().clamp(1.0, 1000.0) as u16,
@@ -485,38 +496,72 @@ impl Fonts {
         self.generation.load(Ordering::Acquire)
     }
 
-    pub(crate) async fn faces(&self) -> Result<Vec<FontFaceInfo>> {
+    pub(crate) async fn families(&self) -> Result<Vec<FontFamilyInfo>> {
         let catalog = self.catalog().await?;
-        let mut faces = self
-            .system
-            .lock()
-            .system_faces()
-            .into_iter()
-            .map(|face| FontFaceInfo {
-                family_name: face.family_name,
-                post_script_name: face.post_script_name,
-                weight: face.weight,
-                stretch: face.stretch,
-                style: face.style,
-                source: FontSource::System,
-            })
-            .collect::<Vec<_>>();
-        faces.extend(catalog.faces.iter().map(|face| face.info()));
-        faces.sort_by(|left, right| {
-            left.source
-                .cmp(&right.source)
-                .then_with(|| left.family_name.cmp(&right.family_name))
-                .then_with(|| left.post_script_name.cmp(&right.post_script_name))
-        });
-        let mut seen = HashSet::new();
-        faces.retain(|face| seen.insert(normalize(&face.post_script_name)));
-        faces.sort_by(|left, right| {
-            left.family_name
-                .cmp(&right.family_name)
-                .then_with(|| left.post_script_name.cmp(&right.post_script_name))
-                .then_with(|| left.source.cmp(&right.source))
-        });
-        Ok(faces)
+        let mut families = BTreeMap::<String, FontFamilyInfo>::new();
+
+        for face in self.system.lock().system_faces() {
+            let key = normalize(&face.family_name);
+            families
+                .entry(key)
+                .or_insert_with(|| FontFamilyInfo {
+                    family_name: face.family_name.clone(),
+                    primary_script: None,
+                    scripts: Vec::new(),
+                    primary_language: None,
+                    languages: Vec::new(),
+                    faces: Vec::new(),
+                })
+                .faces
+                .push(FontFaceInfo {
+                    font_name: face.font_name,
+                    post_script_name: face.post_script_name,
+                    weight: face.weight,
+                    weight_range: None,
+                    stretch: face.stretch,
+                    stretch_range: None,
+                    style: face.style,
+                    source: FontSource::System,
+                });
+        }
+
+        for bundled in &catalog.families {
+            let key = normalize(&bundled.family_name);
+            let family = families.entry(key).or_insert_with(|| bundled.info());
+            if family.primary_script.is_none() {
+                family.primary_script.clone_from(&bundled.primary_script);
+                family.scripts.clone_from(&bundled.scripts);
+                family
+                    .primary_language
+                    .clone_from(&bundled.primary_language);
+                family.languages.clone_from(&bundled.languages);
+            }
+            let mut known = family
+                .faces
+                .iter()
+                .map(|face| normalize(&face.post_script_name))
+                .collect::<HashSet<_>>();
+            family.faces.extend(
+                bundled
+                    .faces
+                    .iter()
+                    .filter(|face| known.insert(normalize(&face.post_script_name)))
+                    .map(|face| face.info()),
+            );
+        }
+
+        let mut families = families.into_values().collect::<Vec<_>>();
+        for family in &mut families {
+            family.faces.sort_by(|left, right| {
+                left.style
+                    .cmp(&right.style)
+                    .then_with(|| left.weight.cmp(&right.weight))
+                    .then_with(|| left.stretch.cmp(&right.stretch))
+                    .then_with(|| left.source.cmp(&right.source))
+                    .then_with(|| left.post_script_name.cmp(&right.post_script_name))
+            });
+        }
+        Ok(families)
     }
 
     pub(crate) fn resolve(
@@ -679,7 +724,19 @@ fn font_from_blob(blob: Blob<u8>, face: &BundledFace, attributes: Attributes) ->
         shared: false,
         system_fonts: false,
     });
-    if collection.register_fonts(blob, None).is_empty() {
+    // The catalog owns the public family name. CJK fonts often expose a different
+    // localized name in their internal records, so register the face under the
+    // catalog name before querying it.
+    if collection
+        .register_fonts(
+            blob,
+            Some(FontInfoOverride {
+                family_name: Some(&face.family_name),
+                ..FontInfoOverride::default()
+            }),
+        )
+        .is_empty()
+    {
         bail!("font file {:?} contained no usable faces", face.file_name);
     }
     let mut sources = SourceCache::new(Default::default());
@@ -731,40 +788,50 @@ where
 }
 
 struct FontCatalog {
-    faces: Vec<Arc<BundledFace>>,
-    families: HashMap<String, Vec<Arc<BundledFace>>>,
+    families: Vec<Arc<BundledFamily>>,
+    family_names: HashMap<String, Arc<BundledFamily>>,
     post_script_names: HashMap<String, Arc<BundledFace>>,
 }
 
 impl FontCatalog {
     fn from_index(index: CatalogIndex) -> Self {
-        let mut faces = Vec::new();
-        let mut families = HashMap::<String, Vec<Arc<BundledFace>>>::new();
+        let mut families = Vec::new();
+        let mut family_names = HashMap::new();
         let mut post_script_names = HashMap::new();
         for family in index.families {
+            let mut faces = Vec::new();
             for weight in family.weights {
                 for font in weight.fonts {
                     let face = Arc::new(BundledFace {
                         family_name: family.family_name.clone(),
                         file_name: font.file_name,
+                        font_name: font.font_name,
                         post_script_name: font.postscript_name,
                         weight: weight.weight,
+                        weight_range: font.weight_range.map(FontAxisRange::weight),
                         stretch: (font.width * 100.0).round().clamp(1.0, 1000.0) as u16,
+                        stretch_range: font.width_range.map(FontAxisRange::width),
                         style: font.style,
                         load: AsyncMutex::new(()),
                     });
-                    families
-                        .entry(normalize(&face.family_name))
-                        .or_default()
-                        .push(face.clone());
                     post_script_names.insert(normalize(&face.post_script_name), face.clone());
                     faces.push(face);
                 }
             }
+            let family = Arc::new(BundledFamily {
+                family_name: family.family_name,
+                primary_script: family.primary_script,
+                scripts: family.scripts,
+                primary_language: family.primary_language,
+                languages: family.languages,
+                faces,
+            });
+            family_names.insert(normalize(&family.family_name), family.clone());
+            families.push(family);
         }
         Self {
-            faces,
             families,
+            family_names,
             post_script_names,
         }
     }
@@ -773,8 +840,9 @@ impl FontCatalog {
         if let Some(face) = self.post_script_names.get(&normalize(name)) {
             return Some(face.clone());
         }
-        self.families
+        self.family_names
             .get(&normalize(name))?
+            .faces
             .iter()
             .min_by_key(|face| {
                 let style = if fontique::FontStyle::from(face.style) == attributes.style {
@@ -782,7 +850,14 @@ impl FontCatalog {
                 } else {
                     2_000
                 };
-                style + (f32::from(face.weight) - attributes.weight.value()).abs() as u32
+                let weight =
+                    axis_distance(attributes.weight.value(), face.weight, face.weight_range);
+                let stretch = axis_distance(
+                    attributes.width.percentage(),
+                    face.stretch,
+                    face.stretch_range,
+                );
+                style + weight + stretch
             })
             .cloned()
     }
@@ -792,12 +867,37 @@ impl FontCatalog {
     }
 }
 
+struct BundledFamily {
+    family_name: String,
+    primary_script: Option<String>,
+    scripts: Vec<String>,
+    primary_language: Option<String>,
+    languages: Vec<String>,
+    faces: Vec<Arc<BundledFace>>,
+}
+
+impl BundledFamily {
+    fn info(&self) -> FontFamilyInfo {
+        FontFamilyInfo {
+            family_name: self.family_name.clone(),
+            primary_script: self.primary_script.clone(),
+            scripts: self.scripts.clone(),
+            primary_language: self.primary_language.clone(),
+            languages: self.languages.clone(),
+            faces: self.faces.iter().map(|face| face.info()).collect(),
+        }
+    }
+}
+
 struct BundledFace {
     family_name: String,
     file_name: String,
+    font_name: String,
     post_script_name: String,
     weight: u16,
+    weight_range: Option<FontAxisRange>,
     stretch: u16,
+    stretch_range: Option<FontAxisRange>,
     style: CatalogStyle,
     load: AsyncMutex<()>,
 }
@@ -805,10 +905,12 @@ struct BundledFace {
 impl BundledFace {
     fn info(&self) -> FontFaceInfo {
         FontFaceInfo {
-            family_name: self.family_name.clone(),
+            font_name: self.font_name.clone(),
             post_script_name: self.post_script_name.clone(),
             weight: self.weight,
+            weight_range: self.weight_range,
             stretch: self.stretch,
+            stretch_range: self.stretch_range,
             style: self.style.into(),
             source: FontSource::Bundled,
         }
@@ -888,6 +990,12 @@ struct CatalogIndex {
 #[derive(Deserialize)]
 struct CatalogFamily {
     family_name: String,
+    primary_script: Option<String>,
+    #[serde(default)]
+    scripts: Vec<String>,
+    primary_language: Option<String>,
+    #[serde(default)]
+    languages: Vec<String>,
     weights: Vec<CatalogWeight>,
 }
 
@@ -900,9 +1008,18 @@ struct CatalogWeight {
 #[derive(Deserialize)]
 struct CatalogFont {
     file_name: String,
+    font_name: String,
     postscript_name: String,
     style: CatalogStyle,
     width: f32,
+    weight_range: Option<CatalogRange>,
+    width_range: Option<CatalogRange>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+struct CatalogRange {
+    minimum: f32,
+    maximum: f32,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, PartialEq)]
@@ -935,4 +1052,86 @@ impl From<CatalogStyle> for fontique::FontStyle {
 
 fn normalize(value: &str) -> String {
     value.trim().to_lowercase()
+}
+
+impl FontAxisRange {
+    fn weight(range: CatalogRange) -> Self {
+        Self {
+            minimum: range.minimum.round().clamp(1.0, 1000.0) as u16,
+            maximum: range.maximum.round().clamp(1.0, 1000.0) as u16,
+        }
+    }
+
+    fn width(range: CatalogRange) -> Self {
+        Self {
+            minimum: (range.minimum * 100.0).round().clamp(1.0, 1000.0) as u16,
+            maximum: (range.maximum * 100.0).round().clamp(1.0, 1000.0) as u16,
+        }
+    }
+}
+
+fn axis_distance(value: f32, default: u16, range: Option<FontAxisRange>) -> u32 {
+    let distance = match range {
+        Some(range) if value < f32::from(range.minimum) => f32::from(range.minimum) - value,
+        Some(range) if value > f32::from(range.maximum) => value - f32::from(range.maximum),
+        Some(_) => 0.0,
+        None => (f32::from(default) - value).abs(),
+    };
+    distance.round() as u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalog_preserves_family_metadata_and_face_ranges() {
+        let index = serde_json::from_str::<CatalogIndex>(
+            r#"{
+                "schema_version": 2,
+                "families": [{
+                    "family_name": "Example Sans",
+                    "primary_script": "latn",
+                    "scripts": ["latn"],
+                    "primary_language": "en",
+                    "languages": ["en"],
+                    "weights": [{
+                        "weight": 400,
+                        "fonts": [{
+                            "file_name": "ExampleSans.ttf",
+                            "font_name": "Example Sans Regular",
+                            "postscript_name": "ExampleSans-Regular",
+                            "style": "normal",
+                            "width": 1.0,
+                            "weight_range": { "minimum": 300, "maximum": 700 },
+                            "width_range": { "minimum": 0.75, "maximum": 1.0 }
+                        }]
+                    }]
+                }]
+            }"#,
+        )
+        .expect("the index fixture must deserialize");
+
+        let catalog = FontCatalog::from_index(index);
+        let family = &catalog.families[0];
+        assert_eq!(family.family_name, "Example Sans");
+        assert_eq!(family.primary_script.as_deref(), Some("latn"));
+        assert_eq!(family.scripts, ["latn"]);
+        let face = &family.faces[0];
+        assert_eq!(face.font_name, "Example Sans Regular");
+        assert_eq!(
+            face.weight_range,
+            Some(FontAxisRange {
+                minimum: 300,
+                maximum: 700
+            })
+        );
+        assert_eq!(
+            face.stretch_range,
+            Some(FontAxisRange {
+                minimum: 75,
+                maximum: 100
+            })
+        );
+    }
 }

@@ -20,6 +20,7 @@
   --border: #e5e5e5;
   --input: #d3d3d3;
   --ring: #d85b6a;
+  --canvas-selection: #f43f5e;
   --surface-titlebar: #fff6f7;
   --surface-toolbar: #ffffff;
   --surface-sidebar: var(--surface-titlebar);
@@ -167,11 +168,7 @@
   }
 
   .koharu-moveable {
-    --moveable-color: var(--primary);
-  }
-
-  .koharu-moveable-text {
-    --moveable-color: var(--primary);
+    --moveable-color: var(--canvas-selection);
   }
 
   .koharu-moveable .moveable-control {

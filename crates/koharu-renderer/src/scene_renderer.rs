@@ -18,7 +18,7 @@ use vello::{
 };
 
 use crate::{
-    Composition, Error, FontFaceInfo, RenderDependency, RenderDiagnostic, RenderRequest,
+    Composition, Error, FontFamilyInfo, RenderDependency, RenderDiagnostic, RenderRequest,
     RenderTheme, Result, TextLayout, TextRenderOptions, WritingMode,
     compositor::{ImageLayer, Layer, RenderBounds},
     fonts::Fonts,
@@ -46,20 +46,32 @@ impl SceneRenderer {
         }
     }
 
-    pub async fn available_fonts() -> Result<Vec<FontFaceInfo>> {
-        Fonts::shared().faces().await.map_err(Error::FontResource)
+    pub async fn available_fonts() -> Result<Vec<FontFamilyInfo>> {
+        Fonts::shared()
+            .families()
+            .await
+            .map_err(Error::FontResource)
     }
 
     pub async fn font_preview(post_script_name: &str) -> Result<FontPreview> {
         const FONT_SIZE: f32 = 24.0;
         const PADDING: f32 = 6.0;
 
-        let font = Fonts::shared()
+        let fonts = Fonts::shared();
+        let font = fonts
             .by_post_script_name(post_script_name)
             .await
             .map_err(Error::FontResource)?;
         let label = font.family_name().to_owned();
-        let layout = TextLayout::new(&font)
+        let preview_fonts = if font.covers(&label) {
+            vec![font]
+        } else {
+            fonts
+                .resolve(Some("Arial"), Some(400), &[], &label, None)
+                .map_err(Error::FontResource)?
+        };
+        let layout = TextLayout::new(&preview_fonts[0])
+            .with_fallback_fonts(&preview_fonts[1..])
             .with_font_size(FONT_SIZE)
             .run(&label)
             .map_err(Error::FontResource)?;

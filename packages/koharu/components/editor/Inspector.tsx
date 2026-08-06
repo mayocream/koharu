@@ -37,7 +37,7 @@ import {
 import {
   commands,
   type EntityId,
-  type FontChoice,
+  type FontFamily,
   type Layer,
   type TextAlignment,
   type Typography,
@@ -71,13 +71,24 @@ import {
 import { Slider } from '@koharu/ui/components/slider'
 import { Switch } from '@koharu/ui/components/switch'
 
-const defaultFont: FontChoice = {
-  family: 'CCWildWords',
-  postscript_name: 'CCWildWords-Regular',
-  weight: 400,
-  stretch: 100,
-  style: 'normal',
-  source: 'bundled',
+const defaultFont: FontFamily = {
+  name: 'CCWildWords',
+  primary_script: 'latn',
+  scripts: ['latn'],
+  primary_language: 'en',
+  languages: ['en'],
+  faces: [
+    {
+      name: 'CCWildWords Regular',
+      postscript_name: 'CCWildWords-Regular',
+      weight: 400,
+      weight_range: null,
+      stretch: 100,
+      stretch_range: null,
+      style: 'normal',
+      source: 'bundled',
+    },
+  ],
 }
 
 const defaultTypography: Typography = {
@@ -146,9 +157,18 @@ function TypeInspector() {
       ? draft.typography
       : (current?.typography ?? defaultTypography)
   const disabled = !current
-  const fonts = useMemo(() => [...(availableFonts ?? []), defaultFont], [availableFonts])
+  const families = useMemo(() => {
+    const available = availableFonts ?? []
+    return available.some(
+      (family) => normalizeFontName(family.name) === normalizeFontName(defaultFont.name),
+    )
+      ? available
+      : [...available, defaultFont]
+  }, [availableFonts])
   const size = Math.round((typography.size ?? 24) * 100) / 100
   const weight = typography.font_weight ?? 400
+  const selectedFamily = findFontFamily(families, typography.preferred_font ?? defaultFont.name)
+  const weights = usableFontWeights(selectedFamily)
   const strokeWidth = typography.stroke_width ?? 0
   const strokeEnabled = strokeWidth > 0
   const displayedStrokeWidth = strokeEnabled ? strokeWidth : 1.5
@@ -159,11 +179,19 @@ function TypeInspector() {
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1.5'>
           <InspectorField label='Font'>
             <FontPicker
-              value={typography.preferred_font ?? defaultFont.family}
-              fonts={fonts}
+              value={typography.preferred_font ?? defaultFont.name}
+              families={families}
               disabled={disabled}
               size='sm'
-              onChange={(preferred_font) => apply((value) => ({ ...value, preferred_font }))}
+              onChange={(preferred_font) => {
+                const nextWeights = usableFontWeights(findFontFamily(families, preferred_font))
+                const fontWeight = nearestFontWeight(nextWeights, weight)
+                apply((value) => ({
+                  ...value,
+                  preferred_font,
+                  font_weight: fontWeight,
+                }))
+              }}
             />
           </InspectorField>
           <InspectorField label='Weight'>
@@ -178,7 +206,7 @@ function TypeInspector() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((value) => (
+                {weights.map((value) => (
                   <SelectItem key={value} value={String(value)}>
                     {value}
                   </SelectItem>
@@ -310,6 +338,38 @@ function TypeInspector() {
       </div>
     </div>
   )
+}
+
+function findFontFamily(families: FontFamily[], name: string): FontFamily | undefined {
+  return families.find((family) => normalizeFontName(family.name) === normalizeFontName(name))
+}
+
+function usableFontWeights(family: FontFamily | undefined): number[] {
+  if (!family) return [400]
+  const regular = family.faces.filter((font) => font.style === 'normal')
+  const faces = regular.length ? regular : family.faces
+  const weights = new Set(faces.map((font) => font.weight))
+  for (const face of faces) {
+    if (!face.weight_range) continue
+    weights.add(face.weight_range.minimum)
+    weights.add(face.weight_range.maximum)
+    for (let weight = 100; weight <= 900; weight += 100) {
+      if (weight >= face.weight_range.minimum && weight <= face.weight_range.maximum) {
+        weights.add(weight)
+      }
+    }
+  }
+  return [...weights].sort((left, right) => left - right)
+}
+
+function nearestFontWeight(weights: number[], target: number): number {
+  return weights.reduce((nearest, weight) =>
+    Math.abs(weight - target) < Math.abs(nearest - target) ? weight : nearest,
+  )
+}
+
+function normalizeFontName(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function displayedLayers(layers: Layer[], page: EntityId) {

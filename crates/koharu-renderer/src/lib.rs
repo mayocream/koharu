@@ -33,4 +33,6 @@ pub use segment::{
 };
 pub use shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
 pub use text_renderer::{StrokeOptions, TextRenderOptions, TextRenderer};
-pub use types::{FontFaceInfo, FontFaceStyle, FontSource, TextAlign};
+pub use types::{
+    FontAxisRange, FontFaceInfo, FontFaceStyle, FontFamilyInfo, FontSource, TextAlign,
+};

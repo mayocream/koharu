@@ -2,8 +2,8 @@ use std::sync::LazyLock;
 
 use anyhow::{Context as _, anyhow};
 use koharu_renderer::{
-    FontFaceStyle as RenderFontStyle, FontSource as RenderFontSource, RasterOptions, Rasterizer,
-    SceneRenderer,
+    FontAxisRange as RenderFontAxisRange, FontFaceStyle as RenderFontStyle,
+    FontSource as RenderFontSource, RasterOptions, Rasterizer, SceneRenderer,
 };
 use serde::Serialize;
 use specta::Type;
@@ -12,13 +12,31 @@ use tauri::ipc::IpcResponse;
 use super::Error;
 
 #[derive(Clone, Debug, Serialize, Type)]
-pub struct FontChoice {
-    pub family: String,
+pub struct FontFamily {
+    pub name: String,
+    pub primary_script: Option<String>,
+    pub scripts: Vec<String>,
+    pub primary_language: Option<String>,
+    pub languages: Vec<String>,
+    pub faces: Vec<FontFace>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct FontFace {
+    pub name: String,
     pub postscript_name: String,
     pub weight: u16,
+    pub weight_range: Option<FontRange>,
     pub stretch: u16,
+    pub stretch_range: Option<FontRange>,
     pub style: FontStyle,
     pub source: FontSource,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Type)]
+pub struct FontRange {
+    pub minimum: u16,
+    pub maximum: u16,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Type)]
@@ -48,26 +66,48 @@ impl IpcResponse for FontPreviewBytes {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn get_fonts() -> std::result::Result<Vec<FontChoice>, Error> {
+pub(crate) async fn get_fonts() -> std::result::Result<Vec<FontFamily>, Error> {
     Ok(SceneRenderer::available_fonts()
         .await?
         .into_iter()
-        .map(|font| FontChoice {
-            family: font.family_name,
-            postscript_name: font.post_script_name,
-            weight: font.weight,
-            stretch: font.stretch,
-            style: match font.style {
-                RenderFontStyle::Normal => FontStyle::Normal,
-                RenderFontStyle::Italic => FontStyle::Italic,
-                RenderFontStyle::Oblique => FontStyle::Oblique,
-            },
-            source: match font.source {
-                RenderFontSource::System => FontSource::System,
-                RenderFontSource::Bundled => FontSource::Bundled,
-            },
+        .map(|family| FontFamily {
+            name: family.family_name,
+            primary_script: family.primary_script,
+            scripts: family.scripts,
+            primary_language: family.primary_language,
+            languages: family.languages,
+            faces: family
+                .faces
+                .into_iter()
+                .map(|face| FontFace {
+                    name: face.font_name,
+                    postscript_name: face.post_script_name,
+                    weight: face.weight,
+                    weight_range: face.weight_range.map(FontRange::from),
+                    stretch: face.stretch,
+                    stretch_range: face.stretch_range.map(FontRange::from),
+                    style: match face.style {
+                        RenderFontStyle::Normal => FontStyle::Normal,
+                        RenderFontStyle::Italic => FontStyle::Italic,
+                        RenderFontStyle::Oblique => FontStyle::Oblique,
+                    },
+                    source: match face.source {
+                        RenderFontSource::System => FontSource::System,
+                        RenderFontSource::Bundled => FontSource::Bundled,
+                    },
+                })
+                .collect(),
         })
         .collect())
+}
+
+impl From<RenderFontAxisRange> for FontRange {
+    fn from(value: RenderFontAxisRange) -> Self {
+        Self {
+            minimum: value.minimum,
+            maximum: value.maximum,
+        }
+    }
 }
 
 #[tauri::command]

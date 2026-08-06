@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render as testingRender, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -13,7 +14,7 @@ import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { SettingsPage } from '@/components/preferences/SettingsPage'
 import { commands, type Layer, type Preferences } from '@/lib/protocol'
-import { pageKey, pagesKey, projectKey, queryClient } from '@/lib/queries'
+import { fontsKey, pageKey, pagesKey, projectKey, queryClient } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
@@ -206,6 +207,7 @@ describe('greenfield editor', () => {
   })
 
   it('switches tools and applies typography from the contextual inspector', async () => {
+    const user = userEvent.setup()
     installProject()
     const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
     render(
@@ -220,8 +222,10 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Text' }))
     expect(screen.getByTestId('type-inspector')).toBeInTheDocument()
     expect(screen.getByTestId('type-font-picker')).toHaveTextContent('Noto Sans')
-    expect(screen.getByTestId('type-size')).toHaveValue('0')
-    fireEvent.change(screen.getByTestId('type-size'), { target: { value: '18' } })
+    expect(screen.getByTestId('type-size')).toHaveValue('24')
+    await user.clear(screen.getByTestId('type-size'))
+    await user.type(screen.getByTestId('type-size'), '18')
+    await user.tab()
     await waitFor(() =>
       expect(setTypography).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -232,6 +236,58 @@ describe('greenfield editor', () => {
         ]),
       ),
     )
+  })
+
+  it('only offers weights available for the selected font family', () => {
+    installProject()
+    queryClient.setQueryData(fontsKey, [
+      {
+        name: 'Noto Sans',
+        primary_script: 'latn',
+        scripts: ['latn'],
+        primary_language: 'en',
+        languages: ['en'],
+        faces: [
+          {
+            name: 'Noto Sans Regular',
+            postscript_name: 'NotoSans-Regular',
+            weight: 400,
+            weight_range: null,
+            stretch: 100,
+            stretch_range: null,
+            style: 'normal',
+            source: 'system',
+          },
+          {
+            name: 'Noto Sans Bold',
+            postscript_name: 'NotoSans-Bold',
+            weight: 700,
+            weight_range: null,
+            stretch: 100,
+            stretch_range: null,
+            style: 'normal',
+            source: 'system',
+          },
+          {
+            name: 'Noto Sans Italic',
+            postscript_name: 'NotoSans-Italic',
+            weight: 400,
+            weight_range: null,
+            stretch: 100,
+            stretch_range: null,
+            style: 'italic',
+            source: 'system',
+          },
+        ],
+      },
+    ])
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Font weight' }))
+
+    expect(screen.getByRole('option', { name: '400' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '700' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '100' })).not.toBeInTheDocument()
   })
 
   it('debounces layer text editing and flushes it when focus leaves the field', async () => {
@@ -476,5 +532,36 @@ describe('greenfield editor', () => {
     expect(screen.getByText('25%')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     await waitFor(() => expect(stop).toHaveBeenCalledWith('job'))
+  })
+
+  it('combines concurrent downloads into one progress bar', () => {
+    useKoharuStore.setState({
+      downloads: {
+        one: {
+          id: 1,
+          state: 'running',
+          name: 'one.ttf',
+          completed: 25,
+          total: 100,
+          error: null,
+        },
+        two: {
+          id: 2,
+          state: 'running',
+          name: 'two.ttf',
+          completed: 75,
+          total: 100,
+          error: null,
+        },
+      },
+    })
+
+    render(<ActivityCenter />)
+
+    expect(screen.getByText('Downloading 2 files')).toBeInTheDocument()
+    expect(screen.getByText('50%')).toBeInTheDocument()
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
+    expect(screen.queryByText('one.ttf')).not.toBeInTheDocument()
+    expect(screen.queryByText('two.ttf')).not.toBeInTheDocument()
   })
 })
