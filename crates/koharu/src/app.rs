@@ -1,7 +1,4 @@
-use std::{
-    path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context as _, Result};
 use parking_lot::Mutex;
@@ -15,7 +12,7 @@ use crate::commands::{
         ResourceChannel,
     },
     processing::{JobChannel, Processing},
-    project::{CurrentProject, Project},
+    project::{CurrentProject, ProjectLibrary},
 };
 
 pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
@@ -57,32 +54,14 @@ pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
     Ok(())
 }
 
-pub fn run(initial_path: Option<PathBuf>, context: tauri::Context<tauri::Wry>) -> Result<()> {
+pub fn run(context: tauri::Context<tauri::Wry>) -> Result<()> {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|handle, arguments, cwd| {
-            let cwd = PathBuf::from(cwd);
-            let project = arguments.into_iter().skip(1).find_map(|argument| {
-                let path = PathBuf::from(argument);
-                path.extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("khr"))
-                    .then(|| if path.is_absolute() { path } else { cwd.join(path) })
-            });
-            let handle = handle.clone();
-            drop(tauri::async_runtime::spawn(async move {
-                if let Some(path) = project {
-                    let opened =
-                        crate::commands::lifecycle::open_project_path(&handle, path.clone()).await;
-                    if let Err(error) = opened {
-                        tracing::error!(%error, path = %path.display(), "could not open the forwarded project");
-                    }
-                }
-                if let Some(window) = handle.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }));
+        .plugin(tauri_plugin_single_instance::init(|handle, _, _| {
+            if let Some(window) = handle.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
         }))
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -98,10 +77,10 @@ pub fn run(initial_path: Option<PathBuf>, context: tauri::Context<tauri::Wry>) -
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
-            let project = initial_path.map(Project::open).transpose()?;
             application.manage(CurrentProject {
-                project: Mutex::new(project),
+                project: Mutex::new(None),
             });
+            application.manage(ProjectLibrary::new()?);
             application.manage(CanvasView {
                 fitted: AtomicBool::new(true),
             });

@@ -78,20 +78,8 @@ export function TitleBar() {
         <MenubarMenu>
           <MenubarTrigger>{t('native.menu.file', { defaultValue: 'File' })}</MenubarTrigger>
           <MenubarContent>
-            <MenubarItem
-              onClick={() =>
-                void call(commands.createProject).catch(() => undefined)
-              }
-            >
-              {t('native.menu.newProject', { defaultValue: 'New Project…' })}
-              <MenubarShortcut>Ctrl+N</MenubarShortcut>
-            </MenubarItem>
-            <MenubarItem
-              onClick={() =>
-                void call(commands.openProject).catch(() => undefined)
-              }
-            >
-              {t('native.menu.openProject', { defaultValue: 'Open Project…' })}
+            <MenubarItem disabled={!project} onClick={closeProject}>
+              Projects…
               <MenubarShortcut>Ctrl+O</MenubarShortcut>
             </MenubarItem>
             <MenubarSeparator />

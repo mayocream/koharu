@@ -38,20 +38,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "fileAssociations": [
-      {
-        "ext": ["khr"],
-        "name": "Koharu Project",
-        "description": "Koharu Project",
-        "role": "Editor",
-        "mimeType": "application/x-koharu-project",
-        "rank": "Owner",
-        "exportedType": {
-          "identifier": "dev.koharu.project",
-          "conformsTo": ["public.data"]
-        }
-      }
-    ],
     "createUpdaterArtifacts": true
   },
   "plugins": {

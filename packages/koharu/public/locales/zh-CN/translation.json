@@ -74,8 +74,7 @@
       "title": "漫画翻译工作区",
       "description": "在一个专注的工作空间中完成每页的清理、翻译与排版。",
       "newProject": "新建项目",
-      "openProject": "打开项目",
-      "openHint": "选择已有的 .khr 文件"
+      "openProject": "打开项目"
     },
     "menu": {
       "file": "文件",
@@ -310,7 +309,6 @@
     "subtitle": "漫画翻译工作区",
     "new": "新建项目",
     "newDescription": "从空白开始，稍后导入页面",
-    "importKhr": "导入 .khr 压缩包",
     "projects": "最近使用",
     "emptyHint": "您的最近项目将显示在这里",
     "delete": "删除",
@@ -322,8 +320,6 @@
   "operations": {
     "title": "处理中",
     "inProgress": "请稍候，正在处理。",
-    "loadKhr": "正在加载项目",
-    "saveKhr": "正在保存项目",
     "loadModel": "正在加载 LLM 模型",
     "processCurrent": "正在处理当前图片",
     "processAll": "正在批量处理所有图片",

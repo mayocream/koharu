@@ -35,8 +35,10 @@ export const commands = {
 	layers: Layer[],
 	regions: AnalysisRegion[],
 } | null>("get_page").then((v) => (v==null?v:({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
-	createProject: () => __TAURI_INVOKE<null>("create_project"),
-	openProject: () => __TAURI_INVOKE<null>("open_project"),
+	listProjects: () => __TAURI_INVOKE<ProjectSummary[]>("list_projects"),
+	createProject: (name: string) => __TAURI_INVOKE<null>("create_project", { name }),
+	openProject: (name: string) => __TAURI_INVOKE<null>("open_project", { name }),
+	deleteProject: (name: string) => __TAURI_INVOKE<null>("delete_project", { name }),
 	closeProject: () => __TAURI_INVOKE<null>("close_project"),
 	importPages: (source: PageImportSource) => __TAURI_INVOKE<null>("import_pages", { source }),
 	selectPage: (page: EntityId) => __TAURI_INVOKE<null>("select_page", { page }),
@@ -416,6 +418,10 @@ export type ProjectInfo = {
 	active_page: EntityId | null,
 	can_undo: boolean,
 	can_redo: boolean,
+};
+
+export type ProjectSummary = {
+	name: string,
 };
 
 export type Provider = "local" | "atlas-cloud" | "openai" | "gemini" | "claude" | "deepseek" | "openai-compatible" | "openrouter" | "lm-studio" | "deepl" | "google-cloud-translation" | "caiyun";

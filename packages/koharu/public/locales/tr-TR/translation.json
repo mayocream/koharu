@@ -79,8 +79,7 @@
       "title": "Manga çeviri çalışma alanı",
       "description": "Her sayfayı tek bir çalışma alanında temizleyin, çevirin ve dizgisini yapın.",
       "newProject": "Yeni Proje",
-      "openProject": "Proje Aç",
-      "openHint": "Mevcut bir .khr dosyası seçin"
+      "openProject": "Proje Aç"
     },
     "menu": {
       "file": "Dosya",
@@ -315,7 +314,6 @@
     "subtitle": "Manga çeviri çalışma alanı",
     "new": "Yeni proje",
     "newDescription": "Boş başlayın, sayfaları sonra içe aktarın",
-    "importKhr": ".khr arşivini içe aktar",
     "projects": "Son Kullanılanlar",
     "emptyHint": "Son projeleriniz burada görünecek",
     "delete": "Sil",
@@ -327,8 +325,6 @@
   "operations": {
     "title": "Çalışıyor",
     "inProgress": "İşlemler tamamlanırken lütfen bekleyin.",
-    "loadKhr": "Proje yükleniyor",
-    "saveKhr": "Proje kaydediliyor",
     "loadModel": "LLM modeli yükleniyor",
     "processCurrent": "Geçerli görsel işleniyor",
     "processAll": "Tüm görseller işleniyor",

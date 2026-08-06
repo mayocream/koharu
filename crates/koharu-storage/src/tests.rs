@@ -1,75 +1,69 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use tempfile::tempdir;
 
-use crate::{BlobAttachment, CommitRequest, DocumentId, Error, Options, Revision, Session};
+use crate::{Blob, Commit, DocumentId, Error, Options, Revision, Session};
 
-fn request(
-    document: DocumentId,
-    parent: Revision,
-    forward: &[u8],
-    inverse: &[u8],
-) -> CommitRequest {
-    CommitRequest::new(document, parent, forward.to_vec(), inverse.to_vec())
+fn commit(document: DocumentId, parent: Revision, forward: &[u8]) -> Commit {
+    Commit::new(document, parent, forward.to_vec(), b"inverse".to_vec())
 }
 
 #[test]
-fn recovers_checkpoint_and_opaque_commit_tail() {
+fn project_reopens_with_history_and_blobdb_payloads() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("project.khr");
+    let path = directory.path().join("project.khrproj");
     let document = DocumentId::new();
-    let mut writer = Session::create(&path, document, b"checkpoint-0".to_vec()).unwrap();
-    let attachment = BlobAttachment::new(&b"asset"[..]);
-    let blob = attachment.id();
-    let mut commit = request(document, Revision::ZERO, b"forward-1", b"inverse-1");
-    commit.attach(attachment);
-    let result = writer.commit(commit, None, BTreeSet::from([blob])).unwrap();
+    let bytes = vec![0x5a; 128 * 1024];
+    let blob = Blob::new(Arc::<[u8]>::from(bytes.clone()));
+    let id = blob.id();
+    {
+        let mut session = Session::create(&path, document, b"initial".to_vec()).unwrap();
+        let mut change = commit(document, Revision::ZERO, b"forward");
+        change.attach(blob);
+        session.commit(change, None).unwrap();
+        session
+            .compact(Revision::ZERO, b"current".to_vec(), BTreeSet::from([id]))
+            .unwrap();
+    }
 
-    assert_eq!(result.revision, Revision::new(1));
-    assert_eq!(result.snapshot.read_blob(blob).unwrap().as_ref(), b"asset");
-    writer.flush().unwrap();
-
-    let reader = Session::open(&path).unwrap();
-    let recovery = reader.recovery().unwrap();
+    assert!(
+        std::fs::read_dir(&path)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .any(|entry| entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "blob")),
+        "the blobs column family should materialize large values in BlobDB files"
+    );
+    let session = Session::open(&path).unwrap();
+    let recovery = session.recover().unwrap();
     assert_eq!(recovery.document, document);
-    assert_eq!(recovery.checkpoint_revision, Revision::ZERO);
     assert_eq!(recovery.head, Revision::new(1));
-    assert_eq!(recovery.checkpoint.as_ref(), b"checkpoint-0");
-    assert_eq!(recovery.commits.len(), 1);
-    assert_eq!(recovery.commits[0].forward.as_ref(), b"forward-1");
-    assert_eq!(recovery.commits[0].inverse.as_ref(), b"inverse-1");
-    assert_eq!(recovery.commits[0].blobs.as_ref(), &[blob]);
     assert_eq!(
-        reader
-            .snapshot(BTreeSet::from([blob]))
-            .read_blob(blob)
+        session
+            .snapshot(BTreeSet::from([id]))
+            .unwrap()
+            .read_blob(id)
             .unwrap()
             .as_ref(),
-        b"asset"
+        bytes
     );
 }
 
 #[test]
-fn stale_writer_is_rejected_by_the_database_head() {
+fn stale_writer_is_rejected_at_the_database_head() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("project.khr");
+    let path = directory.path().join("project.khrproj");
     let document = DocumentId::new();
     let mut first = Session::create(&path, document, Vec::new()).unwrap();
     let mut stale = Session::open(&path).unwrap();
 
     first
-        .commit(
-            request(document, Revision::ZERO, b"one", b"undo-one"),
-            None,
-            BTreeSet::new(),
-        )
+        .commit(commit(document, Revision::ZERO, b"one"), None)
         .unwrap();
     let error = stale
-        .commit(
-            request(document, Revision::ZERO, b"two", b"undo-two"),
-            None,
-            BTreeSet::new(),
-        )
+        .commit(commit(document, Revision::ZERO, b"two"), None)
         .unwrap_err();
     assert!(matches!(
         error,
@@ -81,32 +75,77 @@ fn stale_writer_is_rejected_by_the_database_head() {
 }
 
 #[test]
-fn refresh_advances_only_after_the_owner_accepts_it() {
+fn refreshed_writer_preserves_the_latest_checkpoint_boundary() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("project.khr");
+    let path = directory.path().join("project.khrproj");
     let document = DocumentId::new();
-    let mut writer = Session::create(&path, document, Vec::new()).unwrap();
-    let mut reader = Session::open(&path).unwrap();
+    let mut checkpointing = Session::create_with(
+        &path,
+        document,
+        b"zero".to_vec(),
+        Options {
+            checkpoint_commits: 1,
+            checkpoint_bytes: 0,
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    let mut refreshed = Session::open_with(
+        &path,
+        Options {
+            checkpoint_commits: 0,
+            checkpoint_bytes: 0,
+            ..Options::default()
+        },
+    )
+    .unwrap();
 
-    writer
+    checkpointing
         .commit(
-            request(document, Revision::ZERO, b"one", b"undo-one"),
-            None,
-            BTreeSet::new(),
+            commit(document, Revision::ZERO, b"one"),
+            Some(b"checkpoint-one".to_vec()),
         )
         .unwrap();
-    let refresh = reader.prepare_refresh().unwrap();
-    assert_eq!(reader.revision(), Revision::ZERO);
-    assert_eq!(refresh.from, Revision::ZERO);
-    assert_eq!(refresh.to, Revision::new(1));
-    assert_eq!(refresh.commits[0].forward.as_ref(), b"one");
+    let changes = refreshed.changes().unwrap();
+    refreshed.accept(&changes).unwrap();
+    refreshed
+        .commit(commit(document, Revision::new(1), b"two"), None)
+        .unwrap();
+    drop((checkpointing, refreshed));
 
-    reader.accept_refresh(&refresh).unwrap();
-    assert_eq!(reader.revision(), Revision::new(1));
+    let recovery = Session::open(&path).unwrap().recover().unwrap();
+    assert_eq!(recovery.checkpoint_revision, Revision::new(1));
+    assert_eq!(recovery.checkpoint.as_ref(), b"checkpoint-one");
+    assert_eq!(
+        recovery
+            .entries
+            .iter()
+            .map(|entry| entry.revision)
+            .collect::<Vec<_>>(),
+        [Revision::new(2)]
+    );
 }
 
 #[test]
-fn configured_threshold_requires_the_callers_checkpoint() {
+fn preview_blobs_are_not_persisted() {
+    let document = DocumentId::new();
+    let session = Session::memory(document, Vec::new()).unwrap();
+    let blob = Blob::new(&b"preview"[..]);
+    let id = blob.id();
+    let snapshot = session
+        .snapshot(BTreeSet::new())
+        .unwrap()
+        .preview(Revision::ZERO, [blob], BTreeSet::from([id]))
+        .unwrap();
+    assert_eq!(snapshot.read_blob(id).unwrap().as_ref(), b"preview");
+    assert!(matches!(
+        session.snapshot(BTreeSet::from([id])).unwrap_err(),
+        Error::BlobNotFound(missing) if missing == id
+    ));
+}
+
+#[test]
+fn configured_checkpoint_threshold_is_enforced() {
     let document = DocumentId::new();
     let mut session = Session::memory_with(
         document,
@@ -118,24 +157,20 @@ fn configured_threshold_requires_the_callers_checkpoint() {
         },
     )
     .unwrap();
-    let error = session
-        .commit(
-            request(document, Revision::ZERO, b"one", b"undo-one"),
-            None,
-            BTreeSet::new(),
-        )
-        .unwrap_err();
-    assert!(matches!(error, Error::Invalid(_)));
-
+    assert!(matches!(
+        session
+            .commit(commit(document, Revision::ZERO, b"one"), None)
+            .unwrap_err(),
+        Error::Invalid(_)
+    ));
     session
         .commit(
-            request(document, Revision::ZERO, b"one", b"undo-one"),
-            Some(b"checkpoint-1".to_vec()),
-            BTreeSet::new(),
+            commit(document, Revision::ZERO, b"one"),
+            Some(b"checkpoint".to_vec()),
         )
         .unwrap();
-    let recovery = session.recovery().unwrap();
-    assert_eq!(recovery.checkpoint_revision, Revision::new(1));
-    assert_eq!(recovery.checkpoint.as_ref(), b"checkpoint-1");
-    assert!(recovery.commits.is_empty());
+    assert_eq!(
+        session.recover().unwrap().checkpoint.as_ref(),
+        b"checkpoint"
+    );
 }

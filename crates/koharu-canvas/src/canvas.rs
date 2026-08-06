@@ -276,6 +276,15 @@ impl Canvas {
         }
 
         self.transform = None;
+        if presentation_only {
+            self.page
+                .as_mut()
+                .expect("the active page was established above")
+                .sync_presentation(snapshot)?;
+            self.element_scenes.recompose();
+            self.damage.content();
+            return Ok(());
+        }
         let next = CanvasPage::load(snapshot, current)?;
         if self.page.as_ref().and_then(|page| page.assets.source) != next.assets.source {
             self.failed_source = None;
@@ -296,7 +305,7 @@ impl Canvas {
                             .collect::<HashSet<_>>()
             });
         self.page = Some(next);
-        if presentation_only || same_elements {
+        if same_elements {
             self.element_scenes.recompose();
         } else if let Some(entities) = typography_entities {
             self.element_scenes.invalidate_text_entities(entities);

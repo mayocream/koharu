@@ -95,13 +95,8 @@ impl Session {
         let mut state = (*patch.state).clone();
         state.revision = next_revision;
         let referenced = state.referenced_blobs();
-        self.current.blobs.preview(
-            next_revision,
-            patch.attachments.iter().cloned(),
-            referenced.clone(),
-        )?;
 
-        let mut request = koharu_storage::CommitRequest::new(
+        let mut request = koharu_storage::Commit::new(
             self.storage.document_id(),
             self.storage.revision(),
             forward,
@@ -114,37 +109,37 @@ impl Session {
         }
         let checkpoint = self
             .storage
-            .checkpoint_due(request.forward.len() + request.inverse.len())?
+            .needs_checkpoint(request.payload_len())
             .then(|| encode_checkpoint(&state))
             .transpose()?;
-        let committed = self.storage.commit(request, checkpoint, referenced)?;
+        let revision = self.storage.commit(request, checkpoint)?;
+        let blobs = self.storage.snapshot(referenced)?;
         let state = Arc::new(state);
-        let snapshot = Snapshot::new(state, committed.snapshot)?;
-        let changes =
-            Change::from_operations(patch.base_revision, committed.revision, &patch.operations);
+        let snapshot = Snapshot::new(state, blobs)?;
+        let changes = Change::from_operations(patch.base_revision, revision, &patch.operations);
         self.current = snapshot.clone();
         Ok(Commit {
-            revision: committed.revision,
+            revision,
             changes,
             snapshot,
         })
     }
 
     pub fn refresh(&mut self) -> Result<Change> {
-        let refresh = self.storage.prepare_refresh()?;
+        let refresh = self.storage.changes()?;
         if refresh.from == refresh.to {
             return Ok(Change::empty(refresh.from));
         }
         let mut state = (*self.current.state).clone();
         let mut operations = Vec::new();
-        for commit in &refresh.commits {
+        for commit in &refresh.entries {
             let decoded = decode_operations(&commit.forward)?;
             state = apply_operations(&state, &decoded)?;
             state.revision = commit.revision;
             operations.extend(decoded);
         }
-        self.storage.accept_refresh(&refresh)?;
-        let blobs = self.storage.snapshot(state.referenced_blobs());
+        self.storage.accept(&refresh)?;
+        let blobs = self.storage.snapshot(state.referenced_blobs())?;
         let snapshot = Snapshot::new(Arc::new(state), blobs)?;
         let changes = Change::from_operations(refresh.from, refresh.to, &operations);
         self.current = snapshot;
@@ -213,26 +208,22 @@ impl Session {
             .map_err(Into::into)
     }
 
-    pub fn backup(&self, path: impl AsRef<Path>) -> Result<()> {
-        self.storage.backup(path).map_err(Into::into)
-    }
-
     pub fn flush(&self) -> Result<()> {
         self.storage.flush().map_err(Into::into)
     }
 
     fn assemble_new(storage: koharu_storage::Session, state: State) -> Result<Self> {
-        let blobs = storage.snapshot(BTreeSet::new());
+        let blobs = storage.snapshot(BTreeSet::new())?;
         let current = Snapshot::new(Arc::new(state), blobs)?;
         Ok(Self { storage, current })
     }
 
     fn recover(storage: koharu_storage::Session) -> Result<Self> {
-        let recovery = storage.recovery()?;
+        let recovery = storage.recover()?;
         let checkpoint: StoredState = revision::from_slice(&recovery.checkpoint)?;
         let mut state =
             State::from_checkpoint(recovery.document, recovery.checkpoint_revision, checkpoint)?;
-        for commit in &recovery.commits {
+        for commit in &recovery.entries {
             state = apply_operations(&state, &decode_operations(&commit.forward)?)?;
             state.revision = commit.revision;
         }
@@ -240,7 +231,7 @@ impl Session {
             return Err(Error::invalid("project history does not reach its head"));
         }
         state.validate()?;
-        let blobs = storage.snapshot(state.referenced_blobs());
+        let blobs = storage.snapshot(state.referenced_blobs())?;
         let current = Snapshot::new(Arc::new(state), blobs)?;
         Ok(Self { storage, current })
     }

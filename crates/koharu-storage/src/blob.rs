@@ -1,22 +1,17 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
-use redb::ReadableDatabase;
+use lru::LruCache;
 
-use crate::{
-    BlobId, Error, Result,
-    storage::{BLOBS, Store},
-};
+use crate::BlobId;
 
+/// Content-addressed bytes entering storage.
 #[derive(Clone, Debug)]
-pub struct BlobAttachment {
+pub struct Blob {
     id: BlobId,
     bytes: Arc<[u8]>,
 }
 
-impl BlobAttachment {
+impl Blob {
     #[must_use]
     pub fn new(bytes: impl Into<Arc<[u8]>>) -> Self {
         let bytes = bytes.into();
@@ -37,7 +32,7 @@ impl BlobAttachment {
 
 #[derive(Clone, Debug, Default)]
 pub struct BlobBatch {
-    blobs: BTreeMap<BlobId, Arc<[u8]>>,
+    pub(crate) blobs: BTreeMap<BlobId, Arc<[u8]>>,
 }
 
 impl BlobBatch {
@@ -59,101 +54,46 @@ impl BlobBatch {
     pub fn iter(&self) -> impl Iterator<Item = (BlobId, &Arc<[u8]>)> {
         self.blobs.iter().map(|(id, bytes)| (*id, bytes))
     }
-
-    pub(crate) fn insert(&mut self, id: BlobId, bytes: Arc<[u8]>) {
-        self.blobs.insert(id, bytes);
-    }
 }
 
-impl Store {
-    pub(crate) fn contains_blob(&self, id: BlobId) -> Result<bool> {
-        if self.cache.lock().contains(id) {
-            return Ok(true);
+pub(crate) struct BlobCache {
+    entries: LruCache<BlobId, Arc<[u8]>>,
+    bytes: usize,
+    limit: usize,
+}
+
+impl BlobCache {
+    pub(crate) fn new(limit: usize) -> Self {
+        Self {
+            entries: LruCache::unbounded(),
+            bytes: 0,
+            limit,
         }
-        let transaction = self.database.read().begin_read()?;
-        let table = transaction.open_table(BLOBS)?;
-        Ok(table.get(id)?.is_some())
     }
 
-    pub(crate) fn read_blob(&self, id: BlobId) -> Result<Arc<[u8]>> {
-        if let Some(bytes) = self.cache.lock().get(id) {
-            return Ok(bytes);
-        }
-        let transaction = self.database.read().begin_read()?;
-        let table = transaction.open_table(BLOBS)?;
-        let stored = table.get(id)?.ok_or(Error::BlobNotFound(id))?;
-        let bytes = stored.value();
-        if BlobId::for_bytes(bytes) != id {
-            return Err(Error::invalid(format!("blob {id} has invalid content")));
-        }
-        let bytes: Arc<[u8]> = Arc::from(bytes);
-        self.cache.lock().insert(id, bytes.clone());
-        Ok(bytes)
+    pub(crate) fn get(&mut self, id: BlobId) -> Option<Arc<[u8]>> {
+        self.entries.get(&id).cloned()
     }
 
-    pub(crate) fn read_blobs(&self, ids: impl IntoIterator<Item = BlobId>) -> Result<BlobBatch> {
-        let ids = ids.into_iter().collect::<BTreeSet<_>>();
-        let mut batch = BlobBatch::default();
-        let mut missing = Vec::new();
-        {
-            let mut cache = self.cache.lock();
-            for id in &ids {
-                if let Some(bytes) = cache.get(*id) {
-                    batch.blobs.insert(*id, bytes);
-                } else {
-                    missing.push(*id);
-                }
-            }
+    pub(crate) fn insert(&mut self, id: BlobId, bytes: Arc<[u8]>) {
+        if self.limit == 0 || bytes.len() > self.limit {
+            return;
         }
-        if missing.is_empty() {
-            return Ok(batch);
+        if let Some(previous) = self.entries.put(id, bytes.clone()) {
+            self.bytes = self.bytes.saturating_sub(previous.len());
         }
-
-        let transaction = self.database.read().begin_read()?;
-        let table = transaction.open_table(BLOBS)?;
-        let mut loaded = Vec::with_capacity(missing.len());
-        for id in missing {
-            let stored = table.get(id)?.ok_or(Error::BlobNotFound(id))?;
-            if BlobId::for_bytes(stored.value()) != id {
-                return Err(Error::invalid(format!("blob {id} has invalid content")));
-            }
-            let bytes: Arc<[u8]> = Arc::from(stored.value());
-            batch.blobs.insert(id, bytes.clone());
-            loaded.push((id, bytes));
+        self.bytes = self.bytes.saturating_add(bytes.len());
+        while self.bytes > self.limit {
+            let Some((_, removed)) = self.entries.pop_lru() else {
+                break;
+            };
+            self.bytes = self.bytes.saturating_sub(removed.len());
         }
-        let mut cache = self.cache.lock();
-        for (id, bytes) in loaded {
-            cache.insert(id, bytes);
-        }
-        Ok(batch)
     }
 
-    pub(crate) fn lease(&self, blobs: BTreeSet<BlobId>) -> Arc<BTreeSet<BlobId>> {
-        let lease = Arc::new(blobs);
-        let mut leases = self.leases.lock();
-        leases.retain(|lease| lease.strong_count() != 0);
-        leases.push(Arc::downgrade(&lease));
-        lease
-    }
-
-    pub(crate) fn live_blobs(&self) -> BTreeSet<BlobId> {
-        let mut result = BTreeSet::new();
-        let mut leases = self.leases.lock();
-        leases.retain(|lease| {
-            if let Some(lease) = lease.upgrade() {
-                result.extend(lease.iter().copied());
-                true
-            } else {
-                false
-            }
-        });
-        result
-    }
-
-    pub(crate) fn invalidate_blobs(&self, ids: &BTreeSet<BlobId>) {
-        let mut cache = self.cache.lock();
-        for id in ids {
-            cache.remove(*id);
+    pub(crate) fn remove(&mut self, id: BlobId) {
+        if let Some(bytes) = self.entries.pop(&id) {
+            self.bytes = self.bytes.saturating_sub(bytes.len());
         }
     }
 }

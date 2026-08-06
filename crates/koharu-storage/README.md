@@ -1,41 +1,20 @@
 # koharu-storage
 
-`koharu-storage` is Koharu's single-file durable container. It owns redb,
-revision ordering, opaque checkpoints and reversible commit envelopes, and
-content-addressed blobs. It does not own the scene model or interpret commit
-payloads.
+`koharu-storage` owns the durable, model-agnostic contents of one `.khrproj`
+directory. The directory is a RocksDB database; there is no manifest or JSON
+sidecar.
 
-## Contract
+The database has four column families:
 
-- One redb database stores metadata, an append-only commit tail, and blobs.
-- The caller supplies the initial checkpoint and every later checkpoint.
-- Commits contain caller-defined forward and inverse bytes.
-- A commit succeeds only when its parent equals the durable database head.
-- Refresh is two-phase: storage returns a candidate tail, and advances the
-  reader only after the caller successfully applies and accepts it.
-- Blob bytes are BLAKE3-addressed, loaded explicitly, and retained by current
-  state, retained history, and live snapshot leases.
-- Ordinary interactive transactions are atomic but use deferred durability;
-  `flush`, checkpoint, maintenance, backup, and orderly close establish the
-  durability boundary.
+- `document`: the document identity, current revision, and checkpoint
+- `history`: ordered opaque forward/inverse commits
+- `blob-index`: content IDs and byte lengths used for fast validation and GC
+- `blobs`: BLAKE3-addressed payloads stored through integrated BlobDB
 
-The crate deliberately has no records, components, hierarchy, indexes,
-validation, rebase policy, or domain undo model. Those belong to the owner of
-the opaque payload—in Koharu, `koharu-scene`.
+Scene structure, validation, conflict rebasing, indexes, and undo semantics
+belong to `koharu-scene`. Storage only enforces revision ordering, atomic
+commits, content addressing, and durability boundaries.
 
-## Durable layout
-
-```text
-meta
-  format, document, head, checkpoint revision, checkpoint bytes
-
-commits
-  revision -> label, forward bytes, inverse bytes, retained blob IDs
-
-blobs
-  BLAKE3 ID -> exact bytes
-```
-
-All document semantics are encoded above this layer. This keeps an ordinary
-scene edit proportional to its own payload instead of rebuilding or encoding a
-generic storage-side project model.
+Normal edits are one WAL-backed RocksDB `WriteBatch` across all affected column
+families. Explicit flush and checkpoint operations synchronize the WAL. BlobDB
+garbage collection is enabled and project compaction reclaims deleted payloads.

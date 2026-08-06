@@ -67,6 +67,7 @@ rfd = "0.17"
 rmp-serde = "1"
 thiserror = "2.0"
 blake3 = "1.8"
+dunce = "1.0.5"
 rayon = "1.12"
 rust-embed = { version = "8.12", features = ["interpolate-folder-path"] }
 # disables `esaxx_fast` feature which is conflicting with `ort`
@@ -94,7 +95,7 @@ imbl = "7.0.1"
 hashbrown = "0.17.1"
 slotmap = "1.1.1"
 smallvec = "1.15.2"
-redb = "4.1.0"
+rocksdb = { version = "0.24.0", default-features = false, features = ["lz4", "mt_static", "multi-threaded-cf"] }
 revision = { version = "0.30.0", features = ["uuid"] }
 flate2 = { version = "1.0", features = [
     "zlib-ng-compat",
@@ -192,9 +193,6 @@ safetensors = "0.8"
 
 [profile.dev]
 debug = 1
-
-[profile.dev.package.redb]
-opt-level = 3
 
 [profile.dev.package.image]
 opt-level = 3

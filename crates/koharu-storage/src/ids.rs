@@ -61,6 +61,7 @@ macro_rules! uuid_id {
 }
 
 uuid_id!(DocumentId);
+
 #[revisioned(revision = 1)]
 #[derive(
     Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
@@ -128,6 +129,7 @@ hash_id!(BlobId);
 hash_id!(PatchId);
 
 impl BlobId {
+    #[must_use]
     pub(crate) const fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }

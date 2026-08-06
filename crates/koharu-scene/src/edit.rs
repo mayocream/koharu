@@ -33,7 +33,7 @@ pub struct Edit {
     state: State,
     observations: BTreeSet<Observation>,
     operations: Vec<Operation>,
-    attachments: Vec<koharu_storage::BlobAttachment>,
+    attachments: Vec<koharu_storage::Blob>,
     validate_entities: HashSet<EntityId>,
     generation: Option<Generation>,
 }
@@ -359,7 +359,7 @@ impl Edit {
         role: &AssetRole,
         value: AssetInput,
     ) -> Result<()> {
-        let attachment = koharu_storage::BlobAttachment::new(value.bytes);
+        let attachment = koharu_storage::Blob::new(value.bytes);
         let blob = attachment.id();
         self.attachments.push(attachment);
         let owner = ComponentOwner::Entity(entity);
@@ -582,11 +582,6 @@ impl Edit {
             self.operations,
             self.attachments,
             None,
-        )?;
-        self.base.blobs.preview(
-            self.base.revision(),
-            patch.attachments.iter().cloned(),
-            patch.state.referenced_blobs(),
         )?;
         Ok(patch)
     }

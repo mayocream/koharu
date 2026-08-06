@@ -21,7 +21,9 @@ use super::{
     canvas::{CanvasChannel, CanvasState, CanvasView},
     preferences::Preferences,
     processing::{Job, JobChannel, Processing},
-    project::{CurrentProject, Page, PageSummary, Project, ProjectInfo},
+    project::{
+        CurrentProject, Page, PageSummary, Project, ProjectInfo, ProjectLibrary, ProjectSummary,
+    },
 };
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -218,13 +220,6 @@ async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn open_project_path(handle: &AppHandle, path: std::path::PathBuf) -> Result<()> {
-    let opened = tokio::task::spawn_blocking(move || Project::open(path))
-        .await
-        .context("project open worker stopped unexpectedly")??;
-    replace_project(handle, opened).await
-}
-
 #[tauri::command]
 #[specta::specta]
 pub(crate) fn get_project(
@@ -266,51 +261,70 @@ pub(crate) fn get_page(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn create_project(window: WebviewWindow) -> std::result::Result<(), Error> {
-    let mut dialog = rfd::AsyncFileDialog::new()
-        .add_filter("Koharu project", &["khr"])
-        .set_parent(&window);
-    if let Some(directory) = dirs::document_dir().map(|directory| directory.join("koharu")) {
-        match fs::create_dir_all(&directory) {
-            Ok(()) => dialog = dialog.set_directory(directory),
-            Err(error) => {
-                tracing::warn!(%error, path = %directory.display(), "could not create the project directory");
-            }
-        }
-    }
-    let Some(file) = dialog.set_file_name("Untitled.khr").save_file().await else {
-        return Ok(());
-    };
-    let mut path = file.path().to_owned();
-    if path.extension().is_none() {
-        path.set_extension("khr");
-    }
-    let opened = tokio::task::spawn_blocking(move || Project::create(path))
+pub(crate) fn list_projects(
+    library: State<'_, ProjectLibrary>,
+) -> std::result::Result<Vec<ProjectSummary>, Error> {
+    Ok(library.list()?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn create_project(
+    name: String,
+    handle: AppHandle,
+) -> std::result::Result<(), Error> {
+    let library = handle.state::<ProjectLibrary>().inner().clone();
+    let opened = tokio::task::spawn_blocking(move || library.create(&name))
         .await
         .context("project create worker stopped unexpectedly")??;
-    replace_project(window.app_handle(), opened).await?;
+    replace_project(&handle, opened).await?;
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn open_project(window: WebviewWindow) -> std::result::Result<(), Error> {
-    let mut dialog = rfd::AsyncFileDialog::new()
-        .add_filter("Koharu project", &["khr"])
-        .set_parent(&window);
-    if let Some(directory) = dirs::document_dir().map(|directory| directory.join("koharu")) {
-        dialog = dialog.set_directory(directory);
-    }
-    let Some(file) = dialog.pick_file().await else {
-        return Ok(());
-    };
-    open_project_path(window.app_handle(), file.path().to_owned()).await?;
+pub(crate) async fn open_project(
+    name: String,
+    handle: AppHandle,
+) -> std::result::Result<(), Error> {
+    let library = handle.state::<ProjectLibrary>().inner().clone();
+    let opened = tokio::task::spawn_blocking(move || library.open(&name))
+        .await
+        .context("project open worker stopped unexpectedly")??;
+    replace_project(&handle, opened).await?;
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn close_project(handle: AppHandle) -> std::result::Result<(), Error> {
+    close_current_project(&handle).await?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn delete_project(
+    name: String,
+    handle: AppHandle,
+) -> std::result::Result<(), Error> {
+    let active = handle
+        .state::<CurrentProject>()
+        .project
+        .lock()
+        .as_ref()
+        .is_some_and(|project| project.name == name);
+    if active {
+        close_current_project(&handle).await?;
+    }
+    let library = handle.state::<ProjectLibrary>().inner().clone();
+    tokio::task::spawn_blocking(move || library.delete(&name))
+        .await
+        .context("project deletion worker stopped unexpectedly")??;
+    Ok(())
+}
+
+async fn close_current_project(handle: &AppHandle) -> Result<()> {
     handle.state::<AgentState>().reset().await;
     let processing = handle.state::<Processing>();
     for stop in processing.stops.lock().values() {

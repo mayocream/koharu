@@ -110,6 +110,33 @@ impl CanvasPage {
     pub(crate) fn contains(&self, id: EntityId) -> bool {
         id == self.id || self.members.contains(&id)
     }
+
+    pub(crate) fn sync_presentation(&mut self, snapshot: &Snapshot) -> Result<()> {
+        let groups = self
+            .group_opacities
+            .keys()
+            .map(|id| Ok((*id, visibility(snapshot, *id)?)))
+            .collect::<Result<HashMap<_, _>>>()?;
+        for (id, opacity) in &mut self.group_opacities {
+            *opacity = groups[id].opacity;
+        }
+        for element in &mut self.elements {
+            let local = visibility(snapshot, element.id)?;
+            element.local_opacity = local.opacity;
+            element.visible = local.visible
+                && element
+                    .groups
+                    .iter()
+                    .all(|group| groups.get(group).is_none_or(|value| value.visible));
+            element.opacity = local.opacity
+                * element
+                    .groups
+                    .iter()
+                    .map(|group| groups.get(group).map_or(1.0, |value| value.opacity))
+                    .product::<f32>();
+        }
+        Ok(())
+    }
 }
 
 struct ElementCollector<'a> {
@@ -284,7 +311,7 @@ fn rectangle_frame(points: &[koharu_scene::Point]) -> Option<Frame> {
 mod tests {
     use koharu_scene::{
         At, BubbleRegion, FitsTo, Geometry, Origin, PageDraft, Point, Session, TextLayout,
-        TextLayoutKind,
+        TextLayoutKind, Visibility,
     };
 
     use super::*;
@@ -391,5 +418,86 @@ mod tests {
         };
         assert!(!analysis_region.selectable());
         assert!(text_block.selectable());
+    }
+
+    #[test]
+    fn presentation_sync_updates_inherited_group_state_without_reloading_the_page() {
+        let mut session = Session::memory().unwrap();
+        let mut ids = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(PageDraft::new("page", 100.0, 100.0), At::End)?;
+                let content = edit.add_text_content(page, At::End)?;
+                let text = edit.add_text_layer(
+                    page,
+                    At::End,
+                    content,
+                    &TextLayout {
+                        origin: Origin::User,
+                        kind: TextLayoutKind::Paragraph,
+                    },
+                )?;
+                ids = Some((page, text));
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).unwrap().snapshot;
+        let (page, text) = ids.unwrap();
+        let group = snapshot
+            .page(page)
+            .unwrap()
+            .text_group()
+            .unwrap()
+            .unwrap()
+            .id();
+        let mut canvas_page = CanvasPage {
+            id: page,
+            size: PhysicalSize::new(100, 100),
+            assets: PageAssets::default(),
+            members: HashSet::from([group, text]),
+            elements: vec![CanvasElement {
+                id: text,
+                geometry: Geometry::rectangle(0.0, 0.0, 10.0, 10.0),
+                frame: Frame::new(0.0, 0.0, 10.0, 10.0),
+                visible: true,
+                opacity: 1.0,
+                local_opacity: 1.0,
+                groups: vec![group],
+                image: None,
+                has_text: true,
+                raster: None,
+            }],
+            group_opacities: HashMap::from([(group, 1.0)]),
+        };
+        let patch = snapshot
+            .patch(|edit| {
+                edit.set(
+                    group,
+                    &Visibility {
+                        origin: Origin::User,
+                        visible: false,
+                        opacity: 0.25,
+                    },
+                )?;
+                edit.set(
+                    text,
+                    &Visibility {
+                        origin: Origin::User,
+                        visible: true,
+                        opacity: 0.5,
+                    },
+                )
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).unwrap().snapshot;
+
+        canvas_page.sync_presentation(&snapshot).unwrap();
+
+        let element = &canvas_page.elements[0];
+        assert!(!element.visible);
+        assert_eq!(element.local_opacity, 0.5);
+        assert_eq!(element.opacity, 0.125);
+        assert_eq!(canvas_page.group_opacities[&group], 0.25);
     }
 }

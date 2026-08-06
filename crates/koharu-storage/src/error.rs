@@ -6,15 +6,13 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("storage database error: {0}")]
-    Database(#[source] Box<dyn std::error::Error + Send + Sync>),
-    #[error("failed to persist storage changes: {0}")]
-    Durability(String),
+    #[error(transparent)]
+    RocksDb(#[from] rocksdb::Error),
     #[error(transparent)]
     Codec(#[from] revision::Error),
-    #[error("not a Koharu storage document")]
-    NotADocument,
-    #[error("unsupported Koharu storage schema {0}")]
+    #[error("not a Koharu project database")]
+    NotAProject,
+    #[error("unsupported Koharu project schema {0}")]
     UnsupportedSchema(u32),
     #[error("patch belongs to document {patch}, not {session}")]
     DocumentMismatch {
@@ -33,28 +31,6 @@ pub enum Error {
     #[error("invalid storage data: {0}")]
     Invalid(String),
 }
-
-macro_rules! database_error {
-    ($($error:ty),+ $(,)?) => {
-        $(
-            impl From<$error> for Error {
-                fn from(error: $error) -> Self {
-                    Self::Database(Box::new(error))
-                }
-            }
-        )+
-    };
-}
-
-database_error!(
-    redb::DatabaseError,
-    redb::TransactionError,
-    redb::TableError,
-    redb::StorageError,
-    redb::CommitError,
-    redb::CompactionError,
-    redb::SetDurabilityError,
-);
 
 impl Error {
     pub(crate) fn invalid(message: impl Into<String>) -> Self {

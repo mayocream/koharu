@@ -154,7 +154,7 @@ fn built_in_component_kinds_express_domain_ownership() {
 #[test]
 fn revision_one_project_components_upgrade_when_their_schema_evolves() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("evolving.khr");
+    let path = directory.path().join("evolving.khrproj");
     let entity;
     {
         let mut session = Session::create(&path).unwrap();
@@ -965,7 +965,7 @@ fn assets_attach_bytes_without_decoding() {
 #[test]
 fn disk_scene_reopens_and_validates() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("scene.khs");
+    let path = directory.path().join("scene.khrproj");
     {
         let mut session = Session::create(&path).unwrap();
         let patch = session
@@ -982,7 +982,7 @@ fn disk_scene_reopens_and_validates() {
 #[test]
 fn refresh_updates_page_local_component_queries() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("refresh.khr");
+    let path = directory.path().join("refresh.khrproj");
     let mut writer = Session::create(&path).unwrap();
     let mut reader = Session::open(&path).unwrap();
     let mut entity = None;

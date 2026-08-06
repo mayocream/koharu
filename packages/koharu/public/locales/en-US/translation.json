@@ -79,8 +79,7 @@
       "title": "Manga translation workspace",
       "description": "Clean, translate, and typeset every page in one focused workspace.",
       "newProject": "New Project",
-      "openProject": "Open Project",
-      "openHint": "Choose an existing .khr file"
+      "openProject": "Open Project"
     },
     "menu": {
       "file": "File",
@@ -332,7 +331,6 @@
     "subtitle": "Manga translation workspace",
     "new": "New project",
     "newDescription": "Start blank, import pages later",
-    "importKhr": "Import .khr archive",
     "projects": "Recent",
     "emptyHint": "Your recent projects will appear here",
     "delete": "Delete",
@@ -344,8 +342,6 @@
   "operations": {
     "title": "Working",
     "inProgress": "Please wait while we finish up.",
-    "loadKhr": "Loading project",
-    "saveKhr": "Saving project",
     "loadModel": "Loading LLM model",
     "processCurrent": "Processing current image",
     "processAll": "Processing all images",

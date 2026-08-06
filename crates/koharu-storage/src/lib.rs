@@ -1,24 +1,22 @@
-//! Durable single-file storage for Koharu documents.
+//! RocksDB-backed project storage.
 //!
-//! Storage owns revision ordering, opaque commits and checkpoints,
-//! content-addressed blobs, redb transactions, and durability. It deliberately
-//! does not interpret a document's in-memory model. Scene semantics, indexes,
-//! validation, conflict detection, and undo operations belong to
-//! `koharu-scene`.
+//! A project directory is the database. Document state, ordered history, and
+//! content-addressed blobs occupy separate column families; only the blob
+//! column family uses RocksDB's integrated BlobDB.
 
 mod blob;
+mod commit;
+mod database;
 mod error;
-mod history;
-mod id;
+mod ids;
 mod session;
 mod snapshot;
-mod storage;
 
-pub use blob::{BlobAttachment, BlobBatch};
+pub use blob::{Blob, BlobBatch};
+pub use commit::{Commit, HistoryEntry, Recovery, Refresh};
 pub use error::{Error, Result};
-pub use history::{Commit, CommitRequest, Recovery, Refresh};
-pub use id::{BlobId, DocumentId, PatchId, Revision};
-pub use session::{CommitResult, GcReport, Options, Session};
+pub use ids::{BlobId, DocumentId, PatchId, Revision};
+pub use session::{GcReport, Options, Session};
 pub use snapshot::Snapshot;
 
 #[cfg(test)]

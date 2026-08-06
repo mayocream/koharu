@@ -430,7 +430,7 @@ pub struct Patch {
     pub(crate) state: Arc<State>,
     pub(crate) observations: Arc<[Observation]>,
     pub(crate) operations: Arc<[Operation]>,
-    pub(crate) attachments: Arc<[koharu_storage::BlobAttachment]>,
+    pub(crate) attachments: Arc<[koharu_storage::Blob]>,
     pub(crate) label: Option<Arc<str>>,
     fingerprint: koharu_storage::PatchId,
 }
@@ -441,7 +441,7 @@ impl Patch {
         state: State,
         observations: Vec<Observation>,
         operations: Vec<Operation>,
-        attachments: Vec<koharu_storage::BlobAttachment>,
+        attachments: Vec<koharu_storage::Blob>,
         label: Option<Arc<str>>,
     ) -> Result<Self> {
         let identity = PatchIdentity {

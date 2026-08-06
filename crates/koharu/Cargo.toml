@@ -17,7 +17,6 @@ alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
-clap = { workspace = true }
 console = { workspace = true }
 dirs = { workspace = true }
 image = { workspace = true }

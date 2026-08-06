@@ -79,8 +79,7 @@
       "title": "Espacio de traducción de manga",
       "description": "Limpia, traduce y rotula cada página en un único espacio de trabajo.",
       "newProject": "Proyecto nuevo",
-      "openProject": "Abrir proyecto",
-      "openHint": "Elige un archivo .khr existente"
+      "openProject": "Abrir proyecto"
     },
     "menu": {
       "file": "Archivo",
@@ -315,7 +314,6 @@
     "subtitle": "Espacio de trabajo de traducción de manga",
     "new": "Nuevo proyecto",
     "newDescription": "Empieza en blanco, importa páginas después",
-    "importKhr": "Importar archivo .khr",
     "projects": "Recientes",
     "emptyHint": "Tus proyectos recientes aparecerán aquí",
     "delete": "Eliminar",
@@ -327,8 +325,6 @@
   "operations": {
     "title": "Trabajando",
     "inProgress": "Por favor espera mientras terminamos.",
-    "loadKhr": "Cargando proyecto",
-    "saveKhr": "Guardando proyecto",
     "loadModel": "Cargando modelo LLM",
     "processCurrent": "Procesando imagen actual",
     "processAll": "Procesando todas las imágenes",
