@@ -64,9 +64,11 @@ rasterizer understand glyphs.
 ### `SceneRenderer::render`
 
 The scene renderer resolves a `Composition` into a retained vector `Frame`.
-It owns reusable `RenderResources`, delegates text to `TextRenderer`, decodes
-image resources, records independent layers in parallel, and caches frames by
-scene revision, font generation, and render request.
+It owns decoded-image and font caches, delegates text to `TextRenderer`, records
+independent layers in parallel, and caches frames by scene revision, font
+generation, and render request. System fonts are discovered once. Koharu's
+bundled-font catalog stays resident as metadata, while individual faces are
+downloaded on first use and retained by a byte-bounded LRU cache.
 
 A `Frame` owns an immutable Vello scene and downstream metadata:
 
@@ -209,7 +211,7 @@ After committing a project patch, pass the matching `Change` to
 changed are advanced to the new revision; affected frames are discarded.
 `clear_cache` is available for explicit full invalidation.
 
-Font installation increments the resource generation. A later render uses a
+Loading a bundled face increments the font generation. A later render uses a
 new frame key without requiring callers to recreate the scene renderer.
 
 ## Concurrency
@@ -238,11 +240,10 @@ their source errors in the public error type.
 | --- | --- |
 | `compositor` | Scene semantics, `Composition`, dependencies, diagnostics. |
 | `text_renderer` | Text layout dispatch and Vello glyph recording. |
-| `scene_renderer` | Resource resolution, vector layer recording, frame cache. |
+| `scene_renderer` | Image resolution, vector layer recording, frame cache. |
 | `rasterizer` | Vello GPU execution, readback, target reuse, downsampling. |
 | `request` | `RenderRequest`, `RenderTheme`, rendering policy. |
-| `resources` | Shared decoded-image and font resources. |
-| `font`, `font_policy` | Embedded/system fonts and fallback policy. |
+| `fonts` | System discovery, bundled catalog, fallback, and bounded lazy loading. |
 | `layout`, `shape`, `segment`, `script` | Unicode shaping and layout engine. |
 | `bubble` | Region association and balloon-safe layout geometry. |
 

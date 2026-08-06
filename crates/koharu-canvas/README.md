@@ -99,8 +99,8 @@ Decoded images use an LRU budget controlled by `CanvasOptions::max_decoded_bytes
 Masks stay as single-channel 256×256 copy-on-write tiles, so a stroke clones
 only the tiles it touches.
 
-Text uses the same `Compositor`, `SceneRenderer`, `RenderResources`, and
-`RenderTheme` pipeline as `koharu-renderer`. The canvas compiles a transparent
+Text uses the same `Compositor`, `SceneRenderer`, and `RenderTheme` pipeline as
+`koharu-renderer`. The canvas compiles a transparent
 text-only `Composition`, renders it to a retained `Frame`, and reuses its
 per-entity Vello scenes for live transforms. This avoids duplicated shaping
 policy and GPU readback.

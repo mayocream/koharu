@@ -6,7 +6,8 @@ use std::{
 };
 
 use koharu_scene::{
-    Change, ComponentOwner, EntityChange, EntityId, LanguageTag, RelationChange, Revision, Snapshot,
+    Asset, BlobId, Change, ComponentOwner, EntityChange, EntityId, LanguageTag, RelationChange,
+    Revision, Snapshot,
 };
 use parking_lot::Mutex;
 use rayon::prelude::*;
@@ -17,16 +18,19 @@ use vello::{
 };
 
 use crate::{
-    Composition, Error, RenderDependency, RenderDiagnostic, RenderRequest, RenderResources,
-    RenderTheme, Result, WritingMode,
+    Composition, Error, FontFaceInfo, RenderDependency, RenderDiagnostic, RenderRequest,
+    RenderTheme, Result, TextLayout, TextRenderOptions, WritingMode,
     compositor::{ImageLayer, Layer, RenderBounds},
+    fonts::Fonts,
 };
 
 const DEFAULT_CACHED_FRAMES: usize = 8;
+const DEFAULT_IMAGE_CACHE_BYTES: usize = 512 * 1024 * 1024;
 
 /// Resolves composition layers into retained Vello frames.
 pub struct SceneRenderer {
-    resources: Arc<RenderResources>,
+    fonts: Arc<Fonts>,
+    images: Mutex<DecodedImageCache>,
     text_renderer: crate::TextRenderer,
     frames: Mutex<FrameCache>,
 }
@@ -34,21 +38,46 @@ pub struct SceneRenderer {
 impl SceneRenderer {
     #[must_use]
     pub fn new() -> Self {
-        Self::with_resources(Arc::new(RenderResources::new()))
-    }
-
-    #[must_use]
-    pub fn with_resources(resources: Arc<RenderResources>) -> Self {
         Self {
-            resources,
+            fonts: Fonts::shared(),
+            images: Mutex::new(DecodedImageCache::new(DEFAULT_IMAGE_CACHE_BYTES)),
             text_renderer: crate::TextRenderer::new(),
             frames: Mutex::new(FrameCache::new(DEFAULT_CACHED_FRAMES)),
         }
     }
 
-    #[must_use]
-    pub const fn resources(&self) -> &Arc<RenderResources> {
-        &self.resources
+    pub async fn available_fonts() -> Result<Vec<FontFaceInfo>> {
+        Fonts::shared().faces().await.map_err(Error::FontResource)
+    }
+
+    pub async fn font_preview(post_script_name: &str) -> Result<FontPreview> {
+        const FONT_SIZE: f32 = 24.0;
+        const PADDING: f32 = 6.0;
+
+        let font = Fonts::shared()
+            .by_post_script_name(post_script_name)
+            .await
+            .map_err(Error::FontResource)?;
+        let label = font.family_name().to_owned();
+        let layout = TextLayout::new(&font)
+            .with_font_size(FONT_SIZE)
+            .run(&label)
+            .map_err(Error::FontResource)?;
+        let width = (layout.width + PADDING * 2.0).ceil().max(1.0) as u32;
+        let height = (layout.height + PADDING * 2.0).ceil().max(1.0) as u32;
+        let mut scene = Scene::new();
+        crate::TextRenderer::new().render(
+            &mut scene,
+            &layout,
+            WritingMode::Horizontal,
+            &TextRenderOptions::default(),
+            Affine::translate((f64::from(PADDING), f64::from(PADDING))),
+        );
+        Ok(FontPreview {
+            scene,
+            width,
+            height,
+        })
     }
 
     #[must_use]
@@ -66,7 +95,7 @@ impl SceneRenderer {
         }
         let key = FrameKey::new(
             composition.revision(),
-            self.resources.fonts().generation(),
+            self.fonts.generation(),
             &composition.request,
         );
         if let Some(frame) = self.frames.lock().get(&key) {
@@ -75,7 +104,7 @@ impl SceneRenderer {
         let frame = Arc::new(Frame::render(
             composition,
             snapshot,
-            &self.resources,
+            self,
             &composition.request.theme,
             &self.text_renderer,
         )?);
@@ -84,6 +113,7 @@ impl SceneRenderer {
 
     pub fn clear_cache(&self) {
         self.frames.lock().clear();
+        self.images.lock().clear();
     }
 
     /// Advances unaffected cached frames to the new revision and removes stale ones.
@@ -95,6 +125,24 @@ impl SceneRenderer {
 impl Default for SceneRenderer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct FontPreview {
+    scene: Scene,
+    width: u32,
+    height: u32,
+}
+
+impl FontPreview {
+    #[must_use]
+    pub const fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    #[must_use]
+    pub const fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 }
 
@@ -165,23 +213,14 @@ impl Frame {
     fn render(
         composition: &Composition,
         snapshot: &Snapshot,
-        resources: &RenderResources,
+        renderer: &SceneRenderer,
         theme: &RenderTheme,
         text_renderer: &crate::TextRenderer,
     ) -> Result<Self> {
         let rendered = composition
             .layers
             .par_iter()
-            .map(|layer| {
-                render_layer(
-                    layer,
-                    composition,
-                    snapshot,
-                    resources,
-                    theme,
-                    text_renderer,
-                )
-            })
+            .map(|layer| render_layer(layer, composition, snapshot, renderer, theme, text_renderer))
             .collect::<Result<Vec<_>>>()?;
         let mut scene = Scene::new();
         let mut entity_scenes = HashMap::<EntityId, Vec<Arc<Scene>>>::new();
@@ -509,13 +548,13 @@ fn render_layer(
     layer: &Layer,
     composition: &Composition,
     snapshot: &Snapshot,
-    resources: &RenderResources,
+    renderer: &SceneRenderer,
     theme: &RenderTheme,
     text_renderer: &crate::TextRenderer,
 ) -> Result<RenderedLayer> {
     match layer {
-        Layer::Image(layer) => render_image(layer, composition, snapshot, resources),
-        Layer::Text(layer) => text_renderer.render_layer(layer, resources, theme),
+        Layer::Image(layer) => render_image(layer, composition, snapshot, renderer),
+        Layer::Text(layer) => text_renderer.render_layer(layer, &renderer.fonts, theme),
     }
 }
 
@@ -523,9 +562,9 @@ fn render_image(
     layer: &ImageLayer,
     composition: &Composition,
     snapshot: &Snapshot,
-    resources: &RenderResources,
+    renderer: &SceneRenderer,
 ) -> Result<RenderedLayer> {
-    let image = resources.image(snapshot, &layer.asset)?;
+    let image = renderer.image(snapshot, &layer.asset)?;
     if layer.is_base && (image.width != composition.width || image.height != composition.height) {
         return Err(Error::invalid(format!(
             "base image for page {} is {}x{}, expected {}x{}",
@@ -584,6 +623,120 @@ impl AsRef<[u8]> for ImageBytes {
     }
 }
 
+impl SceneRenderer {
+    fn image(&self, snapshot: &Snapshot, asset: &Asset) -> Result<Arc<DecodedImage>> {
+        if let Some(image) = self.images.lock().get(asset.blob) {
+            return Ok(image);
+        }
+        let bytes = snapshot.read_blob(asset.blob)?;
+        let decoded = image::load_from_memory(&bytes)
+            .map_err(|source| Error::Image {
+                blob: asset.blob,
+                source,
+            })?
+            .into_rgba8();
+        if let (Some(expected_width), Some(expected_height)) =
+            (asset.metadata.width, asset.metadata.height)
+            && (decoded.width() != expected_width || decoded.height() != expected_height)
+        {
+            return Err(Error::invalid(format!(
+                "blob {} decoded as {}x{}, expected {}x{}",
+                asset.blob,
+                decoded.width(),
+                decoded.height(),
+                expected_width,
+                expected_height
+            )));
+        }
+        let image = Arc::new(DecodedImage {
+            width: decoded.width(),
+            height: decoded.height(),
+            pixels: Arc::from(decoded.into_raw()),
+        });
+        self.images.lock().insert(asset.blob, image.clone());
+        Ok(image)
+    }
+}
+
+struct DecodedImage {
+    width: u32,
+    height: u32,
+    pixels: Arc<[u8]>,
+}
+
+impl DecodedImage {
+    fn byte_len(&self) -> usize {
+        self.pixels.len()
+    }
+}
+
+struct CachedImage {
+    image: Arc<DecodedImage>,
+    last_used: u64,
+}
+
+struct DecodedImageCache {
+    entries: HashMap<BlobId, CachedImage>,
+    max_bytes: usize,
+    bytes: usize,
+    clock: u64,
+}
+
+impl DecodedImageCache {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            max_bytes,
+            bytes: 0,
+            clock: 0,
+        }
+    }
+
+    fn get(&mut self, id: BlobId) -> Option<Arc<DecodedImage>> {
+        self.clock = self.clock.wrapping_add(1);
+        let entry = self.entries.get_mut(&id)?;
+        entry.last_used = self.clock;
+        Some(entry.image.clone())
+    }
+
+    fn insert(&mut self, id: BlobId, image: Arc<DecodedImage>) {
+        let image_bytes = image.byte_len();
+        if self.max_bytes == 0 || image_bytes > self.max_bytes {
+            return;
+        }
+        if let Some(previous) = self.entries.remove(&id) {
+            self.bytes = self.bytes.saturating_sub(previous.image.byte_len());
+        }
+        while self.bytes.saturating_add(image_bytes) > self.max_bytes {
+            let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(id, _)| *id)
+            else {
+                break;
+            };
+            if let Some(removed) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(removed.image.byte_len());
+            }
+        }
+        self.clock = self.clock.wrapping_add(1);
+        self.bytes += image_bytes;
+        self.entries.insert(
+            id,
+            CachedImage {
+                image,
+                last_used: self.clock,
+            },
+        );
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.bytes = 0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use koharu_scene::{
@@ -597,13 +750,13 @@ mod tests {
     fn render_frame(
         composition: &Composition,
         snapshot: &Snapshot,
-        resources: &RenderResources,
+        renderer: &SceneRenderer,
         theme: &RenderTheme,
     ) -> Result<Frame> {
         Frame::render(
             composition,
             snapshot,
-            resources,
+            renderer,
             theme,
             &crate::TextRenderer::new(),
         )
@@ -752,7 +905,7 @@ mod tests {
             ..RenderTheme::default()
         };
 
-        let frame = render_frame(&composition, &snapshot, &RenderResources::new(), &theme).unwrap();
+        let frame = render_frame(&composition, &snapshot, &SceneRenderer::new(), &theme).unwrap();
         let rendered = frame
             .layers()
             .iter()
@@ -783,7 +936,7 @@ mod tests {
             ..RenderTheme::default()
         };
 
-        let frame = render_frame(&composition, &snapshot, &RenderResources::new(), &theme).unwrap();
+        let frame = render_frame(&composition, &snapshot, &SceneRenderer::new(), &theme).unwrap();
         let rendered = frame
             .layers()
             .iter()
@@ -813,7 +966,7 @@ mod tests {
             ..RenderTheme::default()
         };
 
-        let frame = render_frame(&composition, &snapshot, &RenderResources::new(), &theme).unwrap();
+        let frame = render_frame(&composition, &snapshot, &SceneRenderer::new(), &theme).unwrap();
         let rendered = frame
             .layers()
             .iter()
@@ -829,7 +982,7 @@ mod tests {
         let frame = render_frame(
             &composition,
             &snapshot,
-            &RenderResources::new(),
+            &SceneRenderer::new(),
             &RenderTheme::default(),
         )
         .unwrap();
@@ -863,7 +1016,7 @@ mod tests {
             ..RenderTheme::default()
         };
 
-        let frame = render_frame(&composition, &snapshot, &RenderResources::new(), &theme).unwrap();
+        let frame = render_frame(&composition, &snapshot, &SceneRenderer::new(), &theme).unwrap();
 
         assert!(frame.diagnostics().iter().any(|diagnostic| matches!(
             diagnostic,
@@ -882,8 +1035,8 @@ mod tests {
             text_inset: [0.0; 4],
             ..RenderTheme::default()
         };
-        let resources = RenderResources::new();
-        let baseline = render_frame(&composition, &snapshot, &resources, &theme).unwrap();
+        let renderer = SceneRenderer::new();
+        let baseline = render_frame(&composition, &snapshot, &renderer, &theme).unwrap();
         let baseline_bounds = baseline
             .layers()
             .iter()
@@ -896,7 +1049,7 @@ mod tests {
             panic!("expected a text layer");
         };
         layer.angle_degrees = 90.0;
-        let rotated = render_frame(&rotated_composition, &snapshot, &resources, &theme).unwrap();
+        let rotated = render_frame(&rotated_composition, &snapshot, &renderer, &theme).unwrap();
         let rotated_bounds = rotated
             .layers()
             .iter()

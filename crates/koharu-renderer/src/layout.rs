@@ -17,7 +17,7 @@ use skrifa::{
 };
 
 use crate::{
-    font::{Font, font_key},
+    fonts::{Font, font_key},
     script::shaping_direction_for_text,
     segment::{LineBreakSuffix, LineBreaker, hyphenation_lang_from_tag},
     shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper, shape_script_runs},
@@ -2069,7 +2069,7 @@ fn reorder_visual(levels: &[unicode_bidi::Level]) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::{Font, FontSystem};
+    use crate::fonts::{Font, FontSystem};
     use skrifa::{MetadataProvider, instance::Size};
 
     fn any_system_font() -> Font {

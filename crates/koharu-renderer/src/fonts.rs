@@ -1,0 +1,938 @@
+//! System discovery, lazy bundled-font loading, fallback, and bounded byte caching.
+
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    future::Future,
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
+use anyhow::{Context, Result, bail};
+use fontique::{
+    Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontStyle, GenericFamily,
+    Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
+};
+use harfrust::{ShaperData, ShaperInstance, Variation};
+use koharu_runtime::HuggingFaceFile;
+use parking_lot::Mutex;
+use serde::Deserialize;
+use skrifa::{MetadataProvider, instance::LocationRef, string::StringId};
+use tokio::sync::{Mutex as AsyncMutex, OnceCell};
+
+use crate::{
+    script::fontique_scripts,
+    types::{FontFaceInfo, FontFaceStyle, FontSource},
+};
+
+const FONT_REPOSITORY: &str = "mayocream/fonts";
+const FONT_INDEX: &str = "index.json";
+const FONT_INDEX_SCHEMA: u32 = 2;
+const DEFAULT_FONT_CACHE_BYTES: usize = 64 * 1024 * 1024;
+const SYMBOL_FALLBACK_FAMILIES: &[&str] = &[
+    "Segoe UI Symbol",
+    "Segoe UI Emoji",
+    "Noto Sans Symbols 2",
+    "Noto Sans Symbols",
+    "Noto Color Emoji",
+    "Apple Symbols",
+    "Apple Color Emoji",
+    "Symbola",
+    "Arial Unicode MS",
+];
+
+fn symbol_fallback_families() -> &'static [String] {
+    static FAMILIES: LazyLock<Vec<String>> = LazyLock::new(|| {
+        SYMBOL_FALLBACK_FAMILIES
+            .iter()
+            .map(|family| (*family).to_owned())
+            .collect()
+    });
+    &FAMILIES
+}
+
+/// A resolved face and variable-font instance used by shaping, metrics, and drawing.
+#[derive(Clone)]
+pub struct Font {
+    data: Blob<u8>,
+    index: u32,
+    family_name: String,
+    post_script_name: String,
+    synthesis: fontique::Synthesis,
+    shaper_data: Arc<ShaperData>,
+    shaper_instance: ShaperInstance,
+    normalized_coords: Vec<skrifa::instance::NormalizedCoord>,
+    vello_coords: Vec<vello::NormalizedCoord>,
+}
+
+impl fmt::Debug for Font {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Font")
+            .field("index", &self.index)
+            .field("family_name", &self.family_name)
+            .field("post_script_name", &self.post_script_name)
+            .field("synthesis", &self.synthesis)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Font {
+    fn from_query(font: QueryFont, family_name: String) -> Result<Self> {
+        let variations = font
+            .synthesis
+            .variation_settings()
+            .iter()
+            .map(|(tag, value)| Variation {
+                tag: harfrust::Tag::new(&tag.to_be_bytes()),
+                value: *value,
+            })
+            .collect::<Vec<_>>();
+        let harfrust_font = harfrust::FontRef::from_index(font.blob.as_ref(), font.index)
+            .context("failed to create HarfRust font reference")?;
+        let shaper_data = Arc::new(ShaperData::new(&harfrust_font));
+        let shaper_instance = ShaperInstance::from_variations(&harfrust_font, &variations);
+        let skrifa_font = skrifa::FontRef::from_index(font.blob.as_ref(), font.index)
+            .context("failed to create Skrifa font reference")?;
+        let location = skrifa_font
+            .axes()
+            .location(variations.iter().map(|variation| {
+                (
+                    skrifa::Tag::new(&variation.tag.into_bytes()),
+                    variation.value,
+                )
+            }));
+        let normalized_coords = location.coords().to_vec();
+        let vello_coords = normalized_coords
+            .iter()
+            .map(|coord| coord.to_bits())
+            .collect();
+        let post_script_name = skrifa_font
+            .localized_strings(StringId::new(6))
+            .english_or_first()
+            .map(|name| name.to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| family_name.clone());
+
+        Ok(Self {
+            data: font.blob,
+            index: font.index,
+            family_name,
+            post_script_name,
+            synthesis: font.synthesis,
+            shaper_data,
+            shaper_instance,
+            normalized_coords,
+            vello_coords,
+        })
+    }
+
+    pub(crate) fn vello_data(&self) -> vello::peniko::FontData {
+        vello::peniko::FontData::new(self.data.clone(), self.index)
+    }
+
+    pub(crate) fn normalized_coords(&self) -> &[vello::NormalizedCoord] {
+        &self.vello_coords
+    }
+
+    pub(crate) fn location(&self) -> LocationRef<'_> {
+        LocationRef::new(&self.normalized_coords)
+    }
+
+    pub(crate) fn shaper_instance(&self) -> &ShaperInstance {
+        &self.shaper_instance
+    }
+
+    pub(crate) fn shaper_data(&self) -> &ShaperData {
+        &self.shaper_data
+    }
+
+    pub(crate) fn synthetic_bold(&self) -> bool {
+        self.synthesis.embolden()
+    }
+
+    pub(crate) fn synthetic_skew(&self) -> Option<f32> {
+        self.synthesis.skew()
+    }
+
+    pub(crate) fn skrifa_ref(&self) -> Result<skrifa::FontRef<'_>> {
+        skrifa::FontRef::from_index(self.data.as_ref(), self.index)
+            .context("failed to create Skrifa font reference")
+    }
+
+    pub(crate) fn harfrust_ref(&self) -> Result<harfrust::FontRef<'_>> {
+        harfrust::FontRef::from_index(self.data.as_ref(), self.index)
+            .context("failed to create HarfRust font reference")
+    }
+
+    pub fn has_glyph(&self, character: char) -> bool {
+        self.skrifa_ref()
+            .is_ok_and(|font| font.charmap().map(character).is_some())
+    }
+
+    pub(crate) fn covers(&self, text: &str) -> bool {
+        self.skrifa_ref().is_ok_and(|font| {
+            let charmap = font.charmap();
+            text.chars()
+                .filter(|character| {
+                    !character.is_control()
+                        && !character.is_whitespace()
+                        && !is_default_ignorable(*character)
+                })
+                .all(|character| charmap.map(character).is_some())
+        })
+    }
+
+    pub fn family_name(&self) -> &str {
+        &self.family_name
+    }
+
+    pub fn post_script_name(&self) -> &str {
+        &self.post_script_name
+    }
+
+    /// Original font bytes for consumers that need a rasterizer other than Vello.
+    pub fn data(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+
+    /// Face index within [`Self::data`], including font collections.
+    pub const fn face_index(&self) -> u32 {
+        self.index
+    }
+}
+
+fn is_default_ignorable(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x200C | 0x200D | 0xFE00..=0xFE0F | 0xE0020..=0xE007F | 0xE0100..=0xE01EF
+    )
+}
+
+pub(crate) fn font_key(font: &Font) -> usize {
+    font as *const Font as usize
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct FontFace {
+    pub(crate) family_name: String,
+    pub(crate) post_script_name: String,
+    pub(crate) weight: u16,
+    pub(crate) stretch: u16,
+    pub(crate) style: FontFaceStyle,
+}
+
+/// Font discovery, matching, fallback, and source caching.
+pub struct FontSystem {
+    collection: Collection,
+    sources: SourceCache,
+    system_families: Vec<String>,
+    system_faces: Option<Vec<FontFace>>,
+    resolved: HashMap<ResolveKey, Vec<Font>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ResolveKey {
+    families: Vec<String>,
+    fallback_families: Vec<String>,
+    width: u32,
+    weight: u32,
+    style: (u8, u32),
+    scripts: Vec<[u8; 4]>,
+    language: Option<String>,
+}
+
+impl FontSystem {
+    #[must_use]
+    pub fn new() -> Self {
+        let mut collection = Collection::new(CollectionOptions::default());
+        let system_families = collection.family_names().map(str::to_owned).collect();
+        Self {
+            collection,
+            sources: SourceCache::new_shared(),
+            system_families,
+            system_faces: None,
+            resolved: HashMap::new(),
+        }
+    }
+
+    /// Resolves an ordered font chain for the requested families, attributes, and scripts.
+    pub fn resolve(
+        &mut self,
+        families: &[String],
+        attributes: Attributes,
+        scripts: &[Script],
+        language: Option<&str>,
+    ) -> Result<Vec<Font>> {
+        self.resolve_with_fallback_families(families, &[], attributes, scripts, language)
+    }
+
+    pub(crate) fn resolve_with_fallback_families(
+        &mut self,
+        families: &[String],
+        fallback_families: &[String],
+        attributes: Attributes,
+        scripts: &[Script],
+        language: Option<&str>,
+    ) -> Result<Vec<Font>> {
+        let language = language.and_then(|tag| Language::parse(tag).ok());
+        let scripts = if scripts.is_empty() {
+            &[Script::from_bytes(*b"Latn")][..]
+        } else {
+            scripts
+        };
+        let style = match attributes.style {
+            FontStyle::Normal => (0, 0),
+            FontStyle::Italic => (1, 0),
+            FontStyle::Oblique(angle) => (2, angle.unwrap_or(14.0).to_bits()),
+        };
+        let key = ResolveKey {
+            families: families.to_vec(),
+            fallback_families: fallback_families.to_vec(),
+            width: attributes.width.percentage().to_bits(),
+            weight: attributes.weight.value().to_bits(),
+            style,
+            scripts: scripts.iter().map(|script| script.to_bytes()).collect(),
+            language: language
+                .as_ref()
+                .map(|language| language.as_str().to_owned()),
+        };
+        if let Some(fonts) = self.resolved.get(&key) {
+            return Ok(fonts.clone());
+        }
+        let mut seen = HashSet::new();
+        let mut resolved = Vec::new();
+
+        for &script in scripts {
+            let mut candidates = Vec::new();
+            {
+                let mut query = self.collection.query(&mut self.sources);
+                if families.is_empty() {
+                    query.set_families([QueryFamily::Generic(GenericFamily::SansSerif)]);
+                } else {
+                    query.set_families(
+                        families
+                            .iter()
+                            .map(|family| QueryFamily::Named(family.as_str())),
+                    );
+                }
+                query.set_attributes(attributes);
+                query.set_fallbacks(FallbackKey::new(script, language.as_ref()));
+                query.matches_with(|font| {
+                    candidates.push(font.clone());
+                    QueryStatus::Continue
+                });
+            }
+            // Explicit symbol families are a final safety net, not body-font
+            // candidates. Query them separately so a missing requested family
+            // still falls back to the platform's script-appropriate text font.
+            if fallback_families.iter().any(|fallback| {
+                !families
+                    .iter()
+                    .any(|family| family.eq_ignore_ascii_case(fallback))
+            }) {
+                let mut query = self.collection.query(&mut self.sources);
+                query.set_families(
+                    fallback_families
+                        .iter()
+                        .filter(|fallback| {
+                            !families
+                                .iter()
+                                .any(|family| family.eq_ignore_ascii_case(fallback))
+                        })
+                        .map(|family| QueryFamily::Named(family.as_str())),
+                );
+                query.set_attributes(attributes);
+                query.matches_with(|font| {
+                    candidates.push(font.clone());
+                    QueryStatus::Continue
+                });
+            }
+
+            for candidate in candidates {
+                if !seen.insert((candidate.blob.id(), candidate.index)) {
+                    continue;
+                }
+                let family_name = self
+                    .collection
+                    .family_name(candidate.family.0)
+                    .unwrap_or("Unknown")
+                    .to_owned();
+                resolved.push(Font::from_query(candidate, family_name)?);
+            }
+        }
+
+        if resolved.is_empty() && !families.is_empty() {
+            resolved = self.resolve_with_fallback_families(
+                &[],
+                fallback_families,
+                attributes,
+                scripts,
+                language.as_ref().map(Language::as_str),
+            )?;
+        }
+        if resolved.is_empty() {
+            bail!("no usable fonts are installed");
+        }
+        if self.resolved.len() >= 256 {
+            self.resolved.clear();
+        }
+        self.resolved.insert(key, resolved.clone());
+        Ok(resolved)
+    }
+
+    pub fn query_family(&mut self, family: &str) -> Result<Font> {
+        self.resolve(
+            &[family.to_owned()],
+            Attributes::default(),
+            &[Script::from_bytes(*b"Latn")],
+            None,
+        )?
+        .into_iter()
+        .find(|font| font.family_name().eq_ignore_ascii_case(family))
+        .with_context(|| format!("no font found for family {family:?}"))
+    }
+
+    pub fn first_font(&mut self) -> Result<Font> {
+        self.resolve(
+            &[],
+            Attributes::default(),
+            &[Script::from_bytes(*b"Latn")],
+            None,
+        )?
+        .into_iter()
+        .next()
+        .context("no usable fonts are installed")
+    }
+
+    pub(crate) fn system_faces(&mut self) -> Vec<FontFace> {
+        if let Some(faces) = &self.system_faces {
+            return faces.clone();
+        }
+        let faces = self.faces_for_families(self.system_families.clone());
+        self.system_faces = Some(faces.clone());
+        faces
+    }
+
+    fn faces_for_families(&mut self, families: impl IntoIterator<Item = String>) -> Vec<FontFace> {
+        let mut faces = Vec::new();
+        for family_name in families {
+            let Some(family) = self.collection.family_by_name(&family_name) else {
+                continue;
+            };
+            for info in family.fonts() {
+                let Some(blob) = info.load(Some(&mut self.sources)) else {
+                    continue;
+                };
+                let query = QueryFont {
+                    family: (family.id(), 0),
+                    blob,
+                    index: info.index(),
+                    synthesis: fontique::Synthesis::default(),
+                    charmap_index: info.charmap_index(),
+                };
+                let Ok(font) = Font::from_query(query, family_name.clone()) else {
+                    continue;
+                };
+                faces.push(FontFace {
+                    family_name: family_name.clone(),
+                    post_script_name: font.post_script_name,
+                    weight: info.weight().value().round().clamp(1.0, 1000.0) as u16,
+                    stretch: info.width().percentage().round().clamp(1.0, 1000.0) as u16,
+                    style: match info.style() {
+                        FontStyle::Normal => FontFaceStyle::Normal,
+                        FontStyle::Italic => FontFaceStyle::Italic,
+                        FontStyle::Oblique(_) => FontFaceStyle::Oblique,
+                    },
+                });
+            }
+        }
+        faces
+    }
+}
+
+impl Default for FontSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub(crate) struct Fonts {
+    system: Mutex<FontSystem>,
+    catalog: OnceCell<Arc<FontCatalog>>,
+    cache: Mutex<FontCache>,
+    generation: AtomicU64,
+}
+
+impl Fonts {
+    fn new() -> Self {
+        Self {
+            system: Mutex::new(FontSystem::new()),
+            catalog: OnceCell::new(),
+            cache: Mutex::new(FontCache::new(DEFAULT_FONT_CACHE_BYTES)),
+            generation: AtomicU64::new(0),
+        }
+    }
+
+    pub(crate) fn shared() -> Arc<Self> {
+        static FONTS: LazyLock<Arc<Fonts>> = LazyLock::new(|| Arc::new(Fonts::new()));
+        FONTS.clone()
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    pub(crate) async fn faces(&self) -> Result<Vec<FontFaceInfo>> {
+        let catalog = self.catalog().await?;
+        let mut faces = self
+            .system
+            .lock()
+            .system_faces()
+            .into_iter()
+            .map(|face| FontFaceInfo {
+                family_name: face.family_name,
+                post_script_name: face.post_script_name,
+                weight: face.weight,
+                stretch: face.stretch,
+                style: face.style,
+                source: FontSource::System,
+            })
+            .collect::<Vec<_>>();
+        faces.extend(catalog.faces.iter().map(|face| face.info()));
+        faces.sort_by(|left, right| {
+            left.source
+                .cmp(&right.source)
+                .then_with(|| left.family_name.cmp(&right.family_name))
+                .then_with(|| left.post_script_name.cmp(&right.post_script_name))
+        });
+        let mut seen = HashSet::new();
+        faces.retain(|face| seen.insert(normalize(&face.post_script_name)));
+        faces.sort_by(|left, right| {
+            left.family_name
+                .cmp(&right.family_name)
+                .then_with(|| left.post_script_name.cmp(&right.post_script_name))
+                .then_with(|| left.source.cmp(&right.source))
+        });
+        Ok(faces)
+    }
+
+    pub(crate) fn resolve(
+        &self,
+        preferred_font: Option<&str>,
+        font_weight: Option<u16>,
+        theme_families: &[String],
+        text: &str,
+        language: Option<&str>,
+    ) -> Result<Vec<Font>> {
+        let mut families = Vec::with_capacity(theme_families.len() + 2);
+        if let Some(preferred) = preferred_font.filter(|value| !value.trim().is_empty()) {
+            families.push(preferred.to_owned());
+        }
+        for family in theme_families {
+            if !families
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case(family))
+            {
+                families.push(family.clone());
+            }
+        }
+        if !families
+            .iter()
+            .any(|family| family.eq_ignore_ascii_case("Arial"))
+        {
+            families.push("Arial".to_owned());
+        }
+
+        let mut attributes = Attributes::default();
+        if let Some(weight) = font_weight {
+            attributes.weight = fontique::FontWeight::new(f32::from(weight));
+        }
+
+        let bundled = if let Some(family) = families.first().filter(|family| {
+            self.system
+                .lock()
+                .collection
+                .family_by_name(family)
+                .is_none()
+        }) {
+            let catalog = match self.catalog.get() {
+                Some(catalog) => catalog.clone(),
+                None => block_on(self.catalog())?.clone(),
+            };
+            if let Some(face) = catalog.select(family, attributes) {
+                let cached = self.cache.lock().get(&face.post_script_name);
+                match cached {
+                    Some(font) => Some(font),
+                    None => Some(block_on(self.load(face))?),
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let mut resolved = self.system.lock().resolve_with_fallback_families(
+            &families,
+            symbol_fallback_families(),
+            attributes,
+            &fontique_scripts(text),
+            language,
+        )?;
+        if let Some(font) = bundled {
+            resolved.retain(|candidate| {
+                candidate.data.id() != font.data.id() || candidate.index != font.index
+            });
+            resolved.insert(0, font);
+        }
+        Ok(resolved)
+    }
+
+    pub(crate) async fn by_post_script_name(&self, post_script_name: &str) -> Result<Font> {
+        let catalog = self.catalog().await?;
+        if let Some(face) = catalog.by_post_script_name(post_script_name) {
+            return self.load(face).await;
+        }
+
+        let mut system = self.system.lock();
+        let face = system
+            .system_faces()
+            .into_iter()
+            .find(|face| face.post_script_name.eq_ignore_ascii_case(post_script_name))
+            .with_context(|| format!("unknown font {post_script_name:?}"))?;
+        system
+            .resolve(
+                &[face.family_name],
+                Attributes {
+                    weight: fontique::FontWeight::new(f32::from(face.weight)),
+                    ..Attributes::default()
+                },
+                &[Script::from_bytes(*b"Latn")],
+                None,
+            )?
+            .into_iter()
+            .find(|font| {
+                font.post_script_name()
+                    .eq_ignore_ascii_case(post_script_name)
+            })
+            .with_context(|| format!("could not load font {post_script_name:?}"))
+    }
+
+    async fn catalog(&self) -> Result<&Arc<FontCatalog>> {
+        self.catalog
+            .get_or_try_init(|| async {
+                let path = HuggingFaceFile::latest_dataset(FONT_REPOSITORY, FONT_INDEX)
+                    .resolve()
+                    .await?;
+                let bytes = tokio::fs::read(&path)
+                    .await
+                    .with_context(|| format!("failed to read {}", path.display()))?;
+                let index: CatalogIndex =
+                    serde_json::from_slice(&bytes).context("invalid bundled font index")?;
+                if index.schema_version != FONT_INDEX_SCHEMA {
+                    bail!(
+                        "unsupported bundled font index schema {}",
+                        index.schema_version
+                    );
+                }
+                Ok(Arc::new(FontCatalog::from_index(index)))
+            })
+            .await
+    }
+
+    async fn load(&self, face: Arc<BundledFace>) -> Result<Font> {
+        if let Some(font) = self.cache.lock().get(&face.post_script_name) {
+            return Ok(font);
+        }
+        let _load = face.load.lock().await;
+        if let Some(font) = self.cache.lock().get(&face.post_script_name) {
+            return Ok(font);
+        }
+        let path = HuggingFaceFile::latest_dataset(FONT_REPOSITORY, &face.file_name)
+            .resolve()
+            .await?;
+        let data = tokio::fs::read(&path)
+            .await
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let font = font_from_blob(
+            Blob::from(data),
+            &face,
+            Attributes {
+                weight: fontique::FontWeight::new(f32::from(face.weight)),
+                style: face.style.into(),
+                ..Attributes::default()
+            },
+        )?;
+        self.cache
+            .lock()
+            .insert(face.post_script_name.clone(), font.clone());
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        Ok(font)
+    }
+}
+
+fn font_from_blob(blob: Blob<u8>, face: &BundledFace, attributes: Attributes) -> Result<Font> {
+    let mut collection = Collection::new(CollectionOptions {
+        shared: false,
+        system_fonts: false,
+    });
+    if collection.register_fonts(blob, None).is_empty() {
+        bail!("font file {:?} contained no usable faces", face.file_name);
+    }
+    let mut sources = SourceCache::new(Default::default());
+    let mut candidates = Vec::new();
+    let mut query = collection.query(&mut sources);
+    query.set_families([QueryFamily::Named(&face.family_name)]);
+    query.set_attributes(attributes);
+    query.matches_with(|font| {
+        candidates.push(font.clone());
+        QueryStatus::Continue
+    });
+    let mut fallback = None;
+    for candidate in candidates {
+        let font = Font::from_query(candidate, face.family_name.clone())?;
+        if font
+            .post_script_name()
+            .eq_ignore_ascii_case(&face.post_script_name)
+        {
+            return Ok(font);
+        }
+        fallback.get_or_insert(font);
+    }
+    fallback.with_context(|| format!("could not load bundled font {:?}", face.family_name))
+}
+
+fn block_on<F>(future: F) -> F::Output
+where
+    F: Future + Send,
+    F::Output: Send,
+{
+    static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("koharu-fonts")
+            .enable_all()
+            .build()
+            .expect("the bundled font runtime must initialize")
+    });
+    if tokio::runtime::Handle::try_current().is_ok() {
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| RUNTIME.block_on(future))
+                .join()
+                .expect("the bundled font loader must not panic")
+        })
+    } else {
+        RUNTIME.block_on(future)
+    }
+}
+
+struct FontCatalog {
+    faces: Vec<Arc<BundledFace>>,
+    families: HashMap<String, Vec<Arc<BundledFace>>>,
+    post_script_names: HashMap<String, Arc<BundledFace>>,
+}
+
+impl FontCatalog {
+    fn from_index(index: CatalogIndex) -> Self {
+        let mut faces = Vec::new();
+        let mut families = HashMap::<String, Vec<Arc<BundledFace>>>::new();
+        let mut post_script_names = HashMap::new();
+        for family in index.families {
+            for weight in family.weights {
+                for font in weight.fonts {
+                    let face = Arc::new(BundledFace {
+                        family_name: family.family_name.clone(),
+                        file_name: font.file_name,
+                        post_script_name: font.postscript_name,
+                        weight: weight.weight,
+                        stretch: (font.width * 100.0).round().clamp(1.0, 1000.0) as u16,
+                        style: font.style,
+                        load: AsyncMutex::new(()),
+                    });
+                    families
+                        .entry(normalize(&face.family_name))
+                        .or_default()
+                        .push(face.clone());
+                    post_script_names.insert(normalize(&face.post_script_name), face.clone());
+                    faces.push(face);
+                }
+            }
+        }
+        Self {
+            faces,
+            families,
+            post_script_names,
+        }
+    }
+
+    fn select(&self, name: &str, attributes: Attributes) -> Option<Arc<BundledFace>> {
+        if let Some(face) = self.post_script_names.get(&normalize(name)) {
+            return Some(face.clone());
+        }
+        self.families
+            .get(&normalize(name))?
+            .iter()
+            .min_by_key(|face| {
+                let style = if fontique::FontStyle::from(face.style) == attributes.style {
+                    0
+                } else {
+                    2_000
+                };
+                style + (f32::from(face.weight) - attributes.weight.value()).abs() as u32
+            })
+            .cloned()
+    }
+
+    fn by_post_script_name(&self, name: &str) -> Option<Arc<BundledFace>> {
+        self.post_script_names.get(&normalize(name)).cloned()
+    }
+}
+
+struct BundledFace {
+    family_name: String,
+    file_name: String,
+    post_script_name: String,
+    weight: u16,
+    stretch: u16,
+    style: CatalogStyle,
+    load: AsyncMutex<()>,
+}
+
+impl BundledFace {
+    fn info(&self) -> FontFaceInfo {
+        FontFaceInfo {
+            family_name: self.family_name.clone(),
+            post_script_name: self.post_script_name.clone(),
+            weight: self.weight,
+            stretch: self.stretch,
+            style: self.style.into(),
+            source: FontSource::Bundled,
+        }
+    }
+}
+
+struct FontCache {
+    entries: HashMap<String, CachedFont>,
+    max_bytes: usize,
+    bytes: usize,
+    clock: u64,
+}
+
+impl FontCache {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            max_bytes,
+            bytes: 0,
+            clock: 0,
+        }
+    }
+
+    fn get(&mut self, key: &str) -> Option<Font> {
+        self.clock = self.clock.wrapping_add(1);
+        let entry = self.entries.get_mut(key)?;
+        entry.last_used = self.clock;
+        Some(entry.font.clone())
+    }
+
+    fn insert(&mut self, key: String, font: Font) {
+        let data_bytes = font.data().len();
+        if let Some(previous) = self.entries.remove(&key) {
+            self.bytes = self.bytes.saturating_sub(previous.bytes);
+        }
+        if self.max_bytes == 0 || data_bytes > self.max_bytes {
+            return;
+        }
+        while self.bytes.saturating_add(data_bytes) > self.max_bytes {
+            let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
+            if let Some(removed) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(removed.bytes);
+            }
+        }
+        self.clock = self.clock.wrapping_add(1);
+        self.bytes += data_bytes;
+        self.entries.insert(
+            key,
+            CachedFont {
+                font,
+                bytes: data_bytes,
+                last_used: self.clock,
+            },
+        );
+    }
+}
+
+struct CachedFont {
+    font: Font,
+    bytes: usize,
+    last_used: u64,
+}
+
+#[derive(Deserialize)]
+struct CatalogIndex {
+    schema_version: u32,
+    families: Vec<CatalogFamily>,
+}
+
+#[derive(Deserialize)]
+struct CatalogFamily {
+    family_name: String,
+    weights: Vec<CatalogWeight>,
+}
+
+#[derive(Deserialize)]
+struct CatalogWeight {
+    weight: u16,
+    fonts: Vec<CatalogFont>,
+}
+
+#[derive(Deserialize)]
+struct CatalogFont {
+    file_name: String,
+    postscript_name: String,
+    style: CatalogStyle,
+    width: f32,
+}
+
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum CatalogStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+
+impl From<CatalogStyle> for FontFaceStyle {
+    fn from(value: CatalogStyle) -> Self {
+        match value {
+            CatalogStyle::Normal => Self::Normal,
+            CatalogStyle::Italic => Self::Italic,
+            CatalogStyle::Oblique => Self::Oblique,
+        }
+    }
+}
+
+impl From<CatalogStyle> for fontique::FontStyle {
+    fn from(value: CatalogStyle) -> Self {
+        match value {
+            CatalogStyle::Normal => Self::Normal,
+            CatalogStyle::Italic => Self::Italic,
+            CatalogStyle::Oblique => Self::Oblique(None),
+        }
+    }
+}
+
+fn normalize(value: &str) -> String {
+    value.trim().to_lowercase()
+}

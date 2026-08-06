@@ -34,7 +34,7 @@ impl KoharuHost {
         Self { handle }
     }
 
-    fn project_context(&self) -> Result<Value> {
+    async fn project_context(&self) -> Result<Value> {
         let (project, pages) = {
             let current = self.handle.state::<CurrentProject>();
             let current = current.project.lock();
@@ -47,6 +47,7 @@ impl KoharuHost {
             (project.info(), pages)
         };
         let preferences = Preferences::load()?;
+        let fonts = koharu_renderer::SceneRenderer::available_fonts().await?;
         let providers = preferences
             .providers
             .entries
@@ -68,7 +69,7 @@ impl KoharuHost {
             "configuration": {
                 "pipeline": preferences.pipeline,
                 "providers": providers,
-                "available_fonts": preferences.fonts.into_iter().map(|font| font.postscript_name).collect::<Vec<_>>(),
+                "available_fonts": fonts.into_iter().map(|font| font.family_name).collect::<Vec<_>>(),
             },
         }))
     }
@@ -185,7 +186,7 @@ impl KoharuHost {
 #[async_trait]
 impl Host for KoharuHost {
     async fn context(&self) -> Result<Value> {
-        self.project_context()
+        self.project_context().await
     }
 
     fn tools(&self) -> Vec<Tool> {
@@ -212,7 +213,7 @@ impl Host for KoharuHost {
                     ),
                     definition::<SetTypography>(
                         "set_typography",
-                        "Replace an element's typography settings. Font is a PostScript name from available_fonts.",
+                        "Replace an element's typography settings. Font is a family name from available_fonts.",
                     ),
                     definition::<SetGeometry>(
                         "set_geometry",
@@ -240,7 +241,7 @@ impl Host for KoharuHost {
         match call.name.as_str() {
             "inspect_project" => {
                 let _: InspectProject = arguments(&call)?;
-                Invocation::read(self.project_context()?)
+                Invocation::read(self.project_context().await?)
             }
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;

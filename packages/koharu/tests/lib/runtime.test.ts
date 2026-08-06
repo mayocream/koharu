@@ -40,7 +40,6 @@ const preferences: Preferences = {
     entries: [],
   },
   languages: [],
-  fonts: [],
 }
 
 const project: ProjectInfo = {

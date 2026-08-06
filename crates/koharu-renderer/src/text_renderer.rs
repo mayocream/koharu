@@ -8,11 +8,11 @@ use vello::{
 };
 
 use crate::{
-    Error, HyphenationPolicy, LayoutRun, RenderDiagnostic, RenderResources, RenderTheme,
-    Result as RenderResult, TextLayout, VerticalAlignment, WritingMode,
+    Error, HyphenationPolicy, LayoutRun, RenderDiagnostic, RenderTheme, Result as RenderResult,
+    TextLayout, VerticalAlignment, WritingMode,
     bubble::LayoutBox,
     compositor::{RenderBounds, TextLayer},
-    font::font_key,
+    fonts::{Fonts, font_key},
     rasterizer::rgba,
     scene_renderer::{RenderedLayer, VisualLayer, VisualLayerKind, VisualText},
     script::is_cjk_text,
@@ -94,7 +94,7 @@ impl TextRenderer {
     pub(crate) fn render_layer(
         &self,
         layer: &TextLayer,
-        resources: &RenderResources,
+        fonts: &Fonts,
         theme: &RenderTheme,
     ) -> RenderResult<RenderedLayer> {
         let is_bubble_text = layer.balloon_contour.is_some();
@@ -109,8 +109,7 @@ impl TextRenderer {
                 layer.entity
             )));
         }
-        let fonts = resources
-            .fonts()
+        let fonts = fonts
             .resolve(
                 layer.preferred_font.as_deref(),
                 layer.font_weight,

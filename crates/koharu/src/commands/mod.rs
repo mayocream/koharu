@@ -1,6 +1,7 @@
 pub(crate) mod agent;
 pub(crate) mod canvas;
 pub(crate) mod editing;
+pub(crate) mod fonts;
 pub(crate) mod lifecycle;
 pub(crate) mod output;
 pub(crate) mod preferences;
@@ -86,6 +87,8 @@ pub fn bindings() -> tauri_specta::Builder<tauri::Wry> {
             processing::stop_job,
             output::export_pages,
             output::get_thumbnail,
+            fonts::get_fonts,
+            fonts::get_font_preview,
             preferences::save_preferences,
             preferences::get_preferences,
             preferences::get_translation_models,

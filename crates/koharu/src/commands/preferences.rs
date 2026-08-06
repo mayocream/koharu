@@ -1,4 +1,4 @@
-use std::{fmt, sync::LazyLock};
+use std::fmt;
 
 use anyhow::Result;
 use koharu_pipeline::PipelineConfig;
@@ -14,7 +14,6 @@ pub struct Preferences {
     pub pipeline: PipelineConfig,
     pub providers: ProviderPreferences,
     pub languages: Vec<LanguageChoice>,
-    pub fonts: Vec<FontChoice>,
 }
 
 impl Preferences {
@@ -33,58 +32,9 @@ impl Preferences {
                     name: language.to_string(),
                 })
                 .collect(),
-            fonts: FONT_CHOICES.as_slice().to_vec(),
         })
     }
 }
-
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct FontChoice {
-    pub family: String,
-    pub postscript_name: String,
-    pub weight: u16,
-    pub stretch: u16,
-    pub style: FontStyle,
-    pub source: FontSource,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum FontStyle {
-    Normal,
-    Italic,
-    Oblique,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum FontSource {
-    System,
-    Registered,
-}
-
-static FONT_CHOICES: LazyLock<Vec<FontChoice>> = LazyLock::new(|| {
-    koharu_renderer::RenderResources::new()
-        .fonts()
-        .available_fonts()
-        .into_iter()
-        .map(|font| FontChoice {
-            family: font.family_name,
-            postscript_name: font.post_script_name,
-            weight: font.weight,
-            stretch: font.stretch,
-            style: match font.style {
-                koharu_renderer::FontFaceStyle::Normal => FontStyle::Normal,
-                koharu_renderer::FontFaceStyle::Italic => FontStyle::Italic,
-                koharu_renderer::FontFaceStyle::Oblique => FontStyle::Oblique,
-            },
-            source: match font.source {
-                koharu_renderer::FontSource::System => FontSource::System,
-                koharu_renderer::FontSource::Registered => FontSource::Registered,
-            },
-        })
-        .collect()
-});
 
 #[derive(Clone, Debug, Deserialize, Serialize, Type)]
 pub struct ProviderPreferences {

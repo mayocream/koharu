@@ -10,11 +10,12 @@ import {
 } from '@tanstack/react-query'
 
 import { call } from './backend'
-import { commands, type PageImportSource } from './protocol'
+import { commands, type FontChoice, type PageImportSource } from './protocol'
 
 export const projectKey = ['project'] as const
 export const pagesKey = ['pages'] as const
 export const pageKey = ['page'] as const
+export const fontsKey = ['fonts'] as const
 const importPagesKey = ['import-pages'] as const
 
 const projectQuery = queryOptions({
@@ -30,6 +31,11 @@ const pagesQuery = queryOptions({
 const pageQuery = queryOptions({
   queryKey: pageKey,
   queryFn: () => call(commands.getPage),
+})
+
+const fontsQuery = queryOptions({
+  queryKey: fontsKey,
+  queryFn: () => call(commands.getFonts),
 })
 
 export const queryClient = new QueryClient({
@@ -53,6 +59,19 @@ export function usePages(enabled = true) {
 
 export function usePage(enabled = true) {
   return useQuery({ ...pageQuery, enabled })
+}
+
+export function useFonts(enabled = true) {
+  return useQuery({ ...fontsQuery, enabled })
+}
+
+export function useFontPreview(font: FontChoice, enabled = true) {
+  return useQuery({
+    queryKey: ['font-preview', font.postscript_name],
+    queryFn: async () => new Uint8Array(await call(commands.getFontPreview, font.postscript_name)),
+    enabled,
+    gcTime: 5 * 60 * 1000,
+  })
 }
 
 export function useImportPages() {

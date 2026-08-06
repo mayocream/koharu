@@ -42,7 +42,7 @@ pub struct RenderTheme {
 impl Default for RenderTheme {
     fn default() -> Self {
         Self {
-            font_families: vec!["CC Wild Words".to_owned(), "Arial".to_owned()],
+            font_families: vec!["CCWildWords".to_owned(), "Arial".to_owned()],
             font_size: 24.0,
             minimum_font_size: 9.0,
             text_color: [0, 0, 0, 255],

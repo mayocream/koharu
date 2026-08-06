@@ -2,8 +2,9 @@
 
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { Check, ChevronDown, Search } from 'lucide-react'
-import { useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 
+import { useFontPreview } from '@/lib/queries'
 import type { FontChoice } from '@/lib/protocol'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
@@ -38,8 +39,8 @@ export function FontPicker({
         (font.style === current.style &&
           (Math.abs(font.weight - 400) < Math.abs(current.weight - 400) ||
             (Math.abs(font.weight - 400) === Math.abs(current.weight - 400) &&
-              font.source === 'registered' &&
-              current.source !== 'registered')))
+              font.source === 'system' &&
+              current.source !== 'system')))
       ) {
         choices.set(family, font)
       }
@@ -87,9 +88,12 @@ export function FontPicker({
             ? 'h-6 gap-1 rounded-md px-1.5 text-[11px]'
             : 'h-8 gap-2 rounded-lg px-2.5 text-[12px]',
         )}
-        style={selectedFont ? fontPreviewStyle(selectedFont) : undefined}
       >
-        <span className='truncate'>{value || 'Choose a font'}</span>
+        {selectedFont ? (
+          <FontPreviewLabel font={selectedFont} className='min-w-0 flex-1' />
+        ) : (
+          <span className='truncate'>{value || 'Choose a font'}</span>
+        )}
         <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
       </PopoverTrigger>
       <PopoverContent
@@ -179,12 +183,10 @@ function FontList({
               <span className='grid size-3 place-items-center'>
                 {selected && <Check className='size-3' />}
               </span>
-              <span className='min-w-0 flex-1 truncate' style={fontPreviewStyle(font)}>
-                {font.family}
-              </span>
-              {font.source === 'registered' && (
+              <FontPreviewLabel font={font} className='min-w-0 flex-1' />
+              {font.source === 'bundled' && (
                 <span className='text-[8px] tracking-wide text-muted-foreground uppercase'>
-                  Project
+                  Koharu
                 </span>
               )}
             </button>
@@ -197,6 +199,32 @@ function FontList({
         </div>
       )}
     </div>
+  )
+}
+
+function FontPreviewLabel({ font, className }: { font: FontChoice; className?: string }) {
+  const preview = useFontPreview(font).data
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!preview) return
+    const next = URL.createObjectURL(new Blob([preview.buffer], { type: 'image/webp' }))
+    setUrl(next)
+    return () => URL.revokeObjectURL(next)
+  }, [preview])
+
+  return url ? (
+    <span className={cn('flex h-full min-w-0 items-center', className)}>
+      <img
+        src={url}
+        alt={font.family}
+        className='max-h-[18px] max-w-full object-contain object-left dark:invert'
+      />
+    </span>
+  ) : (
+    <span className={cn('truncate', className)} style={fontPreviewStyle(font)}>
+      {font.family}
+    </span>
   )
 }
 

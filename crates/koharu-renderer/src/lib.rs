@@ -8,12 +8,10 @@
 mod bubble;
 mod compositor;
 mod error;
-mod font;
-mod font_policy;
+mod fonts;
 mod layout;
 mod rasterizer;
 mod request;
-mod resources;
 mod scene_renderer;
 mod script;
 mod segment;
@@ -23,13 +21,13 @@ mod types;
 
 pub use compositor::{Composition, Compositor, RenderBounds, RenderDependency, RenderDiagnostic};
 pub use error::{Error, Result};
-pub use font::{Font, FontSystem};
-pub use font_policy::FontFallbackPolicy;
+pub use fonts::{Font, FontSystem};
 pub use layout::{HyphenationPolicy, LayoutLine, LayoutRun, TextLayout, WritingMode};
 pub use rasterizer::{DownsampleFilter, Raster, RasterOptions, Rasterizer};
 pub use request::{LayerPresentation, RenderRequest, RenderTheme, VerticalAlignment};
-pub use resources::{FontManager, RenderResources};
-pub use scene_renderer::{Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText};
+pub use scene_renderer::{
+    FontPreview, Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText,
+};
 pub use segment::{
     LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment, hyphenation_lang_from_tag,
 };

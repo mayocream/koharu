@@ -43,7 +43,7 @@ import {
   type Typography,
   type WritingMode,
 } from '@/lib/protocol'
-import { pageKey, projectKey, queryClient, refresh, usePage } from '@/lib/queries'
+import { pageKey, projectKey, queryClient, refresh, useFonts, usePage } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 import {
@@ -72,12 +72,12 @@ import { Slider } from '@koharu/ui/components/slider'
 import { Switch } from '@koharu/ui/components/switch'
 
 const defaultFont: FontChoice = {
-  family: 'CC Wild Words',
-  postscript_name: 'CCWildWordsRoman',
+  family: 'CCWildWords',
+  postscript_name: 'CCWildWords-Regular',
   weight: 400,
   stretch: 100,
   style: 'normal',
-  source: 'registered',
+  source: 'bundled',
 }
 
 const defaultTypography: Typography = {
@@ -114,7 +114,7 @@ export function Inspector() {
 function TypeInspector() {
   const page = usePage().data
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
-  const availableFonts = useKoharuStore((state) => state.preferences?.fonts ?? [])
+  const availableFonts = useFonts().data
   const expandedSelection = page ? expandLayerSelection(page.layers, selectedIds) : []
   const selected =
     page?.layers.filter(isTextLayer).filter((layer) => expandedSelection.includes(layer.id)) ?? []
@@ -146,7 +146,7 @@ function TypeInspector() {
       ? draft.typography
       : (current?.typography ?? defaultTypography)
   const disabled = !current
-  const fonts = useMemo(() => [...availableFonts, defaultFont], [availableFonts])
+  const fonts = useMemo(() => [...(availableFonts ?? []), defaultFont], [availableFonts])
   const size = Math.round((typography.size ?? 24) * 100) / 100
   const weight = typography.font_weight ?? 400
   const strokeWidth = typography.stroke_width ?? 0

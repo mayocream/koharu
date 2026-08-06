@@ -110,16 +110,6 @@ const preferences: Preferences = {
     { tag: 'en-US', name: 'English' },
     { tag: 'ja-JP', name: 'Japanese' },
   ],
-  fonts: [
-    {
-      family: 'Noto Sans',
-      postscript_name: 'NotoSans-Regular',
-      weight: 400,
-      stretch: 100,
-      style: 'normal',
-      source: 'system',
-    },
-  ],
 }
 
 function installProject() {

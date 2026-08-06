@@ -6,7 +6,7 @@ use icu_properties::{CodePointMapData, props::Script as IcuScript};
 use icu_segmenter::GraphemeClusterSegmenter;
 use skrifa::raw::TableProvider;
 
-use crate::font::Font;
+use crate::fonts::Font;
 
 /// A glyph positioned for layout while retaining its source font and text cluster.
 #[derive(Debug, Clone)]
@@ -237,7 +237,7 @@ fn push_font_run<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::font::FontSystem;
+    use crate::fonts::FontSystem;
 
     const PRIMARY_FAMILIES: &[&str] = &[
         "Arial",

@@ -19,6 +19,28 @@ enum Revision<'a> {
     Latest,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum RepositoryKind {
+    Model,
+    Dataset,
+}
+
+impl RepositoryKind {
+    const fn api_route(self) -> &'static str {
+        match self {
+            Self::Model => "models",
+            Self::Dataset => "datasets",
+        }
+    }
+
+    const fn resolve_prefix(self) -> &'static str {
+        match self {
+            Self::Model => "",
+            Self::Dataset => "datasets/",
+        }
+    }
+}
+
 /// An immutable file snapshot hosted by Hugging Face.
 ///
 /// A latest file resolves the repository head once per process. Every file in
@@ -26,6 +48,7 @@ enum Revision<'a> {
 /// from different revisions if its repository changes during initialization.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct HuggingFaceFile<'a> {
+    kind: RepositoryKind,
     repository: &'a str,
     revision: Revision<'a>,
     filename: &'a str,
@@ -35,6 +58,7 @@ impl<'a> HuggingFaceFile<'a> {
     #[must_use]
     pub const fn pinned(repository: &'a str, revision: &'a str, filename: &'a str) -> Self {
         Self {
+            kind: RepositoryKind::Model,
             repository,
             revision: Revision::Pinned(revision),
             filename,
@@ -44,6 +68,17 @@ impl<'a> HuggingFaceFile<'a> {
     #[must_use]
     pub const fn latest(repository: &'a str, filename: &'a str) -> Self {
         Self {
+            kind: RepositoryKind::Model,
+            repository,
+            revision: Revision::Latest,
+            filename,
+        }
+    }
+
+    #[must_use]
+    pub const fn latest_dataset(repository: &'a str, filename: &'a str) -> Self {
+        Self {
+            kind: RepositoryKind::Dataset,
             repository,
             revision: Revision::Latest,
             filename,
@@ -82,13 +117,15 @@ impl<'a> HuggingFaceFile<'a> {
                 ensure!(is_commit(revision), "invalid pinned revision {revision}");
                 revision.to_owned()
             }
-            Revision::Latest => latest_revision(self.repository).await?,
+            Revision::Latest => latest_revision(self.kind, self.repository).await?,
         };
-        let target = snapshot_path(self.repository, &revision, self.filename);
+        let target = snapshot_path(self.kind, self.repository, &revision, self.filename);
         Store::file(target, move |stage| async move {
             let url = format!(
-                "https://huggingface.co/{}/resolve/{revision}/{}",
-                self.repository, self.filename
+                "https://huggingface.co/{}{}/resolve/{revision}/{}",
+                self.kind.resolve_prefix(),
+                self.repository,
+                self.filename
             );
             Transfer::new()?.fetch(&url, &stage).await
         })
@@ -96,11 +133,12 @@ impl<'a> HuggingFaceFile<'a> {
     }
 }
 
-async fn latest_revision(repository: &str) -> anyhow::Result<String> {
+async fn latest_revision(kind: RepositoryKind, repository: &str) -> anyhow::Result<String> {
+    let key = format!("{}/{repository}", kind.api_route());
     let revision = {
         let mut revisions = REVISIONS.lock().await;
         revisions
-            .entry(repository.to_owned())
+            .entry(key)
             .or_insert_with(|| Arc::new(OnceCell::new()))
             .clone()
     };
@@ -112,7 +150,10 @@ async fn latest_revision(repository: &str) -> anyhow::Result<String> {
                 sha: String,
             }
 
-            let url = format!("https://huggingface.co/api/models/{repository}");
+            let url = format!(
+                "https://huggingface.co/api/{}/{repository}",
+                kind.api_route()
+            );
             let response = Transfer::new()?
                 .get(&url)
                 .send()
@@ -134,9 +175,15 @@ async fn latest_revision(repository: &str) -> anyhow::Result<String> {
         .cloned()
 }
 
-fn snapshot_path(repository: &str, revision: &str, filename: &str) -> PathBuf {
+fn snapshot_path(
+    kind: RepositoryKind,
+    repository: &str,
+    revision: &str,
+    filename: &str,
+) -> PathBuf {
     Store::root()
         .join("hugging-face")
+        .join(kind.api_route())
         .join(repository.replace('/', "--"))
         .join("snapshots")
         .join(revision)
@@ -162,6 +209,7 @@ mod tests {
     #[test]
     fn stores_files_by_immutable_snapshot() {
         let path = snapshot_path(
+            RepositoryKind::Model,
             "owner/model",
             "0123456789abcdef0123456789abcdef01234567",
             "subdir/model.safetensors",
