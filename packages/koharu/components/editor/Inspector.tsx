@@ -17,8 +17,6 @@ import {
   Minus,
   Plus,
   RotateCcw,
-  Square,
-  SquareSlash,
   Trash2,
   Type,
 } from 'lucide-react'
@@ -40,6 +38,7 @@ import {
   commands,
   type EntityId,
   type FontFamily,
+  type FontStyle,
   type Layer,
   type TextAlignment,
   type Typography,
@@ -71,7 +70,6 @@ import {
   SelectValue,
 } from '@koharu/ui/components/select'
 import { Slider } from '@koharu/ui/components/slider'
-import { Toggle } from '@koharu/ui/components/toggle'
 
 const defaultFont: FontFamily = {
   name: 'CCWildWords',
@@ -97,6 +95,7 @@ const defaultFont: FontFamily = {
 const defaultTypography: Typography = {
   preferred_font: null,
   font_weight: 400,
+  font_style: 'normal',
   size: null,
   auto_fit: true,
   color: [0, 0, 0, 255],
@@ -171,15 +170,20 @@ function TypeInspector() {
   const size = Math.round((typography.size ?? 24) * 100) / 100
   const weight = typography.font_weight ?? 400
   const selectedFamily = findFontFamily(families, typography.preferred_font ?? defaultFont.name)
-  const weights = usableFontWeights(selectedFamily)
+  const styles = usableFontStyles(selectedFamily)
+  const style = styles.includes(typography.font_style ?? 'normal')
+    ? (typography.font_style ?? 'normal')
+    : (styles[0] ?? 'normal')
+  const weights = usableFontWeights(selectedFamily, style)
   const strokeWidth = typography.stroke_width ?? 0
-  const strokeEnabled = strokeWidth > 0
-  const displayedStrokeWidth = strokeEnabled ? strokeWidth : 1.5
+  const strokeColor = typography.stroke_color ?? defaultTypography.stroke_color!
+  const strokeEnabled = strokeWidth > 0 && strokeColor[3] > 0
+  const displayedStrokeWidth = strokeWidth > 0 ? strokeWidth : 1.5
 
   return (
     <div className='min-w-0 p-2' data-testid='type-inspector' aria-disabled={disabled}>
       <div className='grid min-w-0 gap-1.5'>
-        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1.5'>
+        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5'>
           <InspectorField label='Font'>
             <FontPicker
               value={typography.preferred_font ?? defaultFont.name}
@@ -187,14 +191,41 @@ function TypeInspector() {
               disabled={disabled}
               size='sm'
               onChange={(preferred_font) => {
-                const nextWeights = usableFontWeights(findFontFamily(families, preferred_font))
+                const family = findFontFamily(families, preferred_font)
+                const nextStyles = usableFontStyles(family)
+                const fontStyle = nextStyles.includes(style) ? style : (nextStyles[0] ?? 'normal')
+                const nextWeights = usableFontWeights(family, fontStyle)
                 const fontWeight = nearestFontWeight(nextWeights, weight)
                 apply((value) => ({
                   ...value,
                   preferred_font,
                   font_weight: fontWeight,
+                  font_style: fontStyle,
                 }))
               }}
+            />
+          </InspectorField>
+          <InspectorField label='Color'>
+            <ColorWell
+              label='Text color'
+              size='sm'
+              disabled={disabled}
+              value={rgbaToHex(typography.color ?? defaultTypography.color!)}
+              onChange={(color) => apply((value) => ({ ...value, color: hexToRgba(color) }))}
+            />
+          </InspectorField>
+        </div>
+
+        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_4.25rem_4.75rem] gap-1.5'>
+          <InspectorField label='Size'>
+            <FontSizeField
+              disabled={disabled}
+              value={size}
+              autoFit={typography.auto_fit}
+              onChange={(next) => apply((value) => ({ ...value, size: next, auto_fit: false }))}
+              onAutoFit={() =>
+                apply((value) => ({ ...value, size: value.size ?? size, auto_fit: true }))
+              }
             />
           </InspectorField>
           <InspectorField label='Weight'>
@@ -217,28 +248,31 @@ function TypeInspector() {
               </SelectContent>
             </Select>
           </InspectorField>
-        </div>
-
-        <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5'>
-          <InspectorField label='Size'>
-            <FontSizeField
+          <InspectorField label='Style'>
+            <Select
               disabled={disabled}
-              value={size}
-              autoFit={typography.auto_fit}
-              onChange={(next) => apply((value) => ({ ...value, size: next, auto_fit: false }))}
-              onAutoFit={() =>
-                apply((value) => ({ ...value, size: value.size ?? size, auto_fit: true }))
-              }
-            />
-          </InspectorField>
-          <InspectorField label='Color'>
-            <ColorWell
-              label='Text color'
-              size='sm'
-              disabled={disabled}
-              value={rgbaToHex(typography.color ?? defaultTypography.color!)}
-              onChange={(color) => apply((value) => ({ ...value, color: hexToRgba(color) }))}
-            />
+              value={style}
+              onValueChange={(font_style) => {
+                const nextStyle = font_style as FontStyle
+                const nextWeights = usableFontWeights(selectedFamily, nextStyle)
+                apply((value) => ({
+                  ...value,
+                  font_style: nextStyle,
+                  font_weight: nearestFontWeight(nextWeights, weight),
+                }))
+              }}
+            >
+              <SelectTrigger size='sm' aria-label='Font style' className='w-full min-w-0'>
+                <SelectValue>{fontStyleLabel(style)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent align='end'>
+                {styles.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {fontStyleLabel(value)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </InspectorField>
         </div>
 
@@ -287,38 +321,33 @@ function TypeInspector() {
           </InspectorField>
         </div>
 
-        <div className='grid min-w-0 grid-cols-[2.75rem_2.75rem_minmax(5.5rem,1fr)] items-end gap-1.5'>
+        <div className='grid min-w-0 grid-cols-[2.75rem_minmax(5.5rem,1fr)] items-end gap-1.5'>
           <InspectorField label='Border'>
-            <div className='flex h-6 items-center'>
-              <Toggle
-                size='sm'
-                variant='outline'
-                disabled={disabled}
-                pressed={strokeEnabled}
-                aria-label={strokeEnabled ? 'Disable text border' : 'Enable text border'}
-                title={strokeEnabled ? 'Disable border' : 'Enable border'}
-                className='group size-6 min-w-6 rounded-md border-input bg-background p-0 text-muted-foreground hover:border-foreground/20 hover:bg-muted hover:text-foreground aria-pressed:border-primary/40 aria-pressed:bg-primary/10 aria-pressed:text-primary'
-                onPressedChange={(pressed) =>
-                  apply((value) => ({ ...value, stroke_width: pressed ? 1.5 : 0 }))
-                }
-              >
-                {strokeEnabled ? (
-                  <Square aria-hidden='true' className='size-3.5' strokeWidth={2} />
-                ) : (
-                  <SquareSlash aria-hidden='true' className='size-3.5' strokeWidth={2} />
-                )}
-              </Toggle>
-            </div>
-          </InspectorField>
-          <InspectorField label='Color'>
             <ColorWell
               label='Border color'
               size='sm'
               disabled={disabled}
-              value={rgbaToHex(typography.stroke_color ?? defaultTypography.stroke_color!)}
-              onChange={(stroke_color) =>
-                apply((value) => ({ ...value, stroke_color: hexToRgba(stroke_color) }))
-              }
+              allowTransparent
+              value={strokeEnabled ? rgbaToHex(strokeColor) : null}
+              onChange={(stroke_color) => {
+                apply((value) => {
+                  const width = value.stroke_width ?? 0
+                  if (stroke_color !== null) {
+                    return {
+                      ...value,
+                      stroke_color: hexToRgba(stroke_color),
+                      stroke_width: width > 0 ? width : 1.5,
+                    }
+                  }
+                  const [red, green, blue] =
+                    value.stroke_color ?? defaultTypography.stroke_color!
+                  return {
+                    ...value,
+                    stroke_color: [red, green, blue, 0],
+                    stroke_width: width > 0 ? width : 1.5,
+                  }
+                })
+              }}
             />
           </InspectorField>
           <InspectorField label='Width'>
@@ -356,10 +385,19 @@ function findFontFamily(families: FontFamily[], name: string): FontFamily | unde
   return families.find((family) => normalizeFontName(family.name) === normalizeFontName(name))
 }
 
-function usableFontWeights(family: FontFamily | undefined): number[] {
+function usableFontStyles(family: FontFamily | undefined): FontStyle[] {
+  if (!family) return ['normal']
+  const styles = new Set(family.faces.map((font) => font.style))
+  const available = (['normal', 'italic', 'oblique'] satisfies FontStyle[]).filter((style) =>
+    styles.has(style),
+  )
+  return available.length ? available : ['normal']
+}
+
+function usableFontWeights(family: FontFamily | undefined, style: FontStyle): number[] {
   if (!family) return [400]
-  const regular = family.faces.filter((font) => font.style === 'normal')
-  const faces = regular.length ? regular : family.faces
+  const styled = family.faces.filter((font) => font.style === style)
+  const faces = styled.length ? styled : family.faces
   const weights = new Set(faces.map((font) => font.weight))
   for (const face of faces) {
     if (!face.weight_range) continue
@@ -372,6 +410,17 @@ function usableFontWeights(family: FontFamily | undefined): number[] {
     }
   }
   return [...weights].sort((left, right) => left - right)
+}
+
+function fontStyleLabel(style: FontStyle): string {
+  switch (style) {
+    case 'normal':
+      return 'Regular'
+    case 'italic':
+      return 'Italic'
+    case 'oblique':
+      return 'Oblique'
+  }
 }
 
 function nearestFontWeight(weights: number[], target: number): number {
@@ -789,11 +838,12 @@ function FontSizeField({
   const [draft, setDraft] = useState<number | null>(value)
 
   useEffect(() => {
-    setDraft(value)
-  }, [value])
+    setDraft(autoFit ? null : value)
+  }, [autoFit, value])
 
   const select = (choice: string) => {
     if (choice === 'auto') {
+      setDraft(null)
       onAutoFit()
       return
     }
@@ -808,7 +858,7 @@ function FontSizeField({
     if (next !== null && next > 0 && next <= 300) {
       onChange(next)
     } else {
-      setDraft(value)
+      setDraft(autoFit ? null : value)
     }
   }
 
@@ -827,13 +877,9 @@ function FontSizeField({
         <NumberFieldInput
           data-testid='type-size'
           aria-label='Font size'
+          placeholder='auto'
           className='px-2 text-left'
         />
-        {autoFit && (
-          <span className='pointer-events-none shrink-0 pr-1 text-[9px] text-muted-foreground'>
-            (auto)
-          </span>
-        )}
         <DropdownMenu>
           <DropdownMenuTrigger
             disabled={disabled}

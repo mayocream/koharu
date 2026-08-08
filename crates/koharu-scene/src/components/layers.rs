@@ -99,11 +99,21 @@ pub enum WritingMode {
 }
 
 #[revisioned(revision = 1)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum FontStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+
+#[revisioned(revision = 1)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct Typography {
     pub origin: Origin,
     pub preferred_font: Option<String>,
     pub font_weight: Option<u16>,
+    pub font_style: Option<FontStyle>,
     pub size: Option<f32>,
     pub auto_fit: bool,
     pub color: Option<[u8; 4]>,

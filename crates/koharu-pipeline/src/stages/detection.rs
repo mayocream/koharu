@@ -506,6 +506,7 @@ fn write_region(
                 origin: Origin::Generated(generation.clone()),
                 preferred_font: None,
                 font_weight: None,
+                font_style: None,
                 size: inferred.map(|value| value.font_size),
                 auto_fit: true,
                 color: inferred

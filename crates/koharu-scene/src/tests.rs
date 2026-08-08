@@ -884,6 +884,7 @@ fn independent_pipeline_components_rebase() {
                     origin: Origin::User,
                     preferred_font: Some("Inter".to_owned()),
                     font_weight: Some(500),
+                    font_style: Some(FontStyle::Italic),
                     size: Some(24.0),
                     auto_fit: false,
                     color: Some([1, 2, 3, 255]),

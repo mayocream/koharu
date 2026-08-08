@@ -277,6 +277,10 @@ fn compile(snapshot: &Snapshot, request: &RenderRequest) -> Result<Composition> 
                     .as_ref()
                     .and_then(|value| value.preferred_font.clone()),
                 font_weight: typography.as_ref().and_then(|value| value.font_weight),
+                font_style: typography
+                    .as_ref()
+                    .and_then(|value| value.font_style)
+                    .map(Into::into),
                 font_size: typography.as_ref().and_then(|value| value.size),
                 auto_fit: typography.as_ref().is_none_or(|value| value.auto_fit),
                 alignment,
@@ -386,6 +390,7 @@ pub(crate) struct TextLayer {
     pub opacity: f32,
     pub preferred_font: Option<String>,
     pub font_weight: Option<u16>,
+    pub font_style: Option<crate::FontStyle>,
     pub font_size: Option<f32>,
     pub auto_fit: bool,
     pub alignment: TextAlign,
@@ -601,6 +606,7 @@ mod tests {
                         origin: Origin::User,
                         preferred_font: None,
                         font_weight: Some(600),
+                        font_style: Some(koharu_scene::FontStyle::Italic),
                         size: font_size.filter(|size| *size > 0.0),
                         auto_fit: font_size.is_none_or(|size| size <= 0.0),
                         color: Some([0x12, 0x34, 0x56, 0xff]),
@@ -713,6 +719,7 @@ mod tests {
         assert_eq!(text.writing_mode, WritingMode::Horizontal);
         assert_eq!(text.font_size, Some(18.0));
         assert_eq!(text.font_weight, Some(600));
+        assert_eq!(text.font_style, Some(crate::FontStyle::Italic));
         assert!(text.balloon_contour.is_some());
         assert_eq!(text.foreground_color, Some([0x12, 0x34, 0x56, 0xff]));
         assert_eq!(
@@ -847,6 +854,7 @@ mod tests {
             origin: Origin::User,
             preferred_font: None,
             font_weight: None,
+            font_style: None,
             size: None,
             auto_fit: true,
             color: None,

@@ -17,6 +17,16 @@ pub enum FontStyle {
     Oblique,
 }
 
+impl From<koharu_scene::FontStyle> for FontStyle {
+    fn from(value: koharu_scene::FontStyle) -> Self {
+        match value {
+            koharu_scene::FontStyle::Normal => Self::Normal,
+            koharu_scene::FontStyle::Italic => Self::Italic,
+            koharu_scene::FontStyle::Oblique => Self::Oblique,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub struct FontFamily {

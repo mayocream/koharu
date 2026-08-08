@@ -113,6 +113,7 @@ impl TextRenderer {
             .resolve(
                 layer.preferred_font.as_deref(),
                 layer.font_weight,
+                layer.font_style,
                 &theme.font_families,
                 &layer.text,
                 layer

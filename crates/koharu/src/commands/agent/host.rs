@@ -338,6 +338,7 @@ impl Host for KoharuHost {
                 let typography = Typography {
                     preferred_font: arguments.preferred_font,
                     font_weight: arguments.font_weight,
+                    font_style: arguments.font_style.map(Into::into),
                     size: arguments.size,
                     auto_fit: arguments.auto_fit,
                     color: arguments.color,
@@ -549,6 +550,24 @@ enum AgentWritingMode {
     Vertical,
 }
 
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum AgentFontStyle {
+    Normal,
+    Italic,
+    Oblique,
+}
+
+impl From<AgentFontStyle> for koharu_scene::FontStyle {
+    fn from(value: AgentFontStyle) -> Self {
+        match value {
+            AgentFontStyle::Normal => Self::Normal,
+            AgentFontStyle::Italic => Self::Italic,
+            AgentFontStyle::Oblique => Self::Oblique,
+        }
+    }
+}
+
 impl From<AgentWritingMode> for koharu_scene::WritingMode {
     fn from(value: AgentWritingMode) -> Self {
         match value {
@@ -564,6 +583,7 @@ struct SetTypography {
     element: String,
     preferred_font: Option<String>,
     font_weight: Option<u16>,
+    font_style: Option<AgentFontStyle>,
     size: Option<f32>,
     auto_fit: bool,
     color: Option<[u8; 4]>,

@@ -51,6 +51,7 @@ const textLayer: Layer = {
   typography: {
     preferred_font: 'Noto Sans',
     font_weight: 400,
+    font_style: 'normal',
     size: null,
     auto_fit: true,
     color: [0, 0, 0, 255],
@@ -222,7 +223,8 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Text' }))
     expect(screen.getByTestId('type-inspector')).toBeInTheDocument()
     expect(screen.getByTestId('type-font-picker')).toHaveTextContent('Noto Sans')
-    expect(screen.getByTestId('type-size')).toHaveValue('24')
+    expect(screen.getByTestId('type-size')).toHaveValue('')
+    expect(screen.getByTestId('type-size')).toHaveAttribute('placeholder', 'auto')
     await user.clear(screen.getByTestId('type-size'))
     await user.type(screen.getByTestId('type-size'), '18')
     await user.tab()
@@ -238,8 +240,48 @@ describe('greenfield editor', () => {
     )
   })
 
-  it('only offers weights available for the selected font family', () => {
+  it('uses the border color well to enable and disable the border', async () => {
+    const user = userEvent.setup()
     installProject()
+    const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+    render(<Inspector />)
+
+    expect(screen.queryByRole('button', { name: 'Enable text border' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Border color' }))
+    await user.click(screen.getByRole('button', { name: 'Transparent' }))
+    await waitFor(() =>
+      expect(setTypography).toHaveBeenCalledWith([
+        expect.objectContaining({
+          layer: 'element',
+          typography: expect.objectContaining({
+            stroke_color: [255, 255, 255, 0],
+            stroke_width: 1.5,
+          }),
+        }),
+      ]),
+    )
+
+    setTypography.mockClear()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Hex color code' }), {
+      target: { value: '#FF0000' },
+    })
+    await waitFor(() =>
+      expect(setTypography).toHaveBeenCalledWith([
+        expect.objectContaining({
+          layer: 'element',
+          typography: expect.objectContaining({
+            stroke_color: [255, 0, 0, 255],
+            stroke_width: 1.5,
+          }),
+        }),
+      ]),
+    )
+  })
+
+  it('only offers styles and weights available for the selected font family', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
     queryClient.setQueryData(fontsKey, [
       {
         name: 'Noto Sans',
@@ -281,6 +323,19 @@ describe('greenfield editor', () => {
     expect(screen.getByRole('option', { name: '400' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '700' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '100' })).not.toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('combobox', { name: 'Font style' }))
+    expect(screen.getByRole('option', { name: 'Regular' })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Italic' }))
+    await waitFor(() =>
+      expect(setTypography).toHaveBeenCalledWith([
+        expect.objectContaining({
+          layer: 'element',
+          typography: expect.objectContaining({ font_style: 'italic', font_weight: 400 }),
+        }),
+      ]),
+    )
   })
 
   it('debounces layer text editing and flushes it when focus leaves the field', async () => {

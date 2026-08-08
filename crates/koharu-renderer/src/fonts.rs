@@ -651,6 +651,7 @@ impl Fonts {
         &self,
         preferred_font: Option<&str>,
         font_weight: Option<u16>,
+        font_style: Option<PublicFontStyle>,
         theme_families: &[String],
         text: &str,
         language: Option<&str>,
@@ -677,6 +678,13 @@ impl Fonts {
         let mut attributes = Attributes::default();
         if let Some(weight) = font_weight {
             attributes.weight = fontique::FontWeight::new(f32::from(weight));
+        }
+        if let Some(style) = font_style {
+            attributes.style = match style {
+                PublicFontStyle::Normal => FontStyle::Normal,
+                PublicFontStyle::Italic => FontStyle::Italic,
+                PublicFontStyle::Oblique => FontStyle::Oblique(None),
+            };
         }
 
         let bundled = if let Some(family) = families.first().filter(|family| {

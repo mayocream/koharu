@@ -1,6 +1,6 @@
 'use client'
 
-import { Pipette } from 'lucide-react'
+import { Pipette, SquareSlash } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 
@@ -12,30 +12,56 @@ type EyeDropperWindow = Window & {
   EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> }
 }
 
-export function ColorWell({
-  value,
-  label = 'Brush color',
-  size = 'default',
-  disabled = false,
-  onChange,
-}: {
-  value: string
+type ColorWellProps = {
   label?: string
   size?: 'default' | 'sm'
   disabled?: boolean
-  onChange: (color: string) => void
-}) {
-  const [draft, setDraft] = useState(value)
+} & (
+  | {
+      value: string
+      allowTransparent?: false
+      onChange: (color: string) => void
+    }
+  | {
+      value: string | null
+      allowTransparent: true
+      onChange: (color: string | null) => void
+    }
+)
+
+export function ColorWell(props: ColorWellProps) {
+  const {
+    value,
+    label = 'Brush color',
+    size = 'default',
+    disabled = false,
+    allowTransparent = false,
+  } = props
+  const [draft, setDraft] = useState(value ?? '#000000')
+  const [transparent, setTransparent] = useState(value === null)
   const dragging = useRef(false)
 
   useEffect(() => {
-    if (!dragging.current) setDraft(value)
+    if (value === null) {
+      setTransparent(true)
+    } else if (!dragging.current) {
+      setDraft(value)
+      setTransparent(false)
+    }
   }, [value])
 
   const set = (color: string) => {
     const normalized = normalize(color)
     setDraft(normalized)
-    onChange(normalized)
+    setTransparent(false)
+    if (props.allowTransparent) props.onChange(normalized)
+    else props.onChange(normalized)
+  }
+
+  const clear = () => {
+    if (!props.allowTransparent) return
+    setTransparent(true)
+    props.onChange(null)
   }
 
   const pick = async () => {
@@ -58,19 +84,30 @@ export function ColorWell({
           size === 'sm' ? 'size-6 rounded-md' : 'size-8 rounded-lg',
         )}
       >
-        <span
-          className={cn('rounded-[3px] ring-1 ring-black/15', size === 'sm' ? 'size-3' : 'size-4')}
-          style={{ backgroundColor: draft }}
-        />
+        {transparent ? (
+          <SquareSlash
+            aria-hidden='true'
+            className={cn('text-muted-foreground', size === 'sm' ? 'size-3.5' : 'size-4')}
+          />
+        ) : (
+          <span
+            className={cn(
+              'rounded-[3px] ring-1 ring-black/15',
+              size === 'sm' ? 'size-3' : 'size-4',
+            )}
+            style={{ backgroundColor: draft }}
+          />
+        )}
       </PopoverTrigger>
       <PopoverContent side='right' align='start' className='w-60 rounded-xl p-3'>
         <div
           onPointerDown={() => {
             dragging.current = true
+            setTransparent(false)
           }}
           onPointerUp={() => {
             dragging.current = false
-            onChange(draft)
+            set(draft)
           }}
         >
           <HexColorPicker color={draft} onChange={(color) => setDraft(normalize(color))} />
@@ -94,6 +131,18 @@ export function ColorWell({
             </Button>
           )}
         </div>
+        {allowTransparent && (
+          <Button
+            type='button'
+            size='sm'
+            variant={transparent ? 'secondary' : 'ghost'}
+            className='mt-2 w-full justify-start gap-2'
+            onClick={clear}
+          >
+            <SquareSlash aria-hidden='true' className='size-3.5 text-muted-foreground' />
+            Transparent
+          </Button>
+        )}
       </PopoverContent>
     </Popover>
   )

@@ -163,6 +163,7 @@ pub struct Translation {
 pub struct Typography {
     pub preferred_font: Option<String>,
     pub font_weight: Option<u16>,
+    pub font_style: Option<koharu_scene::FontStyle>,
     pub size: Option<f32>,
     pub auto_fit: bool,
     pub color: Option<[u8; 4]>,
@@ -443,6 +444,7 @@ impl Project {
                     origin: Origin::User,
                     preferred_font: None,
                     font_weight: None,
+                    font_style: None,
                     size: None,
                     auto_fit: true,
                     color: None,
@@ -530,6 +532,7 @@ impl Project {
                         origin: Origin::User,
                         preferred_font: update.typography.preferred_font,
                         font_weight: update.typography.font_weight,
+                        font_style: update.typography.font_style,
                         size: update.typography.size.filter(|size| *size > 0.0),
                         auto_fit: update.typography.auto_fit,
                         color: update.typography.color,
@@ -1092,6 +1095,7 @@ impl Project {
         Typography {
             preferred_font: typography.preferred_font,
             font_weight: typography.font_weight,
+            font_style: typography.font_style,
             size: typography.size,
             auto_fit: typography.auto_fit,
             color: typography.color,

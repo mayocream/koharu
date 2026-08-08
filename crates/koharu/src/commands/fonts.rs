@@ -2,6 +2,7 @@ use koharu_renderer::{
     FontFamily as RenderFontFamily, FontRange as RenderFontRange, FontSource as RenderFontSource,
     FontStyle as RenderFontStyle, SceneRenderer,
 };
+use koharu_scene::FontStyle;
 use serde::Serialize;
 use specta::Type;
 use tauri::ipc::IpcResponse;
@@ -38,14 +39,6 @@ pub struct FontFace {
 pub struct FontRange {
     pub minimum: u16,
     pub maximum: u16,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum FontStyle {
-    Normal,
-    Italic,
-    Oblique,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Type)]

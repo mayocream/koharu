@@ -78,7 +78,7 @@ impl SceneRenderer {
             vec![font]
         } else {
             fonts
-                .resolve(Some("Arial"), Some(400), &[], &label, None)
+                .resolve(Some("Arial"), Some(400), None, &[], &label, None)
                 .map_err(Error::FontResource)?
         };
         let measured = TextLayout::new(&preview_fonts[0])
@@ -958,6 +958,7 @@ mod tests {
                         origin: Origin::User,
                         preferred_font: None,
                         font_weight: None,
+                        font_style: None,
                         size: Some(font_size),
                         auto_fit: false,
                         color: None,
