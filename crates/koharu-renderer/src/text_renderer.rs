@@ -187,7 +187,6 @@ impl TextRenderer {
             layout
                 .with_max_font_size(maximum)
                 .with_min_font_size(minimum)
-                .with_min_line_height(1.0)
         } else {
             layout.with_font_size(layer.font_size.unwrap_or(maximum))
         };
