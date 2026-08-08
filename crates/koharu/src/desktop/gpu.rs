@@ -1,6 +1,6 @@
 //! WGPU surface presentation for the native Tauri window.
 
-use std::{sync::Arc, time::Instant};
+use std::{cmp::Reverse, sync::Arc, time::Instant};
 
 use anyhow::{Context as _, Result, bail};
 use koharu_canvas::{Canvas, CanvasGpu, PhysicalPoint, PhysicalSize, ViewState};
@@ -52,6 +52,107 @@ fn physical_value(value: f64, dpr: f64) -> Result<u32> {
     Ok(value as u32)
 }
 
+struct DesktopGpu {
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    format: wgpu::TextureFormat,
+    alpha_mode: wgpu::CompositeAlphaMode,
+    canvas: Canvas,
+}
+
+impl DesktopGpu {
+    async fn select(
+        instance: &wgpu::Instance,
+        surface: &wgpu::Surface<'_>,
+        surface_size: PhysicalSize,
+        wake: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<Self> {
+        let mut adapters = instance
+            .enumerate_adapters(desktop_backends())
+            .await
+            .into_iter()
+            .filter(|adapter| adapter.is_surface_supported(surface))
+            .map(|adapter| (adapter.get_info(), adapter))
+            .filter(|(info, _)| info.device_type != wgpu::DeviceType::Cpu)
+            .collect::<Vec<_>>();
+        adapters.sort_by_key(|(info, _)| Reverse(adapter_priority(info.device_type, info.backend)));
+
+        let mut failures = Vec::new();
+        for (info, adapter) in adapters {
+            match Self::initialize(adapter, surface, surface_size, Arc::clone(&wake)).await {
+                Ok(gpu) => {
+                    tracing::info!(adapter = ?info, "created desktop WGPU context");
+                    return Ok(gpu);
+                }
+                Err(error) => {
+                    tracing::warn!(adapter = ?info, error = ?error, "rejected desktop WGPU adapter");
+                    failures.push(format!("{} ({}): {error:#}", info.name, info.backend));
+                }
+            }
+        }
+
+        let reason = match failures.as_slice() {
+            [] => "no GPU supports the desktop surface".to_owned(),
+            _ => failures.join("; "),
+        };
+        bail!("no compatible GPU could initialize the desktop renderer: {reason}")
+    }
+
+    async fn initialize(
+        adapter: wgpu::Adapter,
+        surface: &wgpu::Surface<'_>,
+        surface_size: PhysicalSize,
+        wake: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<Self> {
+        let capabilities = surface.get_capabilities(&adapter);
+        let format = capabilities
+            .formats
+            .iter()
+            .copied()
+            .find(|format| {
+                matches!(
+                    format,
+                    wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Bgra8Unorm
+                )
+            })
+            .or_else(|| capabilities.formats.first().copied())
+            .context("surface exposes no texture format")?;
+        let alpha_mode = capabilities
+            .alpha_modes
+            .iter()
+            .copied()
+            .find(|mode| *mode == wgpu::CompositeAlphaMode::Opaque)
+            .or_else(|| capabilities.alpha_modes.first().copied())
+            .context("surface exposes no alpha mode")?;
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("koharu desktop device"),
+                ..Default::default()
+            })
+            .await
+            .context("failed to create the WGPU device")?;
+        let device = Arc::new(device);
+        let queue = Arc::new(queue);
+        let mut canvas = Canvas::new(
+            CanvasGpu {
+                device: Arc::clone(&device),
+                queue: Arc::clone(&queue),
+            },
+            wake,
+        )
+        .context("failed to create the canvas renderer")?;
+        canvas.set_render_target(surface_size, PhysicalPoint::default());
+
+        Ok(Self {
+            device,
+            queue,
+            format,
+            alpha_mode,
+            canvas,
+        })
+    }
+}
+
 pub(crate) struct Renderer {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
@@ -71,75 +172,31 @@ impl Renderer {
         let initial = window.inner_size()?;
         let surface_size = PhysicalSize::new(initial.width, initial.height);
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: desktop_backends(),
             ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
         let surface = instance.create_surface(window)?;
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
-            })
-            .await
-            .context("no WGPU adapter supports the desktop surface")?;
-        tracing::info!(adapter = ?adapter.get_info(), "created desktop WGPU context");
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("koharu desktop device"),
-                ..Default::default()
-            })
-            .await?;
-        let device = Arc::new(device);
-        let queue = Arc::new(queue);
-        let capabilities = surface.get_capabilities(&adapter);
-        let format = capabilities
-            .formats
-            .iter()
-            .copied()
-            .find(|format| {
-                matches!(
-                    format,
-                    wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Bgra8Unorm
-                )
-            })
-            .or_else(|| capabilities.formats.first().copied())
-            .context("desktop surface exposes no texture format")?;
-        let alpha_mode = capabilities
-            .alpha_modes
-            .iter()
-            .copied()
-            .find(|mode| *mode == wgpu::CompositeAlphaMode::Opaque)
-            .or_else(|| capabilities.alpha_modes.first().copied())
-            .context("desktop surface exposes no alpha mode")?;
+        let gpu = DesktopGpu::select(&instance, &surface, surface_size, wake).await?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
+            format: gpu.format,
             width: surface_size.width.max(1),
             height: surface_size.height.max(1),
             present_mode: wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: 2,
-            alpha_mode,
+            alpha_mode: gpu.alpha_mode,
             view_formats: Vec::new(),
         };
-        surface.configure(&device, &config);
-        let blitter = TextureBlitter::new(&device, format);
-        let mut canvas = Canvas::new(
-            CanvasGpu {
-                device: Arc::clone(&device),
-                queue: Arc::clone(&queue),
-            },
-            wake,
-        )?;
-        canvas.set_render_target(surface_size, PhysicalPoint::default());
+        surface.configure(&gpu.device, &config);
+        let blitter = TextureBlitter::new(&gpu.device, gpu.format);
         let mut renderer = Self {
-            device,
-            queue,
+            device: gpu.device,
+            queue: gpu.queue,
             surface,
             config,
             surface_size,
             blitter,
-            canvas,
+            canvas: gpu.canvas,
             viewport: PhysicalRect::default(),
         };
         renderer.present(Instant::now(), surface_size)?;
@@ -242,6 +299,28 @@ impl Renderer {
             PhysicalPoint::new(f64::from(self.viewport.x), f64::from(self.viewport.y)),
         );
     }
+}
+
+fn desktop_backends() -> wgpu::Backends {
+    wgpu::Backends::PRIMARY | wgpu::Backends::SECONDARY
+}
+
+fn adapter_priority(device_type: wgpu::DeviceType, backend: wgpu::Backend) -> (u8, u8) {
+    let device = match device_type {
+        wgpu::DeviceType::DiscreteGpu => 4,
+        wgpu::DeviceType::IntegratedGpu => 3,
+        wgpu::DeviceType::VirtualGpu => 2,
+        wgpu::DeviceType::Other => 1,
+        wgpu::DeviceType::Cpu => 0,
+    };
+    let backend = match backend {
+        wgpu::Backend::Vulkan
+        | wgpu::Backend::Metal
+        | wgpu::Backend::Dx12
+        | wgpu::Backend::BrowserWebGpu => 1,
+        wgpu::Backend::Gl | wgpu::Backend::Noop => 0,
+    };
+    (device, backend)
 }
 
 #[cfg(test)]
