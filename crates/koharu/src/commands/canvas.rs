@@ -116,13 +116,13 @@ pub(crate) async fn set_zoom(
     }
     let canvas = {
         let mut desktop = desktop.lock();
-        let mut view = desktop.view().clone();
+        let mut camera = desktop.view().camera;
         let center = PhysicalPoint::new(
             f64::from(desktop.viewport().size().width) * 0.5,
             f64::from(desktop.viewport().size().height) * 0.5,
         );
-        view.camera.zoom_around(center, f64::from(zoom))?;
-        desktop.set_view(view);
+        camera.zoom_around(center, f64::from(zoom))?;
+        desktop.set_camera(camera);
         canvas_view.fitted.store(false, Ordering::Release);
         desktop.canvas_state(false)
     };
@@ -137,20 +137,14 @@ pub(crate) async fn set_canvas_view(
     zoom: f64,
     translation: [f64; 2],
     canvas_view: State<'_, CanvasView>,
-    canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     if !(0.02..=16.0).contains(&zoom) {
         return Err(anyhow::anyhow!("camera zoom must be between 2% and 1600%").into());
     }
-    let canvas = {
-        let mut desktop = desktop.lock();
-        let mut view = desktop.view().clone();
-        view.camera = koharu_canvas::Camera::new(zoom, translation)?;
-        desktop.set_view(view);
-        canvas_view.fitted.store(false, Ordering::Release);
-        desktop.canvas_state(false)
-    };
-    canvas_channel.channel.publish(canvas);
+    desktop
+        .lock()
+        .set_camera(koharu_canvas::Camera::new(zoom, translation)?);
+    canvas_view.fitted.store(false, Ordering::Release);
     Ok(())
 }
 
@@ -174,9 +168,10 @@ pub(crate) async fn fit_canvas(
     };
     let canvas = {
         let mut desktop = desktop.lock();
-        let mut view = desktop.view().clone();
-        view.camera = koharu_canvas::Camera::contain(desktop.viewport().size(), size);
-        desktop.set_view(view);
+        desktop.set_camera(koharu_canvas::Camera::contain(
+            desktop.viewport().size(),
+            size,
+        ));
         canvas_view.fitted.store(true, Ordering::Release);
         desktop.canvas_state(true)
     };

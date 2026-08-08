@@ -349,6 +349,14 @@ impl Canvas {
         self.view = view;
     }
 
+    /// Updates camera-dependent content without replacing display or viewport state.
+    pub fn set_camera(&mut self, camera: crate::Camera) {
+        if self.view.camera != camera {
+            self.view.camera = camera;
+            self.damage.content();
+        }
+    }
+
     #[must_use]
     pub const fn view(&self) -> &crate::ViewState {
         &self.view

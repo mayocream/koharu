@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use koharu_canvas::{Canvas, ViewState};
+use koharu_canvas::{Camera, Canvas, ViewState};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use parking_lot::{Mutex, MutexGuard};
 use tauri::{AppHandle, Manager as _, WebviewWindow};
@@ -223,6 +223,11 @@ impl DesktopGuard<'_> {
 
     pub fn set_view(&mut self, view: ViewState) {
         self.renderer.set_view(view);
+        self.request_redraw();
+    }
+
+    pub fn set_camera(&mut self, camera: Camera) {
+        self.renderer.canvas().set_camera(camera);
         self.request_redraw();
     }
 
