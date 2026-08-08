@@ -12,7 +12,7 @@ use imageproc::{
     contours::{BorderType, find_contours_with_threshold},
     distance_transform::Norm,
     geometry::{approximate_polygon_dp, arc_length, contour_area},
-    morphology::dilate,
+    morphology::{close, dilate},
 };
 use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
     KoharuLayoutDetection, KoharuLayoutDetections, KoharuLayoutMask, KoharuLayoutRFDetrSeg2XL,
@@ -956,10 +956,11 @@ fn write_mask(
 ) -> Result<()> {
     let mut mask = mask_for(detections, spec.label, size);
     if spec.dilate && size.width > 0 && size.height > 0 {
-        let radius = ((size.width.max(size.height) as f32 / 1024.0) * 6.0)
+        let radius = ((size.width.max(size.height) as f32 / 1024.0) * 4.0)
             .round()
             .clamp(1.0, 255.0) as u8;
         mask = dilate(&mask, Norm::L2, radius);
+        mask = close(&mask, Norm::L2, radius);
     }
     if let Some(bounds) = input.region {
         preserve_mask_outside_region(input, page, spec.role, bounds, &mut mask)?;

@@ -285,7 +285,6 @@ impl Model {
         if image.dimensions() != original.dimensions() || image.dimensions() != mask.dimensions() {
             bail!("inpainted image dimensions do not match page {page}");
         }
-        let original = original.to_rgba8();
         let mut overlay = if manual {
             cleanup.unwrap_or_else(|| RgbaImage::new(image.width(), image.height()))
         } else {
@@ -296,12 +295,9 @@ impl Model {
                 continue;
             }
             let generated = image.get_pixel(x, y);
-            let source = original.get_pixel(x, y);
-            *target = if generated.0[..3] == source.0[..3] {
-                Rgba([0, 0, 0, 0])
-            } else {
-                Rgba([generated[0], generated[1], generated[2], 255])
-            };
+            // Keep the complete cleanup mask opaque. Transparent texels next to
+            // edited pixels let linear canvas sampling reveal the artwork below.
+            *target = Rgba([generated[0], generated[1], generated[2], 255]);
         }
         let mut bytes = Cursor::new(Vec::new());
         let width = overlay.width();
