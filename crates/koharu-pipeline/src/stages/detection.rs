@@ -40,6 +40,7 @@ const COLOR_SNAP_CHROMA: u8 = 24;
 const COLOR_SNAP_DARK_LUMINANCE: u16 = 64;
 const COLOR_SNAP_LIGHT_LUMINANCE: u16 = 191;
 const NMS_CONTAINMENT_THRESHOLD: f32 = 0.9;
+const DIALOGUE_MASK_CONTAINMENT_THRESHOLD: f32 = 0.9;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default, deny_unknown_fields)]
@@ -145,22 +146,23 @@ impl Model {
     }
 }
 
-struct DetectedRegion {
+struct DetectedRegion<'a> {
     entity: EntityId,
-    geometry: Geometry,
+    mask: &'a KoharuLayoutMask,
     area: u32,
 }
 
-struct DetectedText {
+struct DetectedText<'a> {
     entity: EntityId,
-    geometry: Geometry,
+    mask: &'a KoharuLayoutMask,
+    bounds: [f32; 4],
     content: EntityId,
     layer: EntityId,
 }
 
-enum RegionOutput {
-    Bubble(DetectedRegion),
-    Text(DetectedText),
+enum RegionOutput<'a> {
+    Bubble(DetectedRegion<'a>),
+    Text(DetectedText<'a>),
     Other,
 }
 
@@ -173,9 +175,9 @@ struct PreviousText {
 }
 
 #[derive(Default)]
-struct PageRegions {
-    bubbles: Vec<DetectedRegion>,
-    texts: Vec<DetectedText>,
+struct PageRegions<'a> {
+    bubbles: Vec<DetectedRegion<'a>>,
+    texts: Vec<DetectedText<'a>>,
 }
 
 #[derive(Clone, Copy)]
@@ -365,16 +367,16 @@ fn write_page(
     write_masks(input, edit, page, &detections, size)
 }
 
-fn write_regions(
+fn write_regions<'a>(
     snapshot: &koharu_scene::Snapshot,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
     image: &RgbImage,
-    detections: &[KoharuLayoutDetection],
+    detections: &'a [KoharuLayoutDetection],
     generation: &Generation,
     previous_texts: &mut Vec<PreviousText>,
     reused_contents: &mut BTreeSet<EntityId>,
-) -> Result<PageRegions> {
+) -> Result<PageRegions<'a>> {
     let mut regions = PageRegions::default();
     let text_group = snapshot.page(page)?.text_group()?;
     let managed_text_group = if let Some(group) = text_group {
@@ -412,16 +414,16 @@ fn write_regions(
     Ok(regions)
 }
 
-fn write_region(
+fn write_region<'a>(
     snapshot: &koharu_scene::Snapshot,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
     image: &RgbImage,
-    detection: &KoharuLayoutDetection,
+    detection: &'a KoharuLayoutDetection,
     generation: &Generation,
     previous: Option<PreviousText>,
     reused_contents: &mut BTreeSet<EntityId>,
-) -> Result<RegionOutput> {
+) -> Result<RegionOutput<'a>> {
     let entity = edit.add_entity(page, At::End)?;
     let kind = region_kind(&detection.label)?;
     let inferred = (detection.label == "text")
@@ -460,7 +462,7 @@ fn write_region(
         return Ok(if detection.label == "bubble" {
             RegionOutput::Bubble(DetectedRegion {
                 entity,
-                geometry,
+                mask: &detection.mask,
                 area: detection.area,
             })
         } else {
@@ -531,7 +533,8 @@ fn write_region(
 
     Ok(RegionOutput::Text(DetectedText {
         entity,
-        geometry,
+        mask: &detection.mask,
+        bounds: detection.bbox,
         content,
         layer,
     }))
@@ -539,11 +542,11 @@ fn write_region(
 
 fn link_dialogue_regions(
     edit: &mut koharu_scene::Edit,
-    regions: &PageRegions,
+    regions: &PageRegions<'_>,
     generation: &Generation,
 ) -> Result<()> {
     for text in &regions.texts {
-        let bubble = containing_bubble(&regions.bubbles, &text.geometry);
+        let bubble = containing_bubble(&regions.bubbles, text);
         if let Some(bubble) = bubble {
             edit.relate::<Inside>(text.entity, bubble.entity)?;
             edit.relate::<FitsTo>(text.layer, bubble.entity)?;
@@ -555,13 +558,16 @@ fn link_dialogue_regions(
     Ok(())
 }
 
-fn containing_bubble<'a>(
-    bubbles: &'a [DetectedRegion],
-    text: &Geometry,
-) -> Option<&'a DetectedRegion> {
+fn containing_bubble<'regions, 'detections>(
+    bubbles: &'regions [DetectedRegion<'detections>],
+    text: &DetectedText<'detections>,
+) -> Option<&'regions DetectedRegion<'detections>> {
     bubbles
         .iter()
-        .filter(|bubble| geometry_contains(&bubble.geometry, text))
+        .filter(|bubble| {
+            mask_containment(bubble.mask, text.mask, text.bounds)
+                >= DIALOGUE_MASK_CONTAINMENT_THRESHOLD
+        })
         .min_by_key(|bubble| bubble.area)
 }
 
@@ -1122,51 +1128,56 @@ fn containment(container: [f32; 4], value: [f32; 4]) -> f32 {
     intersection_area(container, value) / value_area
 }
 
-fn geometry_contains(container: &Geometry, value: &Geometry) -> bool {
-    if container.points.len() < 3 || value.points.len() < 3 {
-        return false;
+fn mask_containment(
+    container: &KoharuLayoutMask,
+    value: &KoharuLayoutMask,
+    bounds: [f32; 4],
+) -> f32 {
+    if container.width != value.width || container.height != value.height {
+        return 0.0;
     }
 
-    // Instance contours can miss a single corner at the pixel boundary. A text
-    // box that crosses the bubble edge, however, has at least two corners out.
-    let required = value.points.len() - 1;
-    value
-        .points
-        .iter()
-        .filter(|point| geometry_contains_point(container, point))
-        .count()
-        >= required
-}
+    let Some(pixel_count) = container
+        .width
+        .checked_mul(container.height)
+        .and_then(|count| usize::try_from(count).ok())
+    else {
+        return 0.0;
+    };
+    if container.pixels.len() != pixel_count || value.pixels.len() != pixel_count {
+        return 0.0;
+    }
 
-fn geometry_contains_point(geometry: &Geometry, point: &Point) -> bool {
-    let mut inside = false;
-    let mut previous = geometry.points[geometry.points.len() - 1];
-    for &current in &geometry.points {
-        if point_on_segment(point, &previous, &current) {
-            return true;
-        }
-        if (current.y > point.y) != (previous.y > point.y) {
-            let intersection_x = (previous.x - current.x) * (point.y - current.y)
-                / (previous.y - current.y)
-                + current.x;
-            if point.x < intersection_x {
-                inside = !inside;
+    if !bounds.iter().all(|value| value.is_finite()) {
+        return 0.0;
+    }
+    let left = bounds[0].floor().clamp(0.0, value.width as f32) as usize;
+    let top = bounds[1].floor().clamp(0.0, value.height as f32) as usize;
+    let right = bounds[2].ceil().clamp(0.0, value.width as f32) as usize;
+    let bottom = bounds[3].ceil().clamp(0.0, value.height as f32) as usize;
+    if left >= right || top >= bottom {
+        return 0.0;
+    }
+
+    let mut value_area = 0usize;
+    let mut intersection = 0usize;
+    let width = value.width as usize;
+    for y in top..bottom {
+        let row = y * width;
+        for x in left..right {
+            let index = row + x;
+            if value.pixels[index] == 0 {
+                continue;
             }
+            value_area += 1;
+            intersection += usize::from(container.pixels[index] != 0);
         }
-        previous = current;
     }
-    inside
-}
-
-fn point_on_segment(point: &Point, start: &Point, end: &Point) -> bool {
-    let cross = (point.y - start.y) * (end.x - start.x) - (point.x - start.x) * (end.y - start.y);
-    if cross.abs() > f64::EPSILON {
-        return false;
+    if value_area == 0 {
+        0.0
+    } else {
+        intersection as f32 / value_area as f32
     }
-    point.x >= start.x.min(end.x)
-        && point.x <= start.x.max(end.x)
-        && point.y >= start.y.min(end.y)
-        && point.y <= start.y.max(end.y)
 }
 
 fn intersection_over_union(left: [f32; 4], right: [f32; 4]) -> f32 {
@@ -1201,11 +1212,11 @@ fn area(bounds: [f32; 4]) -> f32 {
 mod tests {
     use image::{Rgb, RgbImage};
     use koharu_ml::koharu_layout_rfdetr_seg_2xl::{KoharuLayoutDetection, KoharuLayoutMask};
-    use koharu_scene::{Geometry, Origin, Point, WritingMode};
+    use koharu_scene::WritingMode;
 
     use super::{
-        ImageSize, geometry_contains, infer_typography, layout_order, mask_for, mask_geometry,
-        non_maximum_suppression, normalize_text_color,
+        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, ImageSize, infer_typography, layout_order,
+        mask_containment, mask_for, mask_geometry, non_maximum_suppression, normalize_text_color,
     };
 
     fn detection(label: &str, score: f32, bbox: [f32; 4]) -> KoharuLayoutDetection {
@@ -1359,23 +1370,60 @@ mod tests {
     }
 
     #[test]
-    fn bubble_membership_rejects_text_that_crosses_its_geometry() {
-        let geometry = |points: &[(f64, f64)]| Geometry {
-            origin: Origin::User,
-            points: points.iter().map(|&(x, y)| Point { x, y }).collect(),
+    fn bubble_membership_uses_detected_ink_instead_of_text_box_corners() {
+        let mask = |pixels| KoharuLayoutMask {
+            width: 5,
+            height: 5,
+            pixels,
         };
-        let bubble = geometry(&[
-            (0.0, 0.0),
-            (10.0, 0.0),
-            (10.0, 6.0),
-            (7.0, 10.0),
-            (0.0, 10.0),
+        let bubble = mask(vec![
+            0, 0, 1, 0, 0, //
+            0, 1, 1, 1, 0, //
+            1, 1, 1, 1, 1, //
+            0, 1, 1, 1, 0, //
+            0, 0, 1, 0, 0,
         ]);
-        let dialogue = geometry(&[(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)]);
-        let outside = geometry(&[(7.0, 5.0), (12.0, 5.0), (12.0, 9.0), (7.0, 9.0)]);
+        let dialogue = mask(vec![
+            0, 0, 0, 0, 0, //
+            0, 0, 1, 0, 0, //
+            0, 1, 0, 1, 0, //
+            0, 0, 1, 0, 0, //
+            0, 0, 0, 0, 0,
+        ]);
+        let crossing = mask(vec![
+            0, 0, 0, 0, 0, //
+            0, 0, 0, 0, 0, //
+            0, 0, 0, 1, 1, //
+            0, 0, 0, 1, 1, //
+            0, 0, 0, 1, 1,
+        ]);
 
-        assert!(geometry_contains(&bubble, &dialogue));
-        assert!(!geometry_contains(&bubble, &outside));
+        let bounds = [0.0, 0.0, 5.0, 5.0];
+        assert_eq!(mask_containment(&bubble, &dialogue, bounds), 1.0);
+        assert!(mask_containment(&bubble, &crossing, bounds) < DIALOGUE_MASK_CONTAINMENT_THRESHOLD);
+    }
+
+    #[test]
+    fn mask_containment_rejects_incompatible_masks() {
+        let valid = KoharuLayoutMask {
+            width: 2,
+            height: 2,
+            pixels: vec![1; 4],
+        };
+        let malformed = KoharuLayoutMask {
+            width: 2,
+            height: 2,
+            pixels: vec![1; 3],
+        };
+        let different_size = KoharuLayoutMask {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+
+        let bounds = [0.0, 0.0, 2.0, 2.0];
+        assert_eq!(mask_containment(&valid, &malformed, bounds), 0.0);
+        assert_eq!(mask_containment(&valid, &different_size, bounds), 0.0);
     }
 
     #[test]
