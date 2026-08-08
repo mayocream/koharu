@@ -125,7 +125,7 @@ impl TextRenderer {
                 entity: layer.entity,
                 source,
             })?;
-        let maximum = layer.font_size.unwrap_or_else(|| {
+        let automatic_maximum = || {
             if is_bubble_text {
                 if layer.writing_mode.is_vertical() {
                     bounds.height
@@ -135,7 +135,12 @@ impl TextRenderer {
             } else {
                 theme.font_size
             }
-        });
+        };
+        let maximum = if layer.auto_fit {
+            automatic_maximum()
+        } else {
+            layer.font_size.unwrap_or_else(automatic_maximum)
+        };
         let minimum = theme.minimum_font_size.min(maximum);
         let mut layout = TextLayout::new(&fonts[0])
             .with_fallback_fonts(&fonts[1..])
@@ -412,5 +417,52 @@ fn draw_layout(
             }
             start = end;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_scene::EntityId;
+
+    use super::*;
+    use crate::{TextAlign, compositor::TextLayer, fonts::Fonts};
+
+    #[test]
+    fn automatic_balloon_size_ignores_stored_size() {
+        let layer = TextLayer {
+            entity: EntityId::new(),
+            text: "Hi".to_owned(),
+            language: None,
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 240.0,
+                height: 120.0,
+            },
+            balloon_contour: Some(vec![(0.0, 0.0), (240.0, 0.0), (240.0, 120.0), (0.0, 120.0)]),
+            opacity: 1.0,
+            preferred_font: Some("Arial".to_owned()),
+            font_weight: None,
+            font_style: None,
+            font_size: Some(6.0),
+            auto_fit: true,
+            alignment: TextAlign::Center,
+            writing_mode: WritingMode::Horizontal,
+            foreground_color: None,
+            stroke: None,
+            angle_degrees: 0.0,
+            point_text: false,
+        };
+        let theme = RenderTheme {
+            font_families: vec!["Arial".to_owned()],
+            text_inset: [0.0; 4],
+            ..RenderTheme::default()
+        };
+
+        let rendered = TextRenderer::new()
+            .render_layer(&layer, &Fonts::shared(), &theme)
+            .unwrap();
+
+        assert!(rendered.layer.font_size.unwrap() > theme.font_size);
     }
 }

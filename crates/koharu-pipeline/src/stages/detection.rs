@@ -507,7 +507,7 @@ fn write_region(
                 preferred_font: None,
                 font_weight: None,
                 font_style: None,
-                size: inferred.map(|value| value.font_size),
+                size: None,
                 auto_fit: true,
                 color: inferred
                     .map(|value| [value.color[0], value.color[1], value.color[2], u8::MAX]),
@@ -595,7 +595,6 @@ fn write_text_role(
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct InferredTypography {
-    font_size: f32,
     color: [u8; 3],
     angle_degrees: f32,
     writing_mode: WritingMode,
@@ -607,13 +606,12 @@ struct MaskPoint {
     y: f64,
 }
 
-// BallonsTranslator defines font size as the text-line cross-axis span and
-// normalizes vertical-line angles relative to upright vertical text:
+// BallonsTranslator normalizes vertical-line angles relative to upright text:
 // https://github.com/dmMaze/BallonsTranslator/blob/4bcc635c19f6c63a902872cf77b3d554e14ed1b7/ballontranslator/utils/textblock.py#L576-L608
 // RF-DETR provides foreground pixels rather than line quadrilaterals, so
-// projection-profile sharpness supplies the line axis and the mask projection
-// supplies its cross span. Whole-block PCA is deliberately avoided because a
-// tall multiline horizontal block otherwise looks vertical.
+// projection-profile sharpness supplies the line axis. Whole-block PCA is
+// deliberately avoided because a tall multiline horizontal block otherwise
+// looks vertical.
 fn infer_typography(
     image: &RgbImage,
     detection: &KoharuLayoutDetection,
@@ -645,10 +643,8 @@ fn infer_typography(
     }
 
     let (angle_degrees, vertical) = mask_angle(&points, detection.bbox);
-    let font_size = mask_font_size(&points, angle_degrees, vertical)?;
     let color = infer_text_color(&foreground, &background);
     Some(InferredTypography {
-        font_size,
         color,
         angle_degrees,
         writing_mode: if vertical {
@@ -722,74 +718,6 @@ fn projection_score(points: &[MaskPoint], axis_x: f64, axis_y: f64) -> f64 {
         profile[index + 1] += fraction;
     }
     profile.iter().map(|value| value * value).sum::<f64>() / points.len() as f64
-}
-
-fn mask_font_size(points: &[MaskPoint], angle_degrees: f32, vertical: bool) -> Option<f32> {
-    let line_angle = f64::from(angle_degrees).to_radians()
-        + if vertical {
-            std::f64::consts::FRAC_PI_2
-        } else {
-            0.0
-        };
-    let cross_x = -line_angle.sin();
-    let cross_y = line_angle.cos();
-    let projections = points
-        .iter()
-        .map(|point| point.x * cross_x + point.y * cross_y)
-        .collect::<Vec<_>>();
-    let minimum = projections.iter().copied().fold(f64::INFINITY, f64::min);
-    let maximum = projections
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
-    let length = (maximum.ceil() - minimum.floor()).max(0.0) as usize + 1;
-    let mut occupied = vec![false; length];
-    for projection in projections {
-        let index = (projection - minimum.floor()).floor() as usize;
-        occupied[index.min(length - 1)] = true;
-    }
-    close_short_projection_gaps(&mut occupied, 2);
-
-    let mut spans = Vec::new();
-    let mut index = 0;
-    while index < occupied.len() {
-        if !occupied[index] {
-            index += 1;
-            continue;
-        }
-        let start = index;
-        while index < occupied.len() && occupied[index] {
-            index += 1;
-        }
-        spans.push((index - start) as u32);
-    }
-    let maximum = spans.iter().copied().max()?;
-    spans.retain(|span| *span * 2 >= maximum);
-    spans.sort_unstable();
-    let middle = spans.len() / 2;
-    let size = if spans.len().is_multiple_of(2) {
-        (spans[middle - 1] + spans[middle]) as f32 * 0.5
-    } else {
-        spans[middle] as f32
-    };
-    Some(size.max(1.0))
-}
-
-fn close_short_projection_gaps(occupied: &mut [bool], maximum_gap: usize) {
-    let mut index = 0;
-    while index < occupied.len() {
-        if occupied[index] {
-            index += 1;
-            continue;
-        }
-        let start = index;
-        while index < occupied.len() && !occupied[index] {
-            index += 1;
-        }
-        if start > 0 && index < occupied.len() && index - start <= maximum_gap {
-            occupied[start..index].fill(true);
-        }
-    }
 }
 
 fn median_channel(values: &mut [u8]) -> u8 {
@@ -1431,7 +1359,6 @@ mod tests {
         let inferred = infer_typography(&image, &detection).unwrap();
 
         assert!((inferred.angle_degrees - 12.0).abs() < 1.0);
-        assert!((11.0..=14.0).contains(&inferred.font_size));
         assert_eq!(inferred.color, [24, 80, 160]);
         assert_eq!(inferred.writing_mode, WritingMode::Horizontal);
     }
@@ -1443,7 +1370,6 @@ mod tests {
         let inferred = infer_typography(&image, &detection).unwrap();
 
         assert!((inferred.angle_degrees - 9.0).abs() < 1.0);
-        assert!((11.0..=14.0).contains(&inferred.font_size));
         assert_eq!(inferred.writing_mode, WritingMode::Vertical);
     }
 
