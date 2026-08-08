@@ -292,7 +292,7 @@ function TypeInspector() {
                   aria-label={label}
                   disabled={disabled}
                   data-active={(typography.alignment ?? 'Center') === alignment}
-                  className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-foreground data-[active=true]:text-background'
+                  className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
                   onClick={() =>
                     apply((value) => ({ ...value, alignment: alignment as TextAlignment }))
                   }

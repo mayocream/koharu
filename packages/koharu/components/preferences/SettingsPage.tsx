@@ -201,7 +201,7 @@ function AppearancePreferences() {
                 variant='ghost'
                 size='sm'
                 data-active={theme === value}
-                className='h-9 gap-1.5 text-[10px] text-muted-foreground hover:text-foreground data-[active=true]:bg-foreground data-[active=true]:text-background data-[active=true]:hover:bg-foreground data-[active=true]:hover:text-background dark:data-[active=true]:hover:bg-foreground dark:data-[active=true]:hover:text-background'
+                className='h-9 gap-1.5 text-[10px] text-muted-foreground hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90 data-[active=true]:hover:text-primary-foreground'
                 onClick={() => setTheme(value)}
               >
                 <Icon className='size-3.5' /> {label}
