@@ -344,10 +344,7 @@ export function CanvasWorkspace() {
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {
             if (!page || event.button > 1) return
-            if (
-              event.target instanceof Element &&
-              event.target.closest('.moveable-control, .moveable-line.moveable-direction')
-            )
+            if (event.target instanceof Element && event.target.closest('[data-canvas-control]'))
               return
             event.currentTarget.focus()
             event.currentTarget.setPointerCapture(event.pointerId)

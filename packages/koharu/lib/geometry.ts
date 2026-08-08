@@ -16,6 +16,19 @@ export interface CssFrame {
   angle: number
 }
 
+export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+
+const resizeDirections: Record<ResizeHandle, Point> = {
+  nw: { x: -1, y: -1 },
+  n: { x: 0, y: -1 },
+  ne: { x: 1, y: -1 },
+  e: { x: 1, y: 0 },
+  se: { x: 1, y: 1 },
+  s: { x: 0, y: 1 },
+  sw: { x: -1, y: 1 },
+  w: { x: -1, y: 0 },
+}
+
 export function physicalPoint(clientX: number, clientY: number, bounds: DOMRect): Point {
   const dpr = window.devicePixelRatio
   return { x: (clientX - bounds.x) * dpr, y: (clientY - bounds.y) * dpr }
@@ -144,6 +157,67 @@ export function cssFrame(frame: Frame, camera: Camera): CssFrame {
   }
 }
 
+export function resizeFrame(
+  frame: Frame,
+  handle: ResizeHandle,
+  point: Point,
+  minimumSize: number,
+): Frame {
+  const direction = resizeDirections[handle]
+  const angle = (frame.angle_degrees * Math.PI) / 180
+  const widthAxis = { x: Math.cos(angle), y: Math.sin(angle) }
+  const heightAxis = { x: -widthAxis.y, y: widthAxis.x }
+  const center = { x: frame.x + frame.width * 0.5, y: frame.y + frame.height * 0.5 }
+  const anchor = {
+    x:
+      center.x -
+      widthAxis.x * direction.x * frame.width * 0.5 -
+      heightAxis.x * direction.y * frame.height * 0.5,
+    y:
+      center.y -
+      widthAxis.y * direction.x * frame.width * 0.5 -
+      heightAxis.y * direction.y * frame.height * 0.5,
+  }
+  const delta = { x: point.x - anchor.x, y: point.y - anchor.y }
+  const width = direction.x
+    ? Math.max(minimumSize, direction.x * dot(delta, widthAxis))
+    : frame.width
+  const height = direction.y
+    ? Math.max(minimumSize, direction.y * dot(delta, heightAxis))
+    : frame.height
+  const nextCenter = {
+    x:
+      anchor.x +
+      widthAxis.x * direction.x * width * 0.5 +
+      heightAxis.x * direction.y * height * 0.5,
+    y:
+      anchor.y +
+      widthAxis.y * direction.x * width * 0.5 +
+      heightAxis.y * direction.y * height * 0.5,
+  }
+  return {
+    ...frame,
+    x: nextCenter.x - width * 0.5,
+    y: nextCenter.y - height * 0.5,
+    width,
+    height,
+  }
+}
+
+export function rotateFrame(frame: Frame, start: Point, point: Point): Frame {
+  const center = { x: frame.x + frame.width * 0.5, y: frame.y + frame.height * 0.5 }
+  const from = { x: start.x - center.x, y: start.y - center.y }
+  const to = { x: point.x - center.x, y: point.y - center.y }
+  if (
+    Math.hypot(from.x, from.y) <= minimumFrameSize ||
+    Math.hypot(to.x, to.y) <= minimumFrameSize
+  ) {
+    return frame
+  }
+  const delta = (Math.atan2(from.x * to.y - from.y * to.x, dot(from, to)) * 180) / Math.PI
+  return { ...frame, angle_degrees: normalizeDegrees(frame.angle_degrees + delta) }
+}
+
 export function translateFrames(originals: TransformFrame[], delta: Point): TransformFrame[] {
   return originals.map(({ element, frame }) => ({
     element,
@@ -153,6 +227,14 @@ export function translateFrames(originals: TransformFrame[], delta: Point): Tran
 
 function finite(...values: number[]): boolean {
   return values.every(Number.isFinite)
+}
+
+function dot(left: Point, right: Point): number {
+  return left.x * right.x + left.y * right.y
+}
+
+function normalizeDegrees(value: number): number {
+  return ((((value + 180) % 360) + 360) % 360) - 180
 }
 
 function validFrame(frame: Frame): boolean {

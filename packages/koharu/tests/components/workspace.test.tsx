@@ -159,6 +159,37 @@ describe('canvas interaction adapter', () => {
     )
   })
 
+  it('resizes a selected layer through Koharu selection controls', async () => {
+    installProject()
+    useKoharuStore.setState({ selectedLayers: ['element'] })
+    const begin = vi.spyOn(commands, 'beginTransform').mockResolvedValue(null)
+    const update = vi.spyOn(commands, 'updateTransform').mockResolvedValue(null)
+    const finish = vi.spyOn(commands, 'finishTransform').mockResolvedValue(2)
+    renderWorkspace()
+    Object.defineProperty(screen.getByTestId('canvas-overlay'), 'getBoundingClientRect', {
+      value: () => ({ x: 10, y: 20, width: 800, height: 600 }),
+    })
+    const handle = document.querySelector<HTMLElement>('[data-resize-handle="e"]')!
+
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 10, clientX: 120, clientY: 65 })
+    fireEvent.pointerMove(handle, { pointerId: 10, clientX: 140, clientY: 65 })
+    fireEvent.pointerUp(handle, { pointerId: 10, clientX: 140, clientY: 65 })
+
+    await waitFor(() => expect(finish).toHaveBeenCalledOnce())
+    expect(begin).toHaveBeenCalledWith([
+      { element: 'element', frame: { x: 10, y: 20, width: 100, height: 50, angle_degrees: 0 } },
+    ])
+    expect(update).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.arrayContaining([
+        {
+          element: 'element',
+          frame: { x: 10, y: 20, width: 120, height: 50, angle_degrees: 0 },
+        },
+      ]),
+    )
+  })
+
   it('shows the fit region behind the selected text controls', () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({

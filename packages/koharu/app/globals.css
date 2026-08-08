@@ -20,7 +20,9 @@
   --border: #e5e5e5;
   --input: #d3d3d3;
   --ring: #d85b6a;
-  --canvas-selection: #f43f5e;
+  --canvas-selection: var(--primary);
+  --canvas-region-contrast: rgb(255 255 255 / 92%);
+  --canvas-region-stroke: #1473e6;
   --surface-titlebar: #fff6f7;
   --surface-toolbar: #ffffff;
   --surface-sidebar: var(--surface-titlebar);
@@ -165,46 +167,6 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-floating);
-  }
-
-  .koharu-moveable {
-    --moveable-color: var(--canvas-selection);
-  }
-
-  .koharu-moveable .moveable-control {
-    pointer-events: auto;
-    width: 8px;
-    height: 8px;
-    margin-top: -4px;
-    margin-left: -4px;
-    border: 1px solid var(--background);
-    background: var(--moveable-color);
-  }
-
-  .koharu-moveable-text .moveable-control:not(.moveable-rotation-control) {
-    display: none;
-  }
-
-  .koharu-moveable-text .moveable-rotation {
-    height: 8px !important;
-  }
-
-  .koharu-moveable-text .moveable-rotation-control {
-    width: 5px !important;
-    height: 5px !important;
-    margin-top: -2.5px !important;
-    margin-left: -2.5px !important;
-    border-width: 1px;
-  }
-
-  .koharu-moveable-text .moveable-rotation-control::after {
-    position: absolute;
-    inset: -5px;
-    content: '';
-  }
-
-  .koharu-moveable .moveable-line {
-    background: var(--moveable-color);
   }
 
   .react-colorful {
