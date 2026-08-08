@@ -75,6 +75,16 @@ impl TextShaper {
             buffer.set_script(script);
         }
 
+        let direction = buffer.direction();
+        let script = Some(buffer.script());
+        let language = buffer.language();
+        let plan = font.shape_plan(
+            &font_ref,
+            direction,
+            script,
+            language.as_ref(),
+            options.features,
+        );
         let shaper = font
             .shaper_data()
             .shaper(&font_ref)
@@ -83,6 +93,7 @@ impl TextShaper {
         let output = shaper.shape(
             buffer,
             ShapeOptions::new()
+                .plan(Some(&plan))
                 .features(options.features)
                 .point_size(Some(options.font_size)),
         );

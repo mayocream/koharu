@@ -145,17 +145,23 @@ impl Model {
     }
 }
 
-#[derive(Clone, Copy)]
 struct DetectedRegion {
     entity: EntityId,
-    bounds: [f32; 4],
+    geometry: Geometry,
+    area: u32,
 }
 
-#[derive(Clone, Copy)]
 struct DetectedText {
-    region: DetectedRegion,
+    entity: EntityId,
+    geometry: Geometry,
     content: EntityId,
     layer: EntityId,
+}
+
+enum RegionOutput {
+    Bubble(DetectedRegion),
+    Text(DetectedText),
+    Other,
 }
 
 #[derive(Clone)]
@@ -383,7 +389,7 @@ fn write_regions(
         let previous = (detection.label == "text")
             .then(|| take_previous_text(previous_texts, detection.bbox))
             .flatten();
-        let (detected, text) = write_region(
+        match write_region(
             snapshot,
             edit,
             page,
@@ -392,17 +398,15 @@ fn write_regions(
             generation,
             previous,
             reused_contents,
-        )?;
-        match detection.label.as_str() {
-            "bubble" => regions.bubbles.push(detected),
-            "text" => {
-                let text = text.expect("text detections create text semantics");
+        )? {
+            RegionOutput::Bubble(bubble) => regions.bubbles.push(bubble),
+            RegionOutput::Text(text) => {
                 if let Some(group) = managed_text_group {
                     edit.move_entity(text.layer, Some(group), At::End)?;
                 }
                 regions.texts.push(text);
             }
-            _ => {}
+            RegionOutput::Other => {}
         }
     }
     Ok(regions)
@@ -417,7 +421,7 @@ fn write_region(
     generation: &Generation,
     previous: Option<PreviousText>,
     reused_contents: &mut BTreeSet<EntityId>,
-) -> Result<(DetectedRegion, Option<DetectedText>)> {
+) -> Result<RegionOutput> {
     let entity = edit.add_entity(page, At::End)?;
     let kind = region_kind(&detection.label)?;
     let inferred = (detection.label == "text")
@@ -452,12 +456,16 @@ fn write_region(
             }],
         },
     )?;
-    let region = DetectedRegion {
-        entity,
-        bounds: detection.bbox,
-    };
     if detection.label != "text" {
-        return Ok((region, None));
+        return Ok(if detection.label == "bubble" {
+            RegionOutput::Bubble(DetectedRegion {
+                entity,
+                geometry,
+                area: detection.area,
+            })
+        } else {
+            RegionOutput::Other
+        });
     }
 
     let (content, layer, created) = previous.map_or_else(
@@ -521,14 +529,12 @@ fn write_region(
     }
     edit.relate::<RecognizedFrom>(content, entity)?;
 
-    Ok((
-        region,
-        Some(DetectedText {
-            region,
-            content,
-            layer,
-        }),
-    ))
+    Ok(RegionOutput::Text(DetectedText {
+        entity,
+        geometry,
+        content,
+        layer,
+    }))
 }
 
 fn link_dialogue_regions(
@@ -537,23 +543,26 @@ fn link_dialogue_regions(
     generation: &Generation,
 ) -> Result<()> {
     for text in &regions.texts {
-        let bubble = containing_bubble(&regions.bubbles, text.region.bounds);
+        let bubble = containing_bubble(&regions.bubbles, &text.geometry);
         if let Some(bubble) = bubble {
-            edit.relate::<Inside>(text.region.entity, bubble.entity)?;
+            edit.relate::<Inside>(text.entity, bubble.entity)?;
             edit.relate::<FitsTo>(text.layer, bubble.entity)?;
             write_text_role(edit, text.content, "dev.koharu.text.dialogue", generation)?;
         } else {
-            edit.relate::<FitsTo>(text.layer, text.region.entity)?;
+            edit.relate::<FitsTo>(text.layer, text.entity)?;
         }
     }
     Ok(())
 }
 
-fn containing_bubble(bubbles: &[DetectedRegion], bounds: [f32; 4]) -> Option<&DetectedRegion> {
+fn containing_bubble<'a>(
+    bubbles: &'a [DetectedRegion],
+    text: &Geometry,
+) -> Option<&'a DetectedRegion> {
     bubbles
         .iter()
-        .filter(|bubble| containment(bubble.bounds, bounds) >= 0.5)
-        .min_by(|left, right| area(left.bounds).total_cmp(&area(right.bounds)))
+        .filter(|bubble| geometry_contains(&bubble.geometry, text))
+        .min_by_key(|bubble| bubble.area)
 }
 
 fn take_previous_text(previous: &mut Vec<PreviousText>, bounds: [f32; 4]) -> Option<PreviousText> {
@@ -955,14 +964,7 @@ fn region_kind(label: &str) -> Result<RegionKind> {
 
 fn mask_for(detections: &[KoharuLayoutDetection], label: &str, size: ImageSize) -> GrayImage {
     let mut mask = GrayImage::new(size.width, size.height);
-    for detection in detections.iter().filter(|value| {
-        value.label == label
-            || (label == "text"
-                && value.label == "onomatopoeia"
-                && detections.iter().any(|bubble| {
-                    bubble.label == "bubble" && containment(bubble.bbox, value.bbox) >= 0.5
-                }))
-    }) {
+    for detection in detections.iter().filter(|value| value.label == label) {
         for (target, source) in mask.as_mut().iter_mut().zip(&detection.mask.pixels) {
             if *source != 0 {
                 *target = u8::MAX;
@@ -1120,6 +1122,53 @@ fn containment(container: [f32; 4], value: [f32; 4]) -> f32 {
     intersection_area(container, value) / value_area
 }
 
+fn geometry_contains(container: &Geometry, value: &Geometry) -> bool {
+    if container.points.len() < 3 || value.points.len() < 3 {
+        return false;
+    }
+
+    // Instance contours can miss a single corner at the pixel boundary. A text
+    // box that crosses the bubble edge, however, has at least two corners out.
+    let required = value.points.len() - 1;
+    value
+        .points
+        .iter()
+        .filter(|point| geometry_contains_point(container, point))
+        .count()
+        >= required
+}
+
+fn geometry_contains_point(geometry: &Geometry, point: &Point) -> bool {
+    let mut inside = false;
+    let mut previous = geometry.points[geometry.points.len() - 1];
+    for &current in &geometry.points {
+        if point_on_segment(point, &previous, &current) {
+            return true;
+        }
+        if (current.y > point.y) != (previous.y > point.y) {
+            let intersection_x = (previous.x - current.x) * (point.y - current.y)
+                / (previous.y - current.y)
+                + current.x;
+            if point.x < intersection_x {
+                inside = !inside;
+            }
+        }
+        previous = current;
+    }
+    inside
+}
+
+fn point_on_segment(point: &Point, start: &Point, end: &Point) -> bool {
+    let cross = (point.y - start.y) * (end.x - start.x) - (point.x - start.x) * (end.y - start.y);
+    if cross.abs() > f64::EPSILON {
+        return false;
+    }
+    point.x >= start.x.min(end.x)
+        && point.x <= start.x.max(end.x)
+        && point.y >= start.y.min(end.y)
+        && point.y <= start.y.max(end.y)
+}
+
 fn intersection_over_union(left: [f32; 4], right: [f32; 4]) -> f32 {
     let intersection = intersection_area(left, right);
     let union = area(left) + area(right) - intersection;
@@ -1152,10 +1201,10 @@ fn area(bounds: [f32; 4]) -> f32 {
 mod tests {
     use image::{Rgb, RgbImage};
     use koharu_ml::koharu_layout_rfdetr_seg_2xl::{KoharuLayoutDetection, KoharuLayoutMask};
-    use koharu_scene::WritingMode;
+    use koharu_scene::{Geometry, Origin, Point, WritingMode};
 
     use super::{
-        ImageSize, infer_typography, layout_order, mask_for, mask_geometry,
+        ImageSize, geometry_contains, infer_typography, layout_order, mask_for, mask_geometry,
         non_maximum_suppression, normalize_text_color,
     };
 
@@ -1277,7 +1326,7 @@ mod tests {
     }
 
     #[test]
-    fn text_mask_includes_only_onomatopoeia_contained_by_a_bubble() {
+    fn text_mask_excludes_onomatopoeia() {
         let detection = |label: &str, bbox: [f32; 4], pixels: [u8; 4]| KoharuLayoutDetection {
             label_id: 0,
             label: label.to_owned(),
@@ -1306,7 +1355,27 @@ mod tests {
             },
         );
 
-        assert_eq!(mask.as_raw(), &[255, 255, 0, 0]);
+        assert_eq!(mask.as_raw(), &[0, 255, 0, 0]);
+    }
+
+    #[test]
+    fn bubble_membership_rejects_text_that_crosses_its_geometry() {
+        let geometry = |points: &[(f64, f64)]| Geometry {
+            origin: Origin::User,
+            points: points.iter().map(|&(x, y)| Point { x, y }).collect(),
+        };
+        let bubble = geometry(&[
+            (0.0, 0.0),
+            (10.0, 0.0),
+            (10.0, 6.0),
+            (7.0, 10.0),
+            (0.0, 10.0),
+        ]);
+        let dialogue = geometry(&[(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)]);
+        let outside = geometry(&[(7.0, 5.0), (12.0, 5.0), (12.0, 9.0), (7.0, 9.0)]);
+
+        assert!(geometry_contains(&bubble, &dialogue));
+        assert!(!geometry_contains(&bubble, &outside));
     }
 
     #[test]

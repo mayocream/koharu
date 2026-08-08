@@ -27,7 +27,8 @@ pub use rasterizer::{DownsampleFilter, Raster, RasterOptions, Rasterizer};
 pub use request::{LayerPresentation, RenderRequest, RenderTheme, VerticalAlignment};
 pub use scene_renderer::{Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText};
 pub use segment::{
-    LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment, hyphenation_lang_from_tag,
+    HyphenationOptions, LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment,
+    hyphenation_lang_from_tag,
 };
 pub use shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
 pub use text_renderer::{StrokeOptions, TextRenderOptions, TextRenderer};

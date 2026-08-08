@@ -176,12 +176,9 @@ impl TextRenderer {
         }
         if let Some(language) = &layer.language {
             layout = layout.with_hyphenation_language_tag(language.as_str());
-            if is_bubble_text
-                && layer.writing_mode == WritingMode::Horizontal
-                && is_english(language.as_str())
-            {
-                layout = layout.with_hyphenation_policy(HyphenationPolicy::LastResort);
-            }
+        }
+        if is_bubble_text && layer.writing_mode == WritingMode::Horizontal {
+            layout = layout.with_hyphenation_policy(HyphenationPolicy::LastResort);
         }
         let layout = if layer.auto_fit && !layer.point_text {
             layout
@@ -298,13 +295,6 @@ impl TextRenderer {
             diagnostics,
         })
     }
-}
-
-fn is_english(language: &str) -> bool {
-    language
-        .split(['-', '_'])
-        .next()
-        .is_some_and(|primary| primary.eq_ignore_ascii_case("en"))
 }
 
 fn is_cjk_language(language: &str) -> bool {

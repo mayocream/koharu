@@ -1,7 +1,7 @@
 //! System discovery, lazy bundled-font loading, fallback, and bounded byte caching.
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fmt,
     future::Future,
     sync::{
@@ -15,7 +15,9 @@ use fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
     GenericFamily, Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
-use harfrust::{ShapeOptions, ShaperData, ShaperInstance, UnicodeBuffer, Variation};
+use harfrust::{
+    ShapeOptions, ShapePlan, ShapePlanKey, ShaperData, ShaperInstance, UnicodeBuffer, Variation,
+};
 use koharu_runtime::HuggingFaceFile;
 use parking_lot::Mutex;
 use serde::Deserialize;
@@ -40,6 +42,7 @@ const FONT_REVISION: &str = "304901a868bebd5f31f95664a462e5839873d939";
 const FONT_INDEX: &str = "index.json";
 const FONT_INDEX_SCHEMA: u32 = 3;
 const DEFAULT_FONT_CACHE_BYTES: usize = 64 * 1024 * 1024;
+const SHAPE_PLAN_CACHE_CAPACITY: usize = 8;
 const SYMBOL_FALLBACK_FAMILIES: &[&str] = &[
     "Segoe UI Symbol",
     "Segoe UI Emoji",
@@ -73,6 +76,7 @@ pub struct Font {
     synthesis: fontique::Synthesis,
     shaper_data: Arc<ShaperData>,
     shaper_instance: ShaperInstance,
+    shape_plans: Arc<Mutex<VecDeque<Arc<ShapePlan>>>>,
     normalized_coords: Vec<skrifa::instance::NormalizedCoord>,
     vello_coords: Vec<vello::NormalizedCoord>,
 }
@@ -142,6 +146,7 @@ impl Font {
             synthesis: font.synthesis,
             shaper_data,
             shaper_instance,
+            shape_plans: Arc::new(Mutex::new(VecDeque::new())),
             normalized_coords,
             vello_coords,
         })
@@ -165,6 +170,40 @@ impl Font {
 
     pub(crate) fn shaper_data(&self) -> &ShaperData {
         &self.shaper_data
+    }
+
+    pub(crate) fn shape_plan(
+        &self,
+        font: &harfrust::FontRef<'_>,
+        direction: harfrust::Direction,
+        script: Option<harfrust::Script>,
+        language: Option<&harfrust::Language>,
+        features: &[harfrust::Feature],
+    ) -> Arc<ShapePlan> {
+        let key = ShapePlanKey::new(script, direction)
+            .language(language)
+            .instance(Some(&self.shaper_instance))
+            .features(features);
+        let mut plans = self.shape_plans.lock();
+        if let Some(index) = plans.iter().position(|plan| key.matches(plan)) {
+            let plan = plans.remove(index).expect("shape plan index must exist");
+            plans.push_back(plan.clone());
+            return plan;
+        }
+
+        let shaper = self
+            .shaper_data
+            .shaper(font)
+            .instance(Some(&self.shaper_instance))
+            .build();
+        let plan = Arc::new(ShapePlan::new(
+            &shaper, direction, script, language, features,
+        ));
+        if plans.len() == SHAPE_PLAN_CACHE_CAPACITY {
+            plans.pop_front();
+        }
+        plans.push_back(plan.clone());
+        plan
     }
 
     pub(crate) fn synthetic_bold(&self) -> bool {

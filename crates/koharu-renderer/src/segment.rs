@@ -46,16 +46,46 @@ pub struct LineSegment {
     pub break_suffix: Option<LineBreakSuffix>,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct HyphenationConfig {
-    lang: Lang,
-    min_word_len: usize,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HyphenationOptions {
+    /// Pattern dictionary used to find valid break points.
+    pub language: Lang,
+    /// Words shorter than this remain intact.
+    pub minimum_word_length: usize,
+    /// Minimum characters retained before a discretionary break.
+    pub minimum_prefix_length: usize,
+    /// Minimum characters retained after a discretionary break.
+    pub minimum_suffix_length: usize,
+}
+
+impl HyphenationOptions {
+    #[must_use]
+    pub fn new(language: Lang, minimum_word_length: usize) -> Self {
+        let (minimum_prefix_length, minimum_suffix_length) = language.bounds();
+        Self {
+            language,
+            minimum_word_length,
+            minimum_prefix_length,
+            minimum_suffix_length,
+        }
+    }
+
+    #[must_use]
+    pub fn with_fragment_bounds(
+        mut self,
+        minimum_prefix_length: usize,
+        minimum_suffix_length: usize,
+    ) -> Self {
+        self.minimum_prefix_length = minimum_prefix_length;
+        self.minimum_suffix_length = minimum_suffix_length;
+        self
+    }
 }
 
 /// Line breaker using ICU4X.
 pub struct LineBreaker {
     segmenter: LineSegmenterBorrowed<'static>,
-    hyphenation: Option<HyphenationConfig>,
+    hyphenation: Option<HyphenationOptions>,
     chinese_word_segmentation: bool,
 }
 
@@ -95,23 +125,10 @@ impl LineBreaker {
         self
     }
 
-    /// Enable discretionary word hyphenation for long Latin words.
-    ///
-    /// `min_word_len` follows MangaTranslator's default threshold: short words
-    /// keep ICU's normal break behavior, while long words gain extra break
-    /// opportunities inside the word.
+    /// Enable pattern-based discretionary word hyphenation.
     #[must_use]
-    pub fn with_hyphenation(mut self, lang: Lang, min_word_len: usize) -> Self {
-        self.hyphenation = Some(HyphenationConfig { lang, min_word_len });
-        self
-    }
-
-    /// Enable discretionary hyphenation from a BCP-47-ish language tag
-    /// supported by `hypher`.
-    #[must_use]
-    pub fn with_hyphenation_tag(mut self, tag: &str, min_word_len: usize) -> Self {
-        self.hyphenation =
-            hyphenation_lang_from_tag(tag).map(|lang| HyphenationConfig { lang, min_word_len });
+    pub fn with_hyphenation(mut self, options: HyphenationOptions) -> Self {
+        self.hyphenation = Some(options);
         self
     }
 
@@ -180,13 +197,17 @@ impl LineBreaker {
         };
 
         let core = &segment_text[core_start..core_end];
-        if core.chars().count() < config.min_word_len {
+        if core.chars().count() < config.minimum_word_length {
             return vec![segment];
         }
 
-        let (left_min, right_min) = config.lang.bounds();
-        let syllables: Vec<&str> =
-            hyphenate_bounded(core, config.lang, left_min, right_min).collect();
+        let syllables: Vec<&str> = hyphenate_bounded(
+            core,
+            config.language,
+            config.minimum_prefix_length,
+            config.minimum_suffix_length,
+        )
+        .collect();
         if syllables.len() <= 1 {
             return vec![segment];
         }
@@ -430,7 +451,8 @@ mod tests {
     #[test]
     fn hyphenation_adds_discretionary_segments_to_long_latin_words() {
         let text = "antidisestablishmentarianism";
-        let linebreaker = LineBreaker::new().with_hyphenation(Lang::English, 8);
+        let linebreaker =
+            LineBreaker::new().with_hyphenation(HyphenationOptions::new(Lang::English, 8));
         let segments = linebreaker.line_segments(text);
 
         assert!(
@@ -448,6 +470,34 @@ mod tests {
             .map(|segment| &text[segment.range.clone()])
             .collect::<String>();
         assert_eq!(rebuilt, text);
+    }
+
+    #[test]
+    fn hyphenation_does_not_invent_breaks_missing_from_the_patterns() {
+        let text = "idols";
+        let segments = LineBreaker::new()
+            .with_hyphenation(HyphenationOptions::new(Lang::English, 5))
+            .line_segments(text);
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(&text[segments[0].range.clone()], text);
+        assert_eq!(segments[0].break_suffix, None);
+    }
+
+    #[test]
+    fn configured_fragment_bounds_relax_language_defaults() {
+        let text = "tower within";
+        let segments = LineBreaker::new()
+            .with_hyphenation(HyphenationOptions::new(Lang::English, 5).with_fragment_bounds(2, 2))
+            .line_segments(text);
+        let pieces = segments
+            .iter()
+            .map(|segment| &text[segment.range.clone()])
+            .collect::<Vec<_>>();
+
+        assert_eq!(pieces, ["tow", "er ", "with", "in"]);
+        assert_eq!(segments[0].break_suffix, Some(LineBreakSuffix::Hyphen));
+        assert_eq!(segments[2].break_suffix, Some(LineBreakSuffix::Hyphen));
     }
 
     #[test]
@@ -516,7 +566,8 @@ mod tests {
     #[test]
     fn hyphenation_supports_unicode_words() {
         let text = "электрификация";
-        let linebreaker = LineBreaker::new().with_hyphenation(Lang::Russian, 8);
+        let linebreaker =
+            LineBreaker::new().with_hyphenation(HyphenationOptions::new(Lang::Russian, 8));
         let segments = linebreaker.line_segments(text);
 
         assert!(
