@@ -17,6 +17,8 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Square,
+  SquareSlash,
   Trash2,
   Type,
 } from 'lucide-react'
@@ -69,7 +71,7 @@ import {
   SelectValue,
 } from '@koharu/ui/components/select'
 import { Slider } from '@koharu/ui/components/slider'
-import { Switch } from '@koharu/ui/components/switch'
+import { Toggle } from '@koharu/ui/components/toggle'
 
 const defaultFont: FontFamily = {
   name: 'CCWildWords',
@@ -288,15 +290,24 @@ function TypeInspector() {
         <div className='grid min-w-0 grid-cols-[2.75rem_2.75rem_minmax(5.5rem,1fr)] items-end gap-1.5'>
           <InspectorField label='Border'>
             <div className='flex h-6 items-center'>
-              <Switch
+              <Toggle
                 size='sm'
+                variant='outline'
                 disabled={disabled}
-                checked={strokeEnabled}
+                pressed={strokeEnabled}
                 aria-label={strokeEnabled ? 'Disable text border' : 'Enable text border'}
-                onCheckedChange={(checked) =>
-                  apply((value) => ({ ...value, stroke_width: checked ? 1.5 : 0 }))
+                title={strokeEnabled ? 'Disable border' : 'Enable border'}
+                className='group size-6 min-w-6 rounded-md border-input bg-background p-0 text-muted-foreground hover:border-foreground/20 hover:bg-muted hover:text-foreground aria-pressed:border-primary/40 aria-pressed:bg-primary/10 aria-pressed:text-primary'
+                onPressedChange={(pressed) =>
+                  apply((value) => ({ ...value, stroke_width: pressed ? 1.5 : 0 }))
                 }
-              />
+              >
+                {strokeEnabled ? (
+                  <Square aria-hidden='true' className='size-3.5' strokeWidth={2} />
+                ) : (
+                  <SquareSlash aria-hidden='true' className='size-3.5' strokeWidth={2} />
+                )}
+              </Toggle>
             </div>
           </InspectorField>
           <InspectorField label='Color'>
