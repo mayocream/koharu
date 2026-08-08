@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useColorSampling } from '@/components/controls/ColorSampling'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
 import { CanvasOverlay } from '@/components/editor/CanvasOverlay'
 import { StatusBar } from '@/components/editor/StatusBar'
@@ -42,6 +43,7 @@ export function CanvasWorkspace() {
   const [draft, setDraft] = useState<Frame | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [cursor, setCursor] = useState<Point | null>(null)
+  const colorSampling = useColorSampling()
 
   const page = usePage().data
   const camera = useKoharuStore((state) => state.camera)
@@ -193,6 +195,7 @@ export function CanvasWorkspace() {
       }
       if (event.key === 'Escape') {
         cancelGesture()
+        colorSampling?.cancel()
         selectLayers([])
         return
       }
@@ -218,7 +221,7 @@ export function CanvasWorkspace() {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
     }
-  }, [cancelGesture, page, selectLayers, setTool])
+  }, [cancelGesture, colorSampling, page, selectLayers, setTool])
 
   const clientPagePoint = (clientX: number, clientY: number) =>
     pagePoint(
@@ -409,7 +412,10 @@ export function CanvasWorkspace() {
               )
             } else if (tool === 'color_picker') {
               void call(commands.sampleColor, physical)
-                .then((color) => setBrush({ ...brush, color: rgbaToHex(color) }))
+                .then((color) => {
+                  const hex = rgbaToHex(color)
+                  if (!colorSampling?.complete(hex)) setBrush({ ...brush, color: hex })
+                })
                 .catch(() => undefined)
             }
             event.preventDefault()

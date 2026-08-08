@@ -4,13 +4,10 @@ import { Pipette, SquareSlash } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 
+import { useColorSampling } from '@/components/controls/ColorSampling'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'
-
-type EyeDropperWindow = Window & {
-  EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> }
-}
 
 type ColorWellProps = {
   label?: string
@@ -39,7 +36,9 @@ export function ColorWell(props: ColorWellProps) {
   } = props
   const [draft, setDraft] = useState(value ?? '#000000')
   const [transparent, setTransparent] = useState(value === null)
+  const [open, setOpen] = useState(false)
   const dragging = useRef(false)
+  const sampling = useColorSampling()
 
   useEffect(() => {
     if (value === null) {
@@ -64,18 +63,8 @@ export function ColorWell(props: ColorWellProps) {
     props.onChange(null)
   }
 
-  const pick = async () => {
-    const EyeDropper = (window as EyeDropperWindow).EyeDropper
-    if (!EyeDropper) return
-    try {
-      set((await new EyeDropper().open()).sRGBHex)
-    } catch (error) {
-      if ((error as DOMException | undefined)?.name !== 'AbortError') throw error
-    }
-  }
-
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label={label}
         disabled={disabled}
@@ -120,12 +109,15 @@ export function ColorWell(props: ColorWellProps) {
             className='h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 font-mono text-[11px] uppercase outline-none focus:border-ring'
             onChange={set}
           />
-          {typeof window !== 'undefined' && (window as EyeDropperWindow).EyeDropper && (
+          {sampling && (
             <Button
               size='icon'
               variant='outline'
-              aria-label='Pick color from screen'
-              onClick={pick}
+              aria-label='Pick color from canvas'
+              onClick={() => {
+                setOpen(false)
+                sampling.request(set)
+              }}
             >
               <Pipette />
             </Button>
