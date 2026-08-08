@@ -69,7 +69,7 @@ impl RTDetrV2Detection {
 
         let mut model = Model::new(config.clone(), device);
         model
-            .load_safetensors(&weights_path)
+            .load(&weights_path)
             .context("failed to load comic text/bubble detector safetensors")?;
 
         Ok(Self {

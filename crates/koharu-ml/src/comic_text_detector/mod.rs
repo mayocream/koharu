@@ -42,7 +42,7 @@ impl ComicTextDetector {
 
         let mut model = Model::new(device);
         model
-            .load_safetensors(&yolo_path, &unet_path, &dbnet_path)
+            .load(&yolo_path, &unet_path, &dbnet_path)
             .context("failed to load comic-text-detector safetensors")?;
 
         Ok(Self { device, model })

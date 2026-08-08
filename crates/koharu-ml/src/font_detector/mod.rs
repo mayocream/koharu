@@ -40,7 +40,7 @@ impl FontDetector {
 
         let mut model = Model::new(device);
         model
-            .load_weights(&weights_path)
+            .load(&weights_path)
             .context("failed to load YuzuMarker font detector weights")?;
         let processor = Processor::from_path(&labels_path)?;
 

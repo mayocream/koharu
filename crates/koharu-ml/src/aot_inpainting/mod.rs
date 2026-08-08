@@ -28,7 +28,7 @@ impl AotInpainting {
             .context("failed to resolve AOT inpainting weights")?;
         let mut model = Model::new(device);
         model
-            .load_safetensors(&weights_path)
+            .load(&weights_path)
             .with_context(|| format!("failed to load {}", weights_path.display()))?;
         Ok(Self {
             model,

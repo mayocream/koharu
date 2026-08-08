@@ -67,7 +67,7 @@ impl Model {
         }
     }
 
-    pub fn load_safetensors(
+    pub fn load(
         &mut self,
         yolo_path: impl AsRef<Path>,
         unet_path: impl AsRef<Path>,
@@ -76,14 +76,15 @@ impl Model {
         self.blk_det_vs.load(yolo_path)?;
         self.text_seg_vs.load(unet_path)?;
         self.text_det_vs.load(dbnet_path)?;
-        let kind = if self.blk_det_vs.device().is_cuda() {
-            Kind::BFloat16
+        if self.blk_det_vs.device().is_cuda() {
+            self.blk_det_vs.bfloat16();
+            self.text_seg_vs.bfloat16();
+            self.text_det_vs.bfloat16();
         } else {
-            Kind::Float
-        };
-        self.blk_det_vs.set_kind(kind);
-        self.text_seg_vs.set_kind(kind);
-        self.text_det_vs.set_kind(kind);
+            self.blk_det_vs.float();
+            self.text_seg_vs.float();
+            self.text_det_vs.float();
+        }
         Ok(())
     }
 

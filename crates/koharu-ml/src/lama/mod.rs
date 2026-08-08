@@ -30,7 +30,7 @@ impl LaMa {
             .context("failed to resolve LaMa weights")?;
         let mut model = Model::new(&FFCResNetGeneratorConfig::default(), device);
         model
-            .load_safetensors(&weights_path)
+            .load(&weights_path)
             .context("failed to load LaMa safetensors")?;
         Ok(Self {
             model,

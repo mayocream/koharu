@@ -64,11 +64,11 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>, image_size: i64) -> Result<()> {
         self.vs.load(path)?;
-        self.vs.set_kind(if self.vs.device().is_cuda() {
-            Kind::BFloat16
+        if self.vs.device().is_cuda() {
+            self.vs.bfloat16();
         } else {
-            Kind::Float
-        });
+            self.vs.float();
+        }
         self.model.set_kind(self.vs.kind());
         // The processor always emits one fixed 224x224 crop, so cache the exact
         // DINOv2 bicubic position interpolation instead of repeating it per crop.

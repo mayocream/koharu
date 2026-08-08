@@ -43,11 +43,11 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        self.vs.set_kind(if self.vs.device().is_cuda() {
-            Kind::BFloat16
+        if self.vs.device().is_cuda() {
+            self.vs.bfloat16();
         } else {
-            Kind::Float
-        });
+            self.vs.float();
+        }
         Ok(())
     }
 

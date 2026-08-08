@@ -89,12 +89,11 @@ impl Model {
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         // The complete RF-DETR tree is registered before this strict VarStore load.
         self.var_store.load(path)?;
-        self.var_store
-            .set_kind(if self.var_store.device().is_cuda() {
-                Kind::BFloat16
-            } else {
-                Kind::Float
-            });
+        if self.var_store.device().is_cuda() {
+            self.var_store.bfloat16();
+        } else {
+            self.var_store.float();
+        }
         Ok(())
     }
 
