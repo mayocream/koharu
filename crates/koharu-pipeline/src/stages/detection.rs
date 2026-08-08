@@ -884,7 +884,7 @@ fn write_mask(
 ) -> Result<()> {
     let mut mask = mask_for(detections, spec.label, size);
     if spec.dilate && size.width > 0 && size.height > 0 {
-        let radius = ((size.width.max(size.height) as f32 / 1024.0) * 4.0)
+        let radius = ((size.width.max(size.height) as f32 / 1024.0) * 6.0)
             .round()
             .clamp(1.0, 255.0) as u8;
         mask = dilate(&mask, Norm::L2, radius);
