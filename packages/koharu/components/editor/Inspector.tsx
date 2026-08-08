@@ -73,20 +73,21 @@ import { Switch } from '@koharu/ui/components/switch'
 
 const defaultFont: FontFamily = {
   name: 'CCWildWords',
-  primary_script: 'latn',
-  scripts: ['latn'],
-  primary_language: 'en',
-  languages: ['en'],
+  metadata: {
+    primary_script: 'latn',
+    scripts: ['latn'],
+    languages: ['en'],
+    category: 'HANDWRITING',
+    classifications: ['comic', 'dialogue'],
+    use_cases: ['comic-dialogue', 'word-balloons'],
+  },
+  sources: ['bundled'],
   faces: [
     {
-      name: 'CCWildWords Regular',
       postscript_name: 'CCWildWords-Regular',
       weight: 400,
       weight_range: null,
-      stretch: 100,
-      stretch_range: null,
       style: 'normal',
-      source: 'bundled',
     },
   ],
 }

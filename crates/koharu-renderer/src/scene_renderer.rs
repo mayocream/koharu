@@ -2,26 +2,33 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
+use anyhow::{Context, anyhow};
 use koharu_scene::{
     Asset, BlobId, Change, ComponentOwner, EntityChange, EntityId, LanguageTag, RelationChange,
     Revision, Snapshot,
 };
 use parking_lot::Mutex;
 use rayon::prelude::*;
+use skrifa::{
+    GlyphId, MetadataProvider,
+    instance::Size,
+    outline::{DrawSettings, OutlinePen},
+};
 use vello::{
     Scene,
-    kurbo::{Affine, Rect, Vec2},
+    kurbo::{Affine, BezPath, Rect, Vec2},
     peniko::{Blob, Fill, ImageAlphaType, ImageData, ImageFormat, Mix},
 };
 
 use crate::{
-    Composition, Error, FontFamilyInfo, RenderDependency, RenderDiagnostic, RenderRequest,
-    RenderTheme, Result, TextLayout, TextRenderOptions, WritingMode,
+    Composition, Error, FontFamily, RasterOptions, Rasterizer, RenderDependency, RenderDiagnostic,
+    RenderRequest, RenderTheme, Result, TextLayout, WritingMode,
     compositor::{ImageLayer, Layer, RenderBounds},
-    fonts::Fonts,
+    fonts::{FontPreview, Fonts},
+    rasterizer::rgba,
 };
 
 const DEFAULT_CACHED_FRAMES: usize = 8;
@@ -46,50 +53,73 @@ impl SceneRenderer {
         }
     }
 
-    pub async fn available_fonts() -> Result<Vec<FontFamilyInfo>> {
+    pub async fn available_fonts() -> Result<Vec<FontFamily>> {
         Fonts::shared()
             .families()
             .await
             .map_err(Error::FontResource)
     }
 
-    pub async fn font_preview(post_script_name: &str) -> Result<FontPreview> {
+    pub async fn font_preview(family_name: &str) -> Result<Vec<u8>> {
         const FONT_SIZE: f32 = 24.0;
-        const PADDING: f32 = 6.0;
+        const PREVIEW_HEIGHT: u32 = 96;
 
         let fonts = Fonts::shared();
-        let font = fonts
-            .by_post_script_name(post_script_name)
+        let font = match fonts
+            .preview(family_name)
             .await
-            .map_err(Error::FontResource)?;
-        let label = font.family_name().to_owned();
-        let preview_fonts = if font.covers(&label) {
+            .map_err(Error::FontResource)?
+        {
+            FontPreview::Webp(bytes) => return Ok(bytes),
+            FontPreview::System(font) => font,
+        };
+        let label = family_name.to_owned();
+        let preview_fonts = if font.renders(family_name, FONT_SIZE) {
             vec![font]
         } else {
             fonts
                 .resolve(Some("Arial"), Some(400), &[], &label, None)
                 .map_err(Error::FontResource)?
         };
-        let layout = TextLayout::new(&preview_fonts[0])
+        let measured = TextLayout::new(&preview_fonts[0])
             .with_fallback_fonts(&preview_fonts[1..])
             .with_font_size(FONT_SIZE)
             .run(&label)
             .map_err(Error::FontResource)?;
-        let width = (layout.width + PADDING * 2.0).ceil().max(1.0) as u32;
-        let height = (layout.height + PADDING * 2.0).ceil().max(1.0) as u32;
+        let preview_font_size = FONT_SIZE * PREVIEW_HEIGHT as f32 / measured.height.max(1.0);
+        let layout = TextLayout::new(&preview_fonts[0])
+            .with_fallback_fonts(&preview_fonts[1..])
+            .with_font_size(preview_font_size)
+            .run(&label)
+            .map_err(Error::FontResource)?;
+        let width = layout.width.ceil().max(1.0) as u32;
         let mut scene = Scene::new();
-        crate::TextRenderer::new().render(
-            &mut scene,
-            &layout,
-            WritingMode::Horizontal,
-            &TextRenderOptions::default(),
-            Affine::translate((f64::from(PADDING), f64::from(PADDING))),
-        );
-        Ok(FontPreview {
-            scene,
-            width,
-            height,
+        draw_font_preview(&mut scene, &layout).map_err(Error::FontResource)?;
+        tokio::task::spawn_blocking(move || {
+            static RASTERIZER: LazyLock<std::result::Result<Rasterizer, String>> =
+                LazyLock::new(|| Rasterizer::new().map_err(|error| error.to_string()));
+            let rasterizer = RASTERIZER
+                .as_ref()
+                .map_err(|error| anyhow!(error.clone()))?;
+            let image = rasterizer
+                .rasterize_scene(
+                    &scene,
+                    width,
+                    PREVIEW_HEIGHT,
+                    [0, 0, 0, 0],
+                    RasterOptions::default(),
+                )
+                .context("failed to rasterize the font preview")?;
+            Ok::<_, anyhow::Error>(
+                webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height())
+                    .encode(85.0)
+                    .to_vec(),
+            )
         })
+        .await
+        .context("font preview worker stopped unexpectedly")
+        .and_then(|result| result)
+        .map_err(Error::FontResource)
     }
 
     #[must_use]
@@ -134,27 +164,71 @@ impl SceneRenderer {
     }
 }
 
+fn draw_font_preview(scene: &mut Scene, layout: &crate::LayoutRun<'_>) -> anyhow::Result<()> {
+    let brush = rgba([0, 0, 0, 255]);
+    for line in &layout.lines {
+        let (baseline_x, baseline_y) = line.baseline;
+        let mut pen_x = 0.0;
+        let mut pen_y = 0.0;
+        for glyph in &line.glyphs {
+            let font = glyph.font.skrifa_ref()?;
+            if let Some(outline) = font.outline_glyphs().get(GlyphId::new(glyph.glyph_id)) {
+                let mut path = BezPath::new();
+                outline
+                    .draw(
+                        DrawSettings::unhinted(Size::new(layout.font_size), glyph.font.location()),
+                        &mut PreviewOutline(&mut path),
+                    )
+                    .with_context(|| {
+                        format!("failed to draw font-preview glyph {}", glyph.glyph_id)
+                    })?;
+                let transform = Affine::translate((
+                    f64::from(baseline_x + pen_x + glyph.x_offset),
+                    f64::from(baseline_y + pen_y - glyph.y_offset),
+                )) * Affine::scale_non_uniform(1.0, -1.0);
+                scene.fill(Fill::NonZero, transform, &brush, None, &path);
+            }
+            pen_x += glyph.x_advance;
+            pen_y -= glyph.y_advance;
+        }
+    }
+    Ok(())
+}
+
+struct PreviewOutline<'a>(&'a mut BezPath);
+
+impl OutlinePen for PreviewOutline<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.0.move_to((f64::from(x), f64::from(y)));
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.0.line_to((f64::from(x), f64::from(y)));
+    }
+
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.0.quad_to(
+            (f64::from(cx0), f64::from(cy0)),
+            (f64::from(x), f64::from(y)),
+        );
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.0.curve_to(
+            (f64::from(cx0), f64::from(cy0)),
+            (f64::from(cx1), f64::from(cy1)),
+            (f64::from(x), f64::from(y)),
+        );
+    }
+
+    fn close(&mut self) {
+        self.0.close_path();
+    }
+}
+
 impl Default for SceneRenderer {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-pub struct FontPreview {
-    scene: Scene,
-    width: u32,
-    height: u32,
-}
-
-impl FontPreview {
-    #[must_use]
-    pub const fn scene(&self) -> &Scene {
-        &self.scene
-    }
-
-    #[must_use]
-    pub const fn size(&self) -> (u32, u32) {
-        (self.width, self.height)
     }
 }
 

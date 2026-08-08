@@ -26,7 +26,7 @@ pub struct TypographyUpdate {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn rename_page(
+pub(crate) async fn rename_page(
     page: EntityId,
     label: String,
     desktop: State<'_, Desktop>,
@@ -54,7 +54,7 @@ pub(crate) fn rename_page(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn delete_pages(
+pub(crate) async fn delete_pages(
     pages: Vec<EntityId>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -82,7 +82,7 @@ pub(crate) fn delete_pages(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn move_page(
+pub(crate) async fn move_page(
     page: EntityId,
     index: u32,
     desktop: State<'_, Desktop>,
@@ -108,7 +108,7 @@ pub(crate) fn move_page(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_source_text(
+pub(crate) async fn set_source_text(
     layer: EntityId,
     text: String,
     desktop: State<'_, Desktop>,
@@ -134,7 +134,7 @@ pub(crate) fn set_source_text(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_translation(
+pub(crate) async fn set_translation(
     layer: EntityId,
     text: Option<String>,
     desktop: State<'_, Desktop>,
@@ -160,7 +160,7 @@ pub(crate) fn set_translation(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_typography(
+pub(crate) async fn set_typography(
     updates: Vec<TypographyUpdate>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -185,7 +185,7 @@ pub(crate) fn set_typography(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_geometry(
+pub(crate) async fn set_geometry(
     updates: Vec<GeometryUpdate>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -210,7 +210,7 @@ pub(crate) fn set_geometry(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_visibility(
+pub(crate) async fn set_visibility(
     layers: Vec<EntityId>,
     visible: Option<bool>,
     opacity: Option<f32>,
@@ -237,7 +237,7 @@ pub(crate) fn set_visibility(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn delete_layers(
+pub(crate) async fn delete_layers(
     layers: Vec<EntityId>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -262,7 +262,7 @@ pub(crate) fn delete_layers(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn move_layer(
+pub(crate) async fn move_layer(
     layer: EntityId,
     parent: EntityId,
     index: u32,
@@ -295,7 +295,7 @@ pub(crate) fn move_layer(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn undo(
+pub(crate) async fn undo(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_view: State<'_, CanvasView>,
@@ -321,7 +321,7 @@ pub(crate) fn undo(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn redo(
+pub(crate) async fn redo(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_view: State<'_, CanvasView>,

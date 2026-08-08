@@ -1,16 +1,48 @@
 'use client'
 
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, Search } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { ChevronDown, ListFilter, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { FontFace, FontFamily } from '@/lib/protocol'
+import type { FontFamily, FontSource } from '@/lib/protocol'
 import { useFontPreview } from '@/lib/queries'
+import { Badge } from '@koharu/ui/components/badge'
+import { Button } from '@koharu/ui/components/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@koharu/ui/components/dropdown-menu'
+import { Empty, EmptyTitle } from '@koharu/ui/components/empty'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@koharu/ui/components/input-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
+import { Separator } from '@koharu/ui/components/separator'
 import { cn } from '@koharu/ui/lib/utils'
 
-const rowHeight = 24
-const listHeight = 216
+const rowHeight = 38
+const listHeight = 248
+const allFonts = '__all_fonts__'
+
+type Filters = {
+  source: '' | FontSource
+  script: string
+  category: string
+  useCase: string
+}
+
+const emptyFilters: Filters = { source: '', script: '', category: '', useCase: '' }
 
 export function FontPicker({
   value,
@@ -27,6 +59,7 @@ export function FontPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [filters, setFilters] = useState<Filters>(emptyFilters)
   const input = useRef<HTMLInputElement>(null)
   const orderedFamilies = useMemo(
     () =>
@@ -40,20 +73,34 @@ export function FontPicker({
       ),
     [families],
   )
+  const facets = useMemo(() => fontFacets(orderedFamilies), [orderedFamilies])
   const results = useMemo(() => {
     const normalized = normalizeFontName(query)
-    if (!normalized) return orderedFamilies
-    return orderedFamilies.filter((family) =>
-      [family.name, ...family.faces.flatMap((face) => [face.name, face.postscript_name])].some(
-        (name) => normalizeFontName(name).includes(normalized),
-      ),
-    )
-  }, [orderedFamilies, query])
+    return orderedFamilies.filter((family) => {
+      const matchesQuery =
+        !normalized ||
+        [family.name, ...family.faces.map((face) => face.postscript_name)].some((name) =>
+          normalizeFontName(name).includes(normalized),
+        )
+      const matchesSource = !filters.source || family.sources.includes(filters.source)
+      const matchesScript =
+        !filters.script ||
+        family.metadata.primary_script === filters.script ||
+        family.metadata.scripts.includes(filters.script)
+      const matchesCategory = !filters.category || family.metadata.category === filters.category
+      const matchesUse =
+        !filters.useCase ||
+        family.metadata.classifications.includes(filters.useCase) ||
+        family.metadata.use_cases.includes(filters.useCase)
+      return matchesQuery && matchesSource && matchesScript && matchesCategory && matchesUse
+    })
+  }, [filters, orderedFamilies, query])
   const selectedFamily = useMemo(
     () =>
       orderedFamilies.find((family) => normalizeFontName(family.name) === normalizeFontName(value)),
     [orderedFamilies, value],
   )
+  const activeFilterCount = Object.values(filters).filter(Boolean).length
 
   return (
     <Popover
@@ -64,17 +111,25 @@ export function FontPicker({
       }}
     >
       <PopoverTrigger
+        render={
+          <Button
+            variant='outline'
+            size={size === 'sm' ? 'xs' : 'default'}
+            className='w-full min-w-0 justify-between font-normal'
+          />
+        }
         disabled={disabled}
         data-testid='type-font-picker'
         className={cn(
-          'flex w-full min-w-0 items-center justify-between border border-input bg-background transition-colors outline-none hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25 disabled:opacity-45',
-          size === 'sm'
-            ? 'h-6 gap-1 rounded-md px-1.5 text-[11px]'
-            : 'h-8 gap-2 rounded-lg px-2.5 text-[12px]',
+          'w-full min-w-0 justify-between font-normal',
+          size === 'sm' ? 'h-6 gap-1 px-1.5 text-[11px]' : 'h-8 gap-2 px-2.5 text-[12px]',
         )}
       >
         {selectedFamily ? (
-          <FontPreviewLabel family={selectedFamily} className='min-w-0 flex-1' />
+          <FontPreviewLabel
+            family={selectedFamily}
+            className='min-w-0 flex-1 py-1 [&>img]:max-h-3.5'
+          />
         ) : (
           <span className='truncate'>{value || 'Choose a font'}</span>
         )}
@@ -82,23 +137,46 @@ export function FontPicker({
       </PopoverTrigger>
       <PopoverContent
         align='start'
-        className='w-(--anchor-width) min-w-0 gap-0 overflow-hidden rounded-lg p-0'
+        className='w-(--anchor-width) min-w-44 gap-0 overflow-hidden rounded-lg p-0'
         initialFocus={input}
       >
-        <label className='flex h-8 items-center gap-1.5 border-b px-2'>
-          <Search className='size-3 text-muted-foreground' />
-          <input
-            ref={input}
-            value={query}
-            aria-label='Search fonts'
-            placeholder='Search fonts'
-            className='min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground'
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-        </label>
+        <div className='border-b p-1'>
+          <InputGroup className='h-6 border-0 bg-muted/50 shadow-none focus-within:bg-background has-[>[data-align=inline-start]]:[&>input]:pl-0'>
+            <InputGroupAddon className='pr-1 pl-1.5'>
+              <Search className='size-3' />
+            </InputGroupAddon>
+            <InputGroupInput
+              ref={input}
+              value={query}
+              aria-label='Search fonts'
+              placeholder='Search fonts'
+              className='h-6 px-0 text-[11px]'
+              onChange={(event) => setQuery(event.currentTarget.value)}
+            />
+            <InputGroupAddon align='inline-end' className='gap-0.5 pr-0.5'>
+              {query && (
+                <InputGroupButton aria-label='Clear search' onClick={() => setQuery('')}>
+                  <X />
+                </InputGroupButton>
+              )}
+              <FontFilterMenu
+                filters={filters}
+                facets={facets}
+                onChange={setFilters}
+                onClear={() => setFilters(emptyFilters)}
+              />
+            </InputGroupAddon>
+          </InputGroup>
+        </div>
+        <FontResultSummary
+          count={results.length}
+          activeFilterCount={activeFilterCount}
+          onClear={() => setFilters(emptyFilters)}
+        />
+        <Separator />
         {open && (
           <FontList
-            key={query}
+            key={`${query}:${filters.source}:${filters.script}:${filters.category}:${filters.useCase}`}
             families={results}
             value={value}
             onSelect={(family) => {
@@ -112,6 +190,137 @@ export function FontPicker({
   )
 }
 
+function FontFilterMenu({
+  filters,
+  facets,
+  onChange,
+  onClear,
+}: {
+  filters: Filters
+  facets: ReturnType<typeof fontFacets>
+  onChange: (filters: Filters) => void
+  onClear: () => void
+}) {
+  const activeFilterCount = Object.values(filters).filter(Boolean).length
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <InputGroupButton
+            aria-label={
+              activeFilterCount > 0 ? `Filter fonts, ${activeFilterCount} active` : 'Filter fonts'
+            }
+            className={cn(activeFilterCount > 0 && 'bg-accent text-foreground')}
+          />
+        }
+      >
+        <ListFilter />
+        {activeFilterCount > 0 && (
+          <Badge className='h-3.5 min-w-3.5 px-1 text-[8px]'>{activeFilterCount}</Badge>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end' sideOffset={6} className='w-40'>
+        <FilterSubmenu
+          label='Source'
+          allLabel='All sources'
+          value={filters.source}
+          options={facets.sources}
+          onChange={(source) => onChange({ ...filters, source: source as Filters['source'] })}
+        />
+        <FilterSubmenu
+          label='Script'
+          allLabel='All scripts'
+          value={filters.script}
+          options={facets.scripts}
+          onChange={(script) => onChange({ ...filters, script })}
+        />
+        <FilterSubmenu
+          label='Style'
+          allLabel='All styles'
+          value={filters.category}
+          options={facets.categories}
+          onChange={(category) => onChange({ ...filters, category })}
+        />
+        <FilterSubmenu
+          label='Purpose'
+          allLabel='All purposes'
+          value={filters.useCase}
+          options={facets.uses}
+          onChange={(useCase) => onChange({ ...filters, useCase })}
+        />
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={activeFilterCount === 0}
+          className='text-[11px]'
+          onClick={onClear}
+        >
+          Clear filters
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function FilterSubmenu({
+  label,
+  allLabel,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  allLabel: string
+  value: string
+  options: string[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className='text-[11px]'>{label}</DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className='max-h-60 w-44'>
+        <DropdownMenuRadioGroup
+          value={value || allFonts}
+          onValueChange={(next) => onChange(next === allFonts ? '' : next)}
+        >
+          <DropdownMenuRadioItem className='text-[11px]' value={allFonts}>
+            {allLabel}
+          </DropdownMenuRadioItem>
+          {options.map((option) => (
+            <DropdownMenuRadioItem className='text-[11px]' key={option} value={option}>
+              {formatFacet(label, option)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+function FontResultSummary({
+  count,
+  activeFilterCount,
+  onClear,
+}: {
+  count: number
+  activeFilterCount: number
+  onClear: () => void
+}) {
+  return (
+    <div className='flex h-6 items-center justify-between px-2 text-[9px] text-muted-foreground'>
+      <span>
+        {count.toLocaleString()} {count === 1 ? 'font' : 'fonts'}
+      </span>
+      {activeFilterCount > 0 ? (
+        <Button variant='ghost' size='xs' className='h-5 px-1.5 text-[9px]' onClick={onClear}>
+          {activeFilterCount} active {activeFilterCount === 1 ? 'filter' : 'filters'}
+          <X />
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
 function FontList({
   families,
   value,
@@ -122,13 +331,19 @@ function FontList({
   onSelect: (family: string) => void
 }) {
   const list = useRef<HTMLDivElement>(null)
+  const selectedIndex = families.findIndex(
+    (family) => normalizeFontName(family.name) === normalizeFontName(value),
+  )
   const virtualizer = useVirtualizer({
     count: families.length,
     getScrollElement: () => list.current,
     getItemKey: (index) => normalizeFontName(families[index]?.name ?? String(index)),
     estimateSize: () => rowHeight,
     overscan: 6,
-    initialOffset: 0,
+    initialOffset: Math.max(
+      0,
+      selectedIndex * rowHeight - Math.floor((listHeight / rowHeight - 1) / 2) * rowHeight,
+    ),
     initialRect: { width: 240, height: listHeight },
     observeElementRect: (instance, callback) =>
       observeElementRect(instance, (rect) =>
@@ -141,8 +356,13 @@ function FontList({
       ref={list}
       role='listbox'
       aria-label='Fonts'
-      className='relative overflow-y-auto p-1'
-      style={{ height: Math.min(listHeight, Math.max(rowHeight, families.length * rowHeight)) }}
+      className='relative overflow-x-hidden overflow-y-auto'
+      style={{
+        height:
+          families.length === 0
+            ? rowHeight * 2
+            : Math.min(listHeight, Math.max(rowHeight, families.length * rowHeight)),
+      }}
     >
       <div className='relative' style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -154,33 +374,40 @@ function FontList({
               key={virtualRow.key}
               type='button'
               role='option'
+              aria-label={`${family.name}, ${fontSource(family)}`}
               aria-selected={selected}
               className={cn(
-                'absolute top-0 left-0 flex h-6 w-full items-center rounded-md px-1 text-left text-[11px] hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                selected && 'bg-accent',
+                'absolute inset-x-0 top-0 flex h-9.5 w-full items-center px-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                selected && 'bg-accent text-accent-foreground',
               )}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
               onClick={() => onSelect(family.name)}
             >
-              <FontPreviewLabel family={family} className='min-w-0 flex-1' />
+              <div className='flex min-w-0 flex-1 flex-col justify-center gap-px'>
+                <FontPreviewLabel family={family} className='h-4.5 w-full min-w-0' />
+                <div className='flex min-w-0 items-center justify-between gap-2 text-[8px] leading-none text-muted-foreground'>
+                  <span className='min-w-0 truncate'>{family.name}</span>
+                  <span className='shrink-0'>{fontSource(family)}</span>
+                </div>
+              </div>
             </button>
           )
         })}
       </div>
       {families.length === 0 && (
-        <div className='absolute inset-0 grid place-items-center text-[11px] text-muted-foreground'>
-          No matching fonts
-        </div>
+        <Empty role='status' className='absolute inset-1 rounded-md p-2'>
+          <EmptyTitle className='text-[11px] text-muted-foreground'>
+            No fonts match this search
+          </EmptyTitle>
+        </Empty>
       )}
     </div>
   )
 }
 
 function FontPreviewLabel({ family, className }: { family: FontFamily; className?: string }) {
-  const face = previewFace(family)
-  const needsPreview = face?.source === 'bundled'
-  const previewQuery = useFontPreview(face, needsPreview)
-  const preview = needsPreview ? previewQuery.data : undefined
+  const previewQuery = useFontPreview(family)
+  const preview = previewQuery.data
   const [url, setUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -200,54 +427,91 @@ function FontPreviewLabel({ family, className }: { family: FontFamily; className
       />
     </span>
   ) : (
-    <span
-      className={cn('truncate', className)}
-      style={fontPreviewStyle(family, needsPreview && previewQuery.data === null)}
-    >
-      {family.name}
-    </span>
+    <span className={cn('truncate font-sans', className)}>{family.name}</span>
   )
 }
 
-function previewFace(family: FontFamily): FontFace | undefined {
-  return family.faces.reduce<FontFace | undefined>((best, face) => {
-    if (!best) return face
-    const faceRank = previewFaceRank(face)
-    const bestRank = previewFaceRank(best)
-    for (let index = 0; index < faceRank.length; index += 1) {
-      if (faceRank[index] !== bestRank[index])
-        return faceRank[index]! < bestRank[index]! ? face : best
-    }
-    return best
-  }, undefined)
+function fontFacets(families: FontFamily[]) {
+  return {
+    sources: unique(families.flatMap((family) => family.sources)),
+    scripts: unique(
+      families.flatMap((family) => [
+        ...(family.metadata.primary_script ? [family.metadata.primary_script] : []),
+        ...family.metadata.scripts,
+      ]),
+    ),
+    categories: unique(
+      families.flatMap((family) => (family.metadata.category ? [family.metadata.category] : [])),
+    ),
+    uses: unique(
+      families.flatMap((family) => [
+        ...family.metadata.classifications,
+        ...family.metadata.use_cases,
+      ]),
+    ),
+  }
 }
 
-function previewFaceRank(face: FontFace): readonly number[] {
-  return [
-    face.style === 'normal' ? 0 : 1,
-    Math.abs(face.weight - 400),
-    face.source === 'bundled' ? 0 : 1,
-  ]
+function unique(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) =>
+    formatMetadata(left).localeCompare(formatMetadata(right), undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }),
+  )
 }
 
-function cssFontFamily(family: string): string {
-  return `"${family.replaceAll('"', '\\"')}", Arial, sans-serif`
+function formatMetadata(value: string): string {
+  return value
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function formatFacet(label: string, value: string): string {
+  if (label === 'Script') return formatScript(value)
+  if (label === 'Source') {
+    if (value === 'bundled') return 'Font library'
+    if (value === 'system') return 'System fonts'
+  }
+  return formatMetadata(value)
+}
+
+function fontSource(family: FontFamily): string {
+  return family.sources.includes('bundled') ? 'Library' : 'System'
+}
+
+function formatScript(script: string): string {
+  const names: Record<string, string> = {
+    latn: 'Latin',
+    cyrl: 'Cyrillic',
+    hani: 'Han',
+    hans: 'Simplified Han',
+    hant: 'Traditional Han',
+    hira: 'Hiragana',
+    kana: 'Katakana',
+    hang: 'Hangul',
+    arab: 'Arabic',
+    hebr: 'Hebrew',
+    deva: 'Devanagari',
+    beng: 'Bengali',
+    guru: 'Gurmukhi',
+    gujr: 'Gujarati',
+    taml: 'Tamil',
+    telu: 'Telugu',
+    knda: 'Kannada',
+    mlym: 'Malayalam',
+    thai: 'Thai',
+  }
+  return names[script.toLowerCase()] ?? formatMetadata(script)
 }
 
 function normalizeFontName(value: string): string {
   return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
-function fontPreviewStyle(family: FontFamily, fallback: boolean): CSSProperties {
-  return {
-    fontFamily: fallback ? 'Arial, sans-serif' : cssFontFamily(family.name),
-    fontStyle: 'normal',
-    fontWeight: 400,
-  }
-}
-
 function scriptRank(family: FontFamily): number {
-  const script = family.primary_script
+  const script = family.metadata.primary_script
   if (script === 'latn') return 0
   if (script === 'cyrl') return 1
   if (script === 'hani' || script === 'hira' || script === 'kana') return 2

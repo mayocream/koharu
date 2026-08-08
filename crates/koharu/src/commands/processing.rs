@@ -81,7 +81,7 @@ pub(crate) struct JobChannel {
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn process(
+pub(crate) async fn process(
     handle: AppHandle,
     scope: koharu_pipeline::Scope,
     operation: koharu_pipeline::Operation,
@@ -267,7 +267,7 @@ pub(crate) fn process(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn stop_job(
+pub(crate) async fn stop_job(
     job: JobId,
     processing: State<'_, Processing>,
 ) -> std::result::Result<(), Error> {

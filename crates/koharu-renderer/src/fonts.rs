@@ -15,21 +15,30 @@ use fontique::{
     Attributes, Blob, Collection, CollectionOptions, FallbackKey, FontInfoOverride, FontStyle,
     GenericFamily, Language, QueryFamily, QueryFont, QueryStatus, Script, SourceCache,
 };
-use harfrust::{ShaperData, ShaperInstance, Variation};
+use harfrust::{ShapeOptions, ShaperData, ShaperInstance, UnicodeBuffer, Variation};
 use koharu_runtime::HuggingFaceFile;
 use parking_lot::Mutex;
 use serde::Deserialize;
-use skrifa::{MetadataProvider, instance::LocationRef, string::StringId};
+use skrifa::{
+    MetadataProvider,
+    instance::{LocationRef, Size},
+    outline::{DrawSettings, OutlinePen},
+    string::StringId,
+};
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 use crate::{
     script::fontique_scripts,
-    types::{FontAxisRange, FontFaceInfo, FontFaceStyle, FontFamilyInfo, FontSource},
+    types::{
+        FontFace, FontFamily, FontMetadata, FontRange, FontSource, FontStyle as PublicFontStyle,
+    },
 };
 
 const FONT_REPOSITORY: &str = "mayocream/fonts";
+// The catalog and every referenced face or preview must come from one immutable snapshot.
+const FONT_REVISION: &str = "304901a868bebd5f31f95664a462e5839873d939";
 const FONT_INDEX: &str = "index.json";
-const FONT_INDEX_SCHEMA: u32 = 2;
+const FONT_INDEX_SCHEMA: u32 = 3;
 const DEFAULT_FONT_CACHE_BYTES: usize = 64 * 1024 * 1024;
 const SYMBOL_FALLBACK_FAMILIES: &[&str] = &[
     "Segoe UI Symbol",
@@ -194,6 +203,65 @@ impl Font {
         })
     }
 
+    pub(crate) fn renders(&self, text: &str, font_size: f32) -> bool {
+        let Ok(font) = self.skrifa_ref() else {
+            return false;
+        };
+        if font.charmap().is_symbol() {
+            return false;
+        }
+        let Ok(harfrust_font) = self.harfrust_ref() else {
+            return false;
+        };
+        let mut buffer = UnicodeBuffer::new();
+        buffer.push_str(text);
+        buffer.guess_segment_properties();
+        let shaped = self
+            .shaper_data
+            .shaper(&harfrust_font)
+            .instance(Some(&self.shaper_instance))
+            .build()
+            .shape(buffer, ShapeOptions::new());
+        let outlines = font.outline_glyphs();
+        let size = Size::new(font_size);
+        let metrics = font.glyph_metrics(size, self.location());
+        let mut rendered = false;
+
+        for glyph in shaped.glyph_infos() {
+            let character = text
+                .get(glyph.cluster as usize..)
+                .and_then(|tail| tail.chars().next());
+            if character.is_some_and(|character| {
+                character.is_control()
+                    || character.is_whitespace()
+                    || is_default_ignorable(character)
+            }) {
+                continue;
+            }
+            let glyph_id = skrifa::GlyphId::new(glyph.glyph_id);
+            let Some(bounds) = metrics.bounds(glyph_id) else {
+                return false;
+            };
+            let Some(outline) = outlines.get(glyph_id) else {
+                return false;
+            };
+            let mut pen = OutlinePresence::default();
+            if glyph.glyph_id == 0
+                || bounds.x_min >= bounds.x_max
+                || bounds.y_min >= bounds.y_max
+                || outline
+                    .draw(DrawSettings::unhinted(size, self.location()), &mut pen)
+                    .is_err()
+                || !pen.has_ink
+            {
+                return false;
+            }
+            rendered = true;
+        }
+
+        rendered
+    }
+
     pub fn family_name(&self) -> &str {
         &self.family_name
     }
@@ -213,6 +281,29 @@ impl Font {
     }
 }
 
+#[derive(Default)]
+struct OutlinePresence {
+    has_ink: bool,
+}
+
+impl OutlinePen for OutlinePresence {
+    fn move_to(&mut self, _x: f32, _y: f32) {}
+
+    fn line_to(&mut self, _x: f32, _y: f32) {
+        self.has_ink = true;
+    }
+
+    fn quad_to(&mut self, _cx0: f32, _cy0: f32, _x: f32, _y: f32) {
+        self.has_ink = true;
+    }
+
+    fn curve_to(&mut self, _cx0: f32, _cy0: f32, _cx1: f32, _cy1: f32, _x: f32, _y: f32) {
+        self.has_ink = true;
+    }
+
+    fn close(&mut self) {}
+}
+
 fn is_default_ignorable(character: char) -> bool {
     matches!(
         character as u32,
@@ -225,13 +316,11 @@ pub(crate) fn font_key(font: &Font) -> usize {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct FontFace {
+struct SystemFace {
     pub(crate) family_name: String,
-    pub(crate) font_name: String,
     pub(crate) post_script_name: String,
     pub(crate) weight: u16,
-    pub(crate) stretch: u16,
-    pub(crate) style: FontFaceStyle,
+    pub(crate) style: PublicFontStyle,
 }
 
 /// Font discovery, matching, fallback, and source caching.
@@ -239,7 +328,7 @@ pub struct FontSystem {
     collection: Collection,
     sources: SourceCache,
     system_families: Vec<String>,
-    system_faces: Option<Vec<FontFace>>,
+    system_faces: Option<Vec<SystemFace>>,
     resolved: HashMap<ResolveKey, Vec<Font>>,
 }
 
@@ -417,7 +506,7 @@ impl FontSystem {
         .context("no usable fonts are installed")
     }
 
-    pub(crate) fn system_faces(&mut self) -> Vec<FontFace> {
+    fn system_faces(&mut self) -> Vec<SystemFace> {
         if let Some(faces) = &self.system_faces {
             return faces.clone();
         }
@@ -426,7 +515,10 @@ impl FontSystem {
         faces
     }
 
-    fn faces_for_families(&mut self, families: impl IntoIterator<Item = String>) -> Vec<FontFace> {
+    fn faces_for_families(
+        &mut self,
+        families: impl IntoIterator<Item = String>,
+    ) -> Vec<SystemFace> {
         let mut faces = Vec::new();
         for family_name in families {
             let Some(family) = self.collection.family_by_name(&family_name) else {
@@ -446,16 +538,14 @@ impl FontSystem {
                 let Ok(font) = Font::from_query(query, family_name.clone()) else {
                     continue;
                 };
-                faces.push(FontFace {
+                faces.push(SystemFace {
                     family_name: family_name.clone(),
-                    font_name: font.font_name,
                     post_script_name: font.post_script_name,
                     weight: info.weight().value().round().clamp(1.0, 1000.0) as u16,
-                    stretch: info.width().percentage().round().clamp(1.0, 1000.0) as u16,
                     style: match info.style() {
-                        FontStyle::Normal => FontFaceStyle::Normal,
-                        FontStyle::Italic => FontFaceStyle::Italic,
-                        FontStyle::Oblique(_) => FontFaceStyle::Oblique,
+                        FontStyle::Normal => PublicFontStyle::Normal,
+                        FontStyle::Italic => PublicFontStyle::Italic,
+                        FontStyle::Oblique(_) => PublicFontStyle::Oblique,
                     },
                 });
             }
@@ -477,6 +567,11 @@ pub(crate) struct Fonts {
     generation: AtomicU64,
 }
 
+pub(crate) enum FontPreview {
+    Webp(Vec<u8>),
+    System(Font),
+}
+
 impl Fonts {
     fn new() -> Self {
         Self {
@@ -496,45 +591,34 @@ impl Fonts {
         self.generation.load(Ordering::Acquire)
     }
 
-    pub(crate) async fn families(&self) -> Result<Vec<FontFamilyInfo>> {
+    pub(crate) async fn families(&self) -> Result<Vec<FontFamily>> {
         let catalog = self.catalog().await?;
-        let mut families = BTreeMap::<String, FontFamilyInfo>::new();
+        let mut families = BTreeMap::<String, FontFamily>::new();
 
         for face in self.system.lock().system_faces() {
             let key = normalize(&face.family_name);
-            families
-                .entry(key)
-                .or_insert_with(|| FontFamilyInfo {
-                    family_name: face.family_name.clone(),
-                    primary_script: None,
-                    scripts: Vec::new(),
-                    primary_language: None,
-                    languages: Vec::new(),
-                    faces: Vec::new(),
-                })
-                .faces
-                .push(FontFaceInfo {
-                    font_name: face.font_name,
-                    post_script_name: face.post_script_name,
-                    weight: face.weight,
-                    weight_range: None,
-                    stretch: face.stretch,
-                    stretch_range: None,
-                    style: face.style,
-                    source: FontSource::System,
-                });
+            let family = families.entry(key).or_insert_with(|| FontFamily {
+                name: face.family_name.clone(),
+                metadata: FontMetadata::default(),
+                sources: vec![FontSource::System],
+                faces: Vec::new(),
+            });
+            family.faces.push(FontFace {
+                post_script_name: face.post_script_name,
+                weight: face.weight,
+                weight_range: None,
+                style: face.style,
+            });
         }
 
         for bundled in &catalog.families {
             let key = normalize(&bundled.family_name);
             let family = families.entry(key).or_insert_with(|| bundled.info());
-            if family.primary_script.is_none() {
-                family.primary_script.clone_from(&bundled.primary_script);
-                family.scripts.clone_from(&bundled.scripts);
-                family
-                    .primary_language
-                    .clone_from(&bundled.primary_language);
-                family.languages.clone_from(&bundled.languages);
+            if family.metadata.primary_script.is_none() {
+                family.metadata.clone_from(&bundled.metadata);
+            }
+            if !family.sources.contains(&FontSource::Bundled) {
+                family.sources.push(FontSource::Bundled);
             }
             let mut known = family
                 .faces
@@ -556,10 +640,9 @@ impl Fonts {
                 left.style
                     .cmp(&right.style)
                     .then_with(|| left.weight.cmp(&right.weight))
-                    .then_with(|| left.stretch.cmp(&right.stretch))
-                    .then_with(|| left.source.cmp(&right.source))
                     .then_with(|| left.post_script_name.cmp(&right.post_script_name))
             });
+            family.sources.sort_unstable();
         }
         Ok(families)
     }
@@ -636,42 +719,31 @@ impl Fonts {
         Ok(resolved)
     }
 
-    pub(crate) async fn by_post_script_name(&self, post_script_name: &str) -> Result<Font> {
+    pub(crate) async fn preview(&self, family_name: &str) -> Result<FontPreview> {
         let catalog = self.catalog().await?;
-        if let Some(face) = catalog.by_post_script_name(post_script_name) {
-            return self.load(face).await;
+        if let Some(face) = catalog.select(family_name, Attributes::default()) {
+            let path =
+                HuggingFaceFile::pinned_dataset(FONT_REPOSITORY, FONT_REVISION, &face.preview_file)
+                    .resolve()
+                    .await?;
+            return tokio::fs::read(&path)
+                .await
+                .with_context(|| format!("failed to read {}", path.display()))
+                .map(FontPreview::Webp);
         }
-
-        let mut system = self.system.lock();
-        let face = system
-            .system_faces()
-            .into_iter()
-            .find(|face| face.post_script_name.eq_ignore_ascii_case(post_script_name))
-            .with_context(|| format!("unknown font {post_script_name:?}"))?;
-        system
-            .resolve(
-                &[face.family_name],
-                Attributes {
-                    weight: fontique::FontWeight::new(f32::from(face.weight)),
-                    ..Attributes::default()
-                },
-                &[Script::from_bytes(*b"Latn")],
-                None,
-            )?
-            .into_iter()
-            .find(|font| {
-                font.post_script_name()
-                    .eq_ignore_ascii_case(post_script_name)
-            })
-            .with_context(|| format!("could not load font {post_script_name:?}"))
+        self.system
+            .lock()
+            .query_family(family_name)
+            .map(FontPreview::System)
     }
 
     async fn catalog(&self) -> Result<&Arc<FontCatalog>> {
         self.catalog
             .get_or_try_init(|| async {
-                let path = HuggingFaceFile::latest_dataset(FONT_REPOSITORY, FONT_INDEX)
-                    .resolve()
-                    .await?;
+                let path =
+                    HuggingFaceFile::pinned_dataset(FONT_REPOSITORY, FONT_REVISION, FONT_INDEX)
+                        .resolve()
+                        .await?;
                 let bytes = tokio::fs::read(&path)
                     .await
                     .with_context(|| format!("failed to read {}", path.display()))?;
@@ -696,7 +768,7 @@ impl Fonts {
         if let Some(font) = self.cache.lock().get(&face.post_script_name) {
             return Ok(font);
         }
-        let path = HuggingFaceFile::latest_dataset(FONT_REPOSITORY, &face.file_name)
+        let path = HuggingFaceFile::pinned_dataset(FONT_REPOSITORY, FONT_REVISION, &face.file_name)
             .resolve()
             .await?;
         let data = tokio::fs::read(&path)
@@ -790,14 +862,12 @@ where
 struct FontCatalog {
     families: Vec<Arc<BundledFamily>>,
     family_names: HashMap<String, Arc<BundledFamily>>,
-    post_script_names: HashMap<String, Arc<BundledFace>>,
 }
 
 impl FontCatalog {
     fn from_index(index: CatalogIndex) -> Self {
         let mut families = Vec::new();
         let mut family_names = HashMap::new();
-        let mut post_script_names = HashMap::new();
         for family in index.families {
             let mut faces = Vec::new();
             for weight in family.weights {
@@ -805,25 +875,32 @@ impl FontCatalog {
                     let face = Arc::new(BundledFace {
                         family_name: family.family_name.clone(),
                         file_name: font.file_name,
-                        font_name: font.font_name,
                         post_script_name: font.postscript_name,
                         weight: weight.weight,
-                        weight_range: font.weight_range.map(FontAxisRange::weight),
+                        weight_range: font.weight_range.map(FontRange::weight),
                         stretch: (font.width * 100.0).round().clamp(1.0, 1000.0) as u16,
-                        stretch_range: font.width_range.map(FontAxisRange::width),
+                        stretch_range: font.width_range.map(FontRange::width),
                         style: font.style,
+                        preview_file: font.preview.file,
                         load: AsyncMutex::new(()),
                     });
-                    post_script_names.insert(normalize(&face.post_script_name), face.clone());
                     faces.push(face);
                 }
             }
             let family = Arc::new(BundledFamily {
                 family_name: family.family_name,
-                primary_script: family.primary_script,
-                scripts: family.scripts,
-                primary_language: family.primary_language,
-                languages: family.languages,
+                metadata: FontMetadata {
+                    primary_script: family.primary_script,
+                    scripts: family.scripts,
+                    languages: family.languages,
+                    category: family.category,
+                    classifications: family.classifications,
+                    use_cases: family
+                        .use_cases
+                        .into_iter()
+                        .map(|value| value.name)
+                        .collect(),
+                },
                 faces,
             });
             family_names.insert(normalize(&family.family_name), family.clone());
@@ -832,14 +909,10 @@ impl FontCatalog {
         Self {
             families,
             family_names,
-            post_script_names,
         }
     }
 
     fn select(&self, name: &str, attributes: Attributes) -> Option<Arc<BundledFace>> {
-        if let Some(face) = self.post_script_names.get(&normalize(name)) {
-            return Some(face.clone());
-        }
         self.family_names
             .get(&normalize(name))?
             .faces
@@ -861,29 +934,20 @@ impl FontCatalog {
             })
             .cloned()
     }
-
-    fn by_post_script_name(&self, name: &str) -> Option<Arc<BundledFace>> {
-        self.post_script_names.get(&normalize(name)).cloned()
-    }
 }
 
 struct BundledFamily {
     family_name: String,
-    primary_script: Option<String>,
-    scripts: Vec<String>,
-    primary_language: Option<String>,
-    languages: Vec<String>,
+    metadata: FontMetadata,
     faces: Vec<Arc<BundledFace>>,
 }
 
 impl BundledFamily {
-    fn info(&self) -> FontFamilyInfo {
-        FontFamilyInfo {
-            family_name: self.family_name.clone(),
-            primary_script: self.primary_script.clone(),
-            scripts: self.scripts.clone(),
-            primary_language: self.primary_language.clone(),
-            languages: self.languages.clone(),
+    fn info(&self) -> FontFamily {
+        FontFamily {
+            name: self.family_name.clone(),
+            metadata: self.metadata.clone(),
+            sources: vec![FontSource::Bundled],
             faces: self.faces.iter().map(|face| face.info()).collect(),
         }
     }
@@ -892,27 +956,23 @@ impl BundledFamily {
 struct BundledFace {
     family_name: String,
     file_name: String,
-    font_name: String,
     post_script_name: String,
     weight: u16,
-    weight_range: Option<FontAxisRange>,
+    weight_range: Option<FontRange>,
     stretch: u16,
-    stretch_range: Option<FontAxisRange>,
+    stretch_range: Option<FontRange>,
     style: CatalogStyle,
+    preview_file: String,
     load: AsyncMutex<()>,
 }
 
 impl BundledFace {
-    fn info(&self) -> FontFaceInfo {
-        FontFaceInfo {
-            font_name: self.font_name.clone(),
+    fn info(&self) -> FontFace {
+        FontFace {
             post_script_name: self.post_script_name.clone(),
             weight: self.weight,
             weight_range: self.weight_range,
-            stretch: self.stretch,
-            stretch_range: self.stretch_range,
             style: self.style.into(),
-            source: FontSource::Bundled,
         }
     }
 }
@@ -993,10 +1053,19 @@ struct CatalogFamily {
     primary_script: Option<String>,
     #[serde(default)]
     scripts: Vec<String>,
-    primary_language: Option<String>,
     #[serde(default)]
     languages: Vec<String>,
+    category: Option<String>,
+    #[serde(default)]
+    classifications: Vec<String>,
+    #[serde(default)]
+    use_cases: Vec<CatalogUseCase>,
     weights: Vec<CatalogWeight>,
+}
+
+#[derive(Deserialize)]
+struct CatalogUseCase {
+    name: String,
 }
 
 #[derive(Deserialize)]
@@ -1008,12 +1077,17 @@ struct CatalogWeight {
 #[derive(Deserialize)]
 struct CatalogFont {
     file_name: String,
-    font_name: String,
     postscript_name: String,
     style: CatalogStyle,
     width: f32,
     weight_range: Option<CatalogRange>,
     width_range: Option<CatalogRange>,
+    preview: CatalogPreview,
+}
+
+#[derive(Deserialize)]
+struct CatalogPreview {
+    file: String,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -1030,7 +1104,7 @@ enum CatalogStyle {
     Oblique,
 }
 
-impl From<CatalogStyle> for FontFaceStyle {
+impl From<CatalogStyle> for PublicFontStyle {
     fn from(value: CatalogStyle) -> Self {
         match value {
             CatalogStyle::Normal => Self::Normal,
@@ -1054,7 +1128,7 @@ fn normalize(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-impl FontAxisRange {
+impl FontRange {
     fn weight(range: CatalogRange) -> Self {
         Self {
             minimum: range.minimum.round().clamp(1.0, 1000.0) as u16,
@@ -1070,7 +1144,7 @@ impl FontAxisRange {
     }
 }
 
-fn axis_distance(value: f32, default: u16, range: Option<FontAxisRange>) -> u32 {
+fn axis_distance(value: f32, default: u16, range: Option<FontRange>) -> u32 {
     let distance = match range {
         Some(range) if value < f32::from(range.minimum) => f32::from(range.minimum) - value,
         Some(range) if value > f32::from(range.maximum) => value - f32::from(range.maximum),
@@ -1085,16 +1159,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_preserves_family_metadata_and_face_ranges() {
+    fn catalog_preserves_filter_metadata_preview_and_weight_range() {
         let index = serde_json::from_str::<CatalogIndex>(
             r#"{
-                "schema_version": 2,
+                "schema_version": 3,
                 "families": [{
                     "family_name": "Example Sans",
                     "primary_script": "latn",
                     "scripts": ["latn"],
                     "primary_language": "en",
                     "languages": ["en"],
+                    "category": "SANS_SERIF",
+                    "classifications": ["sans-serif", "comic"],
+                    "use_cases": [{ "name": "comic-dialogue" }],
                     "weights": [{
                         "weight": 400,
                         "fonts": [{
@@ -1104,7 +1181,8 @@ mod tests {
                             "style": "normal",
                             "width": 1.0,
                             "weight_range": { "minimum": 300, "maximum": 700 },
-                            "width_range": { "minimum": 0.75, "maximum": 1.0 }
+                            "width_range": { "minimum": 0.75, "maximum": 1.0 },
+                            "preview": { "file": "previews/ExampleSans.ttf.webp" }
                         }]
                     }]
                 }]
@@ -1115,20 +1193,23 @@ mod tests {
         let catalog = FontCatalog::from_index(index);
         let family = &catalog.families[0];
         assert_eq!(family.family_name, "Example Sans");
-        assert_eq!(family.primary_script.as_deref(), Some("latn"));
-        assert_eq!(family.scripts, ["latn"]);
+        assert_eq!(family.metadata.primary_script.as_deref(), Some("latn"));
+        assert_eq!(family.metadata.scripts, ["latn"]);
+        assert_eq!(family.metadata.category.as_deref(), Some("SANS_SERIF"));
+        assert_eq!(family.metadata.classifications, ["sans-serif", "comic"]);
+        assert_eq!(family.metadata.use_cases, ["comic-dialogue"]);
         let face = &family.faces[0];
-        assert_eq!(face.font_name, "Example Sans Regular");
+        assert_eq!(face.preview_file, "previews/ExampleSans.ttf.webp");
         assert_eq!(
             face.weight_range,
-            Some(FontAxisRange {
+            Some(FontRange {
                 minimum: 300,
                 maximum: 700
             })
         );
         assert_eq!(
             face.stretch_range,
-            Some(FontAxisRange {
+            Some(FontRange {
                 minimum: 75,
                 maximum: 100
             })

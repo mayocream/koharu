@@ -222,7 +222,7 @@ async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn get_project(
+pub(crate) async fn get_project(
     project: State<'_, CurrentProject>,
 ) -> std::result::Result<Option<ProjectInfo>, Error> {
     Ok(project.project.lock().as_ref().map(Project::info))
@@ -230,7 +230,7 @@ pub(crate) fn get_project(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn get_pages(
+pub(crate) async fn get_pages(
     project: State<'_, CurrentProject>,
 ) -> std::result::Result<Vec<PageSummary>, Error> {
     let snapshot = project
@@ -244,7 +244,7 @@ pub(crate) fn get_pages(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn get_page(
+pub(crate) async fn get_page(
     project: State<'_, CurrentProject>,
 ) -> std::result::Result<Option<Page>, Error> {
     let current = {
@@ -261,7 +261,7 @@ pub(crate) fn get_page(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn list_projects(
+pub(crate) async fn list_projects(
     library: State<'_, ProjectLibrary>,
 ) -> std::result::Result<Vec<ProjectSummary>, Error> {
     Ok(library.list()?)
@@ -490,7 +490,7 @@ pub(crate) async fn import_pages(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn select_page(
+pub(crate) async fn select_page(
     desktop: State<'_, Desktop>,
     page: koharu_scene::EntityId,
     project: State<'_, CurrentProject>,

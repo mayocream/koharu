@@ -134,7 +134,7 @@ pub(crate) async fn logout_agent(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn save_agent_config(
+pub(crate) async fn save_agent_config(
     config: Config,
     state: State<'_, AgentState>,
 ) -> std::result::Result<Config, Error> {
@@ -143,7 +143,7 @@ pub(crate) fn save_agent_config(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn run_agent(
+pub(crate) async fn run_agent(
     prompt: String,
     on_event: Channel<Event>,
     handle: AppHandle,
@@ -187,7 +187,7 @@ pub(crate) fn run_agent(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn cancel_agent(
+pub(crate) async fn cancel_agent(
     run: RunId,
     state: State<'_, AgentState>,
 ) -> std::result::Result<(), Error> {

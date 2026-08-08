@@ -25,14 +25,10 @@ pub use fonts::{Font, FontSystem};
 pub use layout::{HyphenationPolicy, LayoutLine, LayoutRun, TextLayout, WritingMode};
 pub use rasterizer::{DownsampleFilter, Raster, RasterOptions, Rasterizer};
 pub use request::{LayerPresentation, RenderRequest, RenderTheme, VerticalAlignment};
-pub use scene_renderer::{
-    FontPreview, Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText,
-};
+pub use scene_renderer::{Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText};
 pub use segment::{
     LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment, hyphenation_lang_from_tag,
 };
 pub use shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
 pub use text_renderer::{StrokeOptions, TextRenderOptions, TextRenderer};
-pub use types::{
-    FontAxisRange, FontFaceInfo, FontFaceStyle, FontFamilyInfo, FontSource, TextAlign,
-};
+pub use types::{FontFace, FontFamily, FontMetadata, FontRange, FontSource, FontStyle, TextAlign};

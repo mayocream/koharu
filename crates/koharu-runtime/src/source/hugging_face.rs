@@ -85,6 +85,16 @@ impl<'a> HuggingFaceFile<'a> {
         }
     }
 
+    #[must_use]
+    pub const fn pinned_dataset(repository: &'a str, revision: &'a str, filename: &'a str) -> Self {
+        Self {
+            kind: RepositoryKind::Dataset,
+            repository,
+            revision: Revision::Pinned(revision),
+            filename,
+        }
+    }
+
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
         let mut repository = self.repository.split('/');
         let owner = repository.next().unwrap_or_default();
@@ -216,6 +226,19 @@ mod tests {
         );
         assert!(path.ends_with(
             "owner--model/snapshots/0123456789abcdef0123456789abcdef01234567/subdir/model.safetensors"
+        ));
+    }
+
+    #[test]
+    fn stores_dataset_files_in_the_dataset_namespace() {
+        let path = snapshot_path(
+            RepositoryKind::Dataset,
+            "owner/dataset",
+            "0123456789abcdef0123456789abcdef01234567",
+            "previews/example.webp",
+        );
+        assert!(path.ends_with(
+            "datasets/owner--dataset/snapshots/0123456789abcdef0123456789abcdef01234567/previews/example.webp"
         ));
     }
 

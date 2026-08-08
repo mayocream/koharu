@@ -105,7 +105,7 @@ pub(crate) struct CanvasChannel {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_zoom(
+pub(crate) async fn set_zoom(
     desktop: State<'_, Desktop>,
     zoom: f32,
     canvas_view: State<'_, CanvasView>,
@@ -132,7 +132,7 @@ pub(crate) fn set_zoom(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_canvas_view(
+pub(crate) async fn set_canvas_view(
     desktop: State<'_, Desktop>,
     zoom: f64,
     translation: [f64; 2],
@@ -156,7 +156,7 @@ pub(crate) fn set_canvas_view(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn fit_canvas(
+pub(crate) async fn fit_canvas(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_view: State<'_, CanvasView>,
@@ -186,7 +186,7 @@ pub(crate) fn fit_canvas(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn set_presentation(
+pub(crate) async fn set_presentation(
     desktop: State<'_, Desktop>,
     presentation: CanvasPresentation,
 ) -> Result<(), Error> {
@@ -209,7 +209,7 @@ pub(crate) fn set_presentation(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn add_point_text(
+pub(crate) async fn add_point_text(
     point: Point,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -235,7 +235,7 @@ pub(crate) fn add_point_text(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn add_text_box(
+pub(crate) async fn add_text_box(
     frame: Frame,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
@@ -261,7 +261,7 @@ pub(crate) fn add_text_box(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn begin_paint(
+pub(crate) async fn begin_paint(
     layer: Option<EntityId>,
     point: Point,
     brush: PaintBrush,
@@ -281,7 +281,10 @@ pub(crate) fn begin_paint(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn extend_paint(points: Vec<Point>, desktop: State<'_, Desktop>) -> Result<(), Error> {
+pub(crate) async fn extend_paint(
+    points: Vec<Point>,
+    desktop: State<'_, Desktop>,
+) -> Result<(), Error> {
     desktop
         .lock()
         .canvas()
@@ -291,7 +294,7 @@ pub(crate) fn extend_paint(points: Vec<Point>, desktop: State<'_, Desktop>) -> R
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn finish_paint(
+pub(crate) async fn finish_paint(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
 ) -> Result<LayerCommit, Error> {
@@ -328,13 +331,14 @@ pub(crate) fn finish_paint(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn cancel_paint(desktop: State<'_, Desktop>) {
+pub(crate) async fn cancel_paint(desktop: State<'_, Desktop>) -> Result<(), Error> {
     desktop.lock().canvas().cancel_raster_stroke();
+    Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn begin_erase(
+pub(crate) async fn begin_erase(
     layer: EntityId,
     point: Point,
     diameter: f32,
@@ -354,7 +358,10 @@ pub(crate) fn begin_erase(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn extend_erase(points: Vec<Point>, desktop: State<'_, Desktop>) -> Result<(), Error> {
+pub(crate) async fn extend_erase(
+    points: Vec<Point>,
+    desktop: State<'_, Desktop>,
+) -> Result<(), Error> {
     desktop
         .lock()
         .canvas()
@@ -364,7 +371,7 @@ pub(crate) fn extend_erase(points: Vec<Point>, desktop: State<'_, Desktop>) -> R
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn finish_erase(
+pub(crate) async fn finish_erase(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
 ) -> Result<LayerCommit, Error> {
@@ -401,13 +408,14 @@ pub(crate) fn finish_erase(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn cancel_erase(desktop: State<'_, Desktop>) {
+pub(crate) async fn cancel_erase(desktop: State<'_, Desktop>) -> Result<(), Error> {
     desktop.lock().canvas().cancel_raster_stroke();
+    Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn begin_transform(
+pub(crate) async fn begin_transform(
     elements: Vec<TransformFrame>,
     desktop: State<'_, Desktop>,
 ) -> Result<(), Error> {
@@ -422,7 +430,7 @@ pub(crate) fn begin_transform(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn update_transform(
+pub(crate) async fn update_transform(
     frame: u32,
     elements: Vec<TransformFrame>,
     desktop: State<'_, Desktop>,
@@ -439,7 +447,7 @@ pub(crate) fn update_transform(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn preview_opacity(
+pub(crate) async fn preview_opacity(
     element: EntityId,
     opacity: Option<f32>,
     desktop: State<'_, Desktop>,
@@ -465,7 +473,7 @@ impl From<TransformFrame> for koharu_canvas::ElementFrame {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn finish_transform(
+pub(crate) async fn finish_transform(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
     canvas_view: State<'_, CanvasView>,
@@ -497,13 +505,14 @@ pub(crate) fn finish_transform(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn cancel_transform(desktop: State<'_, Desktop>) {
+pub(crate) async fn cancel_transform(desktop: State<'_, Desktop>) -> Result<(), Error> {
     desktop.lock().canvas().cancel_transform();
+    Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn begin_text_mask(
+pub(crate) async fn begin_text_mask(
     point: Point,
     brush: MaskBrush,
     desktop: State<'_, Desktop>,
@@ -526,7 +535,7 @@ pub(crate) fn begin_text_mask(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn extend_text_mask(
+pub(crate) async fn extend_text_mask(
     points: Vec<Point>,
     desktop: State<'_, Desktop>,
 ) -> Result<(), Error> {
@@ -539,7 +548,7 @@ pub(crate) fn extend_text_mask(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn finish_text_mask(
+pub(crate) async fn finish_text_mask(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
 ) -> Result<Option<Revision>, Error> {
@@ -598,7 +607,7 @@ pub(crate) fn finish_text_mask(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn cancel_text_mask(desktop: State<'_, Desktop>) -> Result<(), Error> {
+pub(crate) async fn cancel_text_mask(desktop: State<'_, Desktop>) -> Result<(), Error> {
     desktop
         .lock()
         .canvas()
@@ -608,7 +617,7 @@ pub(crate) fn cancel_text_mask(desktop: State<'_, Desktop>) -> Result<(), Error>
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn begin_inpaint(
+pub(crate) async fn begin_inpaint(
     point: Point,
     diameter: f32,
     desktop: State<'_, Desktop>,
@@ -627,7 +636,10 @@ pub(crate) fn begin_inpaint(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn extend_inpaint(points: Vec<Point>, desktop: State<'_, Desktop>) -> Result<(), Error> {
+pub(crate) async fn extend_inpaint(
+    points: Vec<Point>,
+    desktop: State<'_, Desktop>,
+) -> Result<(), Error> {
     desktop.lock().canvas().extend_mask_stroke(
         MaskPlane::Inpaint,
         &points.into_iter().map(PagePoint::from).collect::<Vec<_>>(),
@@ -637,7 +649,7 @@ pub(crate) fn extend_inpaint(points: Vec<Point>, desktop: State<'_, Desktop>) ->
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn finish_inpaint(
+pub(crate) async fn finish_inpaint(
     handle: AppHandle,
     desktop: State<'_, Desktop>,
 ) -> Result<Option<JobId>, Error> {
@@ -654,29 +666,32 @@ pub(crate) fn finish_inpaint(
         png: Arc::from(mask.encode_png()?),
     });
     desktop.lock().canvas().clear_inpaint_mask();
-    Ok(Some(processing::process(
-        handle.clone(),
-        koharu_pipeline::Scope::Region {
-            page,
-            bounds: koharu_pipeline::Bounds {
-                x: f64::from(mask.dirty.x),
-                y: f64::from(mask.dirty.y),
-                width: f64::from(mask.dirty.width),
-                height: f64::from(mask.dirty.height),
+    Ok(Some(
+        processing::process(
+            handle.clone(),
+            koharu_pipeline::Scope::Region {
+                page,
+                bounds: koharu_pipeline::Bounds {
+                    x: f64::from(mask.dirty.x),
+                    y: f64::from(mask.dirty.y),
+                    width: f64::from(mask.dirty.width),
+                    height: f64::from(mask.dirty.height),
+                },
             },
-        },
-        koharu_pipeline::Operation::Only {
-            stage: koharu_pipeline::Stage::Inpainting,
-        },
-        handle.state::<CurrentProject>(),
-        handle.state::<Processing>(),
-        handle.state::<JobChannel>(),
-    )?))
+            koharu_pipeline::Operation::Only {
+                stage: koharu_pipeline::Stage::Inpainting,
+            },
+            handle.state::<CurrentProject>(),
+            handle.state::<Processing>(),
+            handle.state::<JobChannel>(),
+        )
+        .await?,
+    ))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn cancel_inpaint(desktop: State<'_, Desktop>) -> Result<(), Error> {
+pub(crate) async fn cancel_inpaint(desktop: State<'_, Desktop>) -> Result<(), Error> {
     desktop
         .lock()
         .canvas()
@@ -686,7 +701,10 @@ pub(crate) fn cancel_inpaint(desktop: State<'_, Desktop>) -> Result<(), Error> {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn sample_color(point: Point, desktop: State<'_, Desktop>) -> Result<[u8; 4], Error> {
+pub(crate) async fn sample_color(
+    point: Point,
+    desktop: State<'_, Desktop>,
+) -> Result<[u8; 4], Error> {
     Ok(desktop
         .lock()
         .canvas()
@@ -696,7 +714,7 @@ pub(crate) fn sample_color(point: Point, desktop: State<'_, Desktop>) -> Result<
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn set_viewport(
+pub(crate) async fn set_viewport(
     desktop: State<'_, Desktop>,
     x: f64,
     y: f64,

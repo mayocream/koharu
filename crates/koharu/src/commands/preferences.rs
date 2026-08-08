@@ -145,7 +145,7 @@ pub struct LanguageChoice {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn save_preferences(
+pub(crate) async fn save_preferences(
     mut pipeline: PipelineConfig,
     providers: ProviderPreferences,
 ) -> std::result::Result<Preferences, Error> {
@@ -179,7 +179,7 @@ fn remember_pipeline_profiles(config: &mut PipelineConfig) {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) fn get_preferences() -> std::result::Result<Preferences, Error> {
+pub(crate) async fn get_preferences() -> std::result::Result<Preferences, Error> {
     Ok(Preferences::load()?)
 }
 

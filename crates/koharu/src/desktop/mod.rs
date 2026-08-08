@@ -43,9 +43,9 @@ impl Desktop {
             return Ok(());
         }
         let frame_app = self.app.clone();
-        // Synchronous Tauri commands run on the event-loop thread. Calling
-        // `run_on_main_thread` directly from `DesktopGuard::drop` would run
-        // the callback inline while the renderer mutex is still held.
+        // A guard can also be dropped while the event loop is presenting. Calling
+        // `run_on_main_thread` directly there could run the callback inline while
+        // the renderer mutex is still held.
         tauri::async_runtime::spawn(async move {
             let callback_app = frame_app.clone();
             let next_frame_app = frame_app.clone();

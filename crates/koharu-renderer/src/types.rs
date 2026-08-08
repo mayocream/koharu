@@ -11,7 +11,7 @@ pub enum FontSource {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
-pub enum FontFaceStyle {
+pub enum FontStyle {
     Normal,
     Italic,
     Oblique,
@@ -19,33 +19,38 @@ pub enum FontFaceStyle {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
-pub struct FontFamilyInfo {
-    pub family_name: String,
+pub struct FontFamily {
+    pub name: String,
+    pub metadata: FontMetadata,
+    pub sources: Vec<FontSource>,
+    pub faces: Vec<FontFace>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct FontMetadata {
     pub primary_script: Option<String>,
     pub scripts: Vec<String>,
-    pub primary_language: Option<String>,
     pub languages: Vec<String>,
-    pub faces: Vec<FontFaceInfo>,
+    pub category: Option<String>,
+    pub classifications: Vec<String>,
+    pub use_cases: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
-pub struct FontAxisRange {
+pub struct FontRange {
     pub minimum: u16,
     pub maximum: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
-pub struct FontFaceInfo {
-    pub font_name: String,
+pub struct FontFace {
     pub post_script_name: String,
     pub weight: u16,
-    pub weight_range: Option<FontAxisRange>,
-    pub stretch: u16,
-    pub stretch_range: Option<FontAxisRange>,
-    pub style: FontFaceStyle,
-    pub source: FontSource,
+    pub weight_range: Option<FontRange>,
+    pub style: FontStyle,
 }
 
 /// Horizontal alignment within a text layout box.
