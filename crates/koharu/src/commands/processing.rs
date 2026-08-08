@@ -195,6 +195,7 @@ pub(crate) async fn process(
                 }
                 let snapshot = commit.snapshot.clone();
                 let canvas_handle = self.handle.clone();
+                let (send, receive) = tokio::sync::oneshot::channel();
                 self.handle.run_on_main_thread(move || {
                     let canvas_view = canvas_handle.state::<CanvasView>();
                     let result = (|| {
@@ -212,10 +213,14 @@ pub(crate) async fn process(
                             .publish(canvas);
                         Result::<()>::Ok(())
                     })();
-                    if let Err(error) = result {
+                    if let Err(error) = &result {
                         tracing::error!(error = ?error, "failed to synchronize a pipeline commit");
                     }
+                    let _ = send.send(result);
                 })?;
+                receive
+                    .await
+                    .context("the desktop closed while applying a pipeline commit")??;
                 Ok(snapshot)
             }
         }

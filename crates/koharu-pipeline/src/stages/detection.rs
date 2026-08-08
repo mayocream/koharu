@@ -1100,7 +1100,6 @@ fn layout_order(detections: &[KoharuLayoutDetection]) -> Vec<usize> {
     let panels = indices_with_label(detections, "panel");
     let bubbles = indices_with_label(detections, "bubble");
     let texts = indices_with_label(detections, "text");
-    let panels = spatial_order(detections, panels);
 
     let mut panel_for_bubble = vec![None; detections.len()];
     for &bubble in &bubbles {
@@ -1116,52 +1115,31 @@ fn layout_order(detections: &[KoharuLayoutDetection]) -> Vec<usize> {
             .or_else(|| best_container(detections, text, &panels));
     }
 
-    let mut order = Vec::with_capacity(detections.len());
-    let mut included = vec![false; detections.len()];
-    for &panel in &panels {
-        append_once(panel, &mut order, &mut included);
-        for bubble in spatial_order(
-            detections,
-            bubbles
-                .iter()
-                .copied()
-                .filter(|&bubble| panel_for_bubble[bubble] == Some(panel))
-                .collect(),
-        ) {
-            append_once(bubble, &mut order, &mut included);
-            append_texts(detections, &texts, &mut order, &mut included, |text| {
-                bubble_for_text[text] == Some(bubble)
-            });
+    let mut parent = vec![None; detections.len()];
+    for bubble in bubbles {
+        parent[bubble] = panel_for_bubble[bubble];
+    }
+    for text in texts {
+        parent[text] = bubble_for_text[text].or(panel_for_text[text]);
+    }
+
+    let mut roots = Vec::new();
+    let mut children = vec![Vec::new(); detections.len()];
+    for (index, parent) in parent.into_iter().enumerate() {
+        if let Some(parent) = parent {
+            children[parent].push(index);
+        } else {
+            roots.push(index);
         }
-        append_texts(detections, &texts, &mut order, &mut included, |text| {
-            bubble_for_text[text].is_none() && panel_for_text[text] == Some(panel)
-        });
+    }
+    sort_spatial(detections, &mut roots);
+    for siblings in &mut children {
+        sort_spatial(detections, siblings);
     }
 
-    for bubble in spatial_order(
-        detections,
-        bubbles
-            .iter()
-            .copied()
-            .filter(|&bubble| panel_for_bubble[bubble].is_none())
-            .collect(),
-    ) {
-        append_once(bubble, &mut order, &mut included);
-        append_texts(detections, &texts, &mut order, &mut included, |text| {
-            bubble_for_text[text] == Some(bubble)
-        });
-    }
-
-    append_texts(detections, &texts, &mut order, &mut included, |text| {
-        bubble_for_text[text].is_none() && panel_for_text[text].is_none()
-    });
-    for index in spatial_order(
-        detections,
-        (0..detections.len())
-            .filter(|&index| !included[index])
-            .collect(),
-    ) {
-        append_once(index, &mut order, &mut included);
+    let mut order = Vec::with_capacity(detections.len());
+    for root in roots {
+        append_layout_subtree(root, &children, &mut order);
     }
     order
 }
@@ -1174,39 +1152,19 @@ fn indices_with_label(detections: &[KoharuLayoutDetection], label: &str) -> Vec<
         .collect()
 }
 
-fn append_texts(
-    detections: &[KoharuLayoutDetection],
-    texts: &[usize],
-    order: &mut Vec<usize>,
-    included: &mut [bool],
-    belongs: impl Fn(usize) -> bool,
-) {
-    for text in spatial_order(
-        detections,
-        texts
-            .iter()
-            .copied()
-            .filter(|text| belongs(*text))
-            .collect(),
-    ) {
-        append_once(text, order, included);
+fn append_layout_subtree(index: usize, children: &[Vec<usize>], order: &mut Vec<usize>) {
+    order.push(index);
+    for &child in &children[index] {
+        append_layout_subtree(child, children, order);
     }
 }
 
-fn append_once(index: usize, order: &mut Vec<usize>, included: &mut [bool]) {
-    if !included[index] {
-        included[index] = true;
-        order.push(index);
-    }
-}
-
-fn spatial_order(detections: &[KoharuLayoutDetection], mut indices: Vec<usize>) -> Vec<usize> {
+fn sort_spatial(detections: &[KoharuLayoutDetection], indices: &mut [usize]) {
     indices.sort_by(|&left, &right| {
         detection_order(&detections[left], &detections[right])
             .then_with(|| detections[right].score.total_cmp(&detections[left].score))
             .then_with(|| left.cmp(&right))
     });
-    indices
 }
 
 fn best_container(
@@ -1444,6 +1402,26 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(text_scores, [0.61, 0.62, 0.63]);
+    }
+
+    #[test]
+    fn layout_order_merges_containers_and_text_at_each_spatial_level() {
+        let detections = vec![
+            detection("panel", 0.9, [0.0, 40.0, 200.0, 240.0]),
+            detection("bubble", 0.8, [100.0, 120.0, 190.0, 210.0]),
+            detection("text", 0.3, [120.0, 140.0, 180.0, 190.0]),
+            detection("text", 0.2, [20.0, 60.0, 180.0, 90.0]),
+            detection("text", 0.1, [20.0, 0.0, 180.0, 20.0]),
+        ];
+
+        let text_scores = layout_order(&detections)
+            .into_iter()
+            .filter_map(|index| {
+                (detections[index].label == "text").then_some(detections[index].score)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(text_scores, [0.1, 0.2, 0.3]);
     }
 
     #[test]
