@@ -603,22 +603,8 @@ impl Project {
         opacity: Option<f32>,
     ) -> Result<Commit> {
         let snapshot = self.snapshot();
-        let layers = layers
-            .into_iter()
-            .map(|layer| {
-                let text = snapshot.component::<SceneTextLayout>(layer)?.is_some();
-                let content = text
-                    .then(|| Self::text_content(&snapshot, layer))
-                    .transpose()?;
-                Ok((layer, content))
-            })
-            .collect::<Result<Vec<_>>>()?;
         let patch = snapshot.patch(|edit| {
-            for (layer, content) in layers {
-                edit.promote_entity_to_user(layer)?;
-                if let Some(content) = content {
-                    edit.promote_entity_to_user(content)?;
-                }
+            for layer in layers {
                 let mut value =
                     snapshot
                         .component::<SceneVisibility>(layer)?

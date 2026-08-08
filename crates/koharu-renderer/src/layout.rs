@@ -10,11 +10,7 @@ use unicode_bidi::BidiInfo;
 use anyhow::Result;
 use harfrust::{Feature, Tag};
 use hypher::Lang;
-use skrifa::{
-    MetadataProvider,
-    instance::Size,
-    outline::{DrawSettings, OutlinePen},
-};
+use skrifa::{MetadataProvider, instance::Size};
 
 use crate::{
     fonts::{Font, font_key},
@@ -267,97 +263,6 @@ fn rasterize_contour_edge(width: f32, height: f32, contour: &[(f32, f32)]) -> Ve
     let mut pixels = pixels.into_iter().collect::<Vec<_>>();
     pixels.sort_unstable();
     pixels
-}
-
-struct EdgePixelPen<'a> {
-    pixels: &'a mut HashSet<(i32, i32)>,
-    origin: (f32, f32),
-    current: (f32, f32),
-    start: (f32, f32),
-}
-
-impl EdgePixelPen<'_> {
-    fn screen_point(&self, point: (f32, f32)) -> (f32, f32) {
-        (self.origin.0 + point.0, self.origin.1 - point.1)
-    }
-
-    fn line_to_point(&mut self, point: (f32, f32)) {
-        rasterize_edge_segment(
-            self.pixels,
-            self.screen_point(self.current),
-            self.screen_point(point),
-        );
-        self.current = point;
-    }
-
-    fn curve_steps(points: &[(f32, f32)]) -> usize {
-        points
-            .windows(2)
-            .map(|pair| {
-                (pair[1].0 - pair[0].0)
-                    .abs()
-                    .max((pair[1].1 - pair[0].1).abs())
-            })
-            .sum::<f32>()
-            .ceil()
-            .clamp(4.0, 256.0) as usize
-    }
-}
-
-impl OutlinePen for EdgePixelPen<'_> {
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.current = (x, y);
-        self.start = (x, y);
-    }
-
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.line_to_point((x, y));
-    }
-
-    fn quad_to(&mut self, cx: f32, cy: f32, x: f32, y: f32) {
-        let start = self.current;
-        let control = (cx, cy);
-        let end = (x, y);
-        let steps = Self::curve_steps(&[start, control, end]);
-        for step in 1..=steps {
-            let t = step as f32 / steps as f32;
-            let one_minus_t = 1.0 - t;
-            self.line_to_point((
-                one_minus_t * one_minus_t * start.0
-                    + 2.0 * one_minus_t * t * control.0
-                    + t * t * end.0,
-                one_minus_t * one_minus_t * start.1
-                    + 2.0 * one_minus_t * t * control.1
-                    + t * t * end.1,
-            ));
-        }
-    }
-
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        let start = self.current;
-        let control0 = (cx0, cy0);
-        let control1 = (cx1, cy1);
-        let end = (x, y);
-        let steps = Self::curve_steps(&[start, control0, control1, end]);
-        for step in 1..=steps {
-            let t = step as f32 / steps as f32;
-            let one_minus_t = 1.0 - t;
-            self.line_to_point((
-                one_minus_t.powi(3) * start.0
-                    + 3.0 * one_minus_t * one_minus_t * t * control0.0
-                    + 3.0 * one_minus_t * t * t * control1.0
-                    + t.powi(3) * end.0,
-                one_minus_t.powi(3) * start.1
-                    + 3.0 * one_minus_t * one_minus_t * t * control0.1
-                    + 3.0 * one_minus_t * t * t * control1.1
-                    + t.powi(3) * end.1,
-            ));
-        }
-    }
-
-    fn close(&mut self) {
-        self.line_to_point(self.start);
-    }
 }
 
 impl<'a> TextLayout<'a> {
@@ -1068,14 +973,13 @@ impl<'a> TextLayout<'a> {
             }
         }
 
-        let mut overflowed = self.comic_balloon.is_none()
-            && (contour_overflowed
-                || self
-                    .max_width
-                    .is_some_and(|maximum| width > maximum + f32::EPSILON)
-                || self
-                    .max_height
-                    .is_some_and(|maximum| height > maximum + f32::EPSILON));
+        let mut overflowed = contour_overflowed
+            || self
+                .max_width
+                .is_some_and(|maximum| width > maximum + f32::EPSILON)
+            || self
+                .max_height
+                .is_some_and(|maximum| height > maximum + f32::EPSILON);
 
         let layout = LayoutRun {
             lines,
@@ -1355,42 +1259,65 @@ impl<'a> TextLayout<'a> {
         let origin_x = (balloon.width - layout.width) * 0.5 + layout.placement_offset_x;
         let origin_y = (balloon.height - layout.height) * balloon.vertical_alignment
             + layout.placement_offset_y;
-        let mut text_edge_pixels = HashSet::new();
+        let air = balloon.air(font_size);
+        let mut metrics_cache = HashMap::new();
 
         for line in &layout.lines {
             let (mut x, mut y) = line.baseline;
             for glyph in &line.glyphs {
-                let font_ref = glyph.font.skrifa_ref()?;
-                if let Some(outline) = font_ref
-                    .outline_glyphs()
-                    .get(skrifa::GlyphId::new(glyph.glyph_id))
-                {
-                    let mut pen = EdgePixelPen {
-                        pixels: &mut text_edge_pixels,
-                        origin: (origin_x + x + glyph.x_offset, origin_y + y - glyph.y_offset),
-                        current: (0.0, 0.0),
-                        start: (0.0, 0.0),
-                    };
-                    outline
-                        .draw(
-                            DrawSettings::unhinted(Size::new(font_size), glyph.font.location()),
-                            &mut pen,
+                let key = font_key(glyph.font);
+                let glyph_metrics = match metrics_cache.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        let font_ref = glyph.font.skrifa_ref()?;
+                        entry.insert(
+                            font_ref.glyph_metrics(Size::new(font_size), glyph.font.location()),
                         )
-                        .map_err(|error| {
-                            anyhow::anyhow!(
-                                "failed to read glyph {} outline for balloon layout: {error}",
-                                glyph.glyph_id
-                            )
-                        })?;
+                    }
+                };
+
+                if let Some(bounds) = glyph_metrics.bounds(skrifa::GlyphId::new(glyph.glyph_id)) {
+                    let synthetic_pad = glyph
+                        .font
+                        .synthetic_skew()
+                        .map_or(0.0, |_| font_size * 0.25)
+                        + if glyph.font.synthetic_bold() {
+                            font_size * 0.05
+                        } else {
+                            0.0
+                        };
+                    let left = origin_x + x + glyph.x_offset + bounds.x_min - synthetic_pad;
+                    let right = origin_x + x + glyph.x_offset + bounds.x_max + synthetic_pad;
+                    let top = origin_y + y - glyph.y_offset - bounds.y_max;
+                    let bottom = origin_y + y - glyph.y_offset - bounds.y_min;
+                    let center_x = (left + right) * 0.5;
+                    let center_y = (top + bottom) * 0.5;
+
+                    for (point_x, point_y) in [
+                        (left, top),
+                        (center_x, top),
+                        (right, top),
+                        (left, center_y),
+                        (right, center_y),
+                        (left, bottom),
+                        (center_x, bottom),
+                        (right, bottom),
+                    ] {
+                        let pixel = (
+                            (point_x - 0.5).round() as i32,
+                            (point_y - 0.5).round() as i32,
+                        );
+                        if !balloon.contains_with_clearance(pixel, air) {
+                            return Ok(false);
+                        }
+                    }
                 }
                 x += glyph.x_advance;
                 y -= glyph.y_advance;
             }
         }
 
-        Ok(text_edge_pixels
-            .into_iter()
-            .all(|pixel| balloon.contains_with_clearance(pixel, balloon.air(font_size))))
+        Ok(true)
     }
 
     fn center_vertical_fullwidth_punctuation(
