@@ -14,7 +14,6 @@ use self::model::Model;
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const DEFAULT_MAX_TOKENS: usize = 512;
 const DEFAULT_SEED: u32 = 299_792_458;
-const DEFAULT_MEDIA_MARKER: &str = "<__media__>";
 
 /// A loaded GGUF language model with optional multimodal support.
 #[derive(Debug)]
@@ -149,8 +148,6 @@ impl Default for LoadOptions {
 #[derive(Debug, Clone)]
 pub struct MtmdOptions {
     pub projector_path: PathBuf,
-    /// Marker in the rendered prompt replaced by each media input.
-    pub media_marker: String,
     /// `-1` selects the projector default.
     pub image_min_tokens: i32,
     /// `-1` selects the projector default.
@@ -162,16 +159,9 @@ impl MtmdOptions {
     pub fn new(projector_path: impl Into<PathBuf>) -> Self {
         Self {
             projector_path: projector_path.into(),
-            media_marker: DEFAULT_MEDIA_MARKER.to_owned(),
             image_min_tokens: -1,
             image_max_tokens: -1,
         }
-    }
-
-    #[must_use]
-    pub fn with_media_marker(mut self, media_marker: impl Into<String>) -> Self {
-        self.media_marker = media_marker.into();
-        self
     }
 
     #[must_use]
@@ -449,9 +439,8 @@ mod tests {
     }
 
     #[test]
-    fn mtmd_defaults_to_llama_media_marker() {
+    fn mtmd_defaults_to_projector_token_budget() {
         let options = MtmdOptions::new("projector.gguf");
-        assert_eq!(options.media_marker, DEFAULT_MEDIA_MARKER);
         assert_eq!(options.image_min_tokens, -1);
         assert_eq!(options.image_max_tokens, -1);
     }

@@ -411,13 +411,7 @@ impl LlamaModel {
             ),
             x => x,
         }?;
-        // here the assumption is that each byte from the output may map to at most one output charakter
-        let mut output_piece = String::with_capacity(bytes.len());
-        // _result only tells if there is nothing more in the input, or if the output was full
-        // but further decoding will happen on the next interation anyway
-        let (_result, _somesize, _truthy) =
-            decoder.decode_to_string(&bytes, &mut output_piece, false);
-        Ok(output_piece)
+        Ok(decode_piece(decoder, &bytes))
     }
 
     /// Raw token decoding to bytes, use if you want to handle the decoding model output yourself
@@ -972,6 +966,22 @@ impl Drop for LlamaModel {
     }
 }
 
+fn decode_piece(decoder: &mut encoding_rs::Decoder, bytes: &[u8]) -> String {
+    // `decode_to_string` never grows its destination. The decoder's bound also accounts
+    // for an incomplete UTF-8 sequence retained from the previous token.
+    let mut output = String::with_capacity(
+        decoder
+            .max_utf8_buffer_length(bytes.len())
+            .expect("token output is too large to decode"),
+    );
+    let (result, read, _) = decoder.decode_to_string(bytes, &mut output, false);
+    assert!(
+        matches!(result, encoding_rs::CoderResult::InputEmpty) && read == bytes.len(),
+        "UTF-8 decoder capacity bound must consume the complete token"
+    );
+    output
+}
+
 /// a rusty equivalent of `llama_vocab_type`
 #[repr(u32)]
 #[derive(Debug, Eq, Copy, Clone, PartialEq)]
@@ -999,5 +1009,18 @@ impl TryFrom<koharu_llama_sys::llama_vocab_type> for VocabType {
             koharu_llama_sys::LLAMA_VOCAB_TYPE_SPM => Ok(VocabType::SPM),
             unknown => Err(LlamaTokenTypeFromIntError::UnknownValue(unknown)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_piece;
+
+    #[test]
+    fn token_decoder_preserves_utf8_split_across_pieces() {
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+
+        assert_eq!(decode_piece(&mut decoder, &[0xE5, 0x9B]), "");
+        assert_eq!(decode_piece(&mut decoder, &[0xB2]), "\u{56F2}");
     }
 }

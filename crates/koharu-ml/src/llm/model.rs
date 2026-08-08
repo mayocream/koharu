@@ -6,7 +6,6 @@
 //! https://github.com/ggml-org/llama.cpp/blob/99f3dc32296f825fec94f202da1e9fede1e78cf9/tools/mtmd/mtmd-helper.cpp
 
 use std::{
-    ffi::CString,
     num::NonZeroU32,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -159,10 +158,9 @@ impl Model {
                         use_gpu: device.backend != Backend::Cpu && backend.supports_gpu_offload(),
                         print_timings: false,
                         n_threads: available_threads(),
-                        media_marker: CString::new(options.media_marker)
-                            .context("MTMD media marker contains a null byte")?,
                         image_min_tokens: options.image_min_tokens,
                         image_max_tokens: options.image_max_tokens,
+                        ..MtmdContextParams::default()
                     },
                 )
                 .context("failed to initialize MTMD projector")?;

@@ -6,9 +6,8 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use image::DynamicImage;
 use koharu_ml::{
-    baberu_ocr::BaberuOcr,
-    manga_ocr::MangaOcr,
-    paddle_ocr_vl::{PaddleOCRVL, PaddleOCRVLTask},
+    baberu_ocr::BaberuOcr, manga_ocr::MangaOcr, paddle_ocr_vl::PaddleOCRVLTask,
+    paddle_ocr_vl_quantized::PaddleOCRVLQuantized,
 };
 use koharu_scene::{
     Authored, EntityId, Geometry, LanguageTag, OcrAnalysis, Origin, RecognizedFrom, Region,
@@ -64,7 +63,7 @@ impl StageProcessor for Processor {
 enum Model {
     Manga(Arc<Mutex<MangaOcr>>),
     Baberu(Arc<Mutex<BaberuOcr>>),
-    Paddle(Arc<Mutex<PaddleOCRVL>>),
+    Paddle(Arc<Mutex<PaddleOCRVLQuantized>>),
 }
 
 impl Model {
@@ -77,7 +76,7 @@ impl Model {
                 BaberuOcr::load(device).await?,
             )))),
             OcrModel::PaddleOcrVl1_6 => Ok(Self::Paddle(Arc::new(Mutex::new(
-                PaddleOCRVL::load(device).await?,
+                PaddleOCRVLQuantized::load(device).await?,
             )))),
         }
     }

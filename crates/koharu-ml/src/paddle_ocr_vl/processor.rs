@@ -23,7 +23,7 @@ pub enum PaddleOCRVLTask {
 }
 
 impl PaddleOCRVLTask {
-    fn prompt(self) -> &'static str {
+    pub(crate) fn prompt(self) -> &'static str {
         match self {
             Self::Ocr => "OCR:",
             Self::Table => "Table Recognition:",
