@@ -111,7 +111,7 @@ fn built_in_component_schemas_remain_revision_one() {
         [
             schema::<Project>(),
             schema::<Page>(),
-            schema::<RasterLayer>(),
+            schema::<PixelLayer>(),
             schema::<Geometry>(),
             schema::<Visibility>(),
             schema::<SourceText>(),
@@ -143,7 +143,7 @@ fn built_in_component_kinds_express_domain_ownership() {
             Relation::KIND,
             Geometry::KIND,
             Visibility::KIND,
-            RasterLayer::KIND,
+            PixelLayer::KIND,
             TextLayout::KIND,
             TextContent::KIND,
             SourceText::KIND,
@@ -164,7 +164,7 @@ fn built_in_component_kinds_express_domain_ownership() {
             "dev.koharu.relation",
             "dev.koharu.geometry",
             "dev.koharu.visibility",
-            "dev.koharu.layer.raster",
+            "dev.koharu.layer.pixel",
             "dev.koharu.layer.text",
             "dev.koharu.text.content",
             "dev.koharu.text.source",
@@ -540,6 +540,7 @@ fn text_analysis_content_and_presentation_have_distinct_ownership() {
                 &TextLayout {
                     origin: Origin::User,
                     kind: TextLayoutKind::Paragraph,
+                    ..TextLayout::default()
                 },
             )?;
             edit.relate::<RecognizedFrom>(content, region)?;
@@ -581,6 +582,7 @@ fn text_group_owns_the_canonical_text_order() {
                 &TextLayout {
                     origin: Origin::User,
                     kind: TextLayoutKind::Paragraph,
+                    ..TextLayout::default()
                 },
             )?;
             let second_content = edit.add_text_content(page, At::End)?;
@@ -591,6 +593,7 @@ fn text_group_owns_the_canonical_text_order() {
                 &TextLayout {
                     origin: Origin::User,
                     kind: TextLayoutKind::Paragraph,
+                    ..TextLayout::default()
                 },
             )?;
             ids = Some((page, first, second));
@@ -645,6 +648,7 @@ fn typed_relations_enforce_endpoints_and_functional_cardinality() {
             &TextLayout {
                 origin: Origin::User,
                 kind: TextLayoutKind::Paragraph,
+                ..TextLayout::default()
             },
         )?;
         edit.relate::<Presents>(layer, region)?;
@@ -663,6 +667,7 @@ fn typed_relations_enforce_endpoints_and_functional_cardinality() {
             &TextLayout {
                 origin: Origin::User,
                 kind: TextLayoutKind::Paragraph,
+                ..TextLayout::default()
             },
         )?;
         edit.relate::<Presents>(layer, second)?;
@@ -687,6 +692,7 @@ fn component_changes_cannot_invalidate_incident_typed_relations() {
                 &TextLayout {
                     origin: Origin::User,
                     kind: TextLayoutKind::Paragraph,
+                    ..TextLayout::default()
                 },
             )?);
             Ok(())
@@ -887,6 +893,7 @@ fn independent_pipeline_components_rebase() {
                 &TextLayout {
                     origin: Origin::User,
                     kind: TextLayoutKind::Paragraph,
+                    ..TextLayout::default()
                 },
             )?;
             entities = Some((content, layer));
@@ -912,16 +919,19 @@ fn independent_pipeline_components_rebase() {
                 layer,
                 &Typography {
                     origin: Origin::User,
-                    preferred_font: Some("Inter".to_owned()),
-                    font_weight: Some(500),
-                    font_style: Some(FontStyle::Italic),
-                    size: Some(24.0),
+                    font_families: vec!["Inter".to_owned(), "Arial".to_owned()],
+                    font_weight: 500,
+                    font_style: FontStyle::Italic,
+                    size: 24.0,
+                    minimum_size: 9.0,
                     auto_fit: false,
-                    color: Some([1, 2, 3, 255]),
-                    stroke_color: None,
-                    stroke_width: None,
-                    alignment: Some(TextAlignment::Center),
-                    writing_mode: None,
+                    color: [1, 2, 3, 255],
+                    stroke: None,
+                    alignment: TextAlignment::Center,
+                    writing_mode: WritingMode::Horizontal,
+                    line_height: 1.2,
+                    letter_spacing: 0.0,
+                    word_spacing: 0.0,
                     extensions: BTreeMap::new(),
                 },
             )
@@ -991,6 +1001,245 @@ fn assets_attach_bytes_without_decoding() {
     let batch = snapshot.read_blobs([asset.blob, asset.blob]).unwrap();
     assert_eq!(batch.len(), 1);
     assert_eq!(&**batch.get(asset.blob).unwrap(), b"encoded image");
+}
+
+#[test]
+fn explicit_pixel_layers_resolve_cross_owner_assets_in_page_order() {
+    let mut session = Session::memory().unwrap();
+    let source = AssetRole::new("source").unwrap();
+    let mask = AssetRole::new("mask").unwrap();
+    let mut ids = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            edit.set_asset(
+                page,
+                &source,
+                AssetInput::new(
+                    Arc::<[u8]>::from(&b"source pixels"[..]),
+                    "image/test",
+                    AssetMetadata {
+                        width: Some(1200),
+                        height: Some(1800),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            edit.set(
+                page,
+                &PixelLayer::color(
+                    Origin::User,
+                    "Original Image",
+                    AssetRef::new(page, source.clone()),
+                ),
+            )?;
+
+            let asset_owner = edit.add_entity(page, At::End)?;
+            edit.set_asset(
+                asset_owner,
+                &mask,
+                AssetInput::new(
+                    Arc::<[u8]>::from(&b"mask pixels"[..]),
+                    "image/test",
+                    AssetMetadata {
+                        width: Some(10),
+                        height: Some(20),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            let visual = edit.add_entity(page, At::End)?;
+            edit.set(visual, &Geometry::rectangle(12.0, 34.0, 10.0, 20.0))?;
+            edit.set(
+                visual,
+                &PixelLayer::mask(
+                    Origin::User,
+                    "Tinted Mask",
+                    AssetRef::new(asset_owner, mask.clone()),
+                    MaskChannel::Alpha,
+                    [1, 2, 3, 128],
+                ),
+            )?;
+            ids = Some((page, visual));
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).unwrap().snapshot;
+    let (page, visual) = ids.unwrap();
+    let layers = snapshot
+        .page(page)
+        .unwrap()
+        .pixel_layers()
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        layers.iter().map(|layer| layer.id()).collect::<Vec<_>>(),
+        [page, visual]
+    );
+    assert!(layers[0].geometry().unwrap().is_none());
+    assert!(layers[1].geometry().unwrap().is_some());
+    let asset = layers[1].asset().unwrap().unwrap();
+    assert_eq!(&*snapshot.read_blob(asset.blob).unwrap(), b"mask pixels");
+}
+
+#[test]
+fn pixel_layers_require_geometry_except_on_the_page() {
+    let session = Session::memory().unwrap();
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let source = AssetRole::new("source")?;
+        edit.set_asset(
+            page,
+            &source,
+            AssetInput::new(
+                Arc::<[u8]>::from(&b"pixels"[..]),
+                "image/test",
+                AssetMetadata {
+                    width: Some(1),
+                    height: Some(1),
+                    attributes: BTreeMap::new(),
+                },
+            ),
+        )?;
+        let child = edit.add_entity(page, At::End)?;
+        edit.set(
+            child,
+            &PixelLayer::color(
+                Origin::User,
+                "Missing Placement",
+                AssetRef::new(page, source),
+            ),
+        )
+    });
+    assert!(matches!(result, Err(Error::Invalid(_))));
+}
+
+#[test]
+fn pixel_layers_reject_missing_or_removed_asset_roles() {
+    let mut session = Session::memory().unwrap();
+    let source = AssetRole::new("source").unwrap();
+    let missing = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        edit.set(
+            page,
+            &PixelLayer::color(
+                Origin::User,
+                "Original Image",
+                AssetRef::new(page, source.clone()),
+            ),
+        )
+    });
+    assert!(matches!(missing, Err(Error::Invalid(_))));
+
+    let mut page_id = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            edit.set_asset(
+                page,
+                &source,
+                AssetInput::new(
+                    Arc::<[u8]>::from(&b"pixels"[..]),
+                    "image/test",
+                    AssetMetadata {
+                        width: Some(1),
+                        height: Some(1),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            edit.set(
+                page,
+                &PixelLayer::color(
+                    Origin::User,
+                    "Original Image",
+                    AssetRef::new(page, source.clone()),
+                ),
+            )?;
+            page_id = Some(page);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(create).unwrap().snapshot;
+    let removed = snapshot.patch(|edit| edit.remove_asset(page_id.unwrap(), &source));
+    assert!(matches!(removed, Err(Error::Invalid(_))));
+}
+
+#[test]
+fn authored_text_defaults_are_complete_and_validated() {
+    let layout = TextLayout::default();
+    assert_eq!(layout.insets, [4.0; 4]);
+    assert_eq!(layout.vertical_alignment, VerticalAlignment::Center);
+
+    let typography = Typography::default();
+    assert_eq!(typography.font_families, ["CCWildWords", "Arial"]);
+    assert_eq!(typography.font_weight, 400);
+    assert_eq!(typography.size, 24.0);
+    assert_eq!(typography.minimum_size, 9.0);
+    assert_eq!(typography.color, [0, 0, 0, 255]);
+    assert_eq!(typography.line_height, 1.2);
+
+    let session = Session::memory().unwrap();
+    let invalid_layout = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let content = edit.add_text_content(page, At::End)?;
+        edit.add_text_layer(
+            page,
+            At::End,
+            content,
+            &TextLayout {
+                insets: [f32::NAN, 0.0, 0.0, 0.0],
+                ..TextLayout::default()
+            },
+        )?;
+        Ok(())
+    });
+    assert!(matches!(invalid_layout, Err(Error::Invalid(_))));
+
+    let invalid_typography = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let content = edit.add_text_content(page, At::End)?;
+        let layer = edit.add_text_layer(page, At::End, content, &TextLayout::default())?;
+        edit.set(
+            layer,
+            &Typography {
+                size: 12.0,
+                minimum_size: 13.0,
+                ..Typography::default()
+            },
+        )
+    });
+    assert!(matches!(invalid_typography, Err(Error::Invalid(_))));
+}
+
+#[test]
+fn text_layer_creation_materializes_required_typography() {
+    let mut session = Session::memory().unwrap();
+    let mut layer = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let content = edit.add_text_content(page, At::End)?;
+            layer = Some(edit.add_text_layer(page, At::End, content, &TextLayout::default())?);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(create).unwrap().snapshot;
+    assert_eq!(
+        snapshot
+            .text_layer(layer.unwrap())
+            .unwrap()
+            .typography()
+            .unwrap(),
+        Typography::default()
+    );
+    assert!(matches!(
+        snapshot.patch(|edit| edit.remove::<Typography>(layer.unwrap())),
+        Err(Error::Invalid(_))
+    ));
 }
 
 #[test]

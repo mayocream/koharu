@@ -1,274 +1,286 @@
 # koharu-renderer
 
-`koharu-renderer` turns a `koharu-scene` snapshot into reusable vector content
-and, when requested, CPU-readable pixels. It is shared by the editor canvas,
-PNG export, and PSD export.
+This document defines the target architecture for `koharu-renderer`. During the
+migration, implementation details may temporarily differ from this contract.
+Replaced APIs must be removed rather than preserved through compatibility
+layers.
 
-The crate has four explicit operations:
+`koharu-renderer` is the single owner of turning an authored
+`koharu-scene::Snapshot` into reusable visual content. The editor canvas, image
+export, previews, and PSD export all consume the same `Composition`.
 
 ```text
-Snapshot + RenderRequest
-             |
-             v
-Compositor::compile
-             |
-             v
-       Composition
-             |
-             v
-SceneRenderer::render ------> TextRenderer::layout / render
-             |
-             v
-           Frame --------------> embed in another Vello scene
-             |
-             v
-Rasterizer::rasterize
-             |
-             v
-           Raster
+Snapshot + page
+       |
+       v
+Renderer::compose / Renderer::update
+       |
+       v
+Composition
+       |---------------------> Canvas vector embedding
+       |---------------------> PSD layer projection
+       `---- Renderer::rasterize ----> CPU-readable pixels
 ```
 
-There is deliberately no all-in-one renderer facade. Callers own the
-components they use and can stop at `Composition`, `Frame`, or `Raster`.
+There is one renderer service and one renderer-side page representation. The
+crate does not expose compilation stages, hydration stages, or alternate frame
+types.
 
-## Responsibilities
+## Ownership
 
-### `Compositor::compile`
+`Renderer` owns resources and expensive reusable state:
 
-The compositor reads semantic scene components and produces a `Composition`.
-It resolves layer order, the single translation and source-text fallback,
-writing mode, alignment, bubble constraints, visibility, and asset roles.
+- font discovery, loading, fallback resolution, and shaping caches;
+- blob reads and a bounded image/mask decode queue;
+- a byte-bounded decoded-resource cache;
+- retained per-layer Vello nodes;
+- text layout and glyph recording;
+- headless GPU state, reusable raster targets, and readback buffers;
+- incremental reuse statistics and render diagnostics.
 
-A `Composition` is backend-independent. It contains no decoded images, font
-handles, Vello commands, GPU state, or raster settings. It records the scene
-revision plus the entity, relation, and blob dependencies used to produce it.
+The application creates one long-lived `Renderer` and clones its shared handle
+where necessary. Creating a renderer per page, export, or preview is incorrect
+because it discards the caches that make rendering inexpensive.
 
-Compilation is read-only and deterministic for a snapshot and request.
+The renderer does not own:
 
-### `TextRenderer::layout` and `TextRenderer::render`
+- persistent entities, hierarchy, components, relations, or assets;
+- tool state, selection, camera state, or interactive previews;
+- PSD structure, PNG encoding policy, or application persistence;
+- semantic guesses about which asset or text should be displayed.
 
-`TextRenderer` owns the text-specific boundary:
+Those responsibilities remain in `koharu-scene`, `koharu-canvas`, and their
+format-specific consumers.
 
-- `layout` shapes and lays out text through `TextLayout`;
-- `render` records a `LayoutRun` into a caller-owned `vello::Scene`;
-- the scene renderer uses the same component for font fallback, auto-fit,
-  bubble-safe layout, overflow diagnostics, rotation, fill, and stroke policy.
+## Scene contract
 
-Text regions constrain layout and auto-fit but never clip painted glyphs. This
-keeps authored overflow visible and editable while still reporting it through
-`RenderDiagnostic::TextOverflow`.
-
-This keeps direct text rendering available without making the compositor or
-rasterizer understand glyphs.
-
-### `SceneRenderer::render`
-
-The scene renderer resolves a `Composition` into a retained vector `Frame`.
-It owns decoded-image and font caches, delegates text to `TextRenderer`, records
-independent layers in parallel, and caches frames by scene revision, font
-generation, and render request. System fonts are discovered once. Koharu's
-bundled-font catalog stays resident as metadata, while individual faces are
-downloaded on first use and retained by a byte-bounded LRU cache.
-
-A `Frame` owns an immutable Vello scene and downstream metadata:
-
-- page and revision;
-- vector surface size and page-space origin;
-- ordered visual layers;
-- resolved editable-text information for PSD export;
-- dependencies and diagnostics;
-- per-entity vector scenes for editor transforms and cropped exports.
-
-`Frame::append_to` embeds the whole frame in another Vello scene.
-`Frame::append_entity_to` embeds one entity without rasterization.
-`Frame::entity` returns a tightly cropped vector frame for one entity; the
-rasterizer therefore never needs target-selection logic.
-
-### `Rasterizer::rasterize`
-
-The rasterizer converts a `Frame` into a `Raster`. `Raster` contains the RGBA
-image and its page-space origin, so a page frame and an entity frame use the
-same API.
-
-`Rasterizer` owns the headless Vello renderer, device context, readback
-buffers, and a small reusable target pool. `RasterOptions` controls only
-supersampling and downsampling and is intentionally absent from
-`RenderRequest`, `Composition`, and `Frame`.
-
-The crate does not depend on `wgpu` directly. Vello selects the compatible WGPU
-version and `koharu-renderer` uses `vello::wgpu` for the backend types needed by
-Vello rasterization.
-
-## Page rendering
+Renderable intent must be explicit in the scene. A generic pixel component can
+reference any stored image or mask:
 
 ```rust,ignore
-use koharu_renderer::{
-    Compositor, RasterOptions, Rasterizer, RenderRequest, SceneRenderer,
-};
+pub struct AssetRef {
+    pub owner: EntityId,
+    pub role: AssetRole,
+}
 
-let request = RenderRequest::new(page);
+pub struct PixelLayer {
+    pub origin: Origin,
+    pub name: String,
+    pub asset: AssetRef,
+    pub format: PixelFormat,
+}
 
-let compositor = Compositor::new();
-let composition = compositor.compile(&snapshot, &request)?;
-
-let scene_renderer = SceneRenderer::new();
-let frame = scene_renderer.render(&snapshot, &composition)?;
-
-let rasterizer = Rasterizer::new()?;
-let raster = rasterizer.rasterize(&frame, RasterOptions::default())?;
-raster.image.save("page.png")?;
-```
-
-Long-lived callers should keep `SceneRenderer` and `Rasterizer` alive. Reusing
-them preserves decoded/font resources, retained frames, Vello caches, and GPU
-targets.
-
-## Vector embedding
-
-The canvas stops at `Frame` and appends its vector content directly:
-
-```rust,ignore
-let mut scene = vello::Scene::new();
-frame.append_to(&mut scene, None);
-
-frame.append_entity_to(entity, &mut scene, Some(preview_transform));
-```
-
-This avoids GPU readback during interactive rendering and allows transient
-entity transforms without repeating image decoding or text layout.
-
-## Entity rasterization
-
-PSD export uses the same frame as PNG export, then derives cropped vector
-frames for editable text-layer previews:
-
-```rust,ignore
-if let Some(entity_frame) = frame.entity(entity)? {
-    let layer = rasterizer.rasterize(&entity_frame, raster_options)?;
-    // layer.left and layer.top are page-space PSD offsets.
+pub enum PixelFormat {
+    Color,
+    Mask {
+        channel: MaskChannel,
+        tint: [u8; 4],
+    },
 }
 ```
 
-Cropping happens before rasterization. The GPU only sees the smaller entity
-surface, and `Rasterizer` remains independent of scene entities and PSD rules.
+`Geometry` owns placement. `Visibility` owns visibility and opacity. Hierarchy
+owns paint order and group ancestry. Text layout and typography components own
+authored text presentation. Defaults are materialized by the editor or import
+pipeline before committing the scene; they are not supplied through a render
+request.
 
-## Direct text rendering
+The original page, cleanup artwork, paint layers, imported images, and masks
+are all ordinary explicit pixel layers. The renderer has no built-in knowledge
+of asset roles such as `rendered`, `text-mask`, or `coo-mask`. Pipeline
+artifacts remain non-visual unless a scene entity explicitly references them
+through `PixelLayer`.
+
+Analysis entities are not visual merely because they contain geometry or an
+asset. They become visible only through an explicit visual component.
+
+## Public model
+
+`Composition` is an immutable ordered collection of renderable layers for one
+page revision:
 
 ```rust,ignore
-use koharu_renderer::{
-    FontSystem, TextLayout, TextRenderOptions, TextRenderer, WritingMode,
-};
-use vello::{Scene, kurbo::Affine};
+pub struct Composition {
+    revision: Revision,
+    page: EntityId,
+    size: Size,
+    layers: Arc<[Layer]>,
+    index: EntityIndex,
+    diagnostics: Arc<[Diagnostic]>,
+}
 
-let font = FontSystem::new().first_font()?;
-let builder = TextLayout::new(&font)
-    .with_font_size(24.0)
-    .with_max_width(640.0);
+pub struct Layer {
+    pub entity: EntityId,
+    pub geometry: Geometry,
+    pub presentation: Presentation,
+    pub ancestry: Arc<[EntityId]>,
+    pub kind: LayerKind,
+    retained: Arc<RetainedNode>,
+}
 
-let renderer = TextRenderer::new();
-let layout = renderer.layout(&builder, "Hello")?;
-let mut scene = Scene::new();
-renderer.render(
-    &mut scene,
-    &layout,
-    WritingMode::Horizontal,
-    &TextRenderOptions::default(),
-    Affine::IDENTITY,
-);
+pub enum LayerKind {
+    Pixel(PixelMetadata),
+    Text(TextMetadata),
+}
 ```
 
-`TextRenderOptions` contains glyph-paint settings only. Surface background,
-supersampling, and readback policy belong to `Rasterizer`.
+The retained node is private renderer machinery. Consumers can append a whole
+composition or one selected layer to a caller-owned Vello scene without
+accessing its cache representation.
 
-## Requests and diagnostics
+`Composition` provides ordered iteration and O(1) entity lookup. It is cheap to
+clone because immutable layer storage and retained nodes are reference-counted.
+It is the only value shared by canvas, raster output, and PSD projection.
 
-`RenderRequest` selects one page and the non-persistent visual policy used to
-compile and render it:
+There is no `VisualPage`, `CompiledPage`, `PreparedPage`, `Frame`,
+`PreparedEntity`, or canvas-specific copy of the page.
 
-- whether source text may be used when a text content entity has no
-  `Translation` component;
-- base image roles in preference order;
-- child image role and whether image entities are included;
-- `RenderTheme` for fonts, sizing, spacing, insets, alignment, color, stroke,
-  and auto-fit.
+## Public operations
 
-The renderer resolves typed `Presents` and `FitsTo` relations from the manga
-schema. Relation names and endpoint rules are not render-request policy.
+Composition and pixel production are asynchronous because they may wait for
+storage, font data, decoding, GPU execution, or readback:
 
-Compilation and rendering report non-fatal decisions through
-`RenderDiagnostic`, including missing base assets, source-text fallback,
-overflow, and text below the configured readability floor.
+```rust,ignore
+impl Renderer {
+    pub async fn compose(
+        &self,
+        snapshot: &Snapshot,
+        page: EntityId,
+    ) -> Result<Composition>;
 
-## Caching and invalidation
+    pub async fn update(
+        &self,
+        previous: &Composition,
+        snapshot: &Snapshot,
+        change: &Change,
+    ) -> Result<Composition>;
 
-`SceneRenderer` caches a bounded number of immutable `Arc<Frame>` values. A
-cache key contains the scene revision, font generation, and complete
-`RenderRequest`. Raster options do not affect that key because they are not
-part of vector rendering.
+    pub async fn rasterize(
+        &self,
+        composition: &Composition,
+        options: &RasterOptions,
+    ) -> Result<RasterImage>;
+}
+```
 
-After committing a project patch, pass the matching `Change` to
-`SceneRenderer::apply_changes`. Frames whose recorded dependencies were not
-changed are advanced to the new revision; affected frames are discarded.
-`clear_cache` is available for explicit full invalidation.
+A successful `compose` or `update` returns a complete, renderable composition.
+There is no second `compose_complete` operation, public pending-resource state,
+or hydration API. Interactive callers keep displaying their previous
+composition until the new future completes.
 
-Loading a bundled face increments the font generation. A later render uses a
-new frame key without requiring callers to recreate the scene renderer.
+Vector embedding and read-only access remain synchronous:
 
-## Concurrency
+```rust,ignore
+composition.append_to(&mut scene, view_transform);
 
-- `Compositor` and `TextRenderer` are stateless and cheap to create.
-- `SceneRenderer` shares resources and serializes only its frame-cache access;
-  independent layer recording uses Rayon.
-- `Frame` is immutable after construction and is normally shared through
-  `Arc`.
-- `Rasterizer` serializes Vello command encoding because Vello mutates internal
-  caches. GPU completion and readback happen after releasing that lock.
+if let Some(layer) = composition.layer(entity) {
+    layer.append_to(&mut scene, preview_transform);
+}
+```
 
-## Limits
+`RasterOptions` contains only final pixel-output choices such as scale,
+background, and color format. Page selection, asset selection, text fallback,
+and typography are not raster options.
 
-Render requests reject non-finite or non-positive page dimensions, dimensions
-above 32,768 pixels, and surfaces above 268,435,456 pixels. Supersampling is
-clamped to a factor of four and checked for integer overflow.
+## No render request
 
-Decoded assets must match their declared dimensions and byte count. Image
-decode, font resolution, text layout, scene access, and backend errors retain
-their source errors in the public error type.
+The crate has no `RenderRequest` and no `request` module.
 
-## Module map
+- The page is a direct `compose` argument.
+- Explicit scene layers replace base-asset and image-role selection.
+- A composition always includes the complete authored page.
+- Consumers select existing layers for cropped or partial output without
+  recompiling the page.
+- Visibility and opacity remain layer presentation data.
+- The scene's explicit content relation determines displayed text.
+- Typography and layout are authored scene data.
 
-| Module | Responsibility |
-| --- | --- |
-| `compositor` | Scene semantics, `Composition`, dependencies, diagnostics. |
-| `text_renderer` | Text layout dispatch and Vello glyph recording. |
-| `scene_renderer` | Image resolution, vector layer recording, frame cache. |
-| `rasterizer` | Vello GPU execution, readback, target reuse, downsampling. |
-| `request` | `RenderRequest`, `RenderTheme`, rendering policy. |
-| `fonts` | System discovery, bundled catalog, fallback, and bounded lazy loading. |
-| `layout`, `shape`, `segment`, `script` | Unicode shaping and layout engine. |
-| `bubble` | Region association and balloon-safe layout geometry. |
+This gives every successful composition one deterministic meaning: it is the
+visual page described by that snapshot.
+
+## Async and scheduling
+
+The crate follows one rule: asynchronous orchestration, synchronous
+computation.
+
+A composition operation performs coarse-grained work:
+
+1. Traverse the page once and build small layer descriptors synchronously.
+2. Deduplicate all required fonts and blobs.
+3. Read missing resources asynchronously in bounded batches.
+4. Decode images and shape text on a bounded CPU pool.
+5. Reuse or build retained Vello nodes synchronously.
+6. Return one immutable `Composition`.
+
+The renderer must not create one future per entity, glyph, or tile. Blocking
+storage and decode work must never run on the async executor. Cache access must
+not introduce async locks into scene traversal or Vello recording.
+
+Dropping an obsolete composition future prevents its result from being
+installed. Already completed immutable resource decoding may remain in the
+shared cache for later requests.
+
+## Incremental reuse
+
+Incremental rendering is deliberately simple. For a relevant active-page
+change, `update` traverses that page once and rebuilds lightweight descriptors.
+Layers are matched by entity ID and exact descriptor equality.
+
+- Unchanged descriptors reuse the same retained node.
+- Translation, rotation, visibility, and opacity do not rebuild local content.
+- Text rebuilds only when content, typography, frame constraints, or the
+  resolved font generation changes.
+- Pixel content rebuilds only when its blob or pixel interpretation changes.
+- Removed layers are dropped; inserted layers are built once.
+
+An O(n) descriptor walk is preferred to a public dependency-address graph. The
+expensive work is blob access, decoding, shaping, and GPU allocation, all of
+which remains retained. Dependency tracking may exist privately where a
+measurement proves it useful, but it must not create another public page model.
+
+## Rasterization
+
+Rasterization consumes the same `Composition` used by the canvas. It does not
+re-read the scene or reinterpret layers. Cropped entity output is derived from
+an existing layer before allocating the GPU target, so PSD export does not
+rasterize a full page for every layer.
+
+The renderer retains its Vello device state, glyph caches, readback buffers,
+and a small target pool across calls. GPU completion and mapping are awaited
+without blocking the application event loop.
+
+## Performance invariants
+
+- Traverse a page at most once per composition attempt.
+- Batch and deduplicate resource requests before scheduling them.
+- Bound storage, decode, and shaping concurrency.
+- Never decode images or discover fonts in the canvas or an export consumer.
+- Keep placement and presentation outside retained local layer nodes.
+- Avoid full-page intermediate rasters during interactive rendering.
+- Reuse immutable nodes and decoded assets across canvas, previews, PSD, and
+  image export.
+- Measure before adding finer-grained caches or dependency machinery.
 
 ## Extension rules
 
-- Scene interpretation belongs in `Compositor`.
-- Text shaping and glyph recording belong in `TextRenderer`.
-- Resource-backed vector construction belongs in `SceneRenderer`.
-- Pixel production and GPU details belong in `Rasterizer`.
-- Canvas composition consumes `Frame`; it does not duplicate renderer policy.
-- Export-format metadata and serialization stay outside this crate.
-- Do not add raster settings to `RenderRequest` or target-selection enums to
-  `Rasterizer`; the scene owns one translation per text entity.
+- New authored visual concepts begin as explicit scene components.
+- Scene interpretation and retained visual construction belong here.
+- Canvas-specific state must not enter `Composition`.
+- Format-specific metadata and serialization remain outside this crate.
+- Do not add alternate composition types for individual consumers.
+- Do not add policy bags that allow callers to reinterpret the same snapshot
+  differently.
+- An async function must own real waiting or scheduling; pure helpers remain
+  synchronous.
 
 ## Validation
 
-```text
-cargo test -p koharu-renderer
-cargo check -p koharu-renderer --all-targets
-cargo clippy -p koharu-renderer --all-targets -- -D warnings
-```
-
-GPU visual tests are ignored by default. Run them on a machine with a usable
-Vello adapter:
+During development, run the smallest focused debug check or test covering the
+changed path. Typical crate-level checks are:
 
 ```text
-cargo test -p koharu-renderer --test rendering -- --ignored
+cargo check -p koharu-renderer
+cargo test -p koharu-renderer <focused-test-name>
 ```
+
+GPU visual tests remain explicit because they require a usable adapter.

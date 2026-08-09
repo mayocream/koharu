@@ -46,10 +46,10 @@ pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
     let canvas_view = handle.state::<CanvasView>();
     let desktop = handle.state::<crate::desktop::Desktop>();
     if let Some((snapshot, page)) = project {
-        desktop.lock().show_page(&snapshot, page)?;
+        desktop.show_page(&snapshot, page).await?;
         canvas_view.fitted.store(true, Ordering::Release);
     } else {
-        desktop.lock().canvas().clear_page();
+        desktop.lock().canvas().clear();
     }
     Ok(())
 }
@@ -93,7 +93,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) -> Result<()> {
             application.manage(Initialization::default());
 
             let handle = application.handle().clone();
-            application.manage(crate::desktop::Desktop::new(handle.clone()));
+            application.manage(crate::desktop::Desktop::new(handle.clone())?);
             application.manage(AgentState::new(handle.clone())?);
 
             let window = application

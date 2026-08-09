@@ -1,13 +1,14 @@
 use koharu_renderer::{
     FontFamily as RenderFontFamily, FontRange as RenderFontRange, FontSource as RenderFontSource,
-    FontStyle as RenderFontStyle, SceneRenderer,
+    FontStyle as RenderFontStyle,
 };
 use koharu_scene::FontStyle;
 use serde::Serialize;
 use specta::Type;
-use tauri::ipc::IpcResponse;
+use tauri::{State, ipc::IpcResponse};
 
 use super::Error;
+use crate::desktop::Desktop;
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct FontFamily {
@@ -60,8 +61,12 @@ impl IpcResponse for FontPreviewBytes {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn get_fonts() -> std::result::Result<Vec<FontFamily>, Error> {
-    Ok(SceneRenderer::available_fonts()
+pub(crate) async fn get_fonts(
+    desktop: State<'_, Desktop>,
+) -> std::result::Result<Vec<FontFamily>, Error> {
+    Ok(desktop
+        .renderer()
+        .available_fonts()
         .await?
         .into_iter()
         .map(FontFamily::from)
@@ -119,8 +124,9 @@ impl From<RenderFontRange> for FontRange {
 #[specta::specta]
 pub(crate) async fn get_font_preview(
     family_name: String,
+    desktop: State<'_, Desktop>,
 ) -> std::result::Result<FontPreviewBytes, Error> {
     Ok(FontPreviewBytes(
-        SceneRenderer::font_preview(&family_name).await?,
+        desktop.renderer().font_preview(&family_name).await?,
     ))
 }

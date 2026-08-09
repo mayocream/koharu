@@ -194,28 +194,15 @@ pub(crate) async fn process(
                     self.revisions.push(commit.revision);
                 }
                 let snapshot = commit.snapshot.clone();
-                let canvas_handle = self.handle.clone();
-                self.handle.run_on_main_thread(move || {
-                    let canvas_view = canvas_handle.state::<CanvasView>();
-                    let result = (|| {
-                        let canvas = {
-                            let desktop = canvas_handle.state::<Desktop>();
-                            let mut desktop = desktop.lock();
-                            if desktop.synchronize(&commit.snapshot, page, &commit)? {
-                                canvas_view.fitted.store(true, Ordering::Release);
-                            }
-                            desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-                        };
-                        canvas_handle
-                            .state::<CanvasChannel>()
-                            .channel
-                            .publish(canvas);
-                        Result::<()>::Ok(())
-                    })();
-                    if let Err(error) = &result {
-                        tracing::error!(error = ?error, "failed to synchronize a pipeline commit");
-                    }
-                })?;
+                let canvas_view = self.handle.state::<CanvasView>();
+                let desktop = self.handle.state::<Desktop>();
+                if desktop.synchronize(&commit.snapshot, page, &commit).await? {
+                    canvas_view.fitted.store(true, Ordering::Release);
+                }
+                let canvas = desktop
+                    .lock()
+                    .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
+                self.handle.state::<CanvasChannel>().channel.publish(canvas);
                 Ok(snapshot)
             }
         }

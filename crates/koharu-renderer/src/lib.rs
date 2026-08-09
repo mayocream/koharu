@@ -1,35 +1,27 @@
-//! Scene composition, Unicode text rendering, and reusable Vello rasterization.
+//! Retained, performance-first rendering for authored Koharu pages.
 //!
-//! Rendering is staged: [`Compositor::compile`] produces a [`Composition`],
-//! [`SceneRenderer::render`] records a retained [`Frame`], and
-//! [`Rasterizer::rasterize`] turns that frame into pixels. [`TextRenderer`]
-//! owns the layout and glyph-recording boundary used by the scene renderer.
+//! [`Renderer`] is the only stateful owner. It asynchronously resolves resources,
+//! shapes text, retains local vector nodes, and rasterizes immutable [`Composition`]s.
 
 mod bubble;
-mod compositor;
 mod error;
 mod fonts;
 mod layout;
 mod rasterizer;
-mod request;
-mod scene_renderer;
+mod renderer;
 mod script;
 mod segment;
 mod shape;
 mod text_renderer;
 mod types;
 
-pub use compositor::{Composition, Compositor, RenderBounds, RenderDependency, RenderDiagnostic};
 pub use error::{Error, Result};
-pub use fonts::{Font, FontSystem};
-pub use layout::{HyphenationPolicy, LayoutLine, LayoutRun, TextLayout, WritingMode};
-pub use rasterizer::{DownsampleFilter, Raster, RasterOptions, Rasterizer};
-pub use request::{LayerPresentation, RenderRequest, RenderTheme, VerticalAlignment};
-pub use scene_renderer::{Frame, SceneRenderer, VisualLayer, VisualLayerKind, VisualText};
-pub use segment::{
-    HyphenationOptions, LineBreakOpportunity, LineBreakSuffix, LineBreaker, LineSegment,
-    hyphenation_lang_from_tag,
+pub use rasterizer::{DownsampleFilter, RasterImage, RasterOptions};
+pub use renderer::{
+    Composition, CompositionStats, Layer, LayerKind, PixelMetadata, Presentation, RenderBounds,
+    RenderDiagnostic, Renderer, TextMetadata,
 };
-pub use shape::{PositionedGlyph, ShapedRun, ShapingOptions, TextShaper};
-pub use text_renderer::{StrokeOptions, TextRenderOptions, TextRenderer};
-pub use types::{FontFace, FontFamily, FontMetadata, FontRange, FontSource, FontStyle, TextAlign};
+pub use types::{FontFace, FontFamily, FontMetadata, FontRange, FontSource, FontStyle};
+
+pub(crate) use layout::{HyphenationPolicy, LayoutRun, TextLayout, WritingMode};
+pub(crate) use types::TextAlign;

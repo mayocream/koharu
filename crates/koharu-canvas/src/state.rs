@@ -1,7 +1,6 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use koharu_renderer::RenderTheme;
-use koharu_scene::{BlobId, EntityId, Geometry};
+use koharu_scene::{EntityId, Geometry};
 use vello::wgpu;
 
 use crate::{Camera, Frame, PagePoint, PhysicalSize};
@@ -19,36 +18,17 @@ pub struct CanvasGpu {
     pub queue: Arc<wgpu::Queue>,
 }
 
-/// Memory, workspace, and text-rendering policy for one canvas.
+/// Presentation policy owned by one interactive viewport.
 #[derive(Clone, Debug)]
 pub struct CanvasOptions {
-    pub max_decoded_bytes: usize,
     pub workspace_color: Color,
-    pub text: RenderTheme,
 }
 
 impl Default for CanvasOptions {
     fn default() -> Self {
         Self {
-            max_decoded_bytes: 512 * 1024 * 1024,
             workspace_color: [245, 245, 245, 255],
-            text: RenderTheme::default(),
         }
-    }
-}
-
-/// Selects either editable live layers or the flattened rendered artifact.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum PageView {
-    #[default]
-    Editable,
-    Rendered,
-}
-
-impl PageView {
-    #[must_use]
-    pub const fn is_editable(self) -> bool {
-        !matches!(self, Self::Rendered)
     }
 }
 
@@ -58,30 +38,19 @@ pub struct MaskOverlay {
     pub opacity: f32,
 }
 
+/// Identifies either a persistent explicit mask layer or an application-owned
+/// transient scratch plane. Scratch identifiers have no semantic meaning to
+/// the canvas.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MaskTarget {
+    Layer(ElementId),
+    Scratch(u64),
+}
+
 impl MaskOverlay {
     #[must_use]
     pub const fn new(tint: Color, opacity: f32) -> Self {
         Self { tint, opacity }
-    }
-}
-
-/// Presentation-only choices; changing these never mutates the scene snapshot.
-#[derive(Clone, Debug, PartialEq)]
-pub struct DisplayState {
-    pub page: PageView,
-    pub show_text: bool,
-    pub text_mask: Option<MaskOverlay>,
-    pub transition: Option<Duration>,
-}
-
-impl Default for DisplayState {
-    fn default() -> Self {
-        Self {
-            page: PageView::Editable,
-            show_text: true,
-            text_mask: None,
-            transition: Some(Duration::from_millis(180)),
-        }
     }
 }
 
@@ -90,7 +59,6 @@ impl Default for DisplayState {
 pub struct ViewState {
     pub size: PhysicalSize,
     pub camera: Camera,
-    pub display: DisplayState,
 }
 
 /// One transient frame produced while an element transform is active.
@@ -118,29 +86,6 @@ pub struct TransformCommit {
     pub elements: Vec<ElementPreview>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum MaskPlane {
-    Text,
-    Inpaint,
-}
-
-impl MaskPlane {
-    #[must_use]
-    pub const fn asset_role(self) -> &'static str {
-        match self {
-            Self::Text => "text-mask",
-            Self::Inpaint => "inpaint",
-        }
-    }
-
-    pub(crate) const fn name(self) -> &'static str {
-        match self {
-            Self::Text => "text",
-            Self::Inpaint => "inpaint",
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StrokeMode {
     Paint,
@@ -162,23 +107,4 @@ pub struct RasterStrokeCommit {
     pub color: Color,
     pub diameter: f32,
     pub points: Vec<PagePoint>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct CanvasDiagnostic {
-    pub page: Option<PageId>,
-    pub element: Option<ElementId>,
-    pub blob: Option<BlobId>,
-    pub message: String,
-}
-
-impl CanvasDiagnostic {
-    pub(crate) fn resource(page: Option<PageId>, blob: BlobId, message: impl Into<String>) -> Self {
-        Self {
-            page,
-            element: None,
-            blob: Some(blob),
-            message: message.into(),
-        }
-    }
 }

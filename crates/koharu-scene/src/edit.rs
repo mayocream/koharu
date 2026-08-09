@@ -597,6 +597,7 @@ impl Edit {
                 components,
             });
         }
+        self.validate_entities.remove(&entity);
         Ok(())
     }
 

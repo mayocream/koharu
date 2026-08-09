@@ -1,8 +1,8 @@
-//! PSD export directly from Koharu scene revisions and renderer-resolved presentation.
+//! PSD export directly from renderer-resolved page compositions.
 //!
 //! The binary layout follows GIMP's PSD plug-in at the pinned revision linked from every
-//! format implementation. Scene semantics remain owned by `koharu-scene`; font selection,
-//! layout, raster fallback, and the merged preview remain owned by `koharu-renderer`.
+//! format implementation. Layer ordering, pixels, visibility, font selection, layout, and the
+//! merged preview all come from the same immutable `koharu-renderer` composition.
 
 mod descriptor;
 mod document;
@@ -14,4 +14,4 @@ mod writer;
 
 pub use document::{PsdExportOptions, TextLayerMode};
 pub use error::PsdExportError;
-pub use export::{export_page, write_page};
+pub use export::export_page;

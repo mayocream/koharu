@@ -47,7 +47,12 @@ impl KoharuHost {
             (project.info(), pages)
         };
         let preferences = Preferences::load()?;
-        let fonts = koharu_renderer::SceneRenderer::available_fonts().await?;
+        let fonts = self
+            .handle
+            .state::<Desktop>()
+            .renderer()
+            .available_fonts()
+            .await?;
         let providers = preferences
             .providers
             .entries
@@ -100,27 +105,15 @@ impl KoharuHost {
     }
 
     async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<()> {
-        let handle = self.handle.clone();
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.handle.run_on_main_thread(move || {
-            let result = (|| {
-                let canvas_view = handle.state::<CanvasView>();
-                let canvas = {
-                    let desktop = handle.state::<Desktop>();
-                    let mut desktop = desktop.lock();
-                    if desktop.synchronize(&commit.snapshot, page, &commit)? {
-                        canvas_view.fitted.store(true, Ordering::Release);
-                    }
-                    desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-                };
-                handle.state::<CanvasChannel>().channel.publish(canvas);
-                Result::<()>::Ok(())
-            })();
-            let _ = send.send(result);
-        })?;
-        receive
-            .await
-            .context("the desktop closed while applying an agent change")??;
+        let canvas_view = self.handle.state::<CanvasView>();
+        let desktop = self.handle.state::<Desktop>();
+        if desktop.synchronize(&commit.snapshot, page, &commit).await? {
+            canvas_view.fitted.store(true, Ordering::Release);
+        }
+        let canvas = desktop
+            .lock()
+            .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
+        self.handle.state::<CanvasChannel>().channel.publish(canvas);
         Ok(())
     }
 
@@ -246,14 +239,16 @@ impl Host for KoharuHost {
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;
                 let page = entity(&arguments.page)?;
-                let (label, bytes) = {
+                let (label, snapshot) = {
                     let current = self.handle.state::<CurrentProject>();
                     let current = current.project.lock();
                     let project = current.as_ref().context("no project is open")?;
                     let snapshot = project.snapshot();
                     let label = snapshot.page(page)?.page()?.label;
-                    (label, output::rendered_preview(&snapshot, page)?)
+                    (label, snapshot)
                 };
+                let renderer = self.handle.state::<Desktop>().renderer().clone();
+                let bytes = output::rendered_preview(&renderer, &snapshot, page).await?;
                 Ok(
                     Invocation::read(json!({ "page": page, "label": label }))?.with_image(
                         format!("Rendered page {label} ({page})"),
@@ -336,16 +331,22 @@ impl Host for KoharuHost {
                 let arguments: SetTypography = arguments(&call)?;
                 let element = entity(&arguments.element)?;
                 let typography = Typography {
-                    preferred_font: arguments.preferred_font,
+                    font_families: arguments.font_families,
                     font_weight: arguments.font_weight,
-                    font_style: arguments.font_style.map(Into::into),
+                    font_style: arguments.font_style.into(),
                     size: arguments.size,
+                    minimum_size: arguments.minimum_size,
                     auto_fit: arguments.auto_fit,
                     color: arguments.color,
-                    stroke_color: arguments.stroke_color,
-                    stroke_width: arguments.stroke_width,
-                    alignment: arguments.alignment.map(Into::into),
-                    writing_mode: arguments.writing_mode.map(Into::into),
+                    stroke: arguments.stroke.map(|stroke| koharu_scene::TextStroke {
+                        color: stroke.color,
+                        width: stroke.width,
+                    }),
+                    alignment: arguments.alignment.into(),
+                    writing_mode: arguments.writing_mode.into(),
+                    line_height: arguments.line_height,
+                    letter_spacing: arguments.letter_spacing,
+                    word_spacing: arguments.word_spacing,
                 };
                 self.mutate(|project| {
                     Ok((
@@ -581,16 +582,26 @@ impl From<AgentWritingMode> for koharu_scene::WritingMode {
 #[serde(deny_unknown_fields)]
 struct SetTypography {
     element: String,
-    preferred_font: Option<String>,
-    font_weight: Option<u16>,
-    font_style: Option<AgentFontStyle>,
-    size: Option<f32>,
+    font_families: Vec<String>,
+    font_weight: u16,
+    font_style: AgentFontStyle,
+    size: f32,
+    minimum_size: f32,
     auto_fit: bool,
-    color: Option<[u8; 4]>,
-    stroke_color: Option<[u8; 4]>,
-    stroke_width: Option<f32>,
-    alignment: Option<AgentTextAlignment>,
-    writing_mode: Option<AgentWritingMode>,
+    color: [u8; 4],
+    stroke: Option<AgentTextStroke>,
+    alignment: AgentTextAlignment,
+    writing_mode: AgentWritingMode,
+    line_height: f32,
+    letter_spacing: f32,
+    word_spacing: f32,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AgentTextStroke {
+    color: [u8; 4],
+    width: f32,
 }
 
 #[derive(Deserialize, JsonSchema)]

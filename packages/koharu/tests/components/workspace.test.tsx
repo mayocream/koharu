@@ -3,13 +3,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CanvasWorkspace } from '@/components/editor/CanvasWorkspace'
-import { commands, type Layer } from '@/lib/protocol'
+import { commands, type Layer, type Typography } from '@/lib/protocol'
 import { pageKey, pagesKey, projectKey, queryClient } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 const layer: Layer = {
-  type: 'image',
+  type: 'pixel',
   id: 'element',
   parent: 'page',
   geometry: {
@@ -22,16 +22,35 @@ const layer: Layer = {
   },
   visibility: { visible: true, opacity: 1 },
   image: 'image',
+  name: 'Image 1',
+  format: { kind: 'color' },
 }
 
 const paintLayer: Layer = {
-  type: 'raster',
+  type: 'pixel',
   id: 'paint',
   parent: 'page',
+  geometry: null,
   visibility: { visible: true, opacity: 1 },
   image: 'paint-image',
   name: 'Paint 1',
-  kind: 'paint',
+  format: { kind: 'color' },
+}
+
+const typography: Typography = {
+  font_families: ['CCWildWords', 'Arial'],
+  font_weight: 400,
+  font_style: 'normal',
+  size: 24,
+  minimum_size: 9,
+  auto_fit: true,
+  color: [0, 0, 0, 255],
+  stroke: null,
+  alignment: 'Center',
+  writing_mode: 'Horizontal',
+  line_height: 1.2,
+  letter_spacing: 0,
+  word_spacing: 0,
 }
 
 let nextAnimationFrame = 1
@@ -61,13 +80,6 @@ function installProject() {
     id: 'page',
     label: 'Page',
     size: { width: 1000, height: 1000 },
-    assets: {
-      source: 'source',
-      rendered: null,
-      text_mask: null,
-      coo_mask: null,
-      bubble_mask: null,
-    },
     layers: [layer],
     regions: [],
   }
@@ -84,7 +96,6 @@ function installProject() {
 }
 
 function renderWorkspace() {
-  vi.spyOn(commands, 'setPresentation').mockResolvedValue(null)
   vi.spyOn(commands, 'setViewport').mockResolvedValue(null)
   render(
     <QueryClientProvider client={queryClient}>
@@ -139,7 +150,7 @@ describe('canvas interaction adapter', () => {
     expect(extend).toHaveBeenCalledWith(expect.arrayContaining([{ x: 45, y: 45 }]))
   })
 
-  it('uses rendered text bounds for hit testing and semantic transforms', async () => {
+  it('uses composed text bounds for hit testing and semantic transforms', async () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
       ...page,
@@ -153,12 +164,14 @@ describe('canvas interaction adapter', () => {
           content: {
             id: 'content',
             source: { text: 'Source', language: 'en' },
-            translation: { text: 'Rendered', language: null },
+            translation: { text: 'Translation', language: null },
             role: null,
             source_region: null,
           },
-          typography: null,
+          typography,
           layout: 'paragraph',
+          insets: [4, 4, 4, 4],
+          vertical_alignment: 'Center',
           fit_region: null,
         },
       ],
@@ -241,12 +254,14 @@ describe('canvas interaction adapter', () => {
           content: {
             id: 'content',
             source: { text: 'Source', language: 'en' },
-            translation: { text: 'Rendered', language: null },
+            translation: { text: 'Translation', language: null },
             role: null,
             source_region: null,
           },
-          typography: null,
+          typography,
           layout: 'paragraph',
+          insets: [4, 4, 4, 4],
+          vertical_alignment: 'Center',
           fit_region: 'bubble',
         },
       ],
@@ -282,7 +297,7 @@ describe('canvas interaction adapter', () => {
     )
   })
 
-  it('targets the selected raster layer with the eraser', async () => {
+  it('targets the selected editable color pixel layer with the eraser', async () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
       ...page,
@@ -301,6 +316,51 @@ describe('canvas interaction adapter', () => {
 
     await waitFor(() => expect(finish).toHaveBeenCalledOnce())
     expect(begin).toHaveBeenCalledWith('paint', { x: 20, y: 20 }, 48)
+  })
+
+  it('does not target a mask pixel layer with the eraser', () => {
+    installProject()
+    const maskLayer: Layer = {
+      ...paintLayer,
+      id: 'mask',
+      name: 'Text mask',
+      format: { kind: 'mask', channel: 'alpha', tint: [255, 64, 64, 255] },
+    }
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [...page.layers, maskLayer],
+    }))
+    useKoharuStore.setState({ tool: 'eraser', selectedLayers: ['mask'] })
+    const erase = vi.spyOn(commands, 'beginErase').mockResolvedValue(null)
+    const surface = renderWorkspace()
+
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 13, clientX: 30, clientY: 40 })
+    expect(erase).not.toHaveBeenCalled()
+  })
+
+  it('starts a new color layer instead of painting into a selected mask', async () => {
+    installProject()
+    const maskLayer: Layer = {
+      ...paintLayer,
+      id: 'mask',
+      name: 'Text mask',
+      format: { kind: 'mask', channel: 'alpha', tint: [255, 64, 64, 255] },
+    }
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [...page.layers, maskLayer],
+    }))
+    useKoharuStore.setState({ tool: 'draw', selectedLayers: ['mask'] })
+    const paint = vi.spyOn(commands, 'beginPaint').mockResolvedValue(null)
+    const surface = renderWorkspace()
+
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 14, clientX: 30, clientY: 40 })
+    await waitFor(() => expect(paint).toHaveBeenCalledOnce())
+    expect(paint).toHaveBeenCalledWith(
+      null,
+      { x: 20, y: 20 },
+      { diameter: 48, color: [17, 17, 17, 255] },
+    )
   })
 
   it('maps the Remove tool to an inpainting mask gesture', async () => {

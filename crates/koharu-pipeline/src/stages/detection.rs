@@ -491,10 +491,10 @@ fn write_region<'a>(
                     page,
                     At::End,
                     content,
-                    &TextLayout {
-                        origin: Origin::Generated(generation.clone()),
-                        kind: TextLayoutKind::Paragraph,
-                    },
+                    &TextLayout::with_origin(
+                        Origin::Generated(generation.clone()),
+                        TextLayoutKind::Paragraph,
+                    ),
                 )?;
                 Ok((content, layer, true))
             },
@@ -515,10 +515,10 @@ fn write_region<'a>(
     if created || snapshot.component::<TextLayout>(layer)?.is_none() {
         edit.set(
             layer,
-            &TextLayout {
-                origin: Origin::Generated(generation.clone()),
-                kind: TextLayoutKind::Paragraph,
-            },
+            &TextLayout::with_origin(
+                Origin::Generated(generation.clone()),
+                TextLayoutKind::Paragraph,
+            ),
         )
         .context("failed to set detected text layout")?;
     }
@@ -527,25 +527,18 @@ fn write_region<'a>(
             .component::<Typography>(layer)?
             .is_none_or(|value| value.origin != Origin::User)
     {
-        edit.set(
-            layer,
-            &Typography {
-                origin: Origin::Generated(generation.clone()),
-                preferred_font: None,
-                font_weight: None,
-                font_style: None,
-                size: None,
-                auto_fit: true,
-                color: inferred
-                    .map(|value| [value.color[0], value.color[1], value.color[2], u8::MAX]),
-                stroke_color: None,
-                stroke_width: None,
-                alignment: None,
-                writing_mode: inferred.map(|value| value.writing_mode),
-                extensions: Default::default(),
-            },
-        )
-        .context("failed to set detected typography")?;
+        let mut typography = Typography::with_origin(Origin::Generated(generation.clone()));
+        if let Some(inferred) = inferred {
+            typography.color = [
+                inferred.color[0],
+                inferred.color[1],
+                inferred.color[2],
+                u8::MAX,
+            ];
+            typography.writing_mode = inferred.writing_mode;
+        }
+        edit.set(layer, &typography)
+            .context("failed to set detected typography")?;
     }
     edit.relate::<RecognizedFrom>(content, entity)
         .context("failed to associate detected text content with its region")?;

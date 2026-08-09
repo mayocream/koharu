@@ -5,7 +5,9 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRef, AssetRole, At, Origin, PageDraft, PixelLayer,
+};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -208,12 +210,9 @@ async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
         .state::<CanvasView>()
         .fitted
         .store(true, Ordering::Release);
-    let canvas = {
-        let desktop = handle.state::<Desktop>();
-        let mut desktop = desktop.lock();
-        desktop.show_page(&snapshot, page)?;
-        desktop.canvas_state(true)
-    };
+    let desktop = handle.state::<Desktop>();
+    desktop.show_page(&snapshot, page).await?;
+    let canvas = desktop.lock().canvas_state(true);
     drop(previous);
     handle.state::<CanvasChannel>().channel.publish(canvas);
     handle.state::<ProjectChannel>().channel.publish(Some(info));
@@ -347,7 +346,7 @@ async fn close_current_project(handle: &AppHandle) -> Result<()> {
     let result = {
         let desktop = handle.state::<Desktop>();
         let mut desktop = desktop.lock();
-        desktop.canvas().clear_page();
+        desktop.canvas().clear();
         desktop.canvas_state(true)
     };
     drop(previous);
@@ -451,6 +450,7 @@ pub(crate) async fn import_pages(
         let source = AssetRole::new("source")?;
         let patch = project.snapshot().patch(|edit| {
             for (name, bytes, format, width, height) in pages {
+                let layer_name = name.clone();
                 let page = edit.add_page(
                     PageDraft::new(name, f64::from(width), f64::from(height)),
                     At::End,
@@ -468,6 +468,14 @@ pub(crate) async fn import_pages(
                         },
                     ),
                 )?;
+                edit.set(
+                    page,
+                    &PixelLayer::color(
+                        Origin::User,
+                        layer_name,
+                        AssetRef::new(page, source.clone()),
+                    ),
+                )?;
             }
             Ok(())
         })?;
@@ -477,13 +485,12 @@ pub(crate) async fn import_pages(
         let page = project.active_page();
         (commit, page)
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        if desktop.synchronize(&commit.snapshot, page, &commit)? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    if desktop.synchronize(&commit.snapshot, page, &commit).await? {
+        canvas_view.fitted.store(true, Ordering::Release);
+    }
+    let canvas = desktop
+        .lock()
+        .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -503,12 +510,9 @@ pub(crate) async fn select_page(
         project.select_page(page)?;
         project.snapshot()
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.show_page(&snapshot, Some(page))?;
-        canvas_view.fitted.store(true, Ordering::Release);
-        desktop.canvas_state(true)
-    };
+    desktop.show_page(&snapshot, Some(page)).await?;
+    canvas_view.fitted.store(true, Ordering::Release);
+    let canvas = desktop.lock().canvas_state(true);
     canvas_channel.channel.publish(canvas);
     Ok(())
 }

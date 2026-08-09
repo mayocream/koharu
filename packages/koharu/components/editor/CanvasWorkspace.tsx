@@ -9,7 +9,7 @@ import { CanvasOverlay } from '@/components/editor/CanvasOverlay'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { call, dispatch, updateViewport } from '@/lib/backend'
-import { expandLayerSelection } from '@/lib/document'
+import { expandLayerSelection, isEditableColorPixelLayer } from '@/lib/document'
 import {
   controlFrame,
   draftFrame,
@@ -71,14 +71,14 @@ export function CanvasWorkspace() {
   const tool = useKoharuStore((state) => state.tool)
   const brush = useKoharuStore((state) => state.brush)
   const selected = useKoharuStore((state) => state.selectedLayers)
-  const presentation = useKoharuStore((state) => state.presentation)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setTool = useKoharuStore((state) => state.setTool)
   const setBrush = useKoharuStore((state) => state.setBrush)
-  const setPresentation = useKoharuStore((state) => state.setPresentation)
-  const activeRaster =
-    selected.length === 1
-      ? page?.layers.find((layer) => layer.id === selected[0] && layer.type === 'raster')
+  const activePixel =
+    page && selected.length === 1
+      ? page.layers.find(
+          (layer) => layer.id === selected[0] && isEditableColorPixelLayer(layer, page.id),
+        )
       : undefined
 
   const enqueue = useCallback(<Result,>(operation: () => Promise<Result>): Promise<Result> => {
@@ -100,18 +100,15 @@ export function CanvasWorkspace() {
       () => undefined,
     )
   })
-  const strokeUpdates = useFrameCommand(
-    ({ kind, points }: StrokeUpdate) => {
-      if (kind === 'paint') {
-        return enqueue(() => call(commands.extendPaint, points)).then(() => undefined)
-      }
-      if (kind === 'erase') {
-        return enqueue(() => call(commands.extendErase, points)).then(() => undefined)
-      }
-      return enqueue(() => call(commands.extendInpaint, points)).then(() => undefined)
-    },
-    mergeStrokeUpdates,
-  )
+  const strokeUpdates = useFrameCommand(({ kind, points }: StrokeUpdate) => {
+    if (kind === 'paint') {
+      return enqueue(() => call(commands.extendPaint, points)).then(() => undefined)
+    }
+    if (kind === 'erase') {
+      return enqueue(() => call(commands.extendErase, points)).then(() => undefined)
+    }
+    return enqueue(() => call(commands.extendInpaint, points)).then(() => undefined)
+  }, mergeStrokeUpdates)
 
   const report = useCallback(() => {
     if (surface.current) viewportUpdates.schedule(surface.current)
@@ -151,11 +148,7 @@ export function CanvasWorkspace() {
   const cancelGesture = useCallback(() => {
     const current = gesture.current
     gesture.current = null
-    if (
-      current?.kind === 'paint' ||
-      current?.kind === 'erase' ||
-      current?.kind === 'inpaint'
-    ) {
+    if (current?.kind === 'paint' || current?.kind === 'erase' || current?.kind === 'inpaint') {
       strokeUpdates.clear()
     }
     if (current?.kind === 'paint') {
@@ -191,14 +184,6 @@ export function CanvasWorkspace() {
       window.visualViewport?.removeEventListener('resize', report)
     }
   }, [report])
-
-  useEffect(() => {
-    if (!page) return
-    let next = presentation
-    if (next.image === 'rendered' && !page.assets.rendered) next = { ...next, image: 'source' }
-    if (next !== presentation) setPresentation(next)
-    dispatch(commands.setPresentation, next)
-  }, [page, presentation, setPresentation])
 
   useEffect(() => cancelGesture, [cancelGesture, page?.id, tool])
 
@@ -412,8 +397,6 @@ export function CanvasWorkspace() {
                 start: physical,
                 translation: camera.translation,
               }
-            } else if (presentation.image === 'rendered') {
-              return
             } else if (tool === 'select') {
               const target = hitTestLayers(page.layers, point, layerFrames)
               const additive = event.shiftKey || event.ctrlKey || event.metaKey
@@ -442,20 +425,20 @@ export function CanvasWorkspace() {
               strokeUpdates.clear()
               gesture.current = { kind: 'paint', pointer: event.pointerId }
               void enqueue(() =>
-                call(commands.beginPaint, activeRaster?.id ?? null, point, {
+                call(commands.beginPaint, activePixel?.id ?? null, point, {
                   diameter: brush.diameter,
                   color: hexToRgba(brush.color),
                 }),
               ).catch(() => undefined)
             } else if (tool === 'eraser') {
-              if (!activeRaster) {
-                receiveError('Select a paint or cleanup layer before using the Eraser.')
+              if (!activePixel) {
+                receiveError('Select an editable color pixel layer before using the Eraser.')
                 return
               }
               strokeUpdates.clear()
               gesture.current = { kind: 'erase', pointer: event.pointerId }
               void enqueue(() =>
-                call(commands.beginErase, activeRaster.id, point, brush.diameter),
+                call(commands.beginErase, activePixel.id, point, brush.diameter),
               ).catch(() => undefined)
             } else if (tool === 'remove') {
               strokeUpdates.clear()
@@ -515,7 +498,7 @@ export function CanvasWorkspace() {
             viewUpdates.schedule({ zoom, translation })
           }}
         >
-          {page && presentation.image !== 'rendered' && (
+          {page && (
             <CanvasOverlay
               page={page}
               camera={camera}

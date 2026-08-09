@@ -14,8 +14,10 @@ use koharu_pipeline::{
     OcrModel, Operation, Pipeline, PipelineConfig, Progress, Request, RoremMixedConfig, Scope,
     StageOutput, TranslationConfig,
 };
-use koharu_renderer::{Compositor, RasterOptions, Rasterizer, RenderRequest, SceneRenderer};
-use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft, Session};
+use koharu_renderer::{RasterOptions, Renderer};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRef, AssetRole, At, Origin, PageDraft, PixelLayer, Session,
+};
 use koharu_translator::{GenerationConfig, Language, ModelSelection, Provider, ProvidersConfig};
 
 #[derive(Debug, Parser)]
@@ -32,9 +34,6 @@ struct Arguments {
 
     #[arg(long, value_enum, default_value = "paddleocr-vl-1.6")]
     ocr: OcrChoice,
-
-    #[arg(long = "font-family", value_name = "FAMILY")]
-    font_families: Vec<String>,
 
     #[arg(long, value_enum, default_value = "lama")]
     inpainting: InpaintingChoice,
@@ -153,9 +152,10 @@ async fn main() -> Result<()> {
             ),
             At::End,
         )?;
+        let source_role = AssetRole::new("source")?;
         edit.set_asset(
             id,
-            &AssetRole::new("source")?,
+            &source_role,
             AssetInput::new(
                 Arc::<[u8]>::from(source),
                 image_media_type(&arguments.input),
@@ -164,6 +164,14 @@ async fn main() -> Result<()> {
                     height: Some(decoded.height()),
                     attributes: BTreeMap::new(),
                 },
+            ),
+        )?;
+        edit.set(
+            id,
+            &PixelLayer::color(
+                Origin::User,
+                "Original Image",
+                AssetRef::new(id, source_role),
             ),
         )?;
         page = Some(id);
@@ -198,16 +206,13 @@ async fn main() -> Result<()> {
         .await?;
     eprintln!("pipeline finished in {:.2}s", report.elapsed.as_secs_f64());
 
-    let compositor = Compositor::new();
-    let scene_renderer = SceneRenderer::new();
-    let rasterizer = Rasterizer::new()?;
-    let mut request = RenderRequest::new(page);
-    request.theme.font_families = arguments.font_families;
+    let renderer = Renderer::new()?;
     let render_started = Instant::now();
     let snapshot = session.snapshot();
-    let composition = compositor.compile(&snapshot, &request)?;
-    let frame = scene_renderer.render(&snapshot, &composition)?;
-    let raster = rasterizer.rasterize(&frame, RasterOptions::default())?;
+    let composition = renderer.compose(&snapshot, page).await?;
+    let raster = renderer
+        .rasterize(&composition, &RasterOptions::default())
+        .await?;
     let render_elapsed = render_started.elapsed();
     raster
         .image

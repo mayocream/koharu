@@ -41,6 +41,7 @@ impl From<DownsampleFilter> for ResizeAlg {
 pub struct RasterOptions {
     pub supersampling_factor: u32,
     pub downsample_filter: DownsampleFilter,
+    pub background: [u8; 4],
 }
 
 impl RasterOptions {
@@ -64,6 +65,7 @@ impl Default for RasterOptions {
             // exports, but should not multiply every interactive render by four by default.
             supersampling_factor: 1,
             downsample_filter: DownsampleFilter::Lanczos3,
+            background: [0, 0, 0, 0],
         }
     }
 }
@@ -71,7 +73,7 @@ impl Default for RasterOptions {
 const MAX_SUPERSAMPLING_FACTOR: u32 = 4;
 
 #[derive(Debug)]
-pub struct Raster {
+pub struct RasterImage {
     pub image: RgbaImage,
     pub left: i32,
     pub top: i32,
@@ -98,12 +100,12 @@ struct RenderTarget {
 /// GPU setup, Vello's glyph caches, and a small target pool live for the lifetime of this value.
 /// Command encoding is serialized because Vello mutates its caches, but GPU completion and
 /// readback happen after releasing the lock so independent callers can overlap that work.
-pub struct Rasterizer {
+pub(crate) struct Rasterizer {
     gpu: Mutex<GpuState>,
 }
 
 impl Rasterizer {
-    pub fn new() -> crate::Result<Self> {
+    pub(crate) fn new() -> crate::Result<Self> {
         Self::try_new().map_err(crate::Error::Backend)
     }
 
@@ -130,16 +132,26 @@ impl Rasterizer {
         })
     }
 
-    pub fn rasterize(&self, frame: &crate::Frame, options: RasterOptions) -> crate::Result<Raster> {
-        let (width, height) = frame.size();
-        let (left, top) = frame.origin();
+    pub(crate) fn rasterize(
+        &self,
+        composition: &crate::Composition,
+        options: RasterOptions,
+    ) -> crate::Result<RasterImage> {
+        let (width, height) = composition.size();
+        let (left, top) = composition.origin();
         let image = self
-            .rasterize_scene_inner(frame.scene(), width, height, [0, 0, 0, 0], options)
+            .rasterize_scene_inner(
+                composition.scene(),
+                width,
+                height,
+                options.background,
+                options,
+            )
             .map_err(crate::Error::Backend)?;
-        Ok(Raster { image, left, top })
+        Ok(RasterImage { image, left, top })
     }
 
-    pub fn rasterize_scene(
+    pub(crate) fn rasterize_scene(
         &self,
         scene: &Scene,
         width: u32,

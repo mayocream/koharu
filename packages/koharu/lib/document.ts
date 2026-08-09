@@ -8,19 +8,25 @@ export function isGroupLayer(layer: Layer): layer is Extract<Layer, { type: 'gro
   return layer.type === 'group'
 }
 
+export function isEditableColorPixelLayer(
+  layer: Layer,
+  page: string,
+): layer is Extract<Layer, { type: 'pixel' }> {
+  return layer.type === 'pixel' && layer.parent === page && layer.format.kind === 'color'
+}
+
 export function isLockedLayer(layer: Layer): boolean {
-  return layer.type === 'artwork'
+  return layer.type === 'pixel' && layer.parent === null
 }
 
 export function layerName(layer: Layer, index: number): string {
   if (layer.type === 'group') return layer.name
-  if (layer.type === 'raster') return layer.name
+  if (layer.type === 'pixel') return layer.name
   if (layer.type === 'text') {
     const text = layer.content.translation?.text || layer.content.source?.text
     return text?.trim() || `Text ${index + 1}`
   }
-  if (layer.type === 'artwork') return 'Original artwork'
-  return `Image ${index + 1}`
+  return `Layer ${index + 1}`
 }
 
 export function layerChildren(layers: Layer[], parent: string): Layer[] {

@@ -49,18 +49,23 @@ const textLayer: Layer = {
     source_region: null,
   },
   typography: {
-    preferred_font: 'Noto Sans',
+    font_families: ['Noto Sans', 'Arial'],
     font_weight: 400,
     font_style: 'normal',
-    size: null,
+    size: 24,
+    minimum_size: 9,
     auto_fit: true,
     color: [0, 0, 0, 255],
-    stroke_color: [255, 255, 255, 255],
-    stroke_width: 0,
+    stroke: null,
     alignment: 'Center',
     writing_mode: 'Horizontal',
+    line_height: 1.2,
+    letter_spacing: 0,
+    word_spacing: 0,
   },
   layout: 'paragraph',
+  insets: [4, 4, 4, 4],
+  vertical_alignment: 'Center',
   fit_region: null,
 }
 
@@ -119,13 +124,6 @@ function installProject() {
     id: 'page',
     label: 'Page 1',
     size: { width: 1000, height: 1500 },
-    assets: {
-      source: 'source',
-      rendered: null,
-      text_mask: null,
-      coo_mask: null,
-      bubble_mask: null,
-    },
     layers: [textLayer],
     regions: [],
   }
@@ -271,8 +269,7 @@ describe('greenfield editor', () => {
         expect.objectContaining({
           layer: 'element',
           typography: expect.objectContaining({
-            stroke_color: [255, 255, 255, 0],
-            stroke_width: 1.5,
+            stroke: null,
           }),
         }),
       ]),
@@ -287,8 +284,10 @@ describe('greenfield editor', () => {
         expect.objectContaining({
           layer: 'element',
           typography: expect.objectContaining({
-            stroke_color: [255, 0, 0, 255],
-            stroke_width: 1.5,
+            stroke: {
+              color: [255, 0, 0, 255],
+              width: 1.5,
+            },
           }),
         }),
       ]),
@@ -335,7 +334,7 @@ describe('greenfield editor', () => {
     ])
     render(<Inspector />)
 
-    fireEvent.click(screen.getByRole('combobox', { name: 'Font weight' }))
+    await user.click(screen.getByRole('combobox', { name: 'Font weight' }))
 
     expect(screen.getByRole('option', { name: '400' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '700' })).toBeInTheDocument()
@@ -343,8 +342,8 @@ describe('greenfield editor', () => {
 
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('combobox', { name: 'Font style' }))
-    expect(screen.getByRole('option', { name: 'Regular' })).toBeInTheDocument()
-    await user.click(screen.getByRole('option', { name: 'Italic' }))
+    expect(await screen.findByRole('option', { name: 'Regular' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('option', { name: 'Italic' }))
     await waitFor(() =>
       expect(setTypography).toHaveBeenCalledWith([
         expect.objectContaining({
@@ -564,9 +563,7 @@ describe('greenfield editor', () => {
     expect(screen.getAllByLabelText('Base URL')).toHaveLength(3)
     fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Translation' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Translation model')).toHaveTextContent(
-      'LFM 2.5 1.2B Instruct',
-    )
+    expect(screen.getByLabelText('Translation model')).toHaveTextContent('LFM 2.5 1.2B Instruct')
     expect(screen.getByLabelText('Target language')).toHaveTextContent('American English')
   })
 

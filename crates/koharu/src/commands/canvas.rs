@@ -4,11 +4,8 @@ use std::sync::{
 };
 
 use anyhow::Context as _;
-use koharu_canvas::{
-    DisplayState, MaskOverlay as CanvasMask, MaskPlane, PagePoint, PageView as CanvasPageImage,
-    PhysicalPoint,
-};
-use koharu_scene::{AssetMetadata, AssetRole, EntityId, Revision};
+use koharu_canvas::{MaskOverlay, MaskTarget, PagePoint, PhysicalPoint};
+use koharu_scene::{EntityId, Revision};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -20,6 +17,8 @@ use super::{
     project::CurrentProject,
 };
 use crate::desktop::Desktop;
+
+const INPAINT_MASK: u64 = 0;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
 pub struct Frame {
@@ -54,36 +53,10 @@ pub struct LayerCommit {
     pub layer: EntityId,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct MaskBrush {
-    pub diameter: f32,
-    pub erase: bool,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
 pub struct TransformFrame {
     pub element: EntityId,
     pub frame: Frame,
-}
-
-#[derive(Clone, Debug, Deserialize, Type)]
-pub struct CanvasPresentation {
-    pub image: PageImage,
-    pub show_text: bool,
-    pub text_mask: Option<MaskTint>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-pub struct MaskTint {
-    pub color: [u8; 4],
-    pub opacity: f32,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum PageImage {
-    Source,
-    Rendered,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -181,29 +154,6 @@ pub(crate) async fn fit_canvas(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn set_presentation(
-    desktop: State<'_, Desktop>,
-    presentation: CanvasPresentation,
-) -> Result<(), Error> {
-    let mut desktop = desktop.lock();
-    let mut view = desktop.view().clone();
-    view.display = DisplayState {
-        page: match presentation.image {
-            PageImage::Source => CanvasPageImage::Editable,
-            PageImage::Rendered => CanvasPageImage::Rendered,
-        },
-        show_text: presentation.show_text,
-        text_mask: presentation
-            .text_mask
-            .map(|mask| CanvasMask::new(mask.color, mask.opacity)),
-        transition: view.display.transition,
-    };
-    desktop.set_view(view);
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub(crate) async fn add_point_text(
     point: Point,
     desktop: State<'_, Desktop>,
@@ -219,9 +169,7 @@ pub(crate) async fn add_point_text(
         project.record_commit(&commit);
         (commit, project.active_page(), layer)
     };
-    desktop
-        .lock()
-        .synchronize(&commit.snapshot, page, &commit)?;
+    desktop.synchronize(&commit.snapshot, page, &commit).await?;
     Ok(LayerCommit {
         revision: commit.revision,
         layer,
@@ -245,9 +193,7 @@ pub(crate) async fn add_text_box(
         project.record_commit(&commit);
         (commit, project.active_page(), layer)
     };
-    desktop
-        .lock()
-        .synchronize(&commit.snapshot, page, &commit)?;
+    desktop.synchronize(&commit.snapshot, page, &commit).await?;
     Ok(LayerCommit {
         revision: commit.revision,
         layer,
@@ -313,25 +259,16 @@ pub(crate) async fn finish_paint(
                 .collect(),
         )?;
         project.record_commit(&commit);
-        let image = commit
-            .snapshot
-            .asset(element, &AssetRole::new("source")?)?
-            .context("the committed paint layer asset is missing")?
-            .blob;
-        Ok((commit, project.active_page(), element, image))
+        Ok((commit, project.active_page(), element))
     })();
-    let (commit, page, element, image) = match result {
+    let (commit, page, element) = match result {
         Ok(result) => result,
         Err(error) => {
             desktop.lock().canvas().cancel_raster_stroke();
             return Err(error.into());
         }
     };
-    let mut desktop = desktop.lock();
-    desktop
-        .canvas()
-        .acknowledge_raster_commit(stroke.page, image)?;
-    desktop.synchronize(&commit.snapshot, page, &commit)?;
+    desktop.synchronize(&commit.snapshot, page, &commit).await?;
     Ok(LayerCommit {
         revision: commit.revision,
         layer: element,
@@ -404,25 +341,16 @@ pub(crate) async fn finish_erase(
                 .collect(),
         )?;
         project.record_commit(&commit);
-        let image = commit
-            .snapshot
-            .asset(element, &AssetRole::new("source")?)?
-            .context("the committed paint layer asset is missing")?
-            .blob;
-        Ok((commit, project.active_page(), element, image))
+        Ok((commit, project.active_page(), element))
     })();
-    let (commit, page, element, image) = match result {
+    let (commit, page, element) = match result {
         Ok(result) => result,
         Err(error) => {
             desktop.lock().canvas().cancel_raster_stroke();
             return Err(error.into());
         }
     };
-    let mut desktop = desktop.lock();
-    desktop
-        .canvas()
-        .acknowledge_raster_commit(stroke.page, image)?;
-    desktop.synchronize(&commit.snapshot, page, &commit)?;
+    desktop.synchronize(&commit.snapshot, page, &commit).await?;
     Ok(LayerCommit {
         revision: commit.revision,
         layer: element,
@@ -517,11 +445,10 @@ pub(crate) async fn finish_transform(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    desktop.synchronize(&commit.snapshot, page, &commit).await?;
+    let canvas = desktop
+        .lock()
+        .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
     canvas_channel.channel.publish(canvas);
     Ok(Some(commit.revision))
 }
@@ -535,121 +462,17 @@ pub(crate) async fn cancel_transform(desktop: State<'_, Desktop>) -> Result<(), 
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn begin_text_mask(
-    point: Point,
-    brush: MaskBrush,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().begin_mask_stroke(
-        MaskPlane::Text,
-        koharu_canvas::Brush {
-            diameter: brush.diameter,
-            color: [0, 0, 0, 255],
-            mode: if brush.erase {
-                koharu_canvas::StrokeMode::Erase
-            } else {
-                koharu_canvas::StrokeMode::Paint
-            },
-        },
-        point.into(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn extend_text_mask(
-    points: Vec<Point>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().extend_mask_stroke(
-        MaskPlane::Text,
-        &points.into_iter().map(PagePoint::from).collect::<Vec<_>>(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn finish_text_mask(
-    desktop: State<'_, Desktop>,
-    project: State<'_, CurrentProject>,
-) -> Result<Option<Revision>, Error> {
-    let Some(mask) = desktop
-        .lock()
-        .canvas()
-        .finish_mask_stroke(MaskPlane::Text)?
-    else {
-        return Ok(None);
-    };
-    let current = {
-        let project = project.project.lock();
-        project
-            .as_ref()
-            .context("no project is open")?
-            .snapshot()
-            .asset(mask.page, &AssetRole::new(mask.plane.asset_role())?)?
-            .map(|asset| asset.blob)
-    };
-    if current != mask.base {
-        return Err(anyhow::anyhow!("the text mask changed while it was being edited").into());
-    }
-    let size = mask.size();
-    let encoded = mask.encode_png()?;
-    let (commit, page, blob) = {
-        let mut project = project.project.lock();
-        let project = project.as_mut().context("no project is open")?;
-        let commit = project.set_asset(
-            mask.page,
-            mask.plane.asset_role(),
-            encoded,
-            "image/png",
-            AssetMetadata {
-                width: Some(size.width),
-                height: Some(size.height),
-                attributes: Default::default(),
-            },
-        )?;
-        project.record_commit(&commit);
-        let blob = commit
-            .snapshot
-            .asset(mask.page, &AssetRole::new(mask.plane.asset_role())?)?
-            .context("the committed text mask asset is missing")?
-            .blob;
-        (commit, project.active_page(), blob)
-    };
-    {
-        let mut desktop = desktop.lock();
-        desktop
-            .canvas()
-            .acknowledge_mask_commit(mask.page, mask.plane, mask.generation, blob)?;
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-    }
-    Ok(Some(commit.revision))
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn cancel_text_mask(desktop: State<'_, Desktop>) -> Result<(), Error> {
-    desktop
-        .lock()
-        .canvas()
-        .cancel_mask_stroke(MaskPlane::Text)?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub(crate) async fn begin_inpaint(
     point: Point,
     diameter: f32,
     desktop: State<'_, Desktop>,
 ) -> Result<(), Error> {
-    desktop.lock().canvas().begin_mask_stroke(
-        MaskPlane::Inpaint,
+    desktop.lock().canvas().begin_scratch_mask_stroke(
+        INPAINT_MASK,
+        MaskOverlay::new([255, 64, 64, 255], 0.45),
         koharu_canvas::Brush {
             diameter,
-            color: [0, 0, 0, 255],
+            color: [255, 255, 255, 255],
             mode: koharu_canvas::StrokeMode::Paint,
         },
         point.into(),
@@ -664,7 +487,7 @@ pub(crate) async fn extend_inpaint(
     desktop: State<'_, Desktop>,
 ) -> Result<(), Error> {
     desktop.lock().canvas().extend_mask_stroke(
-        MaskPlane::Inpaint,
+        MaskTarget::Scratch(INPAINT_MASK),
         &points.into_iter().map(PagePoint::from).collect::<Vec<_>>(),
     )?;
     Ok(())
@@ -679,7 +502,7 @@ pub(crate) async fn finish_inpaint(
     let Some(mask) = desktop
         .lock()
         .canvas()
-        .finish_mask_stroke(MaskPlane::Inpaint)?
+        .finish_mask_stroke(MaskTarget::Scratch(INPAINT_MASK))?
     else {
         return Ok(None);
     };
@@ -688,7 +511,10 @@ pub(crate) async fn finish_inpaint(
         page,
         png: Arc::from(mask.encode_png()?),
     });
-    desktop.lock().canvas().clear_inpaint_mask();
+    desktop
+        .lock()
+        .canvas()
+        .clear_mask(MaskTarget::Scratch(INPAINT_MASK));
     Ok(Some(
         processing::process(
             handle.clone(),
@@ -718,7 +544,7 @@ pub(crate) async fn cancel_inpaint(desktop: State<'_, Desktop>) -> Result<(), Er
     desktop
         .lock()
         .canvas()
-        .cancel_mask_stroke(MaskPlane::Inpaint)?;
+        .cancel_mask_stroke(MaskTarget::Scratch(INPAINT_MASK))?;
     Ok(())
 }
 
@@ -728,10 +554,16 @@ pub(crate) async fn sample_color(
     point: Point,
     desktop: State<'_, Desktop>,
 ) -> Result<[u8; 4], Error> {
-    Ok(desktop
+    let (send, receive) = tokio::sync::oneshot::channel();
+    desktop
         .lock()
         .canvas()
-        .sample_color(PhysicalPoint::new(point.x, point.y))?)
+        .sample_color(PhysicalPoint::new(point.x, point.y), move |result| {
+            let _ = send.send(result);
+        })?;
+    Ok(receive
+        .await
+        .context("the canvas closed while sampling a color")??)
 }
 
 #[tauri::command]

@@ -31,10 +31,9 @@ export const commands = {
 	id: EntityId,
 	label: string,
 	size: PageSize,
-	assets: PageAssets,
 	layers: Layer[],
 	regions: AnalysisRegion[],
-} | null>("get_page").then((v) => (v==null?v:({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
+} | null>("get_page").then((v) => (v==null?v:({...v,layers:v.layers.map(i=>i),regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
 	listProjects: () => __TAURI_INVOKE<ProjectSummary[]>("list_projects"),
 	createProject: (name: string) => __TAURI_INVOKE<null>("create_project", { name }),
 	openProject: (name: string) => __TAURI_INVOKE<null>("open_project", { name }),
@@ -47,11 +46,11 @@ export const commands = {
 	movePage: (page: EntityId, index: number) => __TAURI_INVOKE<null>("move_page", { page, index }),
 	setSourceText: (layer: EntityId, text: string) => __TAURI_INVOKE<null>("set_source_text", { layer, text }),
 	setTranslation: (layer: EntityId, text: string | null) => __TAURI_INVOKE<null>("set_translation", { layer, text }),
-	setTypography: (updates: TypographyUpdate[]) => __TAURI_INVOKE<null>("set_typography", { updates: updates.map(i=>({...i,typography:({...i.typography,size:i.typography.size==null?i.typography.size:i.typography.size,stroke_width:i.typography.stroke_width==null?i.typography.stroke_width:i.typography.stroke_width})})) }),
+	setTypography: (updates: TypographyUpdate[]) => __TAURI_INVOKE<null>("set_typography", { updates: updates.map(i=>({...i,typography:({...i.typography,stroke:i.typography.stroke==null?i.typography.stroke:i.typography.stroke})})) }),
 	setGeometry: (updates: GeometryUpdate[]) => __TAURI_INVOKE<null>("set_geometry", { updates: updates.map(i=>({...i,points:i.points==null?i.points:i.points.map(i=>i)})) }),
 	setVisibility: (layers: EntityId[], visible: boolean | null, opacity: number | null) => __TAURI_INVOKE<null>("set_visibility", { layers, visible, opacity: opacity==null?opacity:opacity }),
 	deleteLayers: (layers: EntityId[]) => __TAURI_INVOKE<null>("delete_layers", { layers }),
-	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
+	moveLayer: (layer: EntityId, parent: EntityId, index: number) => __TAURI_INVOKE<Page>("move_layer", { layer, parent, index }).then((v) => (({...v,layers:v.layers.map(i=>i),regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
 	undo: () => __TAURI_INVOKE<null>("undo"),
 	redo: () => __TAURI_INVOKE<null>("redo"),
 	process: (scope: Scope, operation: Operation) => __TAURI_INVOKE<JobId>("process", { scope, operation }),
@@ -66,7 +65,6 @@ export const commands = {
 	setZoom: (zoom: number) => __TAURI_INVOKE<null>("set_zoom", { zoom }),
 	setCanvasView: (zoom: number, translation: [number, number]) => __TAURI_INVOKE<null>("set_canvas_view", { zoom, translation: translation.map(i=>i) }),
 	fitCanvas: () => __TAURI_INVOKE<null>("fit_canvas"),
-	setPresentation: (presentation: CanvasPresentation) => __TAURI_INVOKE<null>("set_presentation", { presentation: ({...presentation,text_mask:presentation.text_mask==null?presentation.text_mask:presentation.text_mask}) }),
 	addPointText: (point: Point) => __TAURI_INVOKE<LayerCommit>("add_point_text", { point }),
 	addTextBox: (frame: Frame) => __TAURI_INVOKE<LayerCommit>("add_text_box", { frame }),
 	beginPaint: (layer: string | null, point: Point, brush: PaintBrush) => __TAURI_INVOKE<null>("begin_paint", { layer, point, brush }),
@@ -82,10 +80,6 @@ export const commands = {
 	previewOpacity: (element: EntityId, opacity: number | null) => __TAURI_INVOKE<null>("preview_opacity", { element, opacity: opacity==null?opacity:opacity }),
 	finishTransform: () => __TAURI_INVOKE<number | null>("finish_transform").then((v) => (v==null?v:v as typeof v)),
 	cancelTransform: () => __TAURI_INVOKE<null>("cancel_transform"),
-	beginTextMask: (point: Point, brush: MaskBrush) => __TAURI_INVOKE<null>("begin_text_mask", { point, brush }),
-	extendTextMask: (points: Point[]) => __TAURI_INVOKE<null>("extend_text_mask", { points: points.map(i=>i) }),
-	finishTextMask: () => __TAURI_INVOKE<number | null>("finish_text_mask").then((v) => (v==null?v:v as typeof v)),
-	cancelTextMask: () => __TAURI_INVOKE<null>("cancel_text_mask"),
 	beginInpaint: (point: Point, diameter: number) => __TAURI_INVOKE<null>("begin_inpaint", { point, diameter }),
 	extendInpaint: (points: Point[]) => __TAURI_INVOKE<null>("extend_inpaint", { points: points.map(i=>i) }),
 	finishInpaint: () => __TAURI_INVOKE<string | null>("finish_inpaint"),
@@ -126,12 +120,6 @@ export type Bounds = {
 };
 
 export type CaiyunConfig = Record<string, never>;
-
-export type CanvasPresentation = {
-	image: PageImage,
-	show_text: boolean,
-	text_mask: MaskTint | null,
-};
 
 export type CanvasState = {
 	zoom: number,
@@ -301,7 +289,7 @@ export type LanguageChoice = {
 	name: string,
 };
 
-export type Layer = { type: "group"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; name: string; role: GroupRole | null } | { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; visibility: LayerVisibility; content: TextContent; typography: Typography | null; layout: TextLayoutKind; fit_region: EntityId | null } | { type: "raster"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; image: string | null; name: string; kind: RasterLayerKind } | { type: "image"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string } | { type: "artwork"; id: EntityId; parent: EntityId | null; geometry: Geometry; visibility: LayerVisibility; image: string };
+export type Layer = { type: "group"; id: EntityId; parent: EntityId | null; visibility: LayerVisibility; name: string; role: GroupRole | null } | { type: "text"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; visibility: LayerVisibility; content: TextContent; typography: Typography; layout: TextLayoutKind; insets: [number, number, number, number]; vertical_alignment: VerticalAlignment; fit_region: EntityId | null } | { type: "pixel"; id: EntityId; parent: EntityId | null; geometry: Geometry | null; visibility: LayerVisibility; image: string; name: string; format: PixelFormat };
 
 export type LayerCommit = {
 	revision: Revision,
@@ -321,15 +309,7 @@ export type LocalConfig = Record<string, never>;
 
 export type LoginEvent = { type: "progress"; message: string } | { type: "device_code"; verification_url: string; user_code: string };
 
-export type MaskBrush = {
-	diameter: number,
-	erase: boolean,
-};
-
-export type MaskTint = {
-	color: [number, number, number, number],
-	opacity: number,
-};
+export type MaskChannel = "luminance" | "red" | "green" | "blue" | "alpha";
 
 export type Model = {
 	provider: Provider,
@@ -367,20 +347,9 @@ export type Page = {
 	id: EntityId,
 	label: string,
 	size: PageSize,
-	assets: PageAssets,
 	layers: Layer[],
 	regions: AnalysisRegion[],
 };
-
-export type PageAssets = {
-	source: string | null,
-	rendered: string | null,
-	text_mask: string | null,
-	coo_mask: string | null,
-	bubble_mask: string | null,
-};
-
-export type PageImage = "source" | "rendered";
 
 export type PageImportSource = "files" | "folder";
 
@@ -413,6 +382,8 @@ export type PipelineConfig = {
 	 */
 	processor: ProcessorConfig,
 };
+
+export type PixelFormat = { kind: "color" } | { kind: "mask"; channel: MaskChannel; tint: [number, number, number, number] };
 
 export type Point = {
 	x: number,
@@ -462,8 +433,6 @@ export type Quantization = {
 	name: string,
 };
 
-export type RasterLayerKind = "cleanup" | "paint";
-
 export type Reasoning = "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
 
 export type Revision = number;
@@ -505,6 +474,11 @@ export type TextContent = {
 
 export type TextLayoutKind = "point" | "paragraph";
 
+export type TextStroke = {
+	color: [number, number, number, number],
+	width: number,
+};
+
 export type ThumbnailBytes = number[];
 
 export type TransformFrame = {
@@ -525,22 +499,27 @@ export type TranslationConfig = {
 };
 
 export type Typography = {
-	preferred_font: string | null,
-	font_weight: number | null,
-	font_style: FontStyle | null,
-	size: number | null,
+	font_families: string[],
+	font_weight: number,
+	font_style: FontStyle,
+	size: number,
+	minimum_size: number,
 	auto_fit: boolean,
-	color: [number, number, number, number] | null,
-	stroke_color: [number, number, number, number] | null,
-	stroke_width: number | null,
-	alignment: TextAlignment | null,
-	writing_mode: WritingMode | null,
+	color: [number, number, number, number],
+	stroke: TextStroke | null,
+	alignment: TextAlignment,
+	writing_mode: WritingMode,
+	line_height: number,
+	letter_spacing: number,
+	word_spacing: number,
 };
 
 export type TypographyUpdate = {
 	layer: EntityId,
 	typography: Typography,
 };
+
+export type VerticalAlignment = "Top" | "Center" | "Bottom";
 
 export type WritingMode = "Horizontal" | "Vertical";
 

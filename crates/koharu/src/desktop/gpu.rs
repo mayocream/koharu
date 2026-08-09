@@ -1,11 +1,11 @@
 //! WGPU surface presentation for the native Tauri window.
 
-use std::{cmp::Reverse, sync::Arc, time::Instant};
+use std::{borrow::Cow, cmp::Reverse, sync::Arc};
 
 use anyhow::{Context as _, Result, bail};
-use koharu_canvas::{Canvas, CanvasGpu, PhysicalPoint, PhysicalSize, ViewState};
+use koharu_canvas::{Canvas, CanvasGpu, PhysicalSize, ViewState};
 use tauri::{Runtime, WebviewWindow};
-use vello::wgpu::{self, util::TextureBlitter};
+use vello::wgpu;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PhysicalRect {
@@ -52,6 +52,180 @@ fn physical_value(value: f64, dpr: f64) -> Result<u32> {
     Ok(value as u32)
 }
 
+const VIEWPORT_BLIT_SHADER: &str = r#"
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) tex_coords: vec2<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
+    var output: VertexOutput;
+    output.tex_coords = vec2<f32>(f32((index << 1u) & 2u), f32(index & 2u));
+    output.position = vec4<f32>(output.tex_coords * 2.0 - 1.0, 0.0, 1.0);
+    output.tex_coords.y = 1.0 - output.tex_coords.y;
+    return output;
+}
+
+@group(0) @binding(0) var source: texture_2d<f32>;
+@group(0) @binding(1) var source_sampler: sampler;
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    return textureSample(source, source_sampler, input.tex_coords);
+}
+"#;
+
+struct ViewportBlitter {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+}
+
+impl ViewportBlitter {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("koharu viewport blit sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("koharu viewport blit bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("koharu viewport blit pipeline layout"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("koharu viewport blit shader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(VIEWPORT_BLIT_SHADER)),
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("koharu viewport blit pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        Self {
+            pipeline,
+            layout,
+            sampler,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn copy(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        source: Option<&wgpu::TextureView>,
+        target: &wgpu::TextureView,
+        viewport: PhysicalRect,
+        surface: PhysicalSize,
+        background: [u8; 3],
+    ) {
+        let right = viewport.x.saturating_add(viewport.width).min(surface.width);
+        let bottom = viewport
+            .y
+            .saturating_add(viewport.height)
+            .min(surface.height);
+        let width = right.saturating_sub(viewport.x.min(surface.width));
+        let height = bottom.saturating_sub(viewport.y.min(surface.height));
+        let bind_group = source.map(|source| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("koharu viewport blit bind group"),
+                layout: &self.layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(source),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            })
+        });
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("koharu viewport present pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: f64::from(background[0]) / 255.0,
+                        g: f64::from(background[1]) / 255.0,
+                        b: f64::from(background[2]) / 255.0,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        if let Some(bind_group) = bind_group.filter(|_| width > 0 && height > 0) {
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_viewport(
+                viewport.x as f32,
+                viewport.y as f32,
+                width as f32,
+                height as f32,
+                0.0,
+                1.0,
+            );
+            pass.set_scissor_rect(viewport.x, viewport.y, width, height);
+            pass.draw(0..3, 0..1);
+        }
+    }
+}
+
 struct DesktopGpu {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
@@ -64,7 +238,6 @@ impl DesktopGpu {
     async fn select(
         instance: &wgpu::Instance,
         surface: &wgpu::Surface<'_>,
-        surface_size: PhysicalSize,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self> {
         let mut adapters = instance
@@ -79,7 +252,7 @@ impl DesktopGpu {
 
         let mut failures = Vec::new();
         for (info, adapter) in adapters {
-            match Self::initialize(adapter, surface, surface_size, Arc::clone(&wake)).await {
+            match Self::initialize(adapter, surface, Arc::clone(&wake)).await {
                 Ok(gpu) => {
                     tracing::info!(adapter = ?info, "created desktop WGPU context");
                     return Ok(gpu);
@@ -101,7 +274,6 @@ impl DesktopGpu {
     async fn initialize(
         adapter: wgpu::Adapter,
         surface: &wgpu::Surface<'_>,
-        surface_size: PhysicalSize,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self> {
         let capabilities = surface.get_capabilities(&adapter);
@@ -133,7 +305,7 @@ impl DesktopGpu {
             .context("failed to create the WGPU device")?;
         let device = Arc::new(device);
         let queue = Arc::new(queue);
-        let mut canvas = Canvas::new(
+        let canvas = Canvas::new(
             CanvasGpu {
                 device: Arc::clone(&device),
                 queue: Arc::clone(&queue),
@@ -141,8 +313,6 @@ impl DesktopGpu {
             wake,
         )
         .context("failed to create the canvas renderer")?;
-        canvas.set_render_target(surface_size, PhysicalPoint::default());
-
         Ok(Self {
             device,
             queue,
@@ -153,18 +323,21 @@ impl DesktopGpu {
     }
 }
 
-pub(crate) struct Renderer {
+pub(crate) struct Presenter {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     surface_size: PhysicalSize,
-    blitter: TextureBlitter,
+    blitter: ViewportBlitter,
     canvas: Canvas,
     viewport: PhysicalRect,
+    background: [u8; 3],
+    presented_generation: u64,
+    presentation_dirty: bool,
 }
 
-impl Renderer {
+impl Presenter {
     pub async fn new<R: Runtime>(
         window: WebviewWindow<R>,
         wake: Arc<dyn Fn() + Send + Sync>,
@@ -176,7 +349,7 @@ impl Renderer {
             ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
         let surface = instance.create_surface(window)?;
-        let gpu = DesktopGpu::select(&instance, &surface, surface_size, wake).await?;
+        let gpu = DesktopGpu::select(&instance, &surface, wake).await?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: gpu.format,
@@ -188,7 +361,7 @@ impl Renderer {
             view_formats: Vec::new(),
         };
         surface.configure(&gpu.device, &config);
-        let blitter = TextureBlitter::new(&gpu.device, gpu.format);
+        let blitter = ViewportBlitter::new(&gpu.device, gpu.format);
         let mut renderer = Self {
             device: gpu.device,
             queue: gpu.queue,
@@ -198,8 +371,11 @@ impl Renderer {
             blitter,
             canvas: gpu.canvas,
             viewport: PhysicalRect::default(),
+            background: [245, 245, 245],
+            presented_generation: 0,
+            presentation_dirty: true,
         };
-        renderer.present(Instant::now(), surface_size)?;
+        renderer.present(surface_size)?;
         Ok(renderer)
     }
 
@@ -225,13 +401,16 @@ impl Renderer {
     }
 
     pub fn set_viewport(&mut self, viewport: PhysicalRect, background: [u8; 3]) {
+        if self.viewport != viewport || self.background != background {
+            self.presentation_dirty = true;
+        }
         self.viewport = viewport;
+        self.background = background;
         let mut view = self.canvas.view().clone();
         view.size = viewport.size();
         self.canvas.set_view(view);
         self.canvas
             .set_workspace_color([background[0], background[1], background[2], 255]);
-        self.sync_canvas_target();
     }
 
     fn resize_surface(&mut self, size: PhysicalSize) {
@@ -239,7 +418,7 @@ impl Renderer {
             return;
         }
         self.surface_size = size;
-        self.sync_canvas_target();
+        self.presentation_dirty = true;
         if size.is_empty() {
             return;
         }
@@ -251,12 +430,15 @@ impl Renderer {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn present(&mut self, now: Instant, surface_size: PhysicalSize) -> Result<bool> {
+    pub fn present(&mut self, surface_size: PhysicalSize) -> Result<bool> {
         self.resize_surface(surface_size);
         if self.surface_size.is_empty() {
             return Ok(false);
         }
-        let frame = self.canvas.render(now)?;
+        let frame = self.canvas.render()?;
+        if !self.presentation_dirty && frame.generation == self.presented_generation {
+            return Ok(frame.needs_redraw);
+        }
 
         let (surface_texture, suboptimal) = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
@@ -283,21 +465,23 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("koharu desktop present encoder"),
             });
-        self.blitter
-            .copy(&self.device, &mut encoder, frame.texture, &surface_view);
+        self.blitter.copy(
+            &self.device,
+            &mut encoder,
+            frame.texture,
+            &surface_view,
+            self.viewport,
+            self.surface_size,
+            self.background,
+        );
         self.queue.submit([encoder.finish()]);
         surface_texture.present();
+        self.presented_generation = frame.generation;
+        self.presentation_dirty = false;
         if suboptimal {
             self.surface.configure(&self.device, &self.config);
         }
         Ok(frame.needs_redraw)
-    }
-
-    fn sync_canvas_target(&mut self) {
-        self.canvas.set_render_target(
-            self.surface_size,
-            PhysicalPoint::new(f64::from(self.viewport.x), f64::from(self.viewport.y)),
-        );
     }
 }
 

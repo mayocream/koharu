@@ -1,11 +1,11 @@
-use std::{collections::HashSet, io::Cursor, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, io::Cursor, path::PathBuf};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
-    Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
-    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion,
+    AssetInput, AssetMetadata, AssetRef, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
+    Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, PixelFormat,
+    PixelLayer as ScenePixelLayer, Point as ScenePoint, Presents, Region as SceneRegion,
     RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText,
     TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
     Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
@@ -54,18 +54,8 @@ pub struct Page {
     pub id: EntityId,
     pub label: String,
     pub size: PageSize,
-    pub assets: PageAssets,
     pub layers: Vec<Layer>,
     pub regions: Vec<AnalysisRegion>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Type)]
-pub struct PageAssets {
-    pub source: Option<String>,
-    pub rendered: Option<String>,
-    pub text_mask: Option<String>,
-    pub coo_mask: Option<String>,
-    pub bubble_mask: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -84,31 +74,20 @@ pub enum Layer {
         geometry: Option<Geometry>,
         visibility: LayerVisibility,
         content: TextContent,
-        typography: Option<Typography>,
+        typography: Typography,
         layout: TextLayoutKind,
+        insets: [f32; 4],
+        vertical_alignment: koharu_scene::VerticalAlignment,
         fit_region: Option<EntityId>,
     },
-    Raster {
+    Pixel {
         id: EntityId,
         parent: Option<EntityId>,
+        geometry: Option<Geometry>,
         visibility: LayerVisibility,
-        image: Option<String>,
+        image: String,
         name: String,
-        kind: RasterLayerKind,
-    },
-    Image {
-        id: EntityId,
-        parent: Option<EntityId>,
-        geometry: Geometry,
-        visibility: LayerVisibility,
-        image: String,
-    },
-    Artwork {
-        id: EntityId,
-        parent: Option<EntityId>,
-        geometry: Geometry,
-        visibility: LayerVisibility,
-        image: String,
+        format: PixelFormat,
     },
 }
 
@@ -161,16 +140,19 @@ pub struct Translation {
 
 #[derive(Clone, Debug, serde::Deserialize, Serialize, Type)]
 pub struct Typography {
-    pub preferred_font: Option<String>,
-    pub font_weight: Option<u16>,
-    pub font_style: Option<koharu_scene::FontStyle>,
-    pub size: Option<f32>,
+    pub font_families: Vec<String>,
+    pub font_weight: u16,
+    pub font_style: koharu_scene::FontStyle,
+    pub size: f32,
+    pub minimum_size: f32,
     pub auto_fit: bool,
-    pub color: Option<[u8; 4]>,
-    pub stroke_color: Option<[u8; 4]>,
-    pub stroke_width: Option<f32>,
-    pub alignment: Option<koharu_scene::TextAlignment>,
-    pub writing_mode: Option<koharu_scene::WritingMode>,
+    pub color: [u8; 4],
+    pub stroke: Option<koharu_scene::TextStroke>,
+    pub alignment: koharu_scene::TextAlignment,
+    pub writing_mode: koharu_scene::WritingMode,
+    pub line_height: f32,
+    pub letter_spacing: f32,
+    pub word_spacing: f32,
 }
 
 pub(crate) struct CurrentProject {
@@ -324,7 +306,7 @@ impl Project {
             .pages()
             .map(|page| {
                 let value = page.page()?;
-                let source_asset = Self::asset_id(snapshot, page.id(), "source")?;
+                let source_asset = Self::pixel_asset_id(snapshot, page.id())?;
                 let layer_count = snapshot
                     .descendants(page.id())?
                     .map(|entity| Self::is_content_layer(snapshot, entity.id()))
@@ -431,33 +413,16 @@ impl Project {
                 page,
                 At::End,
                 content,
-                &SceneTextLayout {
-                    origin: Origin::User,
-                    kind,
-                },
+                &SceneTextLayout::with_origin(Origin::User, kind),
             )?;
             layer = Some(added_layer);
             edit.set(added_layer, &geometry)?;
-            edit.set(
-                added_layer,
-                &SceneTypography {
-                    origin: Origin::User,
-                    preferred_font: None,
-                    font_weight: None,
-                    font_style: None,
-                    size: None,
-                    auto_fit: true,
-                    color: None,
-                    stroke_color: None,
-                    stroke_width: None,
-                    alignment: Some(match kind {
-                        TextLayoutKind::Point => koharu_scene::TextAlignment::Start,
-                        TextLayoutKind::Paragraph => koharu_scene::TextAlignment::Center,
-                    }),
-                    writing_mode: None,
-                    extensions: Default::default(),
-                },
-            )?;
+            let mut typography = SceneTypography::with_origin(Origin::User);
+            typography.alignment = match kind {
+                TextLayoutKind::Point => koharu_scene::TextAlignment::Start,
+                TextLayoutKind::Paragraph => koharu_scene::TextAlignment::Center,
+            };
+            edit.set(added_layer, &typography)?;
             Ok(())
         })?;
         Ok((
@@ -530,16 +495,19 @@ impl Project {
                     update.layer,
                     &SceneTypography {
                         origin: Origin::User,
-                        preferred_font: update.typography.preferred_font,
+                        font_families: update.typography.font_families,
                         font_weight: update.typography.font_weight,
                         font_style: update.typography.font_style,
-                        size: update.typography.size.filter(|size| *size > 0.0),
+                        size: update.typography.size,
+                        minimum_size: update.typography.minimum_size,
                         auto_fit: update.typography.auto_fit,
                         color: update.typography.color,
-                        stroke_color: update.typography.stroke_color,
-                        stroke_width: update.typography.stroke_width,
+                        stroke: update.typography.stroke,
                         alignment: update.typography.alignment,
                         writing_mode: update.typography.writing_mode,
+                        line_height: update.typography.line_height,
+                        letter_spacing: update.typography.letter_spacing,
+                        word_spacing: update.typography.word_spacing,
                         extensions: Default::default(),
                     },
                 )?;
@@ -750,21 +718,23 @@ impl Project {
         if width == 0 || height == 0 {
             bail!("page dimensions must be positive");
         }
-        let mut raster_layer = None;
+        let mut pixel_layer = None;
         let mut promote_layer = false;
         let mut image = if let Some(layer) = layer {
             if snapshot.parent(layer)? != Some(page) {
                 bail!("the raster target must be a layer on the active page");
             }
             let target = snapshot
-                .component::<SceneRasterLayer>(layer)?
-                .context("the raster target must be a layer on the active page")?;
+                .component::<ScenePixelLayer>(layer)?
+                .filter(|pixel| pixel.format == PixelFormat::Color)
+                .context("the raster target must be a color pixel layer on the active page")?;
             promote_layer = target.origin != Origin::User
                 || snapshot
                     .component::<EntityOrigin>(layer)?
                     .is_some_and(|origin| origin.origin != Origin::User);
-            raster_layer = Some(target);
-            match snapshot.asset(layer, &AssetRole::new("source")?)? {
+            let asset = target.asset.clone();
+            pixel_layer = Some(target);
+            match snapshot.asset(asset.owner, &asset.role)? {
                 Some(asset) => {
                     image::load_from_memory(&snapshot.read_blob(asset.blob)?)?.to_rgba8()
                 }
@@ -789,10 +759,10 @@ impl Project {
                 .children(page)?
                 .filter(|entity| {
                     snapshot
-                        .component::<SceneRasterLayer>(*entity)
+                        .component::<ScenePixelLayer>(*entity)
                         .ok()
                         .flatten()
-                        .is_some_and(|layer| layer.kind == RasterLayerKind::Paint)
+                        .is_some_and(|layer| layer.name.starts_with("Paint "))
                 })
                 .count()
                 + 1
@@ -802,11 +772,11 @@ impl Project {
             let layer = if let Some(layer) = committed_layer {
                 if promote_layer {
                     edit.promote_entity_to_user(layer)?;
-                    let raster = raster_layer
+                    let pixel = pixel_layer
                         .as_mut()
-                        .expect("an existing raster target has a layer component");
-                    raster.origin = Origin::User;
-                    edit.set(layer, raster)?;
+                        .expect("an existing raster target has a pixel component");
+                    pixel.origin = Origin::User;
+                    edit.set(layer, pixel)?;
                 }
                 layer
             } else {
@@ -817,10 +787,31 @@ impl Project {
                 let layer = edit.add_entity(page, at)?;
                 edit.set(
                     layer,
-                    &SceneRasterLayer {
-                        origin: Origin::User,
+                    &ScenePixelLayer::color(
+                        Origin::User,
                         name,
-                        kind: RasterLayerKind::Paint,
+                        AssetRef::new(layer, source.clone()),
+                    ),
+                )?;
+                edit.set(
+                    layer,
+                    &SceneGeometry {
+                        origin: Origin::User,
+                        points: vec![
+                            ScenePoint { x: 0.0, y: 0.0 },
+                            ScenePoint {
+                                x: f64::from(width),
+                                y: 0.0,
+                            },
+                            ScenePoint {
+                                x: f64::from(width),
+                                y: f64::from(height),
+                            },
+                            ScenePoint {
+                                x: 0.0,
+                                y: f64::from(height),
+                            },
+                        ],
                     },
                 )?;
                 committed_layer = Some(layer);
@@ -844,22 +835,6 @@ impl Project {
             self.commit(patch)?,
             committed_layer.expect("raster layer was selected or added while building the patch"),
         ))
-    }
-
-    pub(crate) fn set_asset(
-        &mut self,
-        entity: EntityId,
-        role: &str,
-        bytes: impl Into<Arc<[u8]>>,
-        media_type: &str,
-        metadata: AssetMetadata,
-    ) -> Result<Commit> {
-        let snapshot = self.snapshot();
-        let role = AssetRole::new(role)?;
-        let patch = snapshot.patch(|edit| {
-            edit.set_asset(entity, &role, AssetInput::new(bytes, media_type, metadata))
-        })?;
-        self.commit(patch)
     }
 
     pub(crate) fn undo(&mut self) -> Result<Commit> {
@@ -907,40 +882,11 @@ impl Project {
 
     pub(crate) fn page(snapshot: &Snapshot, page: EntityId) -> Result<Page> {
         let value = snapshot.page(page)?.page()?;
-        let source = Self::asset_id(snapshot, page, "source")?;
         let mut layers = Vec::new();
-        Self::collect_layer_views(snapshot, page, &mut layers)?;
-        if let Some(image) = source.clone() {
-            layers.insert(
-                0,
-                Layer::Artwork {
-                    id: page,
-                    parent: None,
-                    geometry: Geometry {
-                        points: vec![
-                            Point { x: 0.0, y: 0.0 },
-                            Point {
-                                x: value.width,
-                                y: 0.0,
-                            },
-                            Point {
-                                x: value.width,
-                                y: value.height,
-                            },
-                            Point {
-                                x: 0.0,
-                                y: value.height,
-                            },
-                        ],
-                    },
-                    visibility: LayerVisibility {
-                        visible: true,
-                        opacity: 1.0,
-                    },
-                    image,
-                },
-            );
+        if snapshot.component::<ScenePixelLayer>(page)?.is_some() {
+            layers.push(Self::layer_view(snapshot, page)?);
         }
+        Self::collect_layer_views(snapshot, page, &mut layers)?;
         let regions = snapshot
             .descendants(page)?
             .map(|entity| {
@@ -960,13 +906,6 @@ impl Project {
             size: PageSize {
                 width: value.width,
                 height: value.height,
-            },
-            assets: PageAssets {
-                source,
-                rendered: Self::asset_id(snapshot, page, "rendered")?,
-                text_mask: Self::asset_id(snapshot, page, "text-mask")?,
-                coo_mask: Self::asset_id(snapshot, page, "coo-mask")?,
-                bubble_mask: Self::asset_id(snapshot, page, "bubble-mask")?,
             },
             layers,
             regions,
@@ -1001,7 +940,7 @@ impl Project {
             let role = content.role()?.map(|role| role.role);
             let source_region = content.source_region()?.map(|region| region.id());
             let fit_region = text_layer.fit_target()?.map(|region| region.id());
-            let typography = text_layer.typography()?.map(Self::typography_view);
+            let typography = Self::typography_view(text_layer.typography()?);
             return Ok(Layer::Text {
                 id: layer,
                 parent,
@@ -1018,32 +957,30 @@ impl Project {
                 },
                 typography,
                 layout: layout.kind,
+                insets: layout.insets,
+                vertical_alignment: layout.vertical_alignment,
                 fit_region,
             });
         }
-        if let Some(raster) = snapshot.component::<SceneRasterLayer>(layer)? {
-            return Ok(Layer::Raster {
+        if let Some(pixel) = snapshot.component::<ScenePixelLayer>(layer)? {
+            let image = snapshot
+                .asset(pixel.asset.owner, &pixel.asset.role)?
+                .context("pixel layer asset is missing")?
+                .blob
+                .to_string();
+            return Ok(Layer::Pixel {
                 id: layer,
                 parent,
+                geometry: snapshot
+                    .component::<SceneGeometry>(layer)?
+                    .map(Self::geometry_view),
                 visibility,
-                image: Self::asset_id(snapshot, layer, "source")?,
-                name: raster.name,
-                kind: raster.kind,
+                image,
+                name: pixel.name,
+                format: pixel.format,
             });
         }
-        let geometry = snapshot
-            .component::<SceneGeometry>(layer)?
-            .map(Self::geometry_view)
-            .context("image layer has no geometry")?;
-        let image = Self::asset_id(snapshot, layer, "source")?
-            .context("image layer has no source asset")?;
-        Ok(Layer::Image {
-            id: layer,
-            parent,
-            geometry,
-            visibility,
-            image,
-        })
+        bail!("entity {layer} is not a visual layer")
     }
 
     fn analysis_region(
@@ -1079,16 +1016,19 @@ impl Project {
 
     fn typography_view(typography: SceneTypography) -> Typography {
         Typography {
-            preferred_font: typography.preferred_font,
+            font_families: typography.font_families,
             font_weight: typography.font_weight,
             font_style: typography.font_style,
             size: typography.size,
+            minimum_size: typography.minimum_size,
             auto_fit: typography.auto_fit,
             color: typography.color,
-            stroke_color: typography.stroke_color,
-            stroke_width: typography.stroke_width,
+            stroke: typography.stroke,
             alignment: typography.alignment,
             writing_mode: typography.writing_mode,
+            line_height: typography.line_height,
+            letter_spacing: typography.letter_spacing,
+            word_spacing: typography.word_spacing,
         }
     }
 
@@ -1105,20 +1045,19 @@ impl Project {
         }
     }
 
-    fn asset_id(snapshot: &Snapshot, entity: EntityId, role: &str) -> Result<Option<String>> {
+    fn pixel_asset_id(snapshot: &Snapshot, entity: EntityId) -> Result<Option<String>> {
+        let Some(pixel) = snapshot.component::<ScenePixelLayer>(entity)? else {
+            return Ok(None);
+        };
         Ok(snapshot
-            .asset(entity, &AssetRole::new(role)?)?
+            .asset(pixel.asset.owner, &pixel.asset.role)?
             .map(|asset| asset.blob.to_string()))
     }
 
     fn is_layer(snapshot: &Snapshot, entity: EntityId) -> Result<bool> {
         Ok(snapshot.component::<SceneGroup>(entity)?.is_some()
             || snapshot.component::<SceneTextLayout>(entity)?.is_some()
-            || snapshot.component::<SceneRasterLayer>(entity)?.is_some()
-            || (snapshot.component::<SceneGeometry>(entity)?.is_some()
-                && snapshot
-                    .asset(entity, &AssetRole::new("source")?)?
-                    .is_some()))
+            || snapshot.component::<ScenePixelLayer>(entity)?.is_some())
     }
 
     fn is_content_layer(snapshot: &Snapshot, entity: EntityId) -> Result<bool> {

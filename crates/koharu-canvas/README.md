@@ -1,190 +1,262 @@
 # koharu-canvas
 
-`koharu-canvas` is the Vello-backed editor viewport for a `koharu-scene`
-snapshot. It draws an editable page, text and raster-layer entities, masks,
-and live transform previews into an offscreen texture. React owns tools, hit
-testing, selection, pointer gestures, and DOM controls. The canvas receives
-semantic preview operations and owns their validated native rendering. The
-application owns the window, surface, scene session, undo history, and
-persistence.
+This document defines the target architecture for `koharu-canvas`. During the
+migration, implementation details may temporarily differ from this contract.
+Replaced APIs must be removed rather than preserved through compatibility
+layers.
 
-The canvas is a view and interaction engine, not another scene model. Its
-internal page representation is derived and disposable; committed data remains
-in `koharu-scene`.
+`koharu-canvas` is the native interactive viewport for an already composed
+page. It combines immutable renderer content with transient editor previews and
+presents the result through WGPU beneath Koharu's transparent WebView.
 
-## Scene contract
+The canvas is not a scene reader and not a second renderer.
 
-`Canvas::show_page` consumes an immutable `Snapshot` and the page's
-`EntityId`. `PageId` and `ElementId` are canvas aliases for that same unified
-identifier.
-
-An editable page uses these scene components:
-
-| Owner | Component or asset role | Meaning |
-| --- | --- | --- |
-| page entity | `Page` | label and page-space dimensions |
-| page entity | asset `source` | required original page image |
-| page entity | asset `rendered` | optional flattened preview |
-| page entity | asset `text-mask` | optional segmentation mask |
-| page descendants | `Geometry` | editable polygon and text bounds |
-| page descendants | `RasterLayer` plus asset `source` | ordered transparent Cleanup and Paint layers |
-| page descendants | `Visibility` | visibility and opacity |
-| page descendants | asset `source` | optional image or raster-layer pixels |
-| content entity | `TextContent`, `SourceText`, and optional `Translation` | semantic OCR and translation data; never geometry or presentation |
-| text-layer entity | `TextLayout`, optional `Typography`, and `Presents` relation | editable viewport text presentation |
-| analysis-region entity | `Region`, `Geometry`, and analysis components | source-artwork observations used by OCR and fitting |
-
-Descendants are drawn in subtree order. Four-point rectangular geometries keep
-their rotation in the editor; arbitrary polygons currently use their
-axis-aligned bounds for React hit testing and image placement. The original
-polygon is retained and transformed on commit.
-
-Page dimensions are converted to physical-size integers for raster resources.
-The current safety ceiling is 32,768 pixels per side and 268,435,456 pixels per
-page. A page without a `source` asset is rejected before replacing the active
-page.
-
-## Ownership and lifecycle
-
-The host creates one GPU device and queue and shares them with the canvas. A
-wake callback lets background image decoding request another event-loop turn.
-
-```rust,no_run
-use std::sync::Arc;
-use koharu_canvas::{Canvas, CanvasGpu};
-use vello::wgpu;
-
-# fn example(
-#     device: Arc<wgpu::Device>,
-#     queue: Arc<wgpu::Queue>,
-#     wake: Arc<dyn Fn() + Send + Sync>,
-#     snapshot: &koharu_scene::Snapshot,
-#     page: koharu_scene::EntityId,
-# ) -> koharu_canvas::Result<()> {
-let mut canvas = Canvas::new(CanvasGpu { device, queue }, wake)?;
-canvas.show_page(snapshot, page)?;
-# Ok(())
-# }
+```text
+koharu-scene Snapshot
+        |
+        |  application-owned async orchestration
+        v
+koharu-renderer Renderer
+        |
+        v
+    Composition ---------> koharu-canvas Canvas
+                                  |
+                                  v
+                         viewport-sized WGPU texture
 ```
 
-After every successful scene commit, pass its matching snapshot and change set
-to the canvas:
+## Ownership
+
+The canvas owns:
+
+- the currently installed immutable `Composition`;
+- camera and viewport state;
+- damage tracking;
+- transient transform and raster-stroke previews;
+- sparse editable mask tiles and their local generations;
+- viewport-sized Vello/WGPU targets;
+- asynchronous color-sample readback slots;
+- composition of retained page layers with native transient overlays.
+
+The canvas does not own:
+
+- a `Snapshot` or derived semantic page model;
+- hierarchy traversal or scene interpretation;
+- font discovery, shaping policy, or text-page rendering;
+- blob reads, image decoding, or decoded-resource caches;
+- renderer resource workers or retained-node construction;
+- application persistence, history, or scene commits;
+- PNG, PSD, or export policy.
+
+`koharu-renderer` owns all persistent visual preparation. The application owns
+the long-lived `Renderer`, awaits composition away from the desktop-state lock,
+and installs completed results into the canvas.
+
+## Composition lifecycle
+
+The canvas accepts only a complete renderer `Composition`:
 
 ```rust,ignore
-let committed = session.commit(patch)?;
-canvas.sync(&committed.snapshot, &committed.changes)?;
-```
+let generation = page_generation;
+let composition = renderer.compose(&snapshot, page).await?;
 
-Revisions must be contiguous. A gap returns `Error::RevisionConflict` so the
-host can recover explicitly with `show_page`. Removing the active page clears
-the viewport. Unrelated changes only advance the retained snapshot; changes
-that may affect the active subtree rebuild its derived page and render caches.
-
-`clear_page` releases the active page state. It does not mutate the session.
-
-## Rendering
-
-The render path has two damage-tracked stages:
-
-1. Resize or recreate the Vello GPU target.
-2. Compose page content only when scene data, decoded resources, display mode,
-   camera, text policy, masks, or an interactive preview changes.
-
-Selection outlines, text indicators, guides, cursors, and resize/rotation
-handles are transparent DOM overlays. They no longer invalidate or traverse
-the Vello scene.
-
-Image bytes are read from the snapshot and decoded off the event-loop thread.
-Decoded images use an LRU budget controlled by `CanvasOptions::max_decoded_bytes`.
-Masks stay as single-channel 256×256 copy-on-write tiles, so a stroke clones
-only the tiles it touches.
-
-Text uses the same `Compositor`, `SceneRenderer`, and `RenderTheme` pipeline as
-`koharu-renderer`. The canvas compiles a transparent
-text-only `Composition`, renders it to a retained `Frame`, and reuses its
-per-entity Vello scenes for live transforms. This avoids duplicated shaping
-policy and GPU readback.
-The interactive canvas renders text-layer entities whose related content has a
-`Translation` component, and disables source-text fallback: OCR text remains
-editable scene data but is never drawn as an editor overlay when a translation
-is missing. `set_text_options` and
-`invalidate_fonts` explicitly invalidate the retained text frame.
-
-`Canvas::render` returns a borrowed `CanvasFrame` containing an offscreen
-`TextureView`. The host presents that texture with Vello's `TextureBlitter`.
-A zero-size viewport is valid, and `needs_redraw` is true only while a bounded
-transition is active.
-
-## Interaction and commits
-
-React owns rotated hit testing, selection policy, handles, and move/resize/
-rotate geometry. The canvas validates and renders absolute preview frames;
-mask rasterization and color sampling remain native. Persistent mutation is
-owned by the application. The canvas has no tool, pointer-button, or pointer-
-phase state.
-
-Only text blocks and child image entities participate in React editor hit testing.
-Detection-only panel, bubble, and other analysis regions remain scene data for
-pipeline and rendering decisions but cannot be selected or transformed.
-
-Element transforms follow this flow:
-
-```rust,ignore
-canvas.begin_transform(&selection)?;
-canvas.update_transform(
-    frame_number,
-    &[koharu_canvas::ElementFrame { element, frame }],
-)?;
-
-if let Some(commit) = canvas.finish_transform()? {
-    let patch = session.snapshot().patch(|edit| {
-        for element in &commit.elements {
-            edit.set(element.element, &element.geometry)?;
-        }
-        Ok(())
-    })?;
-    let committed = session.commit(patch)?;
-    canvas.sync(&committed.snapshot, &committed.changes)?;
+if generation == current_page_generation {
+    desktop.canvas.set_composition(composition)?;
 }
 ```
 
-Each monotonically numbered update must contain the complete selected element
-set. Stale frames are ignored, invalid or partial frames are rejected, and an
-unchanged frame does not trigger Vello work. A `TransformCommit` returns
-complete transformed `Geometry` values, preserving component origin and
-arbitrary polygon points. The host can include additional domain updates in
-the same atomic patch.
+After a scene commit, the application requests an incremental update and keeps
+the old composition visible while work is in progress:
 
-Mask strokes return a `MaskCommit`. `encode_png` produces a grayscale PNG that
-the host stores using `AssetRole::new(commit.plane.slot())`. Once the scene
-commit supplies the new `BlobId`, call `acknowledge_mask_commit` with the mask
-generation. Generation checks prevent an older asynchronous save from
-overwriting newer local mask edits. Incoming mask replacement conflicts with
-uncommitted local edits instead of silently discarding them.
+```rust,ignore
+let next = renderer
+    .update(&current_composition, &snapshot, &change)
+    .await?;
 
-## Modules
-
-- `canvas`: public facade, revision synchronization, damage orchestration
-- `model`: immutable active-page materialization from a scene snapshot
-- `geometry`: camera, coordinate, and frame types
-- `transform`: validated absolute previews and geometry commit logic
-- `mask`: copy-on-write tiled grayscale masks and stroke state
-- `resources`: asynchronous decode and byte-budgeted image cache
-- `elements`: renderer-backed text preparation and ordered Vello composition
-- `gpu`: the offscreen Vello target
-- `damage`: render-stage invalidation
-
-Most behavioral tests are GPU-independent. The real-GPU visual test is ignored
-by default and can be run on a machine with a provisioned adapter:
-
-```text
-cargo test -p koharu-canvas -- --ignored
+if next.revision() == current_revision {
+    desktop.canvas.set_composition(next)?;
+}
 ```
 
-The normal package validation is:
+The exact generation check belongs to the application because it owns page
+navigation and the scene session. Installing a composition is synchronous and
+cheap. Its immutable layers and retained nodes are reference-counted.
+
+There is no `CanvasPage`, canvas resource hydration state, or duplicate element
+materialization. Layer order, geometry, presentation, group ancestry, and O(1)
+entity lookup come directly from `Composition`.
+
+## Scene and pixel layers
+
+The canvas has no hard-coded knowledge of page-source, cleanup, paint,
+`rendered`, `text-mask`, or `coo-mask` roles. It draws the ordered color and mask
+layers already present in the composition.
+
+An explicit scene `PixelLayer` may describe either color content or a mask with
+a channel and tint. This is sufficient for page artwork, imported images,
+paint, cleanup, guides backed by pixels, and visible masks. Pipeline artifacts
+that are not referenced by a visual layer are never loaded or displayed.
+
+Mask editing is an interactive canvas concern, but mask persistence is not.
+During a stroke, the canvas overlays sparse local mask tiles above the retained
+composition. Finishing a stroke returns a commit payload. The application
+stores the encoded blob and commits the corresponding explicit scene pixel
+layer or asset update. A later renderer composition replaces the transient
+overlay with retained content.
+
+## Interactive path
+
+Pointer and gesture updates must never await renderer work. The canvas applies
+transient state immediately:
 
 ```text
-cargo test -p koharu-canvas --lib
-cargo check -p koharu-canvas --all-targets
-cargo clippy -p koharu-canvas --all-targets -- -D warnings
+pointer update
+      |
+      v
+validate edit generation
+      |
+      v
+update transform / sparse tiles / preview scene
+      |
+      v
+mark exact damage
+      |
+      v
+render next viewport frame
 ```
+
+One `ActiveEdit` state machine represents the mutually exclusive native edit:
+
+- transform preview;
+- raster stroke preview;
+- mask stroke preview.
+
+Beginning a second edit while one is active is an error. Update sequence
+numbers reject stale messages. Finishing returns a complete commit payload;
+cancelling drops transient state without changing the scene.
+
+The application and Web UI own tool choice, pointer interpretation, selection
+policy, DOM handles, and semantic commits. The canvas owns native validation
+and preview state for operations that affect its pixels.
+
+## Sparse masks
+
+Editable masks use fixed-size single-channel tiles allocated only when a stroke
+touches them. Each tile tracks its nonzero count.
+
+- Painting allocates only intersecting tiles.
+- Erasing the final nonzero pixel releases the tile.
+- A no-op stroke produces no generation or damage change.
+- Dirty bounds contain only pixels whose values actually changed.
+- Preview traversal visits occupied tiles rather than the full page grid.
+- Tint conversion is cached and never performed with a per-frame full-page
+  host loop.
+
+Mask snapshots and commit encoding preserve sparsity until a serialized image
+is explicitly required.
+
+## Rendering and damage
+
+The canvas builds a Vello scene from:
+
+1. retained layers in the installed composition;
+2. transient transform or stroke previews;
+3. native mask overlays that have not yet been persisted.
+
+DOM controls, selection handles, cursors, labels, and tool chrome remain in the
+transparent WebView and do not invalidate the native canvas.
+
+Damage is explicit. Recomposition occurs only when one of these changes:
+
+- the installed composition;
+- viewport size or camera transform;
+- active preview content;
+- local mask tiles;
+- another native visual state.
+
+Unchanged generations skip scene rebuilding, surface acquisition, and surface
+submission.
+
+## Viewport and GPU ownership
+
+The native render target is exactly the physical viewport size, not the page
+size and not the desktop-window size. The camera maps page coordinates into
+local viewport coordinates. Content outside the viewport is clipped before
+presentation.
+
+The application owns the window surface and presents the canvas texture below
+the transparent WebView. `koharu-canvas` owns only its offscreen target and the
+Vello state needed to populate it.
+
+Resize invalidates viewport-sized GPU resources and cancels incompatible
+readbacks. A zero-sized viewport is valid and allocates no render target.
+
+## Color sampling
+
+Color sampling is asynchronous because WGPU mapping completes later, but the
+canvas API must not block or hold the desktop lock while waiting.
+
+The GPU layer owns a small fixed ring of reusable 256-byte readback buffers and
+a bounded request queue. Request submission is synchronous; completion is
+delivered through a callback or oneshot channel that an application command may
+await.
+
+The frame loop polls only while samples are outstanding and never calls a
+blocking device wait. Resize, page clear, and drop cancel every user-visible
+request deterministically.
+
+Sampling observes the last successfully rendered viewport image.
+
+## Async boundary
+
+Canvas hot-path methods remain synchronous. Async orchestration stops before
+the composition is installed:
+
+- `Renderer::compose`, `Renderer::update`, and export rasterization are async.
+- `Canvas::set_composition`, edit updates, camera changes, damage tracking, and
+  scene construction are synchronous.
+- GPU sample completion is asynchronous without making pointer or frame methods
+  async.
+
+An async method that performs no waiting is not added merely for API
+uniformity. This keeps borrows short, avoids async locks around desktop state,
+and prevents task scheduling overhead in pointer and frame loops.
+
+## Performance invariants
+
+- Never traverse a `Snapshot` in this crate.
+- Never read or decode an asset in this crate.
+- Never shape text or construct persistent renderer nodes in this crate.
+- Clone compositions and layers through shared immutable storage.
+- Keep transform placement outside retained local layer nodes.
+- Append retained vector content directly; do not rasterize the page for
+  interactive display.
+- Allocate GPU targets from viewport dimensions only.
+- Track exact mask and render damage.
+- Bound sample queues and reuse readback allocations.
+- Do no native work for DOM-only changes.
+
+## Extension rules
+
+- New persistent visual behavior belongs in scene components and the renderer.
+- New transient native editing behavior may belong here if it owns actual
+  viewport state or pixels.
+- Do not introduce another page, layer, resource, or typography model.
+- Do not add asset-role-specific display modes.
+- Do not add canvas-owned decode workers or renderer caches.
+- Do not hold application or desktop locks across renderer awaits.
+- React/WebView and native WGPU responsibilities must remain visually composable
+  in the final desktop window.
+
+## Validation
+
+During development, run the smallest focused debug check or test covering the
+changed path. Typical crate-level checks are:
+
+```text
+cargo check -p koharu-canvas
+cargo test -p koharu-canvas <focused-test-name>
+```
+
+Real-GPU visual checks remain explicit because they require a usable adapter and
+must validate the final native-under-WebView composition.

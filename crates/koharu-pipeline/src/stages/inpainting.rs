@@ -17,8 +17,8 @@ use koharu_ml::{
     rorem_mixed::{DEFAULT_NEGATIVE_PROMPT, DEFAULT_PROMPT, RoremMixed, RoremMixedOptions},
 };
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, BubbleRegion, EntityOrigin, Geometry, Origin,
-    RasterLayer, RasterLayerKind, Region, RegionSpec,
+    AssetInput, AssetMetadata, AssetRef, AssetRole, At, BubbleRegion, EntityOrigin, Geometry,
+    Origin, PixelFormat, PixelLayer, Region, RegionSpec,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -278,7 +278,7 @@ impl Model {
         };
         edit.observe_assets(page)?;
         if let Some(entity) = cleanup_entity {
-            edit.observe::<RasterLayer>(entity)?;
+            edit.observe::<PixelLayer>(entity)?;
             edit.observe_assets(entity)?;
         }
         let image = image.to_rgba8();
@@ -307,8 +307,8 @@ impl Model {
             if manual {
                 let mut layer = input
                     .scene
-                    .component::<RasterLayer>(entity)?
-                    .context("cleanup entity has no raster layer component")?;
+                    .component::<PixelLayer>(entity)?
+                    .context("cleanup entity has no pixel layer component")?;
                 let generated = layer.origin != Origin::User
                     || input
                         .scene
@@ -323,13 +323,14 @@ impl Model {
             entity
         } else {
             let entity = edit.add_entity(page, At::Start)?;
+            let source = AssetRole::new("source")?;
             edit.set(
                 entity,
-                &RasterLayer {
-                    origin: Origin::User,
-                    name: "Cleanup".to_owned(),
-                    kind: RasterLayerKind::Cleanup,
-                },
+                &PixelLayer::color(Origin::User, "Cleanup", AssetRef::new(entity, source)),
+            )?;
+            edit.set(
+                entity,
+                &Geometry::rectangle(0.0, 0.0, f64::from(width), f64::from(height)),
             )?;
             entity
         };
@@ -418,10 +419,15 @@ fn prepare(input: &StageInput) -> Result<InpaintInput> {
     let cleanup_entity = input.scene.children(page)?.find(|entity| {
         input
             .scene
-            .component::<RasterLayer>(*entity)
+            .component::<PixelLayer>(*entity)
             .ok()
             .flatten()
-            .is_some_and(|layer| layer.kind == RasterLayerKind::Cleanup)
+            .is_some_and(|layer| {
+                layer.name == "Cleanup"
+                    && layer.format == PixelFormat::Color
+                    && layer.asset.owner == *entity
+                    && layer.asset.role.as_str() == "source"
+            })
     });
     let cleanup = cleanup_entity
         .map(|entity| input.images.get(&input.scene, entity, "source"))
