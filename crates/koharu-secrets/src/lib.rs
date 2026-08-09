@@ -70,6 +70,7 @@ static CREDENTIAL_STORE: LazyLock<Result<(), String>> = LazyLock::new(|| {
 });
 
 /// Load a Koharu secret by key, returning `None` when no credential exists.
+#[tracing::instrument(skip_all)]
 pub fn get(key: &str) -> anyhow::Result<Option<SecretString>> {
     let entry = entry(key)?;
     match entry.get_password() {
@@ -80,12 +81,14 @@ pub fn get(key: &str) -> anyhow::Result<Option<SecretString>> {
 }
 
 /// Store a Koharu secret by key.
+#[tracing::instrument(skip_all)]
 pub fn set(key: &str, secret: &SecretString) -> anyhow::Result<()> {
     entry(key)?.set_password(secret.expose_secret())?;
     Ok(())
 }
 
 /// Delete a Koharu secret by key. Missing credentials are treated as success.
+#[tracing::instrument(skip_all)]
 pub fn delete(key: &str) -> anyhow::Result<()> {
     match entry(key)?.delete_credential() {
         Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),

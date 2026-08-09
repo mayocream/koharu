@@ -26,6 +26,7 @@ impl Session {
         Self::create_with(path, koharu_storage::Options::default())
     }
 
+    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn create_with(path: impl AsRef<Path>, options: koharu_storage::Options) -> Result<Self> {
         let document = koharu_storage::DocumentId::new();
         let state = State::empty(document);
@@ -38,6 +39,7 @@ impl Session {
         Self::open_with(path, koharu_storage::Options::default())
     }
 
+    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn open_with(path: impl AsRef<Path>, options: koharu_storage::Options) -> Result<Self> {
         let storage = koharu_storage::Session::open_with(path, options)?;
         Self::recover(storage)
@@ -65,6 +67,14 @@ impl Session {
         self.current.clone()
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            base_revision = %patch.base_revision,
+            operations = patch.operations.len(),
+            attachments = patch.attachments.len(),
+        )
+    )]
     pub fn commit(&mut self, patch: Patch) -> Result<Commit> {
         if patch.project != self.storage.document_id() {
             return Err(Error::invalid("patch belongs to another project"));
@@ -125,6 +135,7 @@ impl Session {
         })
     }
 
+    #[tracing::instrument(skip_all, fields(revision = %self.current.revision()))]
     pub fn refresh(&mut self) -> Result<Change> {
         let refresh = self.storage.changes()?;
         if refresh.from == refresh.to {
@@ -208,6 +219,7 @@ impl Session {
             .map_err(Into::into)
     }
 
+    #[tracing::instrument(skip_all, fields(revision = %self.current.revision()))]
     pub fn flush(&self) -> Result<()> {
         self.storage.flush().map_err(Into::into)
     }

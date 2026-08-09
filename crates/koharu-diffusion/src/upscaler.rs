@@ -51,6 +51,7 @@ impl fmt::Debug for Upscaler {
 }
 
 impl Upscaler {
+    #[tracing::instrument(skip_all)]
     pub fn new(params: &UpscalerParams) -> Result<Self> {
         if params.n_threads <= 0 {
             return Err(Error::InvalidParameter {
@@ -91,6 +92,14 @@ impl Upscaler {
     }
 
     /// Upscales an image and returns the native output as owned Rust images.
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            width = image.width(),
+            height = image.height(),
+            requested_factor,
+        )
+    )]
     pub fn upscale(&mut self, image: &RgbImage, requested_factor: u32) -> Result<Vec<RgbImage>> {
         if requested_factor == 0 {
             return Err(Error::InvalidParameter {

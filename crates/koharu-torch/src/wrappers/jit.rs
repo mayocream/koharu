@@ -446,6 +446,7 @@ impl Drop for CModule {
 
 impl CModule {
     /// Loads a PyTorch saved JIT model from a file.
+    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn load<T: AsRef<std::path::Path>>(path: T) -> Result<CModule, TchError> {
         let path = path_to_cstring(path)?;
         let c_module = unsafe_torch_err!(atm_load(path.as_ptr()));
@@ -456,6 +457,10 @@ impl CModule {
     ///
     /// This function loads the model directly on the specified device,
     /// which means it also allows loading a GPU model on the CPU without having a CUDA enabled GPU.
+    #[tracing::instrument(
+        skip_all,
+        fields(path = %path.as_ref().display(), device = ?device)
+    )]
     pub fn load_on_device<T: AsRef<std::path::Path>>(
         path: T,
         device: Device,
@@ -495,6 +500,7 @@ impl CModule {
 
     /// Performs the forward pass for a model on some specified tensor inputs. This is equivalent
     /// to calling method_ts with the 'forward' method name, and returns a single tensor.
+    #[tracing::instrument(skip_all, fields(inputs = ts.len()))]
     pub fn forward_ts<T: Borrow<Tensor>>(&self, ts: &[T]) -> Result<Tensor, TchError> {
         let ts: Vec<_> = ts.iter().map(|x| x.borrow().c_tensor).collect();
         let c_tensor =
@@ -504,6 +510,7 @@ impl CModule {
 
     /// Performs the forward pass for a model on some specified ivalue inputs. This is equivalent
     /// to calling method_is with the 'forward' method name, and returns an arbitrary ivalue.
+    #[tracing::instrument(skip_all, fields(inputs = ts.len()))]
     pub fn forward_is<T: Borrow<IValue>>(&self, ts: &[T]) -> Result<IValue, TchError> {
         let ts = ts
             .iter()

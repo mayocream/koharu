@@ -20,6 +20,7 @@ pub struct AotInpainting {
 }
 
 impl AotInpainting {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = WEIGHTS
@@ -40,6 +41,7 @@ impl AotInpainting {
         self.inference_with_max_side(image, mask, 2048)
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference_with_max_side(
         &self,
         image: &DynamicImage,

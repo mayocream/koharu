@@ -36,6 +36,7 @@ pub struct KoharuLayoutRFDetrSeg2XL {
 }
 
 impl KoharuLayoutRFDetrSeg2XL {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = CONFIG
@@ -63,6 +64,7 @@ impl KoharuLayoutRFDetrSeg2XL {
         self.inference_with_thresholds(image, self.processor.recommended_thresholds())
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference_with_thresholds(
         &self,
         image: &DynamicImage,

@@ -40,6 +40,7 @@ pub struct RoremMixed {
 }
 
 impl RoremMixed {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (diffusion_model, version_marker, vae, clip_l, clip_g) = tokio::try_join!(
             DIFFUSION_MODEL.resolve(),
@@ -62,6 +63,7 @@ impl RoremMixed {
         Ok(Self { model })
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference(
         &self,
         image: &DynamicImage,

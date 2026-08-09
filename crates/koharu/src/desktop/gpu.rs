@@ -430,6 +430,16 @@ impl Presenter {
         self.surface.configure(&self.device, &self.config);
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            surface_width = surface_size.width,
+            surface_height = surface_size.height,
+            viewport_width = self.viewport.width,
+            viewport_height = self.viewport.height,
+            generation = self.presented_generation,
+        )
+    )]
     pub fn present(&mut self, surface_size: PhysicalSize) -> Result<bool> {
         self.resize_surface(surface_size);
         if self.surface_size.is_empty() {
@@ -439,7 +449,6 @@ impl Presenter {
         if !self.presentation_dirty && frame.generation == self.presented_generation {
             return Ok(frame.needs_redraw);
         }
-
         let (surface_texture, suboptimal) = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(texture) => (texture, false),
             wgpu::CurrentSurfaceTexture::Suboptimal(texture) => (texture, true),

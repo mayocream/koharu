@@ -28,6 +28,7 @@ impl Llm {
     }
 
     /// Loads a GGUF model with model and optional MTMD projector settings.
+    #[tracing::instrument(skip_all)]
     pub async fn load_with_options(
         device: crate::Device,
         model_path: impl Into<PathBuf>,
@@ -77,6 +78,7 @@ impl Llm {
     }
 
     /// Generates text and invokes `on_token` after each decoded token.
+    #[tracing::instrument(skip_all)]
     pub fn inference_with_callback<F>(
         &self,
         input: &Input<'_>,

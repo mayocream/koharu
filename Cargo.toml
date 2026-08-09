@@ -149,7 +149,6 @@ tauri = { version = "=2.11.5", features = [
     "dynamic-acl",
     "macos-private-api",
     "specta",
-    "tracing",
     "wry",
     "x11",
 ] }

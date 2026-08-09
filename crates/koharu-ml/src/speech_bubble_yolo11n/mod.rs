@@ -30,6 +30,7 @@ pub struct Yolo11nSpeechBubbleSegmenter {
 }
 
 impl Yolo11nSpeechBubbleSegmenter {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = CONFIG
@@ -63,6 +64,7 @@ impl Yolo11nSpeechBubbleSegmenter {
         )
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference_with_thresholds(
         &self,
         image: &DynamicImage,

@@ -583,6 +583,16 @@ impl Canvas {
         }
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            width = self.view.size.width,
+            height = self.view.size.height,
+            target_pending = self.damage.target_pending(),
+            content_pending = self.damage.content_pending(),
+            generation = self.generation,
+        )
+    )]
     pub fn render(&mut self) -> Result<CanvasFrame<'_>> {
         self.gpu.poll_samples();
         if self.damage.target_pending() {

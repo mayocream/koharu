@@ -76,6 +76,7 @@ impl Translator {
             .unwrap_or(false)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn load_model(&self, selection: &ModelSelection) -> anyhow::Result<()> {
         if selection.provider == Provider::Local {
             self.local(selection).await?;
@@ -83,6 +84,10 @@ impl Translator {
         Ok(())
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(segments = request.segments.len(), provider = ?selection.provider)
+    )]
     pub async fn translate(
         &self,
         selection: &ModelSelection,

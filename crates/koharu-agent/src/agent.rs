@@ -146,6 +146,10 @@ where
         self.history.lock().await.clear();
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(run = %run, prompt_bytes = prompt.len())
+    )]
     pub async fn run<F>(
         &self,
         run: RunId,

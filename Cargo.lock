@@ -4074,6 +4074,7 @@ dependencies = [
  "serde_json",
  "specta",
  "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -4088,6 +4089,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+ "tracing",
 ]
 
 [[package]]
@@ -4098,6 +4100,7 @@ dependencies = [
  "koharu-renderer",
  "koharu-scene",
  "thiserror 2.0.18",
+ "tracing",
  "vello",
 ]
 
@@ -4112,6 +4115,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml 1.1.2+spec-1.1.0",
+ "tracing",
 ]
 
 [[package]]
@@ -4228,6 +4232,7 @@ dependencies = [
  "koharu-scene",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -4305,6 +4310,7 @@ dependencies = [
  "specta",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
  "uuid",
 ]
 
@@ -4318,6 +4324,7 @@ dependencies = [
  "linux-keyutils-keyring-store",
  "secrecy",
  "serde",
+ "tracing",
 ]
 
 [[package]]
@@ -4335,6 +4342,7 @@ dependencies = [
  "specta",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
  "uuid",
 ]
 
@@ -4352,6 +4360,7 @@ dependencies = [
  "rand 0.8.6",
  "safetensors",
  "thiserror 1.0.69",
+ "tracing",
  "zip 0.6.6",
 ]
 
@@ -8049,7 +8058,6 @@ dependencies = [
  "tauri-utils",
  "thiserror 2.0.18",
  "tokio",
- "tracing",
  "tray-icon",
  "url",
  "webkit2gtk",
@@ -8254,7 +8262,6 @@ dependencies = [
  "tao",
  "tauri-runtime",
  "tauri-utils",
- "tracing",
  "url",
  "webkit2gtk",
  "webview2-com",
@@ -10329,7 +10336,6 @@ dependencies = [
  "soup3",
  "tao-macros",
  "thiserror 2.0.18",
- "tracing",
  "url",
  "webkit2gtk",
  "webkit2gtk-sys",

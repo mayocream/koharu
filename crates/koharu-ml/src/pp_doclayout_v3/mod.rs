@@ -29,6 +29,7 @@ pub struct PPDocLayoutV3 {
 }
 
 impl PPDocLayoutV3 {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
 
@@ -68,6 +69,7 @@ impl PPDocLayoutV3 {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference(
         &self,
         image: &DynamicImage,

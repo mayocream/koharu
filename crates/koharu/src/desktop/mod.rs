@@ -123,6 +123,10 @@ impl Desktop {
         &self.renderer
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(page = ?page, revision = %snapshot.revision())
+    )]
     pub(crate) async fn show_page(
         &self,
         snapshot: &Snapshot,
@@ -157,6 +161,14 @@ impl Desktop {
         Ok(())
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            page = ?page,
+            revision = %snapshot.revision(),
+            from = %commit.changes.from,
+        )
+    )]
     pub(crate) async fn synchronize(
         &self,
         snapshot: &Snapshot,

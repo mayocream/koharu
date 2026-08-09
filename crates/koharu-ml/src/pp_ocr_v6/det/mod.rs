@@ -27,6 +27,7 @@ pub struct PPOCRV6MediumDet {
 }
 
 impl PPOCRV6MediumDet {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = CONFIG
@@ -58,6 +59,7 @@ impl PPOCRV6MediumDet {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> Result<TextDetections> {
         koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;

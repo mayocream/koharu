@@ -20,6 +20,7 @@ pub struct MangaTextMaskGenerator {
 }
 
 impl MangaTextMaskGenerator {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = WEIGHTS
@@ -63,6 +64,7 @@ impl MangaTextMaskGenerator {
         self.call(image, false, false, Some(max_side))
     }
 
+    #[tracing::instrument(skip_all)]
     fn call(
         &self,
         image: &DynamicImage,

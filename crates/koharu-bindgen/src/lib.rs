@@ -47,6 +47,7 @@ impl Generator {
         self
     }
 
+    #[tracing::instrument(skip_all, fields(libraries = self.library_names.len()))]
     pub fn generate(self) -> Result<String> {
         let bindings = self
             .builder

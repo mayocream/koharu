@@ -17,6 +17,7 @@ keyring = { workspace = true }
 keyring-core = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
+tracing = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 linux-keyutils-keyring-store = { workspace = true }

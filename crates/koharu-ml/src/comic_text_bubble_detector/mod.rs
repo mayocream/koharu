@@ -37,6 +37,7 @@ pub struct RTDetrV2Detection {
 }
 
 impl RTDetrV2Detection {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = CONFIG
@@ -81,6 +82,7 @@ impl RTDetrV2Detection {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference(
         &self,
         image: &DynamicImage,

@@ -22,6 +22,7 @@ koharu-torch-sys = { workspace = true }
 zip = "0.6"
 half = "2"
 safetensors = "0.3.0"
+tracing = { workspace = true }
 image = { version = "0.24.5", optional = true }
 
 [dev-dependencies]

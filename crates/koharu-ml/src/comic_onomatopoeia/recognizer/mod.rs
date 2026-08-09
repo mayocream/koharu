@@ -25,6 +25,7 @@ pub struct ComicOnomatopoeiaRecognizer {
 }
 
 impl ComicOnomatopoeiaRecognizer {
+    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let weights_path = WEIGHTS
             .resolve()
@@ -48,6 +49,7 @@ impl ComicOnomatopoeiaRecognizer {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> Result<Recognition> {
         koharu_torch::no_grad(|| {
             let pixel_values = self.processor.preprocess(image, self.device)?;
