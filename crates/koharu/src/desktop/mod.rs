@@ -1,14 +1,13 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context as _, Result};
 use koharu_canvas::{Camera, Canvas, ViewState};
-use koharu_renderer::Renderer;
 use koharu_scene::{Commit, EntityId, Snapshot};
 use parking_lot::{Mutex, MutexGuard};
 use tauri::{AppHandle, Manager as _, WebviewWindow};
@@ -18,7 +17,7 @@ mod gpu;
 
 pub(crate) use gpu::PhysicalRect;
 
-use self::gpu::Presenter;
+use self::gpu::Renderer;
 use crate::commands::canvas::{CanvasState, Frame, TransformFrame};
 
 const MAIN_WINDOW: &str = "main";
@@ -26,21 +25,17 @@ const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 pub(crate) struct Desktop {
     app: AppHandle,
-    renderer: Renderer,
-    presenter: OnceCell<Mutex<Presenter>>,
-    composition_generation: AtomicU64,
+    renderer: OnceCell<Mutex<Renderer>>,
     frame_requested: AtomicBool,
 }
 
 impl Desktop {
-    pub(crate) fn new(app: AppHandle) -> Result<Self> {
-        Ok(Self {
+    pub(crate) fn new(app: AppHandle) -> Self {
+        Self {
             app,
-            renderer: Renderer::new().context("failed to initialize the page renderer")?,
-            presenter: OnceCell::new(),
-            composition_generation: AtomicU64::new(0),
+            renderer: OnceCell::new(),
             frame_requested: AtomicBool::new(false),
-        })
+        }
     }
 
     fn request_frame(&self) -> Result<()> {
@@ -65,12 +60,13 @@ impl Desktop {
                         .get_webview_window(MAIN_WINDOW)
                         .context("the main Tauri webview window is unavailable")?;
                     let size = window.inner_size()?;
-                    let Some(presenter) = desktop.presenter.get() else {
+                    let Some(renderer) = desktop.renderer.get() else {
                         return Ok(false);
                     };
-                    presenter
-                        .lock()
-                        .present(koharu_canvas::PhysicalSize::new(size.width, size.height))
+                    renderer.lock().present(
+                        Instant::now(),
+                        koharu_canvas::PhysicalSize::new(size.width, size.height),
+                    )
                 })();
                 match result {
                     Ok(true) => {
@@ -111,103 +107,15 @@ pub(crate) async fn attach(window: WebviewWindow) -> Result<()> {
     });
     let desktop = app.state::<Desktop>();
     desktop
-        .presenter
-        .get_or_try_init(|| async { Presenter::new(window, wake).await.map(Mutex::new) })
+        .renderer
+        .get_or_try_init(|| async { Renderer::new(window, wake).await.map(Mutex::new) })
         .await?;
     Ok(())
 }
 
-impl Desktop {
-    #[must_use]
-    pub(crate) const fn renderer(&self) -> &Renderer {
-        &self.renderer
-    }
-
-    pub(crate) async fn show_page(
-        &self,
-        snapshot: &Snapshot,
-        page: Option<EntityId>,
-    ) -> Result<()> {
-        let generation = self
-            .composition_generation
-            .fetch_add(1, Ordering::AcqRel)
-            .wrapping_add(1);
-        let composition = match page {
-            Some(page) => Some(self.renderer.compose(snapshot, page).await?),
-            None => None,
-        };
-        if self.composition_generation.load(Ordering::Acquire) != generation {
-            return Ok(());
-        }
-
-        let mut desktop = self.lock();
-        match composition {
-            Some(composition) => {
-                let (width, height) = composition.size();
-                desktop.canvas().set_composition(composition)?;
-                let mut view = desktop.view().clone();
-                view.camera = koharu_canvas::Camera::contain(
-                    desktop.viewport().size(),
-                    koharu_canvas::PhysicalSize::new(width, height),
-                );
-                desktop.set_view(view);
-            }
-            None => desktop.canvas().clear(),
-        }
-        Ok(())
-    }
-
-    pub(crate) async fn synchronize(
-        &self,
-        snapshot: &Snapshot,
-        page: Option<EntityId>,
-        commit: &Commit,
-    ) -> Result<bool> {
-        let (current_page, previous) = {
-            let desktop = self.lock();
-            (
-                desktop.canvas_ref().page_id(),
-                desktop.canvas_ref().composition().cloned(),
-            )
-        };
-        if current_page != page {
-            self.show_page(snapshot, page).await?;
-            return Ok(true);
-        }
-        let Some(page) = page else {
-            return Ok(false);
-        };
-        let Some(previous) = previous else {
-            self.show_page(snapshot, Some(page)).await?;
-            return Ok(true);
-        };
-        if previous.revision() == snapshot.revision() {
-            return Ok(false);
-        }
-
-        let generation = self
-            .composition_generation
-            .fetch_add(1, Ordering::AcqRel)
-            .wrapping_add(1);
-        let next = if commit.revision == snapshot.revision()
-            && commit.changes.from == previous.revision()
-        {
-            self.renderer
-                .update(&previous, snapshot, &commit.changes)
-                .await?
-        } else {
-            self.renderer.compose(snapshot, page).await?
-        };
-        if self.composition_generation.load(Ordering::Acquire) == generation {
-            self.lock().canvas().set_composition(next)?;
-        }
-        Ok(false)
-    }
-}
-
 pub(crate) struct DesktopGuard<'a> {
     desktop: &'a Desktop,
-    presenter: MutexGuard<'a, Presenter>,
+    renderer: MutexGuard<'a, Renderer>,
     redraw: bool,
 }
 
@@ -215,8 +123,8 @@ impl Desktop {
     pub(crate) fn lock(&self) -> DesktopGuard<'_> {
         DesktopGuard {
             desktop: self,
-            presenter: self
-                .presenter
+            renderer: self
+                .renderer
                 .get()
                 .expect("desktop startup completes before canvas IPC is accepted")
                 .lock(),
@@ -236,6 +144,47 @@ impl Drop for DesktopGuard<'_> {
 }
 
 impl DesktopGuard<'_> {
+    pub fn synchronize(
+        &mut self,
+        snapshot: &Snapshot,
+        page: Option<EntityId>,
+        commit: &Commit,
+    ) -> Result<bool> {
+        if self.canvas_ref().page_id() != page {
+            self.show_page(snapshot, page)?;
+            return Ok(true);
+        }
+
+        let revision = self.canvas_ref().revision();
+        if revision == snapshot.revision() {
+            return Ok(false);
+        }
+
+        if commit.revision == snapshot.revision() && commit.changes.from == revision {
+            self.canvas().sync(&commit.snapshot, &commit.changes)?;
+        } else {
+            self.canvas().show_snapshot(snapshot, page)?;
+        }
+        Ok(false)
+    }
+
+    pub fn show_page(&mut self, snapshot: &Snapshot, page: Option<EntityId>) -> Result<()> {
+        self.canvas().show_snapshot(snapshot, page)?;
+        if let Some(page) = page {
+            let page = snapshot.page(page)?.page()?;
+            let mut view = self.view().clone();
+            view.camera = koharu_canvas::Camera::contain(
+                self.viewport().size(),
+                koharu_canvas::PhysicalSize::new(
+                    page.width.ceil() as u32,
+                    page.height.ceil() as u32,
+                ),
+            );
+            self.set_view(view);
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn canvas_state(&mut self, fitted: bool) -> CanvasState {
         let camera = self.view().camera;
@@ -264,37 +213,37 @@ impl DesktopGuard<'_> {
 
     #[must_use]
     pub fn viewport(&self) -> PhysicalRect {
-        self.presenter.viewport()
+        self.renderer.viewport()
     }
 
     #[must_use]
     pub fn view(&self) -> &ViewState {
-        self.presenter.view()
+        self.renderer.view()
     }
 
     pub fn set_view(&mut self, view: ViewState) {
-        self.presenter.set_view(view);
+        self.renderer.set_view(view);
         self.request_redraw();
     }
 
     pub fn set_camera(&mut self, camera: Camera) {
-        self.presenter.canvas().set_camera(camera);
+        self.renderer.canvas().set_camera(camera);
         self.request_redraw();
     }
 
     pub fn set_viewport(&mut self, viewport: PhysicalRect, background: [u8; 3]) {
-        self.presenter.set_viewport(viewport, background);
+        self.renderer.set_viewport(viewport, background);
         self.request_redraw();
     }
 
     pub fn canvas(&mut self) -> &mut Canvas {
         self.request_redraw();
-        self.presenter.canvas()
+        self.renderer.canvas()
     }
 
     #[must_use]
     pub fn canvas_ref(&self) -> &Canvas {
-        self.presenter.canvas_ref()
+        self.renderer.canvas_ref()
     }
 
     fn request_redraw(&mut self) {

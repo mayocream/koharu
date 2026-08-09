@@ -1,6 +1,10 @@
 //! Bubble-aware layout bounds derived from explicit scene relations.
 
-use koharu_scene::Geometry;
+use std::collections::BTreeSet;
+
+use koharu_scene::{BubbleRegion, EntityId, FitsTo, Geometry, RegionSpec, RelationId, Snapshot};
+
+use crate::Result;
 
 const MAX_CONTOUR_POINTS: usize = 1_024;
 
@@ -16,6 +20,44 @@ pub(crate) struct LayoutBox {
 pub(crate) struct GeometryFrame {
     pub bounds: LayoutBox,
     pub angle_degrees: f32,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct FitLayout {
+    pub frame: GeometryFrame,
+    pub balloon_contour: Option<Vec<(f32, f32)>>,
+    pub relation: RelationId,
+    pub region: EntityId,
+}
+
+pub(crate) fn resolve(
+    snapshot: &Snapshot,
+    text: EntityId,
+    page_entities: &BTreeSet<EntityId>,
+) -> Result<Option<FitLayout>> {
+    let Some(relation) = snapshot.relation_from::<FitsTo>(text)? else {
+        return Ok(None);
+    };
+    let value = relation.value();
+    if !page_entities.contains(&value.target) {
+        return Ok(None);
+    }
+    let region = snapshot.analysis_region(value.target)?;
+    let geometry = region.geometry()?;
+    let Some(frame) = geometry_frame(&geometry) else {
+        return Ok(None);
+    };
+    let balloon_contour = if region.region()?.kind == BubbleRegion::kind() {
+        Some(contour(&geometry, frame))
+    } else {
+        None
+    };
+    Ok(Some(FitLayout {
+        frame,
+        balloon_contour,
+        relation: relation.id(),
+        region: value.target,
+    }))
 }
 
 pub(crate) fn contour(geometry: &Geometry, frame: GeometryFrame) -> Vec<(f32, f32)> {

@@ -444,7 +444,6 @@ impl Patch {
         attachments: Vec<koharu_storage::Blob>,
         label: Option<Arc<str>>,
     ) -> Result<Self> {
-        crate::schema::validate_pixel_assets(&state)?;
         let identity = PatchIdentity {
             project: base.state.document,
             base: base.state.revision,

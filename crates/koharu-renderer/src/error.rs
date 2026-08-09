@@ -8,15 +8,8 @@ pub enum Error {
     #[error(transparent)]
     Scene(#[from] koharu_scene::Error),
 
-    #[error("invalid render input: {0}")]
+    #[error("invalid render request: {0}")]
     InvalidRequest(String),
-
-    #[error("pixel layer {entity} references missing asset {owner}/{role}")]
-    MissingAsset {
-        entity: EntityId,
-        owner: EntityId,
-        role: String,
-    },
 
     #[error("failed to decode image blob {blob}")]
     Image {

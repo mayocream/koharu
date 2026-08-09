@@ -1,70 +1,55 @@
-use std::{collections::BTreeMap, hint::black_box, sync::Arc};
+use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
-use koharu_renderer::Renderer;
-use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRef, AssetRole, At, Origin, PageDraft, PixelLayer, Session,
+use koharu_renderer::{
+    FontSystem, RasterOptions, Rasterizer, TextLayout, TextRenderOptions, TextRenderer, WritingMode,
 };
-use vello::Scene;
+use vello::{Scene, kurbo::Affine};
 
-fn fixture() -> (koharu_scene::Snapshot, koharu_scene::EntityId) {
-    let mut encoded = std::io::Cursor::new(Vec::new());
-    DynamicImage::ImageRgba8(RgbaImage::from_pixel(1920, 1080, Rgba([255; 4])))
-        .write_to(&mut encoded, ImageFormat::Png)
-        .unwrap();
-    let mut session = Session::memory().unwrap();
-    let role = AssetRole::new("original").unwrap();
-    let mut page_id = None;
-    let patch = session
-        .snapshot()
-        .patch(|edit| {
-            let page = edit.add_page(PageDraft::new("Page", 1920.0, 1080.0), At::End)?;
-            edit.set_asset(
-                page,
-                &role,
-                AssetInput::new(
-                    Arc::<[u8]>::from(encoded.get_ref().clone()),
-                    "image/png",
-                    AssetMetadata {
-                        width: Some(1920),
-                        height: Some(1080),
-                        attributes: BTreeMap::new(),
-                    },
-                ),
-            )?;
-            edit.set(
-                page,
-                &PixelLayer::color(Origin::User, "Original", AssetRef::new(page, role.clone())),
-            )?;
-            page_id = Some(page);
-            Ok(())
-        })
-        .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
-    (snapshot, page_id.unwrap())
-}
+const FONT_SIZE: f32 = 24.0;
+const SAMPLE_TEXT: &str = "The quick brown fox jumps over the lazy dog.";
 
 fn rendering_benchmark(c: &mut Criterion) {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let renderer = Renderer::new().unwrap();
-    let (snapshot, page) = fixture();
-    let composition = runtime.block_on(renderer.compose(&snapshot, page)).unwrap();
+    let mut fonts = FontSystem::new();
+    let text_renderer = TextRenderer::new();
+    let rasterizer = Rasterizer::new().expect("failed to create rasterizer");
+    let font = fonts.first_font().expect("failed to find font");
+    let layout = TextLayout::new(&font)
+        .with_font_size(FONT_SIZE)
+        .run(SAMPLE_TEXT)
+        .expect("failed to create layout");
+    let options = TextRenderOptions::default();
 
-    c.bench_function("compose_retained", |b| {
+    c.bench_function("layout", |b| {
         b.iter(|| {
-            black_box(
-                runtime
-                    .block_on(renderer.compose(black_box(&snapshot), page))
-                    .unwrap(),
-            );
+            let layout = TextLayout::new(&font)
+                .with_font_size(FONT_SIZE)
+                .run(black_box(SAMPLE_TEXT))
+                .expect("failed to create layout");
+            black_box(layout);
         })
     });
-    c.bench_function("append_composition", |b| {
+
+    c.bench_function("render", |b| {
         b.iter(|| {
             let mut scene = Scene::new();
-            composition.append_to(&mut scene, None);
-            black_box(scene);
+            text_renderer.render(
+                &mut scene,
+                &layout,
+                WritingMode::Horizontal,
+                &options,
+                Affine::IDENTITY,
+            );
+            let image = rasterizer
+                .rasterize_scene(
+                    &scene,
+                    layout.width.ceil() as u32,
+                    layout.height.ceil() as u32,
+                    [0, 0, 0, 0],
+                    RasterOptions::default(),
+                )
+                .expect("failed to render");
+            black_box(image);
         })
     });
 }

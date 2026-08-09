@@ -159,7 +159,10 @@ impl PageState {
         self.entities[parent].children.retain(|child| *child != key);
         self.unindex_entity(key);
         self.keys.remove(&id);
-        let entity = self.entities.remove(key).ok_or(Error::EntityNotFound(id))?;
+        let entity = self
+            .entities
+            .remove(key)
+            .ok_or_else(|| Error::EntityNotFound(id))?;
         self.bump_epoch();
         Ok(entity)
     }

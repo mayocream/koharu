@@ -9,8 +9,11 @@
 //! GIMP reference: merged image data and Photoshop white matte:
 //! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-export.c#L2252-L2378
 
+use std::io::Write;
+
 use image::RgbaImage;
-use koharu_renderer::{Composition, Renderer};
+use koharu_renderer::{Frame, RasterOptions, Rasterizer};
+use koharu_scene::Snapshot;
 
 use crate::{
     descriptor::{
@@ -23,15 +26,36 @@ use crate::{
     writer::PsdWriter,
 };
 
-pub async fn export_page(
-    renderer: &Renderer,
-    composition: &Composition,
+pub fn export_page(
+    snapshot: &Snapshot,
+    frame: &Frame,
+    rasterizer: &Rasterizer,
+    raster_options: RasterOptions,
     options: &PsdExportOptions,
 ) -> Result<Vec<u8>, PsdExportError> {
-    let document = crate::document::build(renderer, composition, options).await?;
-    tokio::task::spawn_blocking(move || serialize(&document))
-        .await
-        .map_err(PsdExportError::EncodingTask)?
+    let mut bytes = Vec::new();
+    write_page(
+        &mut bytes,
+        snapshot,
+        frame,
+        rasterizer,
+        raster_options,
+        options,
+    )?;
+    Ok(bytes)
+}
+
+pub fn write_page<W: Write>(
+    mut output: W,
+    snapshot: &Snapshot,
+    frame: &Frame,
+    rasterizer: &Rasterizer,
+    raster_options: RasterOptions,
+    options: &PsdExportOptions,
+) -> Result<(), PsdExportError> {
+    let document = crate::document::build(snapshot, frame, rasterizer, raster_options, options)?;
+    output.write_all(&serialize(&document)?)?;
+    Ok(())
 }
 
 fn serialize(document: &Document) -> Result<Vec<u8>, PsdExportError> {
@@ -136,7 +160,7 @@ fn build_layer_and_mask_info(
         }
         layer_info.write_signature("8BIM");
         layer_info.write_signature("norm");
-        layer_info.write_u8(layer.opacity);
+        layer_info.write_u8(255);
         layer_info.write_u8(0);
         layer_info.write_u8(if layer.hidden { 2 } else { 0 });
         layer_info.write_u8(0);
@@ -377,7 +401,6 @@ mod tests {
             left: 0,
             top: 0,
             pixels: RgbaImage::from_pixel(1, 1, Rgba([1, 2, 3, 4])),
-            opacity: 255,
             hidden,
             text: None,
         }
@@ -417,18 +440,6 @@ mod tests {
             .expect("blend signature");
         assert_eq!(visible[visible_blend + 10], 0);
         assert_eq!(hidden[hidden_blend + 10], 2);
-    }
-
-    #[test]
-    fn layer_opacity_is_preserved_in_the_psd_record() {
-        let mut partial = layer("partial", false);
-        partial.opacity = 128;
-        let bytes = build_layer_and_mask_info(&[partial], true).expect("partial layer info");
-        let blend = bytes
-            .windows(8)
-            .position(|bytes| bytes == b"8BIMnorm")
-            .expect("blend signature");
-        assert_eq!(bytes[blend + 8], 128);
     }
 
     #[test]

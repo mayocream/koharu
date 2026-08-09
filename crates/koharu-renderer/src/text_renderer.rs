@@ -3,52 +3,22 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use koharu_scene::{
-    FontStyle as SceneFontStyle, LanguageTag, TextAlignment, TextLayout as AuthoredTextLayout,
-    TextLayoutKind, Typography, VerticalAlignment as SceneVerticalAlignment,
-    WritingMode as SceneWritingMode,
-};
 use vello::{
     FontEmbolden, Glyph, Scene,
-    kurbo::{Affine, Diagonal2, Join, Stroke},
+    kurbo::{Affine, Diagonal2, Join, Rect, Stroke},
     peniko::Fill,
 };
 
 use crate::{
-    Error, HyphenationPolicy, LayoutRun, RenderBounds, RenderDiagnostic, Result as RenderResult,
-    TextAlign, TextLayout, WritingMode,
+    Error, HyphenationPolicy, LayoutRun, RenderDiagnostic, RenderTheme, Result as RenderResult,
+    TextLayout, VerticalAlignment, WritingMode,
     bubble::LayoutBox,
+    compositor::{RenderBounds, TextLayer},
     fonts::{Fonts, font_key},
     rasterizer::rgba,
+    scene_renderer::{RenderedLayer, VisualLayer, VisualLayerKind, VisualText},
     script::is_cjk_text,
 };
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct TextNodeDescriptor {
-    pub(crate) entity: koharu_scene::EntityId,
-    pub(crate) text: String,
-    pub(crate) language: Option<LanguageTag>,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-    pub(crate) balloon_contour: Option<Vec<(f32, f32)>>,
-    pub(crate) layout: AuthoredTextLayout,
-    pub(crate) typography: Typography,
-}
-
-pub(crate) struct RenderedTextNode {
-    pub(crate) scene: Arc<Scene>,
-    pub(crate) local_bounds: RenderBounds,
-    pub(crate) metadata: RenderedTextNodeMetadata,
-    pub(crate) diagnostics: Vec<RenderDiagnostic>,
-}
-
-pub(crate) struct RenderedTextNodeMetadata {
-    pub(crate) rendered_bounds: RenderBounds,
-    pub(crate) layout_bounds: RenderBounds,
-    pub(crate) post_script_fonts: Vec<String>,
-    pub(crate) font_size: f32,
-    pub(crate) color: [u8; 4],
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StrokeOptions {
@@ -123,179 +93,206 @@ impl TextRenderer {
         );
     }
 
-    pub(crate) fn render_descriptor(
+    pub(crate) fn render_layer(
         &self,
-        descriptor: &TextNodeDescriptor,
+        layer: &TextLayer,
         fonts: &Fonts,
-    ) -> RenderResult<RenderedTextNode> {
-        let entity = descriptor.entity;
-        let is_bubble_text = descriptor.balloon_contour.is_some();
-        let frame = LayoutBox {
-            x: 0.0,
-            y: 0.0,
-            width: descriptor.width,
-            height: descriptor.height,
+        theme: &RenderTheme,
+    ) -> RenderResult<RenderedLayer> {
+        let is_bubble_text = layer.balloon_contour.is_some();
+        let bounds = if is_bubble_text {
+            inset(layer.bounds, theme.text_inset)
+        } else {
+            layer.bounds
         };
-        let bounds = inset(frame, descriptor.layout.insets);
         if bounds.width <= 0.0 || bounds.height <= 0.0 {
             return Err(Error::invalid(format!(
                 "text inset leaves no layout area for entity {}",
-                entity
+                layer.entity
             )));
         }
-        let writing_mode = match descriptor.typography.writing_mode {
-            SceneWritingMode::Horizontal => WritingMode::Horizontal,
-            SceneWritingMode::Vertical => WritingMode::VerticalRl,
-        };
-        let alignment = match descriptor.typography.alignment {
-            TextAlignment::Start => TextAlign::Left,
-            TextAlignment::Center => TextAlign::Center,
-            TextAlignment::End => TextAlign::Right,
-            TextAlignment::Justify => TextAlign::Justify,
-        };
-        let font_style = match descriptor.typography.font_style {
-            SceneFontStyle::Normal => crate::FontStyle::Normal,
-            SceneFontStyle::Italic => crate::FontStyle::Italic,
-            SceneFontStyle::Oblique => crate::FontStyle::Oblique,
-        };
         let fonts = fonts
             .resolve(
-                None,
-                Some(descriptor.typography.font_weight),
-                Some(font_style),
-                &descriptor.typography.font_families,
-                &descriptor.text,
-                descriptor
+                layer.preferred_font.as_deref(),
+                layer.font_weight,
+                layer.font_style,
+                &theme.font_families,
+                &layer.text,
+                layer
                     .language
                     .as_ref()
                     .map(koharu_scene::LanguageTag::as_str),
             )
-            .map_err(|source| Error::Font { entity, source })?;
-        let maximum = descriptor.typography.size;
-        let minimum = descriptor.typography.minimum_size.min(maximum);
+            .map_err(|source| Error::Font {
+                entity: layer.entity,
+                source,
+            })?;
+        let automatic_maximum = || {
+            if is_bubble_text {
+                if layer.writing_mode.is_vertical() {
+                    bounds.height
+                } else {
+                    bounds.width
+                }
+            } else {
+                theme.font_size
+            }
+        };
+        let maximum = if layer.auto_fit {
+            automatic_maximum()
+        } else {
+            layer.font_size.unwrap_or_else(automatic_maximum)
+        };
+        let minimum = theme.minimum_font_size.min(maximum);
         let mut layout = TextLayout::new(&fonts[0])
             .with_fallback_fonts(&fonts[1..])
-            .with_writing_mode(writing_mode)
-            .with_alignment(alignment)
-            .with_line_height(descriptor.typography.line_height)
-            .with_spacing(
-                descriptor.typography.letter_spacing,
-                descriptor.typography.word_spacing,
-            )
+            .with_writing_mode(layer.writing_mode)
+            .with_alignment(layer.alignment)
+            .with_line_height(theme.line_height)
+            .with_spacing(theme.letter_spacing, theme.word_spacing)
             .with_compact_emphasis_punctuation(
-                is_cjk_text(&descriptor.text)
-                    || descriptor
+                is_cjk_text(&layer.text)
+                    || layer
                         .language
                         .as_ref()
                         .is_some_and(|language| is_cjk_language(language.as_str())),
             );
-        let point_text = descriptor.layout.kind == TextLayoutKind::Point;
-        if !point_text {
+        if !layer.point_text {
             layout = layout
                 .with_max_width(bounds.width)
                 .with_max_height(bounds.height);
         }
-        if let Some(contour) = &descriptor.balloon_contour {
-            let [top, _, _, left] = descriptor.layout.insets;
+        if let Some(contour) = &layer.balloon_contour {
+            let [top, _, _, left] = theme.text_inset;
             layout = layout.with_comic_balloon(
                 bounds.width,
                 bounds.height,
                 contour.iter().map(|&(x, y)| (x - left, y - top)).collect(),
-                match descriptor.layout.vertical_alignment {
-                    SceneVerticalAlignment::Top => 0.0,
-                    SceneVerticalAlignment::Center => 0.5,
-                    SceneVerticalAlignment::Bottom => 1.0,
+                match theme.vertical_alignment {
+                    VerticalAlignment::Top => 0.0,
+                    VerticalAlignment::Center => 0.5,
+                    VerticalAlignment::Bottom => 1.0,
                 },
-                descriptor.layout.insets.into_iter().fold(0.0, f32::max),
+                theme.text_inset.into_iter().fold(0.0, f32::max),
             );
         }
-        if let Some(language) = &descriptor.language {
+        if let Some(language) = &layer.language {
             layout = layout.with_hyphenation_language_tag(language.as_str());
         }
-        if is_bubble_text && writing_mode == WritingMode::Horizontal {
+        if is_bubble_text && layer.writing_mode == WritingMode::Horizontal {
             layout = layout.with_hyphenation_policy(HyphenationPolicy::LastResort);
         }
-        let layout = if descriptor.typography.auto_fit && !point_text {
+        let layout = if layer.auto_fit && !layer.point_text {
             layout
                 .with_max_font_size(maximum)
                 .with_min_font_size(minimum)
         } else {
-            layout.with_font_size(maximum)
+            layout.with_font_size(layer.font_size.unwrap_or(maximum))
         };
         let layout = self
-            .layout(&layout, &descriptor.text)
-            .map_err(|source| Error::Layout { entity, source })?;
-        let (mut x, mut y) = if point_text {
+            .layout(&layout, &layer.text)
+            .map_err(|source| Error::Layout {
+                entity: layer.entity,
+                source,
+            })?;
+        let (mut x, mut y) = if layer.point_text {
             (bounds.x, bounds.y)
         } else {
             placement(
                 bounds,
                 layout.width,
                 layout.height,
-                descriptor.layout.vertical_alignment,
+                theme.vertical_alignment,
             )
         };
         x += layout.placement_offset_x();
         y += layout.placement_offset_y();
-        let transform = Affine::translate((f64::from(x), f64::from(y)));
-        let color = descriptor.typography.color;
+        let layout_rect = Rect::new(
+            f64::from(x),
+            f64::from(y),
+            f64::from(x + layout.width),
+            f64::from(y + layout.height),
+        );
+        let angle = f64::from(layer.angle_degrees).to_radians();
+        let center = layout_rect.center();
+        let rotation = Affine::rotate_about(angle, center);
+        let transform =
+            Affine::translate((f64::from(x), f64::from(y))).then_rotate_about(angle, center);
+        let color = with_alpha(
+            layer.foreground_color.unwrap_or(theme.text_color),
+            layer.opacity,
+        );
         let mut options = TextRenderOptions {
             color,
             stroke: None,
             ..TextRenderOptions::default()
         };
         let mut scene = Scene::new();
-        if let Some(stroke) = descriptor.typography.stroke {
-            options.stroke = Some(StrokeOptions {
-                color: stroke.color,
-                width_px: stroke.width,
-            });
+        if let Some(mut stroke) = layer.stroke.or(theme.text_stroke) {
+            stroke.color = with_alpha(stroke.color, layer.opacity);
+            options.stroke = Some(stroke);
         }
-        self.render(&mut scene, &layout, writing_mode, &options, transform);
+        self.render(&mut scene, &layout, layer.writing_mode, &options, transform);
+        let rendered_bounds = rotation.transform_rect_bbox(layout_rect);
         let mut diagnostics = Vec::new();
-        if layout.font_size + f32::EPSILON < descriptor.typography.minimum_size {
+        if layout.font_size + f32::EPSILON < theme.minimum_font_size {
             diagnostics.push(RenderDiagnostic::TextBelowReadableSize {
-                entity,
+                entity: layer.entity,
                 font_size: layout.font_size,
-                minimum_font_size: descriptor.typography.minimum_size,
+                minimum_font_size: theme.minimum_font_size,
             });
         }
         if layout.overflowed() {
             diagnostics.push(RenderDiagnostic::TextOverflow {
-                entity,
+                entity: layer.entity,
                 available: bounds.into(),
                 actual_width: layout.width,
                 actual_height: layout.height,
                 font_size: layout.font_size,
             });
         }
-        let rendered_bounds = RenderBounds {
-            x,
-            y,
-            width: layout.width,
-            height: layout.height,
-        };
-        Ok(RenderedTextNode {
+        Ok(RenderedLayer {
             scene: Arc::new(scene),
-            local_bounds: RenderBounds {
-                x: 0.0,
-                y: 0.0,
-                width: descriptor.width.max(x + layout.width),
-                height: descriptor.height.max(y + layout.height),
-            },
-            metadata: RenderedTextNodeMetadata {
-                rendered_bounds,
-                layout_bounds: if point_text {
-                    rendered_bounds
-                } else {
-                    bounds.into()
+            layer: VisualLayer {
+                entity: layer.entity,
+                kind: VisualLayerKind::Text,
+                name: None,
+                bounds: RenderBounds {
+                    x: rendered_bounds.x0 as f32,
+                    y: rendered_bounds.y0 as f32,
+                    width: rendered_bounds.width() as f32,
+                    height: rendered_bounds.height() as f32,
                 },
-                post_script_fonts: fonts
-                    .iter()
-                    .map(|font| font.post_script_name().to_owned())
-                    .collect(),
-                font_size: layout.font_size,
-                color,
+                font_size: Some(layout.font_size),
+                text: Some(VisualText {
+                    text: layer.text.clone(),
+                    language: layer.language.clone(),
+                    rendered_bounds: RenderBounds {
+                        x,
+                        y,
+                        width: layout.width,
+                        height: layout.height,
+                    },
+                    layout_bounds: if layer.point_text {
+                        RenderBounds {
+                            x,
+                            y,
+                            width: layout.width,
+                            height: layout.height,
+                        }
+                    } else {
+                        bounds.into()
+                    },
+                    post_script_fonts: fonts
+                        .iter()
+                        .map(|font| font.post_script_name().to_owned())
+                        .collect(),
+                    font_size: layout.font_size,
+                    color,
+                    alignment: layer.alignment,
+                    writing_mode: layer.writing_mode,
+                    angle_degrees: layer.angle_degrees,
+                }),
             },
             diagnostics,
         })
@@ -318,26 +315,26 @@ fn inset(rect: LayoutBox, [top, right, bottom, left]: [f32; 4]) -> LayoutBox {
     }
 }
 
-fn placement(
-    rect: LayoutBox,
-    width: f32,
-    height: f32,
-    vertical: SceneVerticalAlignment,
-) -> (f32, f32) {
+fn placement(rect: LayoutBox, width: f32, height: f32, vertical: VerticalAlignment) -> (f32, f32) {
     let x = rect.x + (rect.width - width) * 0.5;
     let remaining = rect.height - height;
     let y = rect.y
         + match vertical {
-            SceneVerticalAlignment::Top => 0.0,
-            SceneVerticalAlignment::Center => remaining * 0.5,
-            SceneVerticalAlignment::Bottom => remaining,
+            VerticalAlignment::Top => 0.0,
+            VerticalAlignment::Center => remaining * 0.5,
+            VerticalAlignment::Bottom => remaining,
         };
     (x, y)
 }
 
+fn with_alpha(mut color: [u8; 4], opacity: f32) -> [u8; 4] {
+    color[3] = (f32::from(color[3]) * opacity.clamp(0.0, 1.0)).round() as u8;
+    color
+}
+
 #[derive(Clone, Copy)]
 enum DrawStyle {
-    Stroke(StrokeOptions),
+    Stroke(crate::StrokeOptions),
     Fill,
 }
 
@@ -351,7 +348,9 @@ fn draw_layout(
 ) {
     for line in &layout.lines {
         let (baseline_x, baseline_y) = match writing_mode {
-            WritingMode::Horizontal | WritingMode::VerticalRl => line.baseline,
+            WritingMode::Horizontal | WritingMode::VerticalRl | WritingMode::VerticalLr => {
+                line.baseline
+            }
         };
         let mut pen_x = 0.0;
         let mut pen_y = 0.0;
@@ -414,43 +413,47 @@ fn draw_layout(
 
 #[cfg(test)]
 mod tests {
-    use koharu_scene::{EntityId, TextLayout as AuthoredTextLayout, Typography};
+    use koharu_scene::EntityId;
 
     use super::*;
-    use crate::fonts::Fonts;
+    use crate::{TextAlign, compositor::TextLayer, fonts::Fonts};
 
-    #[tokio::test]
-    async fn authored_auto_fit_respects_declared_size_range() {
-        let fonts = Fonts::new();
-        fonts
-            .prepare(&[("Arial".to_owned(), 400, crate::FontStyle::Normal)])
-            .await
-            .unwrap();
-        let descriptor = TextNodeDescriptor {
+    #[test]
+    fn automatic_balloon_size_ignores_stored_size() {
+        let layer = TextLayer {
             entity: EntityId::new(),
-            text: "A deliberately long line of dialogue for a small frame".to_owned(),
+            text: "Hi".to_owned(),
             language: None,
-            width: 160.0,
-            height: 64.0,
-            balloon_contour: Some(vec![(0.0, 0.0), (160.0, 0.0), (160.0, 64.0), (0.0, 64.0)]),
-            layout: AuthoredTextLayout {
-                insets: [0.0; 4],
-                ..AuthoredTextLayout::default()
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 240.0,
+                height: 120.0,
             },
-            typography: Typography {
-                font_families: vec!["Arial".to_owned()],
-                size: 32.0,
-                minimum_size: 9.0,
-                auto_fit: true,
-                ..Typography::default()
-            },
+            balloon_contour: Some(vec![(0.0, 0.0), (240.0, 0.0), (240.0, 120.0), (0.0, 120.0)]),
+            opacity: 1.0,
+            preferred_font: Some("Arial".to_owned()),
+            font_weight: None,
+            font_style: None,
+            font_size: Some(6.0),
+            auto_fit: true,
+            alignment: TextAlign::Center,
+            writing_mode: WritingMode::Horizontal,
+            foreground_color: None,
+            stroke: None,
+            angle_degrees: 0.0,
+            point_text: false,
+        };
+        let theme = RenderTheme {
+            font_families: vec!["Arial".to_owned()],
+            text_inset: [0.0; 4],
+            ..RenderTheme::default()
         };
 
         let rendered = TextRenderer::new()
-            .render_descriptor(&descriptor, &fonts)
+            .render_layer(&layer, &Fonts::shared(), &theme)
             .unwrap();
 
-        assert!(rendered.metadata.font_size <= descriptor.typography.size);
-        assert!(rendered.metadata.font_size >= descriptor.typography.minimum_size);
+        assert!(rendered.layer.font_size.unwrap() > theme.font_size);
     }
 }

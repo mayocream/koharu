@@ -265,20 +265,11 @@ mod tests {
         image_edit
             .set(
                 cleanup,
-                &koharu_scene::PixelLayer::color(
-                    koharu_scene::Origin::User,
-                    "Cleanup",
-                    koharu_scene::AssetRef::new(
-                        cleanup,
-                        koharu_scene::AssetRole::new("source").unwrap(),
-                    ),
-                ),
-            )
-            .unwrap();
-        image_edit
-            .set(
-                cleanup,
-                &koharu_scene::Geometry::rectangle(0.0, 0.0, 1.0, 1.0),
+                &koharu_scene::RasterLayer {
+                    origin: koharu_scene::Origin::User,
+                    name: "Cleanup".to_owned(),
+                    kind: koharu_scene::RasterLayerKind::Cleanup,
+                },
             )
             .unwrap();
         image_edit

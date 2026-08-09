@@ -93,19 +93,16 @@ const defaultFont: FontFamily = {
 }
 
 const defaultTypography: Typography = {
-  font_families: [defaultFont.name, 'Arial'],
+  preferred_font: null,
   font_weight: 400,
   font_style: 'normal',
-  size: 24,
-  minimum_size: 9,
+  size: null,
   auto_fit: true,
   color: [0, 0, 0, 255],
-  stroke: null,
-  alignment: 'Center',
-  writing_mode: 'Horizontal',
-  line_height: 1.2,
-  letter_spacing: 0,
-  word_spacing: 0,
+  stroke_color: [255, 255, 255, 255],
+  stroke_width: 0,
+  alignment: null,
+  writing_mode: null,
 }
 
 export function Inspector() {
@@ -145,7 +142,7 @@ function TypeInspector() {
     if (!selected.length) return
     const updates = selected.map((layer) => ({
       layer: layer.id,
-      typography: update(layer.typography),
+      typography: update(layer.typography ?? defaultTypography),
     }))
     const optimistic = current && updates.find(({ layer }) => layer === current.id)
     if (optimistic) setDraft(optimistic)
@@ -171,18 +168,18 @@ function TypeInspector() {
       ? available
       : [...available, defaultFont]
   }, [availableFonts])
-  const size = Math.round(typography.size * 100) / 100
-  const weight = typography.font_weight
-  const primaryFont = typography.font_families[0] ?? defaultFont.name
-  const selectedFamily = findFontFamily(families, primaryFont)
+  const size = Math.round((typography.size ?? 24) * 100) / 100
+  const weight = typography.font_weight ?? 400
+  const selectedFamily = findFontFamily(families, typography.preferred_font ?? defaultFont.name)
   const styles = usableFontStyles(selectedFamily)
-  const style = styles.includes(typography.font_style)
-    ? typography.font_style
+  const style = styles.includes(typography.font_style ?? 'normal')
+    ? (typography.font_style ?? 'normal')
     : (styles[0] ?? 'normal')
   const weights = usableFontWeights(selectedFamily, style)
-  const strokeColor = typography.stroke?.color ?? [255, 255, 255, 255]
-  const strokeEnabled = typography.stroke !== null
-  const displayedStrokeWidth = typography.stroke?.width ?? 1.5
+  const strokeWidth = typography.stroke_width ?? 0
+  const strokeColor = typography.stroke_color ?? defaultTypography.stroke_color!
+  const strokeEnabled = strokeWidth > 0 && strokeColor[3] > 0
+  const displayedStrokeWidth = strokeWidth > 0 ? strokeWidth : 1.5
 
   return (
     <div className='min-w-0 p-2' data-testid='type-inspector' aria-disabled={disabled}>
@@ -190,24 +187,19 @@ function TypeInspector() {
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5'>
           <InspectorField label='Font'>
             <FontPicker
-              value={primaryFont}
+              value={typography.preferred_font ?? defaultFont.name}
               families={families}
               disabled={disabled}
               size='sm'
-              onChange={(font) => {
-                const family = findFontFamily(families, font)
+              onChange={(preferred_font) => {
+                const family = findFontFamily(families, preferred_font)
                 const nextStyles = usableFontStyles(family)
                 const fontStyle = nextStyles.includes(style) ? style : (nextStyles[0] ?? 'normal')
                 const nextWeights = usableFontWeights(family, fontStyle)
                 const fontWeight = nearestFontWeight(nextWeights, weight)
                 apply((value) => ({
                   ...value,
-                  font_families: [
-                    font,
-                    ...value.font_families.filter(
-                      (fallback) => normalizeFontName(fallback) !== normalizeFontName(font),
-                    ),
-                  ],
+                  preferred_font,
                   font_weight: fontWeight,
                   font_style: fontStyle,
                 }))
@@ -219,7 +211,7 @@ function TypeInspector() {
               label='Text color'
               size='sm'
               disabled={disabled}
-              value={rgbaToHex(typography.color)}
+              value={rgbaToHex(typography.color ?? defaultTypography.color!)}
               onChange={(color) => apply((value) => ({ ...value, color: hexToRgba(color) }))}
             />
           </InspectorField>
@@ -231,15 +223,10 @@ function TypeInspector() {
               disabled={disabled}
               value={size}
               autoFit={typography.auto_fit}
-              onChange={(next) =>
-                apply((value) => ({
-                  ...value,
-                  size: next,
-                  minimum_size: Math.min(value.minimum_size, next),
-                  auto_fit: false,
-                }))
+              onChange={(next) => apply((value) => ({ ...value, size: next, auto_fit: false }))}
+              onAutoFit={() =>
+                apply((value) => ({ ...value, size: value.size ?? size, auto_fit: true }))
               }
-              onAutoFit={() => apply((value) => ({ ...value, auto_fit: true }))}
             />
           </InspectorField>
           <InspectorField label='Weight'>
@@ -305,7 +292,7 @@ function TypeInspector() {
                   type='button'
                   aria-label={label}
                   disabled={disabled}
-                  data-active={typography.alignment === alignment}
+                  data-active={(typography.alignment ?? 'Center') === alignment}
                   className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
                   onClick={() =>
                     apply((value) => ({ ...value, alignment: alignment as TextAlignment }))
@@ -319,7 +306,7 @@ function TypeInspector() {
           <InspectorField label='Direction'>
             <Select
               disabled={disabled}
-              value={typography.writing_mode}
+              value={typography.writing_mode ?? 'Horizontal'}
               onValueChange={(writing_mode) =>
                 apply((value) => ({ ...value, writing_mode: writing_mode as WritingMode }))
               }
@@ -343,18 +330,23 @@ function TypeInspector() {
               disabled={disabled}
               allowTransparent
               value={strokeEnabled ? rgbaToHex(strokeColor) : null}
-              onChange={(color) => {
+              onChange={(stroke_color) => {
                 apply((value) => {
-                  if (color !== null) {
+                  const width = value.stroke_width ?? 0
+                  if (stroke_color !== null) {
                     return {
                       ...value,
-                      stroke: {
-                        color: hexToRgba(color),
-                        width: value.stroke?.width ?? 1.5,
-                      },
+                      stroke_color: hexToRgba(stroke_color),
+                      stroke_width: width > 0 ? width : 1.5,
                     }
                   }
-                  return { ...value, stroke: null }
+                  const [red, green, blue] =
+                    value.stroke_color ?? defaultTypography.stroke_color!
+                  return {
+                    ...value,
+                    stroke_color: [red, green, blue, 0],
+                    stroke_width: width > 0 ? width : 1.5,
+                  }
                 })
               }}
             />
@@ -371,13 +363,7 @@ function TypeInspector() {
               step={0.5}
               onValueChange={(next) => {
                 if (next !== null && next >= 0.5 && next <= 32) {
-                  apply((value) => ({
-                    ...value,
-                    stroke: {
-                      color: value.stroke?.color ?? [255, 255, 255, 255],
-                      width: next,
-                    },
-                  }))
+                  apply((value) => ({ ...value, stroke_width: next }))
                 }
               }}
             >
@@ -959,14 +945,14 @@ function hexToRgba(hex: string): [number, number, number, number] {
 
 function layerIcon(layer: Layer): typeof Type {
   if (layer.type === 'group') return Folder
-  if (layer.type === 'pixel') return layer.format.kind === 'mask' ? Brush : ImageIcon
+  if (layer.type === 'raster') return Brush
   if (layer.type === 'text') return Type
   return ImageIcon
 }
 
 function layerKind(layer: Layer): string {
   if (layer.type === 'group') return layer.role === 'text' ? 'text group' : 'group'
-  if (layer.type === 'pixel') return layer.format.kind === 'mask' ? 'mask' : 'pixel'
+  if (layer.type === 'raster') return layer.kind
   if (layer.type === 'text') {
     const role = layer.content.role?.split('.').at(-1)
     return role === 'dialogue' || role === 'free-text' ? role : 'text'

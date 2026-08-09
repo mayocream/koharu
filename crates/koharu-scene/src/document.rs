@@ -1,40 +1,10 @@
 //! Resolved document views and intent-level edits over the generic scene kernel.
 
 use crate::{
-    Asset, At, DetectionAnalysis, Edit, EntityId, Geometry, Group, OcrAnalysis, Origin, PageRef,
-    PixelLayer, Presents, Region, RegionSpec, Result, Snapshot, SourceText, TextContent, TextGroup,
-    TextLayout, TextRole, Translation, Typography, Visibility,
+    At, DetectionAnalysis, Edit, EntityId, Geometry, Group, OcrAnalysis, Origin, PageRef, Presents,
+    Region, RegionSpec, Result, Snapshot, SourceText, TextContent, TextGroup, TextLayout, TextRole,
+    Translation, Typography, Visibility,
 };
-
-#[derive(Copy, Clone)]
-pub struct PixelLayerRef<'a> {
-    snapshot: &'a Snapshot,
-    id: EntityId,
-}
-
-impl PixelLayerRef<'_> {
-    #[must_use]
-    pub const fn id(self) -> EntityId {
-        self.id
-    }
-
-    pub fn layer(self) -> Result<PixelLayer> {
-        required(self.snapshot.component(self.id)?, self.id, "pixel layer")
-    }
-
-    pub fn geometry(self) -> Result<Option<Geometry>> {
-        self.snapshot.component(self.id)
-    }
-
-    pub fn visibility(self) -> Result<Option<Visibility>> {
-        self.snapshot.component(self.id)
-    }
-
-    pub fn asset(self) -> Result<Option<Asset>> {
-        let layer = self.layer()?;
-        self.snapshot.asset(layer.asset.owner, &layer.asset.role)
-    }
-}
 
 #[derive(Copy, Clone)]
 pub struct GroupRef<'a> {
@@ -96,8 +66,8 @@ impl<'a> TextLayerRef<'a> {
         required(self.snapshot.component(self.id)?, self.id, "text layout")
     }
 
-    pub fn typography(self) -> Result<Typography> {
-        required(self.snapshot.component(self.id)?, self.id, "typography")
+    pub fn typography(self) -> Result<Option<Typography>> {
+        self.snapshot.component(self.id)
     }
 
     pub fn visibility(self) -> Result<Option<Visibility>> {
@@ -194,20 +164,6 @@ impl AnalysisRegionRef<'_> {
 }
 
 impl Snapshot {
-    pub fn pixel_layer(&self, id: EntityId) -> Result<PixelLayerRef<'_>> {
-        required(self.component::<PixelLayer>(id)?, id, "pixel layer")?;
-        Ok(PixelLayerRef { snapshot: self, id })
-    }
-
-    pub fn pixel_layers(&self) -> Result<impl ExactSizeIterator<Item = PixelLayerRef<'_>>> {
-        Ok(self
-            .entities_with::<PixelLayer>()?
-            .map(|entity| PixelLayerRef {
-                snapshot: self,
-                id: entity.id(),
-            }))
-    }
-
     pub fn group(&self, id: EntityId) -> Result<GroupRef<'_>> {
         required(self.component::<Group>(id)?, id, "group")?;
         Ok(GroupRef { snapshot: self, id })
@@ -239,19 +195,6 @@ impl Snapshot {
 }
 
 impl<'a> PageRef<'a> {
-    pub fn pixel_layers(self) -> Result<impl ExactSizeIterator<Item = PixelLayerRef<'a>>> {
-        let mut layers = Vec::new();
-        for entity in self.snapshot.subtree(self.id)? {
-            if entity.component::<PixelLayer>()?.is_some() {
-                layers.push(PixelLayerRef {
-                    snapshot: self.snapshot,
-                    id: entity.id(),
-                });
-            }
-        }
-        Ok(layers.into_iter())
-    }
-
     pub fn text_group(self) -> Result<Option<GroupRef<'a>>> {
         let mut groups = Vec::new();
         for id in self.snapshot.children(self.id)? {
@@ -292,7 +235,6 @@ impl Edit {
         let group = self.ensure_text_group(page)?;
         let layer = self.add_entity(group, at)?;
         self.set(layer, layout)?;
-        self.set(layer, &Typography::with_origin(layout.origin.clone()))?;
         self.relate::<Presents>(layer, content)?;
         Ok(layer)
     }

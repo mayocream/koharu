@@ -5,8 +5,8 @@
 //! relation endpoints.
 
 use crate::{
-    DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis, Page,
-    PixelLayer, Project, Region, Relation, Result, SourceText, TextContent, TextGroup, TextLayout,
+    DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis, Page, Project,
+    RasterLayer, Region, Relation, Result, SourceText, TextContent, TextGroup, TextLayout,
     TextRole, Translation, Typography, Visibility,
     component::{Component, ComponentRecord, ValidationContext, decode, key},
     components::Assets,
@@ -31,7 +31,7 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
     let has_translation = has(Translation::KIND);
     let has_region = has(Region::KIND);
     let has_geometry = has(Geometry::KIND);
-    let has_pixel = has(PixelLayer::KIND);
+    let has_raster = has(RasterLayer::KIND);
     let has_assets = has(Assets::KIND);
     let has_layout = has(TextLayout::KIND);
     let has_typography = has(Typography::KIND);
@@ -48,10 +48,6 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
                 .any(|(key, _)| key.kind == TextGroup::KIND)
         })
     });
-
-    if has_pixel {
-        validate_pixel_asset(state, id)?;
-    }
 
     if (has_source || has_translation || has(TextRole::KIND)) && !has_content {
         Err(Error::invalid(format!(
@@ -70,7 +66,7 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
             || has_content
             || has_region
             || has_geometry
-            || has_pixel
+            || has_raster
             || has_assets
             || has_layout
             || has_typography
@@ -103,13 +99,7 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
             "text layer {id} is not contained by the page text group"
         )))
     } else if has_content
-        && (has_region
-            || has_geometry
-            || has_pixel
-            || has_layout
-            || has_typography
-            || has_detection
-            || has_ocr)
+        && (has_region || has_geometry || has_layout || has_typography || has_detection || has_ocr)
     {
         Err(Error::invalid(format!(
             "text content entity {id} also carries analysis or presentation components"
@@ -123,22 +113,14 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
             "analysis region {id} has no geometry"
         )))
     } else if has_layout
-        && (has_source || has_translation || has_region || has_pixel || has_detection || has_ocr)
+        && (has_source || has_translation || has_region || has_detection || has_ocr)
     {
         Err(Error::invalid(format!(
             "text layer {id} also carries content or analysis components"
         )))
-    } else if has_layout && !has_typography {
-        Err(Error::invalid(format!(
-            "text layer {id} has no authored typography"
-        )))
     } else if has_typography && !has_layout {
         Err(Error::invalid(format!(
             "entity {id} has typography but is not a text layer"
-        )))
-    } else if has_pixel && !has(Page::KIND) && !has_geometry {
-        Err(Error::invalid(format!(
-            "pixel layer {id} has no placement geometry"
         )))
     } else if (has_detection || has_ocr) && !has_region {
         Err(Error::invalid(format!(
@@ -146,54 +128,6 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
         )))
     } else {
         Ok(())
-    }
-}
-
-/// Validates the cross-component asset references that make pixel layers
-/// immediately renderable. This runs when patches are assembled as well as
-/// during full snapshot validation so rebases cannot produce dangling roles.
-pub(crate) fn validate_pixel_assets(state: &State) -> Result<()> {
-    let pixel_key = key::<PixelLayer>()?;
-    for page_id in state.page_order.iter().copied() {
-        for entity in state.page(page_id)?.entities_with(&pixel_key) {
-            validate_entity(state, entity)?;
-        }
-    }
-    Ok(())
-}
-
-fn validate_pixel_asset(state: &State, entity: EntityId) -> Result<()> {
-    let record_exists = |id| state.contains_entity(id);
-    let blob_exists = |_id| true;
-    let context = ValidationContext::new(&record_exists, &blob_exists);
-    let layer = decode::<PixelLayer>(
-        state
-            .component(entity, &key::<PixelLayer>()?)?
-            .ok_or_else(|| Error::invalid(format!("entity {entity} is not a pixel layer")))?,
-        &context,
-    )?;
-    if !state.contains_entity(layer.asset.owner) {
-        return Err(Error::invalid(format!(
-            "pixel layer {entity} references missing asset owner {}",
-            layer.asset.owner
-        )));
-    }
-    let Some(assets) = state.component(layer.asset.owner, &key::<Assets>()?)? else {
-        return Err(Error::invalid(format!(
-            "pixel layer {entity} references missing asset role {} on {}",
-            layer.asset.role.as_str(),
-            layer.asset.owner
-        )));
-    };
-    let assets = decode::<Assets>(assets, &context)?;
-    if assets.values.contains_key(&layer.asset.role) {
-        Ok(())
-    } else {
-        Err(Error::invalid(format!(
-            "pixel layer {entity} references missing asset role {} on {}",
-            layer.asset.role.as_str(),
-            layer.asset.owner
-        )))
     }
 }
 
@@ -313,7 +247,7 @@ fn validate_component(
     validate!(Group);
     validate!(TextGroup);
     validate!(Geometry);
-    validate!(PixelLayer);
+    validate!(RasterLayer);
     validate!(Visibility);
     validate!(SourceText);
     validate!(TextContent);

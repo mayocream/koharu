@@ -1,15 +1,15 @@
-use std::{fs, sync::Arc};
+use std::fs;
 
 use anyhow::{Context as _, Result};
 use koharu_psd::{PsdExportOptions, export_page};
-use koharu_renderer::{RasterOptions, Renderer};
-use koharu_scene::{EntityId, PixelLayer, Snapshot};
+use koharu_renderer::{Compositor, RasterOptions, Rasterizer, RenderRequest, SceneRenderer};
+use koharu_scene::{AssetRole, EntityId, Snapshot};
+use rayon::prelude::*;
 use serde::Deserialize;
 use specta::Type;
 use tauri::{State, WebviewWindow, ipc::IpcResponse};
 
 use super::{Error, project::CurrentProject};
-use crate::desktop::Desktop;
 
 const THUMBNAIL_EDGE: u32 = 128;
 
@@ -37,7 +37,6 @@ pub(crate) async fn export_pages(
     pages: Vec<EntityId>,
     format: ExportFormat,
     project: State<'_, CurrentProject>,
-    desktop: State<'_, Desktop>,
 ) -> std::result::Result<(), Error> {
     let snapshot = {
         let project = project.project.lock();
@@ -61,22 +60,17 @@ pub(crate) async fn export_pages(
     if pages.is_empty() {
         return Err(anyhow::anyhow!("there are no pages to export").into());
     }
-    let renderer = desktop.renderer().clone();
+    let compositor = Compositor::new();
+    let renderer = SceneRenderer::new();
+    let rasterizer = Rasterizer::new().context("failed to initialize the export rasterizer")?;
     let options = RasterOptions::default();
-    let concurrency = Arc::new(tokio::sync::Semaphore::new(2));
-    let mut tasks = tokio::task::JoinSet::new();
-    for (index, page_id) in pages.into_iter().enumerate() {
-        let snapshot = snapshot.clone();
-        let renderer = renderer.clone();
-        let directory = directory.clone();
-        let concurrency = Arc::clone(&concurrency);
-        tasks.spawn(async move {
-            let _permit = concurrency
-                .acquire_owned()
-                .await
-                .context("the export queue was closed")?;
+    pages
+        .into_par_iter()
+        .enumerate()
+        .try_for_each(|(index, page_id)| -> Result<()> {
             let page = snapshot.page(page_id)?.page()?;
-            let composition = renderer.compose(&snapshot, page_id).await?;
+            let composition = compositor.compile(&snapshot, &RenderRequest::new(page_id))?;
+            let frame = renderer.render(&snapshot, &composition)?;
             let name = page
                 .label
                 .trim()
@@ -101,28 +95,23 @@ pub(crate) async fn export_pages(
                 if name.is_empty() { "page" } else { &name }
             );
             match format {
-                ExportFormat::Png => {
-                    let image = renderer.rasterize(&composition, &options).await?.image;
-                    let path = directory.join(format!("{stem}.png"));
-                    tokio::task::spawn_blocking(move || image.save(path))
-                        .await
-                        .context("the PNG encoder stopped unexpectedly")??;
-                }
+                ExportFormat::Png => rasterizer
+                    .rasterize(&frame, options)?
+                    .image
+                    .save(directory.join(format!("{stem}.png")))?,
                 ExportFormat::Psd => {
-                    let bytes =
-                        export_page(&renderer, &composition, &PsdExportOptions::default()).await?;
-                    let path = directory.join(format!("{stem}.psd"));
-                    tokio::task::spawn_blocking(move || fs::write(path, bytes))
-                        .await
-                        .context("the PSD writer stopped unexpectedly")??;
+                    let bytes = export_page(
+                        &snapshot,
+                        &frame,
+                        &rasterizer,
+                        options,
+                        &PsdExportOptions::default(),
+                    )?;
+                    fs::write(directory.join(format!("{stem}.psd")), bytes)?;
                 }
             }
-            Result::<()>::Ok(())
-        });
-    }
-    while let Some(result) = tasks.join_next().await {
-        result.context("an export task stopped unexpectedly")??;
-    }
+            Ok(())
+        })?;
     Ok(())
 }
 
@@ -139,12 +128,9 @@ pub(crate) async fn get_thumbnail(
         .context("no project is open")?
         .snapshot();
     snapshot.page(page)?;
-    let pixel = snapshot
-        .component::<PixelLayer>(page)?
-        .with_context(|| format!("page {page} has no pixel layer"))?;
     let blob = snapshot
-        .asset(pixel.asset.owner, &pixel.asset.role)?
-        .with_context(|| format!("page {page} has no visual asset"))?
+        .asset(page, &AssetRole::new("source")?)?
+        .with_context(|| format!("page {page} has no source image"))?
         .blob;
     let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
         let bytes = snapshot.read_blob(blob)?;
@@ -161,24 +147,18 @@ pub(crate) async fn get_thumbnail(
     Ok(ThumbnailBytes(bytes))
 }
 
-pub(crate) async fn rendered_preview(
-    renderer: &Renderer,
-    snapshot: &Snapshot,
-    page: EntityId,
-) -> Result<Vec<u8>> {
+pub(crate) fn rendered_preview(snapshot: &Snapshot, page: EntityId) -> Result<Vec<u8>> {
     snapshot.page(page)?;
-    let composition = renderer.compose(snapshot, page).await?;
-    let image = renderer
-        .rasterize(&composition, &RasterOptions::default())
-        .await?
-        .image;
-    tokio::task::spawn_blocking(move || {
-        let image = image::DynamicImage::ImageRgba8(image)
-            .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
-            .to_rgba8();
-        let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
-        Ok(encoder.encode(85.0).to_vec())
-    })
-    .await
-    .context("the preview encoder stopped unexpectedly")?
+    let composition = Compositor::new().compile(snapshot, &RenderRequest::new(page))?;
+    let frame = SceneRenderer::new().render(snapshot, &composition)?;
+    let rasterizer = Rasterizer::new().context("failed to initialize the preview rasterizer")?;
+    let image = image::DynamicImage::ImageRgba8(
+        rasterizer
+            .rasterize(&frame, RasterOptions::default())?
+            .image,
+    )
+    .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
+    .to_rgba8();
+    let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
+    Ok(encoder.encode(85.0).to_vec())
 }

@@ -58,11 +58,14 @@ export function draftFrame(start: Point, end: Point): Frame {
 }
 
 export function selectableLayer(layer: Layer): boolean {
-  return layer.type === 'text' || (layer.type === 'pixel' && layer.geometry !== null)
+  return layer.type === 'text' || layer.type === 'image'
 }
 
 export function layerFrame(layer: Layer): Frame | null {
-  const points = layer.type === 'text' || layer.type === 'pixel' ? layer.geometry?.points : null
+  const points =
+    layer.type === 'text' || layer.type === 'image' || layer.type === 'artwork'
+      ? layer.geometry?.points
+      : null
   if (!points?.length || points.some((point) => !finite(point.x, point.y))) return null
   if (points.length === 4) {
     const [topLeft, topRight, bottomRight, bottomLeft] = points

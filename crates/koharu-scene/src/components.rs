@@ -20,8 +20,8 @@ pub(crate) use assets::Assets;
 pub use assets::{Asset, AssetInput, AssetMetadata, AssetRole};
 pub use groups::{Group, TextGroup};
 pub use layers::{
-    AssetRef, FontStyle, MaskChannel, PixelFormat, PixelLayer, TextAlignment, TextLayout,
-    TextLayoutKind, TextStroke, Typography, VerticalAlignment, WritingMode,
+    FontStyle, RasterLayer, RasterLayerKind, TextAlignment, TextLayout, TextLayoutKind, Typography,
+    WritingMode,
 };
 pub use provenance::{Authored, Generation, Origin};
 pub use spatial::{Geometry, Point, Visibility};

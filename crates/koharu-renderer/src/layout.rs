@@ -42,12 +42,14 @@ pub enum WritingMode {
     Horizontal,
     /// Vertical text, right-to-left columns (traditional CJK).
     VerticalRl,
+    /// Vertical text, left-to-right columns.
+    VerticalLr,
 }
 
 impl WritingMode {
     /// Returns true if the writing mode is vertical.
     pub const fn is_vertical(self) -> bool {
-        matches!(self, WritingMode::VerticalRl)
+        matches!(self, WritingMode::VerticalRl | WritingMode::VerticalLr)
     }
 }
 
@@ -62,6 +64,8 @@ pub struct LayoutLine<'a> {
     pub advance: f32,
     /// Baseline position for this line (x, y).
     pub baseline: (f32, f32),
+    /// Writing direction of this line.
+    pub direction: harfrust::Direction,
 }
 
 /// A collection of laid out lines.
@@ -288,8 +292,27 @@ impl<'a> TextLayout<'a> {
     }
 
     #[must_use]
+    pub fn with_center_vertical_punctuation(mut self, enabled: bool) -> Self {
+        self.center_vertical_punctuation = enabled;
+        self
+    }
+
+    #[must_use]
+    pub fn with_hyphenation_language(mut self, lang: Lang) -> Self {
+        self.hyphenation_lang = Some(lang);
+        self
+    }
+
+    #[must_use]
     pub fn with_hyphenation_language_tag(mut self, tag: &str) -> Self {
         self.hyphenation_lang = hyphenation_lang_from_tag(tag);
+        self
+    }
+
+    #[must_use]
+    pub fn without_hyphenation(mut self) -> Self {
+        self.hyphenation_lang = None;
+        self.hyphenation_policy = HyphenationPolicy::Disabled;
         self
     }
 
@@ -647,6 +670,7 @@ impl<'a> TextLayout<'a> {
                 line_ink,
                 balloon_air,
                 balloon_air,
+                &bidi_info,
                 &mut lines,
                 &mut line_profiles,
             );
@@ -666,6 +690,7 @@ impl<'a> TextLayout<'a> {
                     line_ink,
                     balloon_air,
                     balloon_air,
+                    &bidi_info,
                     &mut lines,
                     &mut line_profiles,
                 );
@@ -682,6 +707,7 @@ impl<'a> TextLayout<'a> {
                     line_ink,
                     balloon_air,
                     balloon_air,
+                    &bidi_info,
                     &mut lines,
                     &mut line_profiles,
                 );
@@ -716,6 +742,15 @@ impl<'a> TextLayout<'a> {
                                 + line_height * 0.5,
                             |profile| profile.block_baseline,
                         ),
+                    vertical_y(),
+                ),
+                WritingMode::VerticalLr => (
+                    self.comic_balloon
+                        .as_ref()
+                        .and_then(|_| line_profiles.get(i))
+                        .map_or(i as f32 * line_height + line_height * 0.5, |profile| {
+                            profile.block_baseline
+                        }),
                     vertical_y(),
                 ),
                 WritingMode::Horizontal => {
@@ -944,6 +979,7 @@ impl<'a> TextLayout<'a> {
         line_ink: InkBand,
         balloon_air_x: f32,
         balloon_air_y: f32,
+        bidi_info: &BidiInfo<'_>,
         lines: &mut Vec<LayoutLine<'a>>,
         line_profiles: &mut Vec<LineProfile>,
     ) -> bool {
@@ -956,6 +992,7 @@ impl<'a> TextLayout<'a> {
                     final_next_offset,
                     None,
                     true,
+                    bidi_info,
                     lines,
                 );
                 line_profiles.push(LineProfile {
@@ -984,14 +1021,12 @@ impl<'a> TextLayout<'a> {
             comic_line_breaks(
                 &measures,
                 balloon,
-                ComicLineBreakOptions {
-                    writing_mode: self.writing_mode,
-                    line_height,
-                    line_ink,
-                    air_x: balloon_air_x,
-                    air_y: balloon_air_y,
-                    policy: self.hyphenation_policy,
-                },
+                self.writing_mode,
+                line_height,
+                line_ink,
+                balloon_air_x,
+                balloon_air_y,
+                self.hyphenation_policy,
             )
         } else if max_extent.is_finite() && max_extent > 0.0 {
             line_breaks_with_policy(&measures, max_extent, self.hyphenation_policy)
@@ -1046,6 +1081,7 @@ impl<'a> TextLayout<'a> {
                 next_offset,
                 break_suffix,
                 mandatory_line || (force_final_line && final_line),
+                bidi_info,
                 lines,
             );
             line_profiles.push(
@@ -1073,6 +1109,7 @@ impl<'a> TextLayout<'a> {
         next_offset: usize,
         break_suffix: Option<ShapedBreakSuffix<'a>>,
         force_push: bool,
+        bidi_info: &BidiInfo<'_>,
         lines: &mut Vec<LayoutLine<'a>>,
     ) -> usize {
         if runs.is_empty() && !force_push {
@@ -1088,6 +1125,22 @@ impl<'a> TextLayout<'a> {
 
         let mut line = LayoutLine {
             range: offset..visible_end,
+            direction: if self.writing_mode.is_vertical() {
+                harfrust::Direction::TopToBottom
+            } else {
+                bidi_info
+                    .paragraphs
+                    .iter()
+                    .find(|p| offset >= p.range.start && offset <= p.range.end)
+                    .map(|p| {
+                        if p.level.is_rtl() {
+                            harfrust::Direction::RightToLeft
+                        } else {
+                            harfrust::Direction::LeftToRight
+                        }
+                    })
+                    .unwrap_or(harfrust::Direction::LeftToRight)
+            },
             ..Default::default()
         };
 
@@ -1449,29 +1502,16 @@ fn optimal_uniform_line_breaks(
     }
 }
 
-#[derive(Clone, Copy)]
-struct ComicLineBreakOptions {
+fn comic_line_breaks(
+    segments: &[LineBreakMeasure],
+    balloon: &ComicBalloon,
     writing_mode: WritingMode,
     line_height: f32,
     line_ink: InkBand,
     air_x: f32,
     air_y: f32,
     policy: HyphenationPolicy,
-}
-
-fn comic_line_breaks(
-    segments: &[LineBreakMeasure],
-    balloon: &ComicBalloon,
-    options: ComicLineBreakOptions,
 ) -> LineBreakResult {
-    let ComicLineBreakOptions {
-        writing_mode,
-        line_height,
-        line_ink,
-        air_x,
-        air_y,
-        policy,
-    } = options;
     let block_extent = if writing_mode.is_vertical() {
         balloon.width
     } else {
@@ -2636,17 +2676,15 @@ mod tests {
         let horizontal = comic_line_breaks(
             &segments,
             &balloon,
-            ComicLineBreakOptions {
-                writing_mode: WritingMode::Horizontal,
-                line_height: 24.0,
-                line_ink: InkBand {
-                    before: 10.0,
-                    after: 10.0,
-                },
-                air_x: 0.0,
-                air_y: 0.0,
-                policy: HyphenationPolicy::Disabled,
+            WritingMode::Horizontal,
+            24.0,
+            InkBand {
+                before: 10.0,
+                after: 10.0,
             },
+            0.0,
+            0.0,
+            HyphenationPolicy::Disabled,
         );
         let vertical_balloon = comic_balloon(
             200.0,
@@ -2658,17 +2696,15 @@ mod tests {
         let vertical = comic_line_breaks(
             &segments,
             &vertical_balloon,
-            ComicLineBreakOptions {
-                writing_mode: WritingMode::VerticalRl,
-                line_height: 24.0,
-                line_ink: InkBand {
-                    before: 10.0,
-                    after: 10.0,
-                },
-                air_x: 0.0,
-                air_y: 0.0,
-                policy: HyphenationPolicy::Disabled,
+            WritingMode::VerticalRl,
+            24.0,
+            InkBand {
+                before: 10.0,
+                after: 10.0,
             },
+            0.0,
+            0.0,
+            HyphenationPolicy::Disabled,
         );
 
         assert_eq!(horizontal.breaks, [2, 4]);
@@ -2968,6 +3004,24 @@ mod tests {
             assert_approx_eq(dx, line_height);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn vertical_lr_columns_flow_left_to_right() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let layout = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_writing_mode(WritingMode::VerticalLr)
+            .run("A\nB\nC")?;
+
+        assert_eq!(layout.lines.len(), 3);
+        assert!(
+            layout
+                .lines
+                .windows(2)
+                .all(|pair| { pair[0].baseline.0 < pair[1].baseline.0 })
+        );
         Ok(())
     }
 
