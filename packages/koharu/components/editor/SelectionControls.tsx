@@ -173,7 +173,7 @@ export function SelectionControls({
       <div
         data-canvas-control
         data-rotate-handle
-        className='pointer-events-auto absolute top-[-8px] left-1/2 grid size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-alias touch-none place-items-center'
+        className='pointer-events-auto absolute top-[-16px] left-1/2 grid size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-alias touch-none place-items-center'
         onPointerDown={startRotate}
         {...pointerEvents}
       >

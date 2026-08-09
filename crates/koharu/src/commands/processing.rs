@@ -234,7 +234,7 @@ pub(crate) async fn process(
             Ok(report) => (report.status == RunStatus::Stopped, None),
             Err(error) => {
                 tracing::error!(stage = ?error.stage, %error, "processing failed");
-                (false, Some(error.to_string()))
+                (false, Some(format!("{error:#}")))
             }
         };
         task_handle.state::<Processing>().stops.lock().remove(&id);

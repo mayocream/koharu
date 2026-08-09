@@ -20,7 +20,7 @@ import {
   Trash2,
   Type,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { ColorWell } from '@/components/controls/ColorWell'
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
@@ -125,6 +125,7 @@ export function Inspector() {
 }
 
 function TypeInspector() {
+  const borderWidthId = useId()
   const page = usePage().data
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
   const availableFonts = useFonts().data
@@ -352,6 +353,8 @@ function TypeInspector() {
           </InspectorField>
           <InspectorField label='Width'>
             <NumberField
+              id={borderWidthId}
+              name='border-width'
               className='min-w-0'
               disabled={disabled}
               value={displayedStrokeWidth}
@@ -835,6 +838,7 @@ function FontSizeField({
   onChange: (value: number) => void
   onAutoFit: () => void
 }) {
+  const id = useId()
   const [draft, setDraft] = useState<number | null>(value)
 
   useEffect(() => {
@@ -864,6 +868,8 @@ function FontSizeField({
 
   return (
     <NumberField
+      id={id}
+      name='font-size'
       className='min-w-0'
       disabled={disabled}
       value={draft}

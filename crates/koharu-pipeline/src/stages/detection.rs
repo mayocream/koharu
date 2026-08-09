@@ -197,7 +197,8 @@ fn build_patch(
     let mut reused_contents = BTreeSet::new();
     let mut edit = input.scene.edit_as(generation.clone());
     edit.observe_subtree(page)?;
-    remove_previous_regions(input, &mut edit, generation)?;
+    remove_previous_regions(input, &mut edit, generation)
+        .context("failed to replace the previous detection regions")?;
     write_page(
         input,
         &mut edit,
@@ -207,14 +208,16 @@ fn build_patch(
         generation,
         &mut previous_texts,
         &mut reused_contents,
-    )?;
+    )
+    .context("failed to write detection output")?;
     remove_unmatched_texts(
         input,
         &mut edit,
         generation,
         previous_texts,
         &reused_contents,
-    )?;
+    )
+    .context("failed to remove unmatched detected text")?;
     finish(edit)
 }
 
@@ -362,9 +365,11 @@ fn write_page(
         generation,
         previous_texts,
         reused_contents,
-    )?;
-    link_dialogue_regions(edit, &regions, generation)?;
-    write_masks(input, edit, page, &detections, size)
+    )
+    .context("failed to write detected regions")?;
+    link_dialogue_regions(edit, &regions, generation)
+        .context("failed to associate detected text with dialogue regions")?;
+    write_masks(input, edit, page, &detections, size).context("failed to write detection masks")
 }
 
 fn write_regions<'a>(
@@ -387,7 +392,7 @@ fn write_regions<'a>(
     } else {
         None
     };
-    for detection in detections {
+    for (index, detection) in detections.iter().enumerate() {
         let previous = (detection.label == "text")
             .then(|| take_previous_text(previous_texts, detection.bbox))
             .flatten();
@@ -400,11 +405,14 @@ fn write_regions<'a>(
             generation,
             previous,
             reused_contents,
-        )? {
+        )
+        .with_context(|| format!("failed to write {} detection {index}", detection.label))?
+        {
             RegionOutput::Bubble(bubble) => regions.bubbles.push(bubble),
             RegionOutput::Text(text) => {
                 if let Some(group) = managed_text_group {
-                    edit.move_entity(text.layer, Some(group), At::End)?;
+                    edit.move_entity(text.layer, Some(group), At::End)
+                        .context("failed to place the detected text layer in its group")?;
                 }
                 regions.texts.push(text);
             }
@@ -424,7 +432,9 @@ fn write_region<'a>(
     previous: Option<PreviousText>,
     reused_contents: &mut BTreeSet<EntityId>,
 ) -> Result<RegionOutput<'a>> {
-    let entity = edit.add_entity(page, At::End)?;
+    let entity = edit
+        .add_entity(page, At::End)
+        .context("failed to create a detected region")?;
     let kind = region_kind(&detection.label)?;
     let inferred = (detection.label == "text")
         .then(|| infer_typography(image, detection))
@@ -439,7 +449,8 @@ fn write_region<'a>(
     } else {
         rectangle_geometry(detection.bbox)
     };
-    edit.set(entity, &geometry)?;
+    edit.set(entity, &geometry)
+        .context("failed to set detected region geometry")?;
     edit.set(
         entity,
         &Region {
@@ -447,7 +458,8 @@ fn write_region<'a>(
             kind: kind.clone(),
             label: Some(detection.label.clone()),
         },
-    )?;
+    )
+    .context("failed to set detected region metadata")?;
     edit.set(
         entity,
         &DetectionAnalysis {
@@ -457,7 +469,8 @@ fn write_region<'a>(
                 confidence: detection.score,
             }],
         },
-    )?;
+    )
+    .context("failed to set detection analysis")?;
     if detection.label != "text" {
         return Ok(if detection.label == "bubble" {
             RegionOutput::Bubble(DetectedRegion {
@@ -470,22 +483,24 @@ fn write_region<'a>(
         });
     }
 
-    let (content, layer, created) = previous.map_or_else(
-        || -> Result<_> {
-            let content = edit.add_text_content(page, At::End)?;
-            let layer = edit.add_text_layer(
-                page,
-                At::End,
-                content,
-                &TextLayout {
-                    origin: Origin::Generated(generation.clone()),
-                    kind: TextLayoutKind::Paragraph,
-                },
-            )?;
-            Ok((content, layer, true))
-        },
-        |previous| Ok((previous.content, previous.layer, false)),
-    )?;
+    let (content, layer, created) = previous
+        .map_or_else(
+            || -> Result<_> {
+                let content = edit.add_text_content(page, At::End)?;
+                let layer = edit.add_text_layer(
+                    page,
+                    At::End,
+                    content,
+                    &TextLayout {
+                        origin: Origin::Generated(generation.clone()),
+                        kind: TextLayoutKind::Paragraph,
+                    },
+                )?;
+                Ok((content, layer, true))
+            },
+            |previous| Ok((previous.content, previous.layer, false)),
+        )
+        .context("failed to create or reuse detected text entities")?;
     if !created {
         reused_contents.insert(content);
     }
@@ -494,7 +509,8 @@ fn write_region<'a>(
             .component::<TextRole>(content)?
             .is_none_or(|value| value.origin != Origin::User)
     {
-        write_text_role(edit, content, "dev.koharu.text.free-text", generation)?;
+        write_text_role(edit, content, "dev.koharu.text.free-text", generation)
+            .context("failed to set the detected text role")?;
     }
     if created || snapshot.component::<TextLayout>(layer)?.is_none() {
         edit.set(
@@ -503,7 +519,8 @@ fn write_region<'a>(
                 origin: Origin::Generated(generation.clone()),
                 kind: TextLayoutKind::Paragraph,
             },
-        )?;
+        )
+        .context("failed to set detected text layout")?;
     }
     if created
         || snapshot
@@ -527,9 +544,11 @@ fn write_region<'a>(
                 writing_mode: inferred.map(|value| value.writing_mode),
                 extensions: Default::default(),
             },
-        )?;
+        )
+        .context("failed to set detected typography")?;
     }
-    edit.relate::<RecognizedFrom>(content, entity)?;
+    edit.relate::<RecognizedFrom>(content, entity)
+        .context("failed to associate detected text content with its region")?;
 
     Ok(RegionOutput::Text(DetectedText {
         entity,

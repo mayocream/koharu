@@ -515,9 +515,10 @@ describe('greenfield editor', () => {
     )
   })
 
-  it('edits pipeline and translation preferences from the settings page', () => {
+  it('edits and persists pipeline and translation preferences from the settings page', async () => {
     installProject()
     useKoharuStore.setState({ settingsOpen: true })
+    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(preferences)
     render(
       <ThemeProvider attribute='class'>
         <SettingsPage />
@@ -527,13 +528,28 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pipeline' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Pipeline' })).toBeInTheDocument()
     expect(screen.getAllByRole('combobox')).toHaveLength(3)
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Text threshold' }), {
+      target: { value: '0.42' },
+    })
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processor: expect.objectContaining({
+            'koharu-layout-rfdetr-seg-2xl': expect.objectContaining({ text_threshold: 0.42 }),
+          }),
+        }),
+        preferences.providers,
+      ),
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Providers' })).toBeInTheDocument()
     expect(screen.getByLabelText('DeepL credential')).toBeInTheDocument()
     expect(screen.getAllByLabelText('Base URL')).toHaveLength(3)
     fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Translation' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Translation model')).toHaveTextContent('lfm2.5-1.2b-instruct')
+    expect(screen.getByLabelText('Translation model')).toHaveTextContent(
+      'LFM 2.5 1.2B Instruct',
+    )
     expect(screen.getByLabelText('Target language')).toHaveTextContent('American English')
   })
 

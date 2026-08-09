@@ -63,32 +63,12 @@ impl Edit {
     }
 
     pub fn observe<T: Component>(&mut self, entity: EntityId) -> Result<()> {
-        let key = key::<T>()?;
-        let fingerprint = self
-            .state
-            .component(entity, &key)?
-            .map(ComponentRecord::fingerprint);
-        self.observations.insert(Observation::Component {
-            owner: ComponentOwner::Entity(entity),
-            key,
-            fingerprint,
-        });
-        Ok(())
+        self.observe_component(ComponentOwner::Entity(entity), key::<T>()?)
     }
 
     /// Observes the complete typed asset collection owned by an entity.
     pub fn observe_assets(&mut self, entity: EntityId) -> Result<()> {
-        let key = key::<Assets>()?;
-        let fingerprint = self
-            .state
-            .component(entity, &key)?
-            .map(ComponentRecord::fingerprint);
-        self.observations.insert(Observation::Component {
-            owner: ComponentOwner::Entity(entity),
-            key,
-            fingerprint,
-        });
-        Ok(())
+        self.observe_component(ComponentOwner::Entity(entity), key::<Assets>()?)
     }
 
     pub fn add_page(&mut self, page: PageDraft, at: At) -> Result<EntityId> {
@@ -365,7 +345,6 @@ impl Edit {
         let owner = ComponentOwner::Entity(entity);
         let key = key::<Assets>()?;
         let previous = self.component(owner, &key)?;
-        let fingerprint = previous.map(ComponentRecord::fingerprint);
         let mut assets = previous
             .map(|value| {
                 let record_exists = |id| self.state.contains_entity(id);
@@ -377,13 +356,7 @@ impl Edit {
         if let Some(existing) = assets.values.get(role) {
             self.validate_origin_removal(Some(&existing.origin))?;
         }
-        if self.base.state.contains_entity(entity) {
-            self.observations.insert(Observation::Component {
-                owner,
-                key: key.clone(),
-                fingerprint,
-            });
-        }
+        self.observe_component(owner, key.clone())?;
         assets.values.insert(
             role.clone(),
             Asset {
@@ -401,7 +374,6 @@ impl Edit {
         let owner = ComponentOwner::Entity(entity);
         let key = key::<Assets>()?;
         let previous = self.component(owner, &key)?;
-        let fingerprint = previous.map(ComponentRecord::fingerprint);
         let Some(mut assets) = previous
             .map(|value| {
                 let record_exists = |id| self.state.contains_entity(id);
@@ -416,13 +388,7 @@ impl Edit {
             return Ok(());
         };
         self.validate_origin_removal(Some(&existing.origin))?;
-        if self.base.state.contains_entity(entity) {
-            self.observations.insert(Observation::Component {
-                owner,
-                key: key.clone(),
-                fingerprint,
-            });
-        }
+        self.observe_component(owner, key.clone())?;
         assets.values.remove(role);
         if assets.values.is_empty() {
             self.replace_component(owner, key, None)
@@ -685,6 +651,35 @@ impl Edit {
         }
     }
 
+    /// Observations describe dependencies on the edit's base snapshot. Changes made earlier in
+    /// this edit are already ordered by `operations` and must not become competing observations.
+    fn observe_component(&mut self, owner: ComponentOwner, key: ComponentKey) -> Result<()> {
+        let fingerprint = match owner {
+            ComponentOwner::Project => self
+                .base
+                .state
+                .project_component(&key)
+                .map(ComponentRecord::fingerprint),
+            ComponentOwner::Entity(id) if self.base.state.contains_entity(id) => self
+                .base
+                .state
+                .component(id, &key)?
+                .map(ComponentRecord::fingerprint),
+            ComponentOwner::Relation(id) if self.base.state.relations.contains_key(&id) => self
+                .base
+                .state
+                .relation_component(id, &key)?
+                .map(ComponentRecord::fingerprint),
+            ComponentOwner::Entity(_) | ComponentOwner::Relation(_) => return Ok(()),
+        };
+        self.observations.insert(Observation::Component {
+            owner,
+            key,
+            fingerprint,
+        });
+        Ok(())
+    }
+
     fn encoded<T: Component>(&self, value: &T) -> Result<(ComponentKey, ComponentRecord)> {
         Ok((key::<T>()?, self.encode_value(value)?))
     }
@@ -784,9 +779,6 @@ impl Edit {
 
     fn validate_removal_authorship<T: Component>(&mut self, owner: ComponentOwner) -> Result<()> {
         let key = key::<T>()?;
-        let fingerprint = self
-            .component(owner, &key)?
-            .map(ComponentRecord::fingerprint);
         let existing = self
             .component(owner, &key)?
             .map(|value| {
@@ -795,18 +787,7 @@ impl Edit {
                 decode::<T>(value, &ValidationContext::new(&record_exists, &blob_exists))
             })
             .transpose()?;
-        let existed_at_base = match owner {
-            ComponentOwner::Project => true,
-            ComponentOwner::Entity(id) => self.base.state.contains_entity(id),
-            ComponentOwner::Relation(id) => self.base.state.relations.contains_key(&id),
-        };
-        if existed_at_base {
-            self.observations.insert(Observation::Component {
-                owner,
-                key,
-                fingerprint,
-            });
-        }
+        self.observe_component(owner, key)?;
         match existing {
             None => Ok(()),
             Some(value) => {

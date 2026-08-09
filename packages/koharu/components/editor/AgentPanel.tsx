@@ -213,6 +213,7 @@ export function AgentPanel() {
       <div className='shrink-0 border-t p-2.5'>
         <div className='rounded-xl border bg-background p-1.5 focus-within:border-ring'>
           <Textarea
+            id='agent-message'
             value={prompt}
             disabled={running !== null}
             aria-label={t('native.agent.message')}

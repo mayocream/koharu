@@ -72,6 +72,36 @@ fn fresh_scene_has_an_empty_project_hierarchy() {
 }
 
 #[test]
+fn components_on_new_entities_do_not_observe_missing_base_state() {
+    let mut session = Session::memory().unwrap();
+    let mut entity = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(page(), At::End)?;
+            let id = edit.add_entity(page, At::End)?;
+            edit.set(
+                id,
+                &Visibility {
+                    origin: Origin::User,
+                    visible: true,
+                    opacity: 1.0,
+                },
+            )?;
+            entity = Some(id);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).unwrap().snapshot;
+    assert!(
+        snapshot
+            .component::<Visibility>(entity.unwrap())
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[test]
 fn built_in_component_schemas_remain_revision_one() {
     fn schema<T: Component>() -> u16 {
         <T as revision::Revisioned>::revision()
@@ -961,6 +991,73 @@ fn assets_attach_bytes_without_decoding() {
     let batch = snapshot.read_blobs([asset.blob, asset.blob]).unwrap();
     assert_eq!(batch.len(), 1);
     assert_eq!(&**batch.get(asset.blob).unwrap(), b"encoded image");
+}
+
+#[test]
+fn repeated_asset_writes_rebase_over_an_unrelated_page_edit() {
+    let mut session = Session::memory().unwrap();
+    let mut ids = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let first_page = edit.add_page(page(), At::End)?;
+            let second_page = edit.add_page(page(), At::End)?;
+            ids = Some((first_page, second_page));
+            Ok(())
+        })
+        .unwrap();
+    let base = session.commit(create).unwrap().snapshot;
+    let (first_page, second_page) = ids.unwrap();
+
+    let assets = base
+        .patch(|edit| {
+            for role in ["text-mask", "bubble-mask"] {
+                edit.set_asset(
+                    second_page,
+                    &AssetRole::new(role)?,
+                    AssetInput::new(
+                        Arc::<[u8]>::from(role.as_bytes()),
+                        "image/test",
+                        AssetMetadata {
+                            width: None,
+                            height: None,
+                            attributes: BTreeMap::new(),
+                        },
+                    ),
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let unrelated = base
+        .patch(|edit| {
+            edit.set_asset(
+                first_page,
+                &AssetRole::new("source")?,
+                AssetInput::new(
+                    Arc::<[u8]>::from(&b"source"[..]),
+                    "image/test",
+                    AssetMetadata {
+                        width: None,
+                        height: None,
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )
+        })
+        .unwrap();
+    let current = session.commit(unrelated).unwrap().snapshot;
+
+    let assets = assets.rebase_on(&current).unwrap();
+    let snapshot = session.commit(assets).unwrap().snapshot;
+    for role in ["text-mask", "bubble-mask"] {
+        assert!(
+            snapshot
+                .asset(second_page, &AssetRole::new(role).unwrap())
+                .unwrap()
+                .is_some()
+        );
+    }
 }
 
 #[test]

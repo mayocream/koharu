@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { WindowControls } from '@/components/app/WindowChrome'
 import { call, dispatch } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
-import { commands, type Scope, type Stage } from '@/lib/protocol'
+import { commands, type Operation, type Scope, type Stage } from '@/lib/protocol'
 import {
   pageKey,
   pagesKey,
@@ -47,12 +47,8 @@ export function TitleBar() {
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
 
-  const run = (scope: Scope, stage?: Stage) =>
-    void call(
-      commands.process,
-      scope,
-      stage ? { operation: 'through', stage } : { operation: 'full' },
-    ).catch(() => undefined)
+  const run = (scope: Scope, operation: Operation = { operation: 'full' }) =>
+    void call(commands.process, scope, operation).catch(() => undefined)
 
   const closeProject = () => void call(commands.closeProject).catch(() => undefined)
 
@@ -200,7 +196,12 @@ export function TitleBar() {
             </MenubarItem>
             <MenubarItem
               disabled={selectedLayers.length === 0}
-              onClick={() => run({ scope: 'entities', value: selectedLayers })}
+              onClick={() =>
+                run(
+                  { scope: 'entities', value: selectedLayers },
+                  { operation: 'stages', stages: ['ocr', 'translation'] },
+                )
+              }
             >
               {t('native.menu.processLayers', { defaultValue: 'Process Selection' })}
             </MenubarItem>
@@ -209,7 +210,7 @@ export function TitleBar() {
               <MenubarItem
                 key={stage}
                 disabled={!project || pages.length === 0}
-                onClick={() => run({ scope: 'project' }, stage)}
+                onClick={() => run({ scope: 'project' }, { operation: 'through', stage })}
               >
                 {t('native.menu.runPhase', {
                   phase: t(`native.phase.${stage}`, { defaultValue: stage }),

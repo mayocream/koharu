@@ -5,7 +5,7 @@ use vello::kurbo::{Affine, Point as KurboPoint};
 
 use crate::{
     CanvasPage, ElementFrame, ElementId, ElementPreview, Error, Frame, PageId, Result,
-    TransformCommit,
+    TransformCommit, geometry::frame_corners,
 };
 
 /// Validated Rust-side state for transform previews authored by React.
@@ -49,7 +49,19 @@ impl ActiveTransform {
                 Ok(ElementPreview {
                     element: control.element,
                     frame,
-                    geometry: value.geometry.clone(),
+                    geometry: if value.has_text {
+                        Geometry {
+                            origin: value.geometry.origin.clone(),
+                            points: frame_corners(frame)
+                                .map(|point| Point {
+                                    x: point.x,
+                                    y: point.y,
+                                })
+                                .into(),
+                        }
+                    } else {
+                        value.geometry.clone()
+                    },
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -338,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn rendered_text_control_translates_the_resolved_text_geometry() {
+    fn manual_text_transform_authors_the_resolved_control_frame() {
         let source = Frame::new(10.0, 20.0, 80.0, 50.0);
         let (page, ids) = page_with_frames(&[source]);
         let control = Frame::new(30.0, 35.0, 40.0, 20.0);
@@ -358,6 +370,7 @@ mod tests {
                     frame: Frame {
                         x: control.x + 12.0,
                         y: control.y - 7.0,
+                        angle_degrees: 90.0,
                         ..control
                     },
                 }],
@@ -365,7 +378,10 @@ mod tests {
             .unwrap();
 
         let commit = transform.finish().unwrap();
-        let expected = crate::frame_corners(Frame::new(22.0, 13.0, 80.0, 50.0));
+        let expected = crate::frame_corners(Frame {
+            angle_degrees: 90.0,
+            ..Frame::new(42.0, 28.0, 40.0, 20.0)
+        });
         for (actual, expected) in commit.elements[0].geometry.points.iter().zip(expected) {
             assert!((actual.x - expected.x).abs() < 1e-5);
             assert!((actual.y - expected.y).abs() < 1e-5);

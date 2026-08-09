@@ -240,7 +240,6 @@ impl Camera {
     }
 }
 
-#[cfg(test)]
 pub(crate) fn frame_corners(frame: Frame) -> [PagePoint; 4] {
     let center = PagePoint::new(
         f64::from(frame.x + frame.width * 0.5),

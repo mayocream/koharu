@@ -1,5 +1,7 @@
 'use client'
 
+import { useId } from 'react'
+
 import { Input } from '@koharu/ui/components/input'
 import { Switch } from '@koharu/ui/components/switch'
 
@@ -112,10 +114,12 @@ export function NumberField({
   step?: number
   onChange: (value: number | null) => void
 }) {
+  const id = useId()
   return (
     <label className='grid gap-1 text-[10px] text-muted-foreground'>
       {label}
       <Input
+        id={id}
         type='number'
         value={value ?? ''}
         min={min}
