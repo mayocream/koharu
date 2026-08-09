@@ -148,8 +148,35 @@ impl SceneRenderer {
             snapshot,
             self,
             &composition.request.theme,
-            &self.text_renderer,
         )?);
+        Ok(self.frames.lock().insert(key, frame))
+    }
+
+    /// Resolves a new composition while retaining unchanged entity layers from
+    /// the previous frame. Text layout is local to its geometry; placement is
+    /// applied only when the frame is assembled.
+    pub fn update(
+        &self,
+        previous: &Frame,
+        snapshot: &Snapshot,
+        composition: &Composition,
+    ) -> Result<Arc<Frame>> {
+        if composition.revision() != snapshot.revision() {
+            return Err(Error::invalid(format!(
+                "composition revision {} does not match scene revision {}",
+                composition.revision(),
+                snapshot.revision()
+            )));
+        }
+        let key = FrameKey::new(
+            composition.revision(),
+            self.fonts.generation(),
+            &composition.request,
+        );
+        if let Some(frame) = self.frames.lock().get(&key) {
+            return Ok(frame);
+        }
+        let frame = Arc::new(Frame::update(composition, snapshot, self, previous)?);
         Ok(self.frames.lock().insert(key, frame))
     }
 
@@ -275,6 +302,9 @@ pub struct Frame {
     top: i32,
     scene: Arc<Scene>,
     entity_scenes: HashMap<EntityId, Vec<Arc<Scene>>>,
+    retained: Vec<RetainedLayer>,
+    theme: RenderTheme,
+    font_generation: u64,
     layers: Vec<VisualLayer>,
     dependencies: Vec<RenderDependency>,
     diagnostics: Vec<RenderDiagnostic>,
@@ -301,26 +331,116 @@ impl Frame {
         snapshot: &Snapshot,
         renderer: &SceneRenderer,
         theme: &RenderTheme,
-        text_renderer: &crate::TextRenderer,
     ) -> Result<Self> {
-        let rendered = composition
+        let retained = composition
             .layers
             .par_iter()
-            .map(|layer| render_layer(layer, composition, snapshot, renderer, theme, text_renderer))
+            .map(|layer| RetainedLayer::render(layer, composition, snapshot, renderer, theme))
             .collect::<Result<Vec<_>>>()?;
+        Ok(Self::assemble(
+            composition,
+            retained,
+            theme.clone(),
+            renderer.fonts.generation(),
+        ))
+    }
+
+    fn update(
+        composition: &Composition,
+        snapshot: &Snapshot,
+        renderer: &SceneRenderer,
+        previous: &Self,
+    ) -> Result<Self> {
+        if previous.page != composition.page {
+            return Self::render(composition, snapshot, renderer, &composition.request.theme);
+        }
+
+        let font_generation = renderer.fonts.generation();
+        let text_context_changed = previous.theme != composition.request.theme
+            || previous.font_generation != font_generation;
+        let mut old = HashMap::<LayerIdentity, VecDeque<RetainedLayer>>::new();
+        for layer in &previous.retained {
+            old.entry(layer.identity())
+                .or_default()
+                .push_back(layer.clone());
+        }
+
+        let mut retained = Vec::with_capacity(composition.layers.len());
+        let mut pending = Vec::new();
+        for (index, layer) in composition.layers.iter().enumerate() {
+            let (source, placement) = RetainedLayer::resolve(layer);
+            let reused = old
+                .get_mut(&RetainedLayer::identity_for(&source))
+                .and_then(VecDeque::pop_front)
+                .filter(|previous| {
+                    previous.source == source
+                        && (!matches!(source, Layer::Text(_)) || !text_context_changed)
+                })
+                .map(|previous| RetainedLayer {
+                    source: source.clone(),
+                    placement,
+                    rendered: previous.rendered,
+                });
+            retained.push(reused);
+            if retained[index].is_none() {
+                pending.push((index, source, placement));
+            }
+        }
+
+        let rendered = pending
+            .into_par_iter()
+            .map(|(index, source, placement)| {
+                let rendered = RetainedLayer::render_source(
+                    &source,
+                    composition,
+                    snapshot,
+                    renderer,
+                    &composition.request.theme,
+                )?;
+                Ok((
+                    index,
+                    RetainedLayer {
+                        source,
+                        placement,
+                        rendered: Arc::new(rendered),
+                    },
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (index, layer) in rendered {
+            retained[index] = Some(layer);
+        }
+        Ok(Self::assemble(
+            composition,
+            retained
+                .into_iter()
+                .map(|layer| layer.expect("every composition layer was resolved"))
+                .collect(),
+            composition.request.theme.clone(),
+            font_generation,
+        ))
+    }
+
+    fn assemble(
+        composition: &Composition,
+        retained: Vec<RetainedLayer>,
+        theme: RenderTheme,
+        font_generation: u64,
+    ) -> Self {
         let mut scene = Scene::new();
         let mut entity_scenes = HashMap::<EntityId, Vec<Arc<Scene>>>::new();
-        let mut layers = Vec::with_capacity(rendered.len());
+        let mut layers = Vec::with_capacity(retained.len());
         let mut diagnostics = composition.diagnostics.clone();
-        for layer in rendered {
+        for retained_layer in &retained {
+            let layer = retained_layer.placed();
             let entity = layer.layer.entity;
-            let layer_scene = Arc::new(layer.scene);
+            let layer_scene = layer.scene;
             scene.append(&layer_scene, None);
             entity_scenes.entry(entity).or_default().push(layer_scene);
             layers.push(layer.layer);
             diagnostics.extend(layer.diagnostics);
         }
-        Ok(Self {
+        Self {
             revision: composition.revision,
             page: composition.page,
             width: composition.width,
@@ -329,10 +449,13 @@ impl Frame {
             top: 0,
             scene: Arc::new(scene),
             entity_scenes,
+            retained,
+            theme,
+            font_generation,
             layers,
             dependencies: composition.dependencies.clone(),
             diagnostics,
-        })
+        }
     }
 
     #[must_use]
@@ -451,6 +574,9 @@ impl Frame {
             top,
             scene: layer_scene.clone(),
             entity_scenes: HashMap::from([(entity, vec![layer_scene])]),
+            retained: Vec::new(),
+            theme: self.theme.clone(),
+            font_generation: self.font_generation,
             layers: self
                 .layers
                 .iter()
@@ -472,6 +598,9 @@ impl Frame {
             top: self.top,
             scene: self.scene.clone(),
             entity_scenes: self.entity_scenes.clone(),
+            retained: self.retained.clone(),
+            theme: self.theme.clone(),
+            font_generation: self.font_generation,
             layers: self.layers.clone(),
             dependencies: self.dependencies.clone(),
             diagnostics: self.diagnostics.clone(),
@@ -493,6 +622,9 @@ impl Frame {
             top: 0,
             scene: Arc::new(Scene::new()),
             entity_scenes: HashMap::new(),
+            retained: Vec::new(),
+            theme: RenderTheme::default(),
+            font_generation: 0,
             layers: Vec::new(),
             dependencies,
             diagnostics: Vec::new(),
@@ -624,23 +756,101 @@ impl FrameCache {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct RenderedLayer {
-    pub(crate) scene: Scene,
+    pub(crate) scene: Arc<Scene>,
     pub(crate) layer: VisualLayer,
     pub(crate) diagnostics: Vec<RenderDiagnostic>,
 }
 
-fn render_layer(
-    layer: &Layer,
-    composition: &Composition,
-    snapshot: &Snapshot,
-    renderer: &SceneRenderer,
-    theme: &RenderTheme,
-    text_renderer: &crate::TextRenderer,
-) -> Result<RenderedLayer> {
-    match layer {
-        Layer::Image(layer) => render_image(layer, composition, snapshot, renderer),
-        Layer::Text(layer) => text_renderer.render_layer(layer, &renderer.fonts, theme),
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+enum LayerIdentity {
+    Image(EntityId),
+    Text(EntityId),
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+struct Placement {
+    x: f32,
+    y: f32,
+}
+
+#[derive(Clone)]
+struct RetainedLayer {
+    source: Layer,
+    placement: Placement,
+    rendered: Arc<RenderedLayer>,
+}
+
+impl RetainedLayer {
+    fn resolve(layer: &Layer) -> (Layer, Placement) {
+        match layer {
+            Layer::Image(layer) => (Layer::Image(layer.clone()), Placement::default()),
+            Layer::Text(layer) => {
+                let placement = Placement {
+                    x: layer.bounds.x,
+                    y: layer.bounds.y,
+                };
+                let mut layer = layer.clone();
+                layer.bounds.x = 0.0;
+                layer.bounds.y = 0.0;
+                (Layer::Text(layer), placement)
+            }
+        }
+    }
+
+    fn identity_for(layer: &Layer) -> LayerIdentity {
+        match layer {
+            Layer::Image(layer) => LayerIdentity::Image(layer.entity),
+            Layer::Text(layer) => LayerIdentity::Text(layer.entity),
+        }
+    }
+
+    fn identity(&self) -> LayerIdentity {
+        Self::identity_for(&self.source)
+    }
+
+    fn render(
+        layer: &Layer,
+        composition: &Composition,
+        snapshot: &Snapshot,
+        renderer: &SceneRenderer,
+        theme: &RenderTheme,
+    ) -> Result<Self> {
+        let (source, placement) = Self::resolve(layer);
+        let rendered = Arc::new(Self::render_source(
+            &source,
+            composition,
+            snapshot,
+            renderer,
+            theme,
+        )?);
+        Ok(Self {
+            source,
+            placement,
+            rendered,
+        })
+    }
+
+    fn render_source(
+        source: &Layer,
+        composition: &Composition,
+        snapshot: &Snapshot,
+        renderer: &SceneRenderer,
+        theme: &RenderTheme,
+    ) -> Result<RenderedLayer> {
+        match source {
+            Layer::Image(layer) => render_image(layer, composition, snapshot, renderer),
+            Layer::Text(layer) => {
+                renderer
+                    .text_renderer
+                    .render_layer(layer, &renderer.fonts, theme)
+            }
+        }
+    }
+
+    fn placed(&self) -> RenderedLayer {
+        self.rendered.translated(self.placement.x, self.placement.y)
     }
 }
 
@@ -688,7 +898,7 @@ fn render_image(
         scene.pop_layer();
     }
     Ok(RenderedLayer {
-        scene,
+        scene: Arc::new(scene),
         layer: VisualLayer {
             entity: layer.entity,
             kind: layer.kind,
@@ -699,6 +909,59 @@ fn render_image(
         },
         diagnostics: Vec::new(),
     })
+}
+
+impl RenderedLayer {
+    fn translated(&self, x: f32, y: f32) -> Self {
+        if x == 0.0 && y == 0.0 {
+            return self.clone();
+        }
+        let mut scene = Scene::new();
+        scene.append(
+            &self.scene,
+            Some(Affine::translate((f64::from(x), f64::from(y)))),
+        );
+        let mut layer = self.layer.clone();
+        translate_bounds(&mut layer.bounds, x, y);
+        if let Some(text) = layer.text.as_mut() {
+            translate_bounds(&mut text.rendered_bounds, x, y);
+            translate_bounds(&mut text.layout_bounds, x, y);
+        }
+        let diagnostics = self
+            .diagnostics
+            .iter()
+            .cloned()
+            .map(|diagnostic| match diagnostic {
+                RenderDiagnostic::TextOverflow {
+                    entity,
+                    mut available,
+                    actual_width,
+                    actual_height,
+                    font_size,
+                } => {
+                    translate_bounds(&mut available, x, y);
+                    RenderDiagnostic::TextOverflow {
+                        entity,
+                        available,
+                        actual_width,
+                        actual_height,
+                        font_size,
+                    }
+                }
+                diagnostic => diagnostic,
+            })
+            .collect();
+        Self {
+            scene: Arc::new(scene),
+            layer,
+            diagnostics,
+        }
+    }
+}
+
+fn translate_bounds(bounds: &mut RenderBounds, x: f32, y: f32) {
+    bounds.x += x;
+    bounds.y += y;
 }
 
 struct ImageBytes(Arc<[u8]>);
@@ -839,13 +1102,7 @@ mod tests {
         renderer: &SceneRenderer,
         theme: &RenderTheme,
     ) -> Result<Frame> {
-        Frame::render(
-            composition,
-            snapshot,
-            renderer,
-            theme,
-            &crate::TextRenderer::new(),
-        )
+        Frame::render(composition, snapshot, renderer, theme)
     }
 
     fn cached_frame(
@@ -1005,6 +1262,48 @@ mod tests {
             RenderDiagnostic::TextOverflow { entity: found, .. } if *found == entity
         )));
         assert_eq!(frame.entity_scenes[&entity][0].encoding().n_clips, 0);
+    }
+
+    #[test]
+    fn text_placement_is_not_part_of_layout_input() {
+        let entity = EntityId::new();
+        let layer = Layer::Text(crate::compositor::TextLayer {
+            entity,
+            text: "Move without reflow".to_owned(),
+            language: None,
+            bounds: crate::bubble::LayoutBox {
+                x: 10.0,
+                y: 20.0,
+                width: 120.0,
+                height: 80.0,
+            },
+            balloon_contour: None,
+            opacity: 1.0,
+            preferred_font: None,
+            font_weight: None,
+            font_style: None,
+            font_size: None,
+            auto_fit: true,
+            alignment: crate::TextAlign::Center,
+            writing_mode: WritingMode::Horizontal,
+            foreground_color: None,
+            stroke: None,
+            angle_degrees: 0.0,
+            point_text: false,
+        });
+        let (before, before_placement) = RetainedLayer::resolve(&layer);
+        let Layer::Text(mut moved) = layer else {
+            unreachable!()
+        };
+        moved.bounds.x += 37.0;
+        moved.bounds.y -= 12.0;
+        let (after, after_placement) = RetainedLayer::resolve(&Layer::Text(moved));
+
+        assert_eq!(before, after);
+        assert_eq!(before_placement.x, 10.0);
+        assert_eq!(before_placement.y, 20.0);
+        assert_eq!(after_placement.x, 47.0);
+        assert_eq!(after_placement.y, 8.0);
     }
 
     #[test]

@@ -363,13 +363,13 @@ impl VisualTraversal<'_> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Layer {
     Image(ImageLayer),
     Text(TextLayer),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ImageLayer {
     pub entity: EntityId,
     pub asset: Asset,
@@ -380,7 +380,7 @@ pub(crate) struct ImageLayer {
     pub is_base: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TextLayer {
     pub entity: EntityId,
     pub text: String,

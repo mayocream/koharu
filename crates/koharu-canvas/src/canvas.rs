@@ -6,8 +6,7 @@ use std::{
 
 use koharu_renderer::RenderTheme;
 use koharu_scene::{
-    BlobId, Change, Component, ComponentOwner, EntityChange, Revision, Snapshot, Typography,
-    Visibility,
+    BlobId, Change, Component, ComponentOwner, EntityChange, Revision, Snapshot, Visibility,
 };
 use vello::wgpu;
 use vello::{
@@ -270,25 +269,6 @@ impl Canvas {
             && changes.relations.is_empty()
             && changes.components.is_empty()
             && !changes.hierarchy.is_empty();
-        let typography_entities = (changes.entities.is_empty()
-            && changes.hierarchy.is_empty()
-            && changes.relations.is_empty()
-            && !changes.components.is_empty()
-            && changes
-                .components
-                .iter()
-                .all(|change| change.kind == Typography::KIND))
-        .then(|| {
-            changes
-                .components
-                .iter()
-                .filter_map(|change| match change.owner {
-                    ComponentOwner::Entity(entity) => Some(entity),
-                    ComponentOwner::Project | ComponentOwner::Relation(_) => None,
-                })
-                .collect::<HashSet<_>>()
-        })
-        .filter(|entities| !entities.is_empty());
         self.snapshot = Some(snapshot.clone());
         self.revision = changes.to;
         if !affected {
@@ -343,10 +323,8 @@ impl Canvas {
         if !waiting_for_raster {
             if same_elements {
                 self.element_scenes.recompose();
-            } else if let Some(entities) = typography_entities {
-                self.element_scenes.invalidate_text_entities(entities);
             } else {
-                self.element_scenes.clear();
+                self.element_scenes.invalidate_text();
             }
         }
         self.request_page_resources(snapshot);

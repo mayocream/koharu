@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use koharu_renderer::{
     Compositor, Frame as RenderFrame, LayerPresentation, RenderRequest, RenderTheme, SceneRenderer,
@@ -24,8 +21,7 @@ pub(crate) struct ElementScenes {
     compositor: Compositor,
     scene_renderer: SceneRenderer,
     text_frame: Option<Arc<RenderFrame>>,
-    text_overrides: HashMap<EntityId, Option<Arc<RenderFrame>>>,
-    dirty_text: BTreeSet<EntityId>,
+    text_dirty: bool,
     combined: Option<Scene>,
 }
 
@@ -45,16 +41,14 @@ impl ElementScenes {
             compositor: Compositor::new(),
             scene_renderer: SceneRenderer::new(),
             text_frame: None,
-            text_overrides: HashMap::new(),
-            dirty_text: BTreeSet::new(),
+            text_dirty: false,
             combined: None,
         })
     }
 
     pub fn clear(&mut self) {
         self.text_frame = None;
-        self.text_overrides.clear();
-        self.dirty_text.clear();
+        self.text_dirty = false;
         self.combined = None;
     }
 
@@ -63,14 +57,7 @@ impl ElementScenes {
     }
 
     pub fn invalidate_text(&mut self) {
-        self.text_frame = None;
-        self.text_overrides.clear();
-        self.dirty_text.clear();
-        self.recompose();
-    }
-
-    pub fn invalidate_text_entities(&mut self, entities: impl IntoIterator<Item = EntityId>) {
-        self.dirty_text.extend(entities);
+        self.text_dirty = true;
         self.recompose();
     }
 
@@ -130,14 +117,8 @@ impl ElementScenes {
         text: &RenderTheme,
         diagnostics: &mut Vec<CanvasDiagnostic>,
     ) {
-        if self.text_frame.is_none() {
-            self.dirty_text.clear();
-            self.render_text(snapshot, page, text, diagnostics, None);
-            return;
-        }
-        if !self.dirty_text.is_empty() {
-            let entities = std::mem::take(&mut self.dirty_text);
-            self.render_text(snapshot, page, text, diagnostics, Some(entities));
+        if self.text_frame.is_none() || self.text_dirty {
+            self.render_text(snapshot, page, text, diagnostics);
         }
     }
 
@@ -147,32 +128,24 @@ impl ElementScenes {
         page: &CanvasPage,
         text: &RenderTheme,
         diagnostics: &mut Vec<CanvasDiagnostic>,
-        entities: Option<BTreeSet<EntityId>>,
     ) {
         let mut request = RenderRequest::transparent(page.id);
         request.include_images = false;
-        request.text_entities = entities.clone();
         request.presentation = LayerPresentation::Deferred;
         request.fallback_to_source_text = false;
         request.theme = text.clone();
         let frame = self
             .compositor
             .compile(snapshot, &request)
-            .and_then(|composition| self.scene_renderer.render(snapshot, &composition));
+            .and_then(|composition| match self.text_frame.as_deref() {
+                Some(previous) => self.scene_renderer.update(previous, snapshot, &composition),
+                None => self.scene_renderer.render(snapshot, &composition),
+            });
         match frame {
-            Ok(frame) => match entities {
-                Some(entities) => {
-                    for entity in entities {
-                        let rendered = frame.layers().iter().any(|layer| layer.entity == entity);
-                        self.text_overrides
-                            .insert(entity, rendered.then(|| frame.clone()));
-                    }
-                }
-                None => {
-                    self.text_frame = Some(frame);
-                    self.text_overrides.clear();
-                }
-            },
+            Ok(frame) => {
+                self.text_frame = Some(frame);
+                self.text_dirty = false;
+            }
             Err(error) => diagnostics.push(CanvasDiagnostic {
                 page: Some(page.id),
                 element: None,
@@ -183,10 +156,9 @@ impl ElementScenes {
     }
 
     fn text_frame_for(&self, entity: EntityId) -> Option<&Arc<RenderFrame>> {
-        match self.text_overrides.get(&entity) {
-            Some(frame) => frame.as_ref(),
-            None => self.text_frame.as_ref(),
-        }
+        self.text_frame
+            .as_ref()
+            .filter(|frame| frame.layers().iter().any(|layer| layer.entity == entity))
     }
 
     fn visual_text(&self, entity: EntityId) -> Option<&koharu_renderer::VisualText> {

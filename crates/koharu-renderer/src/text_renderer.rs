@@ -1,5 +1,7 @@
 //! Text layout and Vello glyph recording.
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use vello::{
     FontEmbolden, Glyph, Scene,
@@ -250,7 +252,7 @@ impl TextRenderer {
             });
         }
         Ok(RenderedLayer {
-            scene,
+            scene: Arc::new(scene),
             layer: VisualLayer {
                 entity: layer.entity,
                 kind: VisualLayerKind::Text,
