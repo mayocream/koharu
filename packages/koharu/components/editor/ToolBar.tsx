@@ -1,14 +1,35 @@
 'use client'
 
-import { Brush, Eraser, Hand, MousePointer2, Pipette, Sparkles, Type } from 'lucide-react'
+import {
+  Brush,
+  Eraser,
+  Hand,
+  Minus,
+  MousePointer2,
+  Pipette,
+  Plus,
+  Sparkles,
+  Type,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { ColorWell } from '@/components/controls/ColorWell'
 import { usePage } from '@/lib/queries'
 import { useKoharuStore, type CanvasTool } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
-import { Input } from '@koharu/ui/components/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from '@koharu/ui/components/number-field'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from '@koharu/ui/components/popover'
 import { Slider } from '@koharu/ui/components/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
@@ -21,6 +42,8 @@ const tools = [
   ['remove', Sparkles, 'Remove'],
   ['pan', Hand, 'Pan'],
 ] as const satisfies ReadonlyArray<readonly [CanvasTool, typeof MousePointer2, string]>
+
+const MAX_BRUSH_DIAMETER = 128
 
 export function ToolBar() {
   const { t } = useTranslation()
@@ -83,24 +106,56 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
   return (
     <Popover>
       <PopoverTrigger
-        aria-label='Brush size'
-        className='grid size-8 place-items-center rounded-lg text-[9px] font-semibold text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
+        render={
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            aria-label='Brush size'
+            className='text-[9px] font-semibold text-muted-foreground tabular-nums hover:bg-foreground/[0.06] hover:text-foreground'
+          />
+        }
       >
         {Math.round(value)}
       </PopoverTrigger>
-      <PopoverContent side='right' align='center' className='w-56 rounded-xl p-3'>
-        <div className='mb-2 flex items-center justify-between'>
-          <span className='text-[11px] font-medium'>Brush size</span>
-          <Input
-            type='number'
+      <PopoverContent
+        side='right'
+        align='center'
+        sideOffset={8}
+        className='w-48 gap-2.5 rounded-xl p-2.5'
+      >
+        <div className='flex items-center justify-between gap-3'>
+          <PopoverTitle className='text-[11px]'>Brush size</PopoverTitle>
+          <NumberField
             min={1}
-            max={512}
+            max={MAX_BRUSH_DIAMETER}
+            step={1}
             value={Math.round(value)}
-            className='h-7 w-16 text-right text-[11px]'
-            onChange={(event) => onChange(clamp(Number(event.currentTarget.value), 1, 512))}
-          />
+            className='w-20'
+            onValueChange={(next) => {
+              if (next !== null) onChange(clamp(next, 1, MAX_BRUSH_DIAMETER))
+            }}
+          >
+            <NumberFieldGroup className='h-7'>
+              <NumberFieldDecrement aria-label='Decrease brush size'>
+                <Minus />
+              </NumberFieldDecrement>
+              <NumberFieldInput aria-label='Brush size in pixels' />
+              <NumberFieldIncrement aria-label='Increase brush size'>
+                <Plus />
+              </NumberFieldIncrement>
+            </NumberFieldGroup>
+          </NumberField>
         </div>
-        <Slider min={1} max={512} step={1} value={value} onValueChange={onChange} />
+        <Slider
+          aria-label='Brush size'
+          min={1}
+          max={MAX_BRUSH_DIAMETER}
+          step={1}
+          value={value}
+          className='py-1 [&_[data-slot=slider-thumb]]:size-2.5'
+          onValueChange={onChange}
+        />
       </PopoverContent>
     </Popover>
   )

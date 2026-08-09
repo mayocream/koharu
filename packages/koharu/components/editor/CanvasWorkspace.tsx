@@ -21,7 +21,17 @@ import {
 } from '@/lib/geometry'
 import { commands, type Frame, type Point, type TransformFrame } from '@/lib/protocol'
 import { pageKey, pagesKey, projectKey, refresh, usePage } from '@/lib/queries'
-import { receiveError, useKoharuStore } from '@/lib/store'
+import { receiveError, useKoharuStore, type CanvasTool } from '@/lib/store'
+
+const canvasCursors = {
+  select: undefined,
+  text: 'text',
+  draw: 'none',
+  eraser: 'none',
+  color_picker: 'crosshair',
+  remove: 'none',
+  pan: 'grab',
+} as const satisfies Record<CanvasTool, string | undefined>
 
 type Gesture =
   | { kind: 'pan'; pointer: number; start: Point; translation: [number, number] }
@@ -330,9 +340,6 @@ export function CanvasWorkspace() {
     }
   }
 
-  const cursorStyle =
-    tool === 'text' || tool === 'color_picker' ? 'crosshair' : tool === 'pan' ? 'grab' : undefined
-
   return (
     <main className='relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tl-2xl bg-transparent'>
       <CanvasCommandBar />
@@ -343,7 +350,7 @@ export function CanvasWorkspace() {
           tabIndex={0}
           aria-label={t('native.canvas.surface', { defaultValue: 'Koharu canvas' })}
           className='relative min-h-0 min-w-0 flex-1 touch-none overflow-hidden bg-transparent outline-none'
-          style={{ cursor: cursorStyle }}
+          style={{ cursor: page ? canvasCursors[tool] : undefined }}
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {
             if (!page || event.button > 1) return

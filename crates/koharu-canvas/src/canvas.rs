@@ -25,6 +25,8 @@ use crate::{
     TransformCommit,
 };
 
+const MAX_BRUSH_DIAMETER: f32 = 128.0;
+
 pub struct CanvasFrame<'a> {
     /// Final Vello pixels for the desktop surface.
     pub texture: &'a wgpu::TextureView,
@@ -497,9 +499,11 @@ impl Canvas {
                 "raster painting cannot start during another canvas edit".into(),
             ));
         }
-        if !brush.diameter.is_finite() || !(1.0..=512.0).contains(&brush.diameter) {
+        if !brush.diameter.is_finite()
+            || !(1.0..=MAX_BRUSH_DIAMETER).contains(&brush.diameter)
+        {
             return Err(Error::Invalid(
-                "brush diameter must be between 1 and 512 pixels".into(),
+                format!("brush diameter must be between 1 and {MAX_BRUSH_DIAMETER} pixels"),
             ));
         }
         if !point.x.is_finite() || !point.y.is_finite() || !self.contains_page_point(point) {

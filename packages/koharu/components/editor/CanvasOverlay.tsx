@@ -106,7 +106,7 @@ export function CanvasOverlay({
       {draft && <DraftOverlay frame={draft} camera={camera} />}
       {showBrushCursor && cursor && (
         <div
-          className='absolute rounded-full border border-foreground/90 shadow-[0_0_0_1px_rgb(0_0_0/0.4)]'
+          className='absolute rounded-full border border-white/95 shadow-[0_0_0_1px_rgb(0_0_0/0.9),0_1px_3px_rgb(0_0_0/0.45)]'
           style={{
             left: cursor.x / window.devicePixelRatio - (brushSize * scale) / 2,
             top: cursor.y / window.devicePixelRatio - (brushSize * scale) / 2,

@@ -88,6 +88,7 @@ describe('canvas interaction adapter', () => {
       .spyOn(commands, 'finishPaint')
       .mockResolvedValue({ revision: 2, layer: 'paint' })
     const surface = renderWorkspace()
+    expect(surface).toHaveStyle({ cursor: 'none' })
 
     fireEvent.pointerDown(surface, { button: 0, pointerId: 7, clientX: 30, clientY: 40 })
     fireEvent.pointerMove(surface, { pointerId: 7, clientX: 55, clientY: 65 })

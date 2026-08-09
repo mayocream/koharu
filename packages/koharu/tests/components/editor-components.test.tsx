@@ -240,6 +240,23 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('adjusts brush size from the toolbar popover', async () => {
+    const user = userEvent.setup()
+    installProject()
+    useKoharuStore.setState({ tool: 'draw' })
+    render(
+      <TooltipProvider>
+        <ToolBar />
+      </TooltipProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Brush size' }))
+    expect(screen.getByRole('textbox', { name: 'Brush size in pixels' })).toHaveValue('48')
+
+    await user.click(screen.getByRole('button', { name: 'Increase brush size' }))
+    expect(useKoharuStore.getState().brush.diameter).toBe(49)
+  })
+
   it('uses the border color well to enable and disable the border', async () => {
     const user = userEvent.setup()
     installProject()
