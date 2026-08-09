@@ -36,7 +36,6 @@ pub struct Flux2Klein {
 }
 
 impl Flux2Klein {
-    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (transformer, text_encoder, vae) = tokio::try_join!(
             TRANSFORMER_WEIGHTS.resolve(),
@@ -55,7 +54,6 @@ impl Flux2Klein {
         Ok(Self { model })
     }
 
-    #[tracing::instrument(skip_all)]
     pub fn inference(
         &self,
         image: &[DynamicImage],
@@ -130,7 +128,6 @@ pub struct Flux2KleinInpaint {
 }
 
 impl Flux2KleinInpaint {
-    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let (transformer, text_encoder, vae) = tokio::try_join!(
             TRANSFORMER_WEIGHTS.resolve(),
@@ -149,7 +146,6 @@ impl Flux2KleinInpaint {
         Ok(Self { model })
     }
 
-    #[tracing::instrument(skip_all)]
     pub fn inference(
         &self,
         prompt: &str,

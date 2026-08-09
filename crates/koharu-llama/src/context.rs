@@ -79,7 +79,6 @@ impl<'model> LlamaContext<'model> {
     /// # Panics
     ///
     /// - the returned [`std::ffi::c_int`] from llama-cpp does not fit into a i32 (this should never happen on most systems)
-    #[tracing::instrument(skip_all, fields(tokens = batch.n_tokens()))]
     pub fn decode(&mut self, batch: &mut LlamaBatch) -> Result<(), DecodeError> {
         let result =
             unsafe { koharu_llama_sys::llama_decode(self.context.as_ptr(), batch.llama_batch) };
@@ -103,7 +102,6 @@ impl<'model> LlamaContext<'model> {
     /// # Panics
     ///
     /// - the returned [`std::ffi::c_int`] from llama-cpp does not fit into a i32 (this should never happen on most systems)
-    #[tracing::instrument(skip_all, fields(tokens = batch.n_tokens()))]
     pub fn encode(&mut self, batch: &mut LlamaBatch) -> Result<(), EncodeError> {
         let result =
             unsafe { koharu_llama_sys::llama_encode(self.context.as_ptr(), batch.llama_batch) };

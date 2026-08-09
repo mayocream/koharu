@@ -59,6 +59,17 @@ Koharu supports Metal on Apple Silicon Macs.
 
 Koharu also supports Vulkan on Windows and Linux as an alternative to CUDA and HIP.
 
+### CPU Fallback
+
+You can always force Koharu to use CPU for inference:
+
+```bash
+# macOS / Linux
+koharu --cpu
+# Windows
+koharu.exe --cpu
+```
+
 ## Machine Learning Models
 
 Koharu uses a staged stack of vision and language models instead of trying to solve the entire page with a single network.
@@ -143,6 +154,17 @@ brew install --cask koharu
 ```
 
 ## Troubleshooting
+
+Koharu provides a diagnostic mode that outputs detailed logs and system information to help identify issues with installation, GPU acceleration, model loading, and more. To enable it, run:
+
+```bash
+# macOS / Linux
+koharu --debug
+# Windows
+koharu.exe --debug
+```
+
+You can also set the `RUST_LOG` environment variable to `debug` or `trace` to see more verbose logs:
 
 ```bash
 # macOS / Linux

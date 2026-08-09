@@ -34,7 +34,6 @@ pub struct ComicLayoutYolo26sSegmenter {
 }
 
 impl ComicLayoutYolo26sSegmenter {
-    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let config_path = CONFIG
@@ -63,7 +62,6 @@ impl ComicLayoutYolo26sSegmenter {
         self.inference_with_threshold(image, 0.25)
     }
 
-    #[tracing::instrument(skip_all)]
     pub fn inference_with_threshold(
         &self,
         image: &DynamicImage,

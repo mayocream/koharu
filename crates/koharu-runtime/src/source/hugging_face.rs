@@ -95,10 +95,6 @@ impl<'a> HuggingFaceFile<'a> {
         }
     }
 
-    #[tracing::instrument(
-        skip_all,
-        fields(repository = self.repository, filename = self.filename)
-    )]
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
         let mut repository = self.repository.split('/');
         let owner = repository.next().unwrap_or_default();

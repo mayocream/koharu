@@ -55,7 +55,6 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    #[tracing::instrument(skip_all)]
     pub fn discover(features: impl IntoIterator<Item = Feature>) -> Result<Self> {
         let hardware = Hardware::discover();
         let mut plan = Plan::default();
@@ -79,7 +78,6 @@ impl Runtime {
     }
 
     /// Installs and activates packages sequentially in topological order.
-    #[tracing::instrument(skip_all)]
     pub async fn initialize(&self) -> Result<()> {
         self.plan.initialize().await
     }

@@ -70,10 +70,6 @@ impl Session {
         Self::create_with(path, document, checkpoint, Options::default())
     }
 
-    #[tracing::instrument(
-        skip_all,
-        fields(path = %path.as_ref().display(), checkpoint_bytes = checkpoint.len())
-    )]
     pub fn create_with(
         path: impl AsRef<Path>,
         document: DocumentId,
@@ -96,7 +92,6 @@ impl Session {
         Self::open_with(path, Options::default())
     }
 
-    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn open_with(path: impl AsRef<Path>, options: Options) -> Result<Self> {
         validate_options(&options)?;
         let engine = Engine::open(
@@ -181,15 +176,6 @@ impl Session {
         )
     }
 
-    #[tracing::instrument(
-        skip_all,
-        fields(
-            document = %commit.document,
-            parent = %commit.parent,
-            payload_bytes = commit.payload_len(),
-            checkpoint = checkpoint.is_some(),
-        )
-    )]
     pub fn commit(&mut self, commit: Commit, checkpoint: Option<Vec<u8>>) -> Result<Revision> {
         if commit.document != self.head.document {
             return Err(Error::DocumentMismatch {
@@ -328,10 +314,6 @@ impl Session {
         decode_entry(revision, &encoded)
     }
 
-    #[tracing::instrument(
-        skip_all,
-        fields(revision = %self.head.revision, checkpoint_bytes = checkpoint.len())
-    )]
     pub fn checkpoint(&mut self, checkpoint: Vec<u8>) -> Result<()> {
         validate_size(&checkpoint, "checkpoint")?;
         let mut next = self.head.clone();
@@ -367,10 +349,6 @@ impl Session {
         Ok(report)
     }
 
-    #[tracing::instrument(
-        skip_all,
-        fields(revision = %self.head.revision, referenced_blobs = referenced.len())
-    )]
     pub fn gc(&mut self, referenced: BTreeSet<BlobId>) -> Result<GcReport> {
         let (report, _) = self.engine.collect(&self.head, None, referenced)?;
         self.engine.flush()?;
@@ -388,7 +366,6 @@ impl Session {
         Ok(report)
     }
 
-    #[tracing::instrument(skip_all, fields(revision = %self.head.revision))]
     pub fn flush(&self) -> Result<()> {
         self.engine.flush()
     }

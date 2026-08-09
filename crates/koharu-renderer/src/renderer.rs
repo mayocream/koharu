@@ -68,27 +68,11 @@ impl Renderer {
     }
 
     /// Composes one page, resolving storage and font resources away from the caller's executor.
-    #[tracing::instrument(
-        skip_all,
-        fields(page = %page, revision = %snapshot.revision())
-    )]
     pub async fn compose(&self, snapshot: &Snapshot, page: EntityId) -> Result<Composition> {
         self.compose_inner(snapshot, page, None).await
     }
 
     /// Re-composes a changed revision while retaining equal entity descriptors.
-    #[tracing::instrument(
-        skip_all,
-        fields(
-            page = %previous.page(),
-            from = %change.from,
-            to = %change.to,
-            entity_changes = change.entities.len(),
-            hierarchy_changes = change.hierarchy.len(),
-            component_changes = change.components.len(),
-            relation_changes = change.relations.len(),
-        )
-    )]
     pub async fn update(
         &self,
         previous: &Composition,
@@ -112,16 +96,6 @@ impl Renderer {
     }
 
     /// Rasterizes the exact vector content stored by a composition.
-    #[tracing::instrument(
-        skip_all,
-        fields(
-            page = %composition.page(),
-            width = composition.size().0,
-            height = composition.size().1,
-            layers = composition.layers().len(),
-            supersampling = options.supersampling_factor,
-        )
-    )]
     pub async fn rasterize(
         &self,
         composition: &Composition,

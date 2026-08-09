@@ -17,4 +17,3 @@ koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tracing = { workspace = true }

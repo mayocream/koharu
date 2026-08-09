@@ -22,7 +22,6 @@ pub struct LaMa {
 }
 
 impl LaMa {
-    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = WEIGHTS
@@ -39,7 +38,6 @@ impl LaMa {
         })
     }
 
-    #[tracing::instrument(skip_all)]
     pub fn inference(
         &self,
         image: &DynamicImage,

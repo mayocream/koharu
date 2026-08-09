@@ -27,7 +27,6 @@ pub struct FontDetector {
 }
 
 impl FontDetector {
-    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let weights_path = WEIGHTS
@@ -52,7 +51,6 @@ impl FontDetector {
         })
     }
 
-    #[tracing::instrument(skip_all)]
     pub fn inference(&self, images: &[DynamicImage], top_k: usize) -> Result<Vec<FontPrediction>> {
         if images.is_empty() {
             return Ok(Vec::new());

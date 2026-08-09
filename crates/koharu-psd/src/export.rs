@@ -23,15 +23,6 @@ use crate::{
     writer::PsdWriter,
 };
 
-#[tracing::instrument(
-    skip_all,
-    fields(
-        page = %composition.page(),
-        width = composition.size().0,
-        height = composition.size().1,
-        layers = composition.layers().len(),
-    )
-)]
 pub async fn export_page(
     renderer: &Renderer,
     composition: &Composition,

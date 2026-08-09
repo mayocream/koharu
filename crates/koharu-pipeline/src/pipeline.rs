@@ -83,10 +83,6 @@ impl Pipeline {
         self.resources.subscribe()
     }
 
-    #[tracing::instrument(
-        skip_all,
-        fields(revision = %snapshot.revision())
-    )]
     pub async fn execute(
         &self,
         snapshot: Snapshot,

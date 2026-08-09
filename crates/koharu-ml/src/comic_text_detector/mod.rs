@@ -25,7 +25,6 @@ pub struct ComicTextDetector {
 }
 
 impl ComicTextDetector {
-    #[tracing::instrument(skip_all)]
     pub async fn load(device: crate::Device) -> Result<Self> {
         let device: Device = device.try_into()?;
         let yolo_path = YOLO_WEIGHTS
@@ -49,7 +48,6 @@ impl ComicTextDetector {
         Ok(Self { device, model })
     }
 
-    #[tracing::instrument(skip_all)]
     pub fn inference(&self, image: &DynamicImage) -> Result<(image::GrayImage, Vec<TextBlock>)> {
         koharu_torch::no_grad(|| {
             if let Some(detection) =

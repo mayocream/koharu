@@ -154,7 +154,6 @@ where
     T: Serialize,
 {
     /// Persist the latest complete value while preventing concurrent mutation.
-    #[tracing::instrument(skip_all)]
     pub fn save(&self) -> Result<()> {
         let value = self.read()?;
         self.manager.save(&self.target, &*value)
@@ -193,7 +192,6 @@ where
     T: Serialize,
 {
     /// Persist this exact write-locked value and then release the guard.
-    #[tracing::instrument(skip_all)]
     pub fn save(self) -> Result<()> {
         self.config.manager.save(
             &self.config.target,
@@ -378,7 +376,6 @@ pub fn path() -> Result<PathBuf> {
 }
 
 /// Load or retrieve a live, process-wide top-level configuration section.
-#[tracing::instrument(skip_all, fields(section))]
 pub fn load<T>(section: &str) -> Result<Config<T>>
 where
     T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,
@@ -391,7 +388,6 @@ where
 ///
 /// Prefer `load(section)` for independently owned configuration. This exists
 /// for applications whose schema intentionally covers the complete file.
-#[tracing::instrument(skip_all)]
 pub fn load_root<T>() -> Result<Config<T>>
 where
     T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,

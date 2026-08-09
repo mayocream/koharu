@@ -180,7 +180,6 @@ impl VarStore {
     /// be saved in safetensors format. Otherwise, libtorch C++ module format
     /// will be used. Note that saving in pickle format (`.pt` extension) is
     /// not supported by the C++ API of Torch.
-    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn save<T: AsRef<std::path::Path>>(&self, path: T) -> Result<(), TchError> {
         let variables = self.variables_.lock().unwrap();
         let named_tensors = variables.named_variables.iter().collect::<Vec<_>>();
@@ -241,7 +240,6 @@ impl VarStore {
     /// - `.safetensors`: The file is assumed to be in safetensors format.
     /// - `.bin` or `.pt`: The file is assumed to be in pickle format.
     /// - Otherwise, the file is assumed to be in libtorch C++ module format.
-    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn load<T: AsRef<std::path::Path>>(&mut self, path: T) -> Result<(), TchError> {
         if self.device != Device::Mps {
             self.load_internal(path)
@@ -268,7 +266,6 @@ impl VarStore {
     /// for these tensors are modified.
     ///
     /// Returns a String Vector containing the names of missing variables.
-    #[tracing::instrument(skip_all, fields(path = %path.as_ref().display()))]
     pub fn load_partial<T: AsRef<std::path::Path>>(
         &mut self,
         path: T,
