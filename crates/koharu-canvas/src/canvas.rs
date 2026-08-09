@@ -916,6 +916,11 @@ impl Canvas {
                             if self.failed_source == Some(id) {
                                 self.failed_source = None;
                             }
+                            // CPU decode completion is the point where these pixels
+                            // become authoritative for Vello's independent image cache.
+                            if let Some(image) = self.resources.color(id) {
+                                self.gpu.mark_image_dirty(&image);
+                            }
                             self.element_scenes.invalidate_image(id);
                         }
                     }

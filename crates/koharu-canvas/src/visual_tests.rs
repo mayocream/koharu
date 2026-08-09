@@ -53,6 +53,13 @@ fn assert_clean_blue(pixel: [u8; 4]) {
     );
 }
 
+fn assert_source_blue(pixel: [u8; 4]) {
+    assert!(
+        pixel[0] < 60 && pixel[1] < 80 && pixel[2] < 100,
+        "expected dark blue source content, got {pixel:?}"
+    );
+}
+
 #[test]
 #[ignore = "requires an explicitly provisioned WGPU adapter"]
 fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
@@ -75,7 +82,6 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     let mut session = Session::memory().unwrap();
     let mut page = None;
     let source = rgba_png((16, 12), [21, 34, 55, 255]);
-    let clean = rgba_png((16, 12), [89, 144, 233, 255]);
     let patch = session
         .snapshot()
         .patch(|edit| {
@@ -85,20 +91,6 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
                 &AssetRole::new("source")?,
                 image_asset(source.clone(), 16, 12),
             )?;
-            let cleanup = edit.add_entity(id, At::Start)?;
-            edit.set(
-                cleanup,
-                &RasterLayer {
-                    origin: Origin::User,
-                    name: "Cleanup".to_owned(),
-                    kind: RasterLayerKind::Cleanup,
-                },
-            )?;
-            edit.set_asset(
-                cleanup,
-                &AssetRole::new("source")?,
-                image_asset(clean.clone(), 16, 12),
-            )?;
             page = Some(id);
             Ok(())
         })
@@ -107,7 +99,7 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
     let page = page.unwrap();
 
     // Resource decoding happens on a worker. The wake channel lets the test
-    // wait until both source and clean images are ready before rendering.
+    // wait until each image is ready before rendering.
     let (wake, woke) = std::sync::mpsc::channel();
     let mut canvas = Canvas::new(
         CanvasGpu {
@@ -125,14 +117,42 @@ fn renders_move_resize_and_rotate_previews_to_expected_pixels() {
         display: DisplayState::default(),
     });
     canvas.show_page(&commit.snapshot, page).unwrap();
-    for _ in 0..2 {
-        woke.recv_timeout(Duration::from_secs(2)).unwrap();
-    }
+    woke.recv_timeout(Duration::from_secs(2)).unwrap();
 
     let now = Instant::now();
     let frame = canvas.render(now).unwrap();
     assert_eq!(frame.size, VIEWPORT);
     assert!(frame.generation > 0);
+    let initial_generation = frame.generation;
+    assert_source_blue(pixel(&canvas.read_output_for_test(), 16, 12));
+
+    let clean = rgba_png((16, 12), [89, 144, 233, 255]);
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let cleanup = edit.add_entity(page, At::Start)?;
+            edit.set(
+                cleanup,
+                &RasterLayer {
+                    origin: Origin::User,
+                    name: "Cleanup".to_owned(),
+                    kind: RasterLayerKind::Cleanup,
+                },
+            )?;
+            edit.set_asset(
+                cleanup,
+                &AssetRole::new("source")?,
+                image_asset(clean.clone(), 16, 12),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    let commit = session.commit(patch).unwrap();
+    canvas.sync(&commit.snapshot, &commit.changes).unwrap();
+    woke.recv_timeout(Duration::from_secs(2)).unwrap();
+    let frame = canvas.render(now + Duration::from_millis(1)).unwrap();
+    assert!(frame.generation > initial_generation);
+
     let generation = frame.generation;
     let pixels = canvas.read_output_for_test();
     assert_clean_blue(pixel(&pixels, 16, 12));
