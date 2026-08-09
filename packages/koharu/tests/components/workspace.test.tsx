@@ -81,7 +81,7 @@ function renderWorkspace() {
 describe('canvas interaction adapter', () => {
   it('interprets a brush gesture in React and sends paint data to Rust', async () => {
     installProject()
-    useKoharuStore.setState({ tool: 'draw' })
+    useKoharuStore.setState({ tool: 'draw', brush: { diameter: 48, color: '#FFFFFF' } })
     const begin = vi.spyOn(commands, 'beginPaint').mockResolvedValue(null)
     const extend = vi.spyOn(commands, 'extendPaint').mockResolvedValue(null)
     const finish = vi
@@ -98,7 +98,7 @@ describe('canvas interaction adapter', () => {
     expect(begin).toHaveBeenCalledWith(
       null,
       { x: 20, y: 20 },
-      { diameter: 48, color: [17, 17, 17, 255] },
+      { diameter: 48, color: [255, 255, 255, 255] },
     )
     expect(extend).toHaveBeenCalledWith(expect.arrayContaining([{ x: 45, y: 45 }]))
   })

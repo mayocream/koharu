@@ -1349,5 +1349,15 @@ mod tests {
         );
         assert_eq!(image.get_pixel(16, 8)[3], 0);
         assert_eq!(image.get_pixel(4, 8)[3], 255);
+
+        let mut white = RgbaImage::new(4, 4);
+        rasterize_stroke(
+            &mut white,
+            koharu_canvas::StrokeMode::Paint,
+            [255, 255, 255, 255],
+            3.0,
+            &[ScenePoint { x: 2.0, y: 2.0 }],
+        );
+        assert_eq!(white.get_pixel(2, 2).0, [255, 255, 255, 255]);
     }
 }

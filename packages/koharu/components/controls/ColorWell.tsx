@@ -1,7 +1,7 @@
 'use client'
 
 import { Pipette, SquareSlash } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
@@ -37,13 +37,12 @@ export function ColorWell(props: ColorWellProps) {
   const [draft, setDraft] = useState(value ?? '#000000')
   const [transparent, setTransparent] = useState(value === null)
   const [open, setOpen] = useState(false)
-  const dragging = useRef(false)
   const sampling = useColorSampling()
 
   useEffect(() => {
     if (value === null) {
       setTransparent(true)
-    } else if (!dragging.current) {
+    } else {
       setDraft(value)
       setTransparent(false)
     }
@@ -89,17 +88,12 @@ export function ColorWell(props: ColorWellProps) {
         )}
       </PopoverTrigger>
       <PopoverContent side='right' align='start' className='w-60 rounded-xl p-3'>
-        <div
-          onPointerDown={() => {
-            dragging.current = true
-            setTransparent(false)
-          }}
-          onPointerUp={() => {
-            dragging.current = false
-            set(draft)
-          }}
-        >
-          <HexColorPicker color={draft} onChange={(color) => setDraft(normalize(color))} />
+        <div>
+          <HexColorPicker
+            color={draft}
+            onChange={(color) => setDraft(normalize(color))}
+            onChangeEnd={set}
+          />
         </div>
         <div className='mt-3 flex gap-2'>
           <HexColorInput
@@ -141,5 +135,8 @@ export function ColorWell(props: ColorWellProps) {
 }
 
 function normalize(value: string): string {
-  return `${value.startsWith('#') ? '' : '#'}${value}`.toUpperCase()
+  const digits = value.startsWith('#') ? value.slice(1) : value
+  const expanded =
+    digits.length === 3 ? [...digits].map((digit) => digit.repeat(2)).join('') : digits
+  return `#${expanded}`.toUpperCase()
 }

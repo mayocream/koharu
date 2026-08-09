@@ -44,6 +44,24 @@ struct ImageTransition {
     duration: Duration,
 }
 
+enum RasterStrokeState {
+    Active(RasterStrokeCommit),
+    Finishing(RasterStrokeCommit),
+    WaitingForImage {
+        stroke: RasterStrokeCommit,
+        image: BlobId,
+    },
+}
+
+impl RasterStrokeState {
+    fn stroke(&self) -> &RasterStrokeCommit {
+        match self {
+            Self::Active(stroke) | Self::Finishing(stroke) => stroke,
+            Self::WaitingForImage { stroke, .. } => stroke,
+        }
+    }
+}
+
 /// Native scene viewport. React owns interaction policy; the desktop host
 /// presents the returned texture and invokes semantic preview operations.
 pub struct Canvas {
@@ -71,7 +89,7 @@ pub struct Canvas {
 
     // At most one low-latency editing operation is active for each category.
     stroke: Option<ActiveStroke>,
-    raster_stroke: Option<RasterStrokeCommit>,
+    raster_stroke: Option<RasterStrokeState>,
     transform: Option<ActiveTransform>,
 
     diagnostics: Vec<CanvasDiagnostic>,
@@ -288,6 +306,19 @@ impl Canvas {
             return Ok(());
         }
         let next = CanvasPage::load(snapshot, current)?;
+        let waiting_for_raster = matches!(
+            self.raster_stroke.as_ref(),
+            Some(RasterStrokeState::WaitingForImage { stroke, image })
+                if stroke.page == current
+                    && !self.resources.contains(*image, ResourceKind::Color)
+        );
+        if matches!(
+            self.raster_stroke.as_ref(),
+            Some(RasterStrokeState::WaitingForImage { image, .. })
+                if self.resources.contains(*image, ResourceKind::Color)
+        ) {
+            self.raster_stroke = None;
+        }
         if self.page.as_ref().and_then(|page| page.assets.source) != next.assets.source {
             self.failed_source = None;
         }
@@ -307,12 +338,16 @@ impl Canvas {
                             .collect::<HashSet<_>>()
             });
         self.page = Some(next);
-        if same_elements {
-            self.element_scenes.recompose();
-        } else if let Some(entities) = typography_entities {
-            self.element_scenes.invalidate_text_entities(entities);
-        } else {
-            self.element_scenes.clear();
+        // A committed stroke replaces its source asynchronously. Retaining the
+        // composed scene keeps the old source and preview visible until Ready.
+        if !waiting_for_raster {
+            if same_elements {
+                self.element_scenes.recompose();
+            } else if let Some(entities) = typography_entities {
+                self.element_scenes.invalidate_text_entities(entities);
+            } else {
+                self.element_scenes.clear();
+            }
         }
         self.request_page_resources(snapshot);
         self.sync_ready_masks()?;
@@ -499,12 +534,10 @@ impl Canvas {
                 "raster painting cannot start during another canvas edit".into(),
             ));
         }
-        if !brush.diameter.is_finite()
-            || !(1.0..=MAX_BRUSH_DIAMETER).contains(&brush.diameter)
-        {
-            return Err(Error::Invalid(
-                format!("brush diameter must be between 1 and {MAX_BRUSH_DIAMETER} pixels"),
-            ));
+        if !brush.diameter.is_finite() || !(1.0..=MAX_BRUSH_DIAMETER).contains(&brush.diameter) {
+            return Err(Error::Invalid(format!(
+                "brush diameter must be between 1 and {MAX_BRUSH_DIAMETER} pixels"
+            )));
         }
         if !point.x.is_finite() || !point.y.is_finite() || !self.contains_page_point(point) {
             return Err(Error::Invalid(
@@ -522,14 +555,14 @@ impl Canvas {
                 "raster target is not an active pixel layer".into(),
             ));
         }
-        self.raster_stroke = Some(RasterStrokeCommit {
+        self.raster_stroke = Some(RasterStrokeState::Active(RasterStrokeCommit {
             page: self.page_id().ok_or(Error::NoPage)?,
             layer,
             mode: brush.mode,
             color: brush.color,
             diameter: brush.diameter,
             points: vec![point],
-        });
+        }));
         self.damage.content();
         Ok(())
     }
@@ -537,7 +570,9 @@ impl Canvas {
     pub fn extend_raster_stroke(&mut self, points: &[PagePoint]) -> Result<()> {
         let size = self.page_size().ok_or(Error::NoPage)?;
         let zoom = self.view.camera.zoom().max(f64::EPSILON);
-        let stroke = self.raster_stroke.as_mut().ok_or(Error::NoStroke)?;
+        let Some(RasterStrokeState::Active(stroke)) = self.raster_stroke.as_mut() else {
+            return Err(Error::NoStroke);
+        };
         for point in points {
             if !point.x.is_finite() || !point.y.is_finite() {
                 return Err(Error::Invalid("drawing points must be finite".into()));
@@ -561,9 +596,24 @@ impl Canvas {
     }
 
     pub fn finish_raster_stroke(&mut self) -> Result<RasterStrokeCommit> {
-        let stroke = self.raster_stroke.take().ok_or(Error::NoStroke)?;
-        self.damage.content();
+        let Some(RasterStrokeState::Active(stroke)) = self.raster_stroke.take() else {
+            return Err(Error::NoStroke);
+        };
+        self.raster_stroke = Some(RasterStrokeState::Finishing(stroke.clone()));
         Ok(stroke)
+    }
+
+    pub fn acknowledge_raster_commit(&mut self, page: PageId, image: BlobId) -> Result<()> {
+        if self.page_id() != Some(page) {
+            return Err(Error::Invalid(
+                "raster commit belongs to a different page".into(),
+            ));
+        }
+        let Some(RasterStrokeState::Finishing(stroke)) = self.raster_stroke.take() else {
+            return Err(Error::NoStroke);
+        };
+        self.raster_stroke = Some(RasterStrokeState::WaitingForImage { stroke, image });
+        Ok(())
     }
 
     pub fn cancel_raster_stroke(&mut self) {
@@ -925,6 +975,13 @@ impl Canvas {
                             if let Some(image) = self.resources.color(id) {
                                 self.gpu.mark_image_dirty(&image);
                             }
+                            if matches!(
+                                self.raster_stroke.as_ref(),
+                                Some(RasterStrokeState::WaitingForImage { image, .. })
+                                    if *image == id
+                            ) {
+                                self.raster_stroke = None;
+                            }
                             self.element_scenes.invalidate_image(id);
                         }
                     }
@@ -1076,7 +1133,7 @@ impl Canvas {
             });
             page_scene.append(elements, None);
             if include_previews
-                && let Some(stroke) = self.raster_stroke.as_ref()
+                && let Some(stroke) = self.raster_stroke.as_ref().map(RasterStrokeState::stroke)
                 && stroke.mode == StrokeMode::Paint
             {
                 draw_freehand(

@@ -294,7 +294,7 @@ pub(crate) async fn finish_paint(
     project: State<'_, CurrentProject>,
 ) -> Result<LayerCommit, Error> {
     let stroke = desktop.lock().canvas().finish_raster_stroke()?;
-    let (commit, page, element) = {
+    let result = (|| -> anyhow::Result<_> {
         let mut project = project.project.lock();
         let project = project.as_mut().context("no project is open")?;
         let (commit, element) = project.apply_raster_stroke(
@@ -313,11 +313,25 @@ pub(crate) async fn finish_paint(
                 .collect(),
         )?;
         project.record_commit(&commit);
-        (commit, project.active_page(), element)
+        let image = commit
+            .snapshot
+            .asset(element, &AssetRole::new("source")?)?
+            .context("the committed paint layer asset is missing")?
+            .blob;
+        Ok((commit, project.active_page(), element, image))
+    })();
+    let (commit, page, element, image) = match result {
+        Ok(result) => result,
+        Err(error) => {
+            desktop.lock().canvas().cancel_raster_stroke();
+            return Err(error.into());
+        }
     };
+    let mut desktop = desktop.lock();
     desktop
-        .lock()
-        .synchronize(&commit.snapshot, page, &commit)?;
+        .canvas()
+        .acknowledge_raster_commit(stroke.page, image)?;
+    desktop.synchronize(&commit.snapshot, page, &commit)?;
     Ok(LayerCommit {
         revision: commit.revision,
         layer: element,
@@ -371,7 +385,7 @@ pub(crate) async fn finish_erase(
     project: State<'_, CurrentProject>,
 ) -> Result<LayerCommit, Error> {
     let stroke = desktop.lock().canvas().finish_raster_stroke()?;
-    let (commit, page, element) = {
+    let result = (|| -> anyhow::Result<_> {
         let mut project = project.project.lock();
         let project = project.as_mut().context("no project is open")?;
         let (commit, element) = project.apply_raster_stroke(
@@ -390,11 +404,25 @@ pub(crate) async fn finish_erase(
                 .collect(),
         )?;
         project.record_commit(&commit);
-        (commit, project.active_page(), element)
+        let image = commit
+            .snapshot
+            .asset(element, &AssetRole::new("source")?)?
+            .context("the committed paint layer asset is missing")?
+            .blob;
+        Ok((commit, project.active_page(), element, image))
+    })();
+    let (commit, page, element, image) = match result {
+        Ok(result) => result,
+        Err(error) => {
+            desktop.lock().canvas().cancel_raster_stroke();
+            return Err(error.into());
+        }
     };
+    let mut desktop = desktop.lock();
     desktop
-        .lock()
-        .synchronize(&commit.snapshot, page, &commit)?;
+        .canvas()
+        .acknowledge_raster_commit(stroke.page, image)?;
+    desktop.synchronize(&commit.snapshot, page, &commit)?;
     Ok(LayerCommit {
         revision: commit.revision,
         layer: element,
