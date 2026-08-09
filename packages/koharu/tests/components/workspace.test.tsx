@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CanvasWorkspace } from '@/components/editor/CanvasWorkspace'
 import { commands, type Layer } from '@/lib/protocol'
@@ -32,6 +32,28 @@ const paintLayer: Layer = {
   image: 'paint-image',
   name: 'Paint 1',
   kind: 'paint',
+}
+
+let nextAnimationFrame = 1
+let animationFrames = new Map<number, FrameRequestCallback>()
+
+beforeEach(() => {
+  nextAnimationFrame = 1
+  animationFrames = new Map()
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const frame = nextAnimationFrame++
+    animationFrames.set(frame, callback)
+    return frame
+  })
+  vi.stubGlobal('cancelAnimationFrame', (frame: number) => animationFrames.delete(frame))
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
+function runAnimationFrame() {
+  const callbacks = [...animationFrames.values()]
+  animationFrames.clear()
+  for (const callback of callbacks) callback(performance.now())
 }
 
 function installProject() {
@@ -79,6 +101,20 @@ function renderWorkspace() {
 }
 
 describe('canvas interaction adapter', () => {
+  it('coalesces camera updates into one Rust command per browser frame', async () => {
+    installProject()
+    const setCanvasView = vi.spyOn(commands, 'setCanvasView').mockResolvedValue(null)
+    const surface = renderWorkspace()
+
+    fireEvent.wheel(surface, { clientX: 100, clientY: 100, deltaY: 4 })
+    fireEvent.wheel(surface, { clientX: 100, clientY: 100, deltaY: 6 })
+
+    expect(setCanvasView).not.toHaveBeenCalled()
+    runAnimationFrame()
+    await waitFor(() => expect(setCanvasView).toHaveBeenCalledOnce())
+    expect(setCanvasView).toHaveBeenCalledWith(1, [0, -10])
+  })
+
   it('interprets a brush gesture in React and sends paint data to Rust', async () => {
     installProject()
     useKoharuStore.setState({ tool: 'draw', brush: { diameter: 48, color: '#FFFFFF' } })

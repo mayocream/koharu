@@ -45,9 +45,9 @@ export function refreshTranslationModels(force = false): Promise<void> {
   return request
 }
 
-export function updateViewport(element: HTMLElement): void {
+export function updateViewport(element: HTMLElement): Promise<void> {
   const bounds = element.getBoundingClientRect()
-  void call(
+  return call(
     commands.setViewport,
     bounds.x,
     bounds.y,
@@ -55,7 +55,7 @@ export function updateViewport(element: HTMLElement): void {
     bounds.height,
     window.devicePixelRatio,
     workspaceColor(),
-  ).catch(() => undefined)
+  ).then(() => undefined)
 }
 
 function report(error: unknown): Error {

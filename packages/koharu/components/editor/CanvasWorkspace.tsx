@@ -41,6 +41,16 @@ type Gesture =
   | { kind: 'erase'; pointer: number }
   | { kind: 'inpaint'; pointer: number }
 
+interface CanvasView {
+  zoom: number
+  translation: [number, number]
+}
+
+interface StrokeUpdate {
+  kind: 'paint' | 'erase' | 'inpaint'
+  points: Point[]
+}
+
 export function CanvasWorkspace() {
   const { t } = useTranslation()
   const surface = useRef<HTMLDivElement>(null)
@@ -80,45 +90,74 @@ export function CanvasWorkspace() {
     return pending
   }, [])
 
+  const viewportUpdates = useFrameCommand((element: HTMLElement) => updateViewport(element))
+  const viewUpdates = useFrameCommand(({ zoom, translation }: CanvasView) =>
+    call(commands.setCanvasView, zoom, translation).then(() => undefined),
+  )
+  const transformUpdates = useFrameCommand((elements: TransformFrame[]) => {
+    transformFrame.current += 1
+    return enqueue(() => call(commands.updateTransform, transformFrame.current, elements)).then(
+      () => undefined,
+    )
+  })
+  const strokeUpdates = useFrameCommand(
+    ({ kind, points }: StrokeUpdate) => {
+      if (kind === 'paint') {
+        return enqueue(() => call(commands.extendPaint, points)).then(() => undefined)
+      }
+      if (kind === 'erase') {
+        return enqueue(() => call(commands.extendErase, points)).then(() => undefined)
+      }
+      return enqueue(() => call(commands.extendInpaint, points)).then(() => undefined)
+    },
+    mergeStrokeUpdates,
+  )
+
   const report = useCallback(() => {
-    if (surface.current) updateViewport(surface.current)
-  }, [])
+    if (surface.current) viewportUpdates.schedule(surface.current)
+  }, [viewportUpdates])
 
   const beginTransform = useCallback(
     (elements: TransformFrame[]) => {
       if (!elements.length || transformActive.current) return
+      transformUpdates.clear()
       transformActive.current = true
       transformFrame.current = 0
       setPreviews(Object.fromEntries(elements.map(({ element, frame }) => [element, frame])))
       void enqueue(() => call(commands.beginTransform, elements)).catch(() => undefined)
     },
-    [enqueue],
+    [enqueue, transformUpdates],
   )
 
   const updateTransform = useCallback(
     (elements: TransformFrame[]) => {
       if (!transformActive.current) return
-      transformFrame.current += 1
       setPreviews(Object.fromEntries(elements.map(({ element, frame }) => [element, frame])))
-      void enqueue(() => call(commands.updateTransform, transformFrame.current, elements)).catch(
-        () => undefined,
-      )
+      transformUpdates.schedule(elements)
     },
-    [enqueue],
+    [transformUpdates],
   )
 
   const finishTransform = useCallback(() => {
     if (!transformActive.current) return
+    transformUpdates.commit()
     transformActive.current = false
     void enqueue(() => call(commands.finishTransform))
       .then((revision) => (revision === null ? undefined : refresh(projectKey, pagesKey, pageKey)))
       .catch(() => undefined)
       .finally(() => setPreviews({}))
-  }, [enqueue])
+  }, [enqueue, transformUpdates])
 
   const cancelGesture = useCallback(() => {
     const current = gesture.current
     gesture.current = null
+    if (
+      current?.kind === 'paint' ||
+      current?.kind === 'erase' ||
+      current?.kind === 'inpaint'
+    ) {
+      strokeUpdates.clear()
+    }
     if (current?.kind === 'paint') {
       void enqueue(() => call(commands.cancelPaint)).catch(() => undefined)
     } else if (current?.kind === 'erase') {
@@ -127,12 +166,13 @@ export function CanvasWorkspace() {
       void enqueue(() => call(commands.cancelInpaint)).catch(() => undefined)
     }
     if (transformActive.current) {
+      transformUpdates.clear()
       transformActive.current = false
       void enqueue(() => call(commands.cancelTransform)).catch(() => undefined)
     }
     setDraft(null)
     setPreviews({})
-  }, [enqueue])
+  }, [enqueue, strokeUpdates, transformUpdates])
 
   useEffect(() => {
     const element = surface.current
@@ -276,7 +316,7 @@ export function CanvasWorkspace() {
         current.translation[1] + physical.y - current.start.y,
       ]
       useKoharuStore.setState({ camera: { zoom: camera.zoom, translation, fitted: false } })
-      dispatch(commands.setCanvasView, camera.zoom, translation)
+      viewUpdates.schedule({ zoom: camera.zoom, translation })
       return
     }
 
@@ -293,11 +333,11 @@ export function CanvasWorkspace() {
       current.frame = draftFrame(current.start, point)
       setDraft(current.frame)
     } else if (current.kind === 'paint') {
-      void enqueue(() => call(commands.extendPaint, points)).catch(() => undefined)
+      strokeUpdates.schedule({ kind: 'paint', points })
     } else if (current.kind === 'erase') {
-      void enqueue(() => call(commands.extendErase, points)).catch(() => undefined)
+      strokeUpdates.schedule({ kind: 'erase', points })
     } else if (current.kind === 'inpaint') {
-      void enqueue(() => call(commands.extendInpaint, points)).catch(() => undefined)
+      strokeUpdates.schedule({ kind: 'inpaint', points })
     }
   }
 
@@ -322,6 +362,7 @@ export function CanvasWorkspace() {
         })
         .catch(() => undefined)
     } else if (current.kind === 'paint') {
+      strokeUpdates.commit()
       void enqueue(() => call(commands.finishPaint))
         .then((result) => {
           selectLayers([result.layer])
@@ -329,6 +370,7 @@ export function CanvasWorkspace() {
         })
         .catch(() => undefined)
     } else if (current.kind === 'erase') {
+      strokeUpdates.commit()
       void enqueue(() => call(commands.finishErase))
         .then((result) => {
           selectLayers([result.layer])
@@ -336,6 +378,7 @@ export function CanvasWorkspace() {
         })
         .catch(() => undefined)
     } else if (current.kind === 'inpaint') {
+      strokeUpdates.commit()
       void enqueue(() => call(commands.finishInpaint)).catch(() => undefined)
     }
   }
@@ -396,6 +439,7 @@ export function CanvasWorkspace() {
               gesture.current = { kind: 'text', pointer: event.pointerId, start: point, frame }
               setDraft(frame)
             } else if (tool === 'draw') {
+              strokeUpdates.clear()
               gesture.current = { kind: 'paint', pointer: event.pointerId }
               void enqueue(() =>
                 call(commands.beginPaint, activeRaster?.id ?? null, point, {
@@ -408,11 +452,13 @@ export function CanvasWorkspace() {
                 receiveError('Select a paint or cleanup layer before using the Eraser.')
                 return
               }
+              strokeUpdates.clear()
               gesture.current = { kind: 'erase', pointer: event.pointerId }
               void enqueue(() =>
                 call(commands.beginErase, activeRaster.id, point, brush.diameter),
               ).catch(() => undefined)
             } else if (tool === 'remove') {
+              strokeUpdates.clear()
               gesture.current = { kind: 'inpaint', pointer: event.pointerId }
               void enqueue(() => call(commands.beginInpaint, point, brush.diameter)).catch(
                 () => undefined,
@@ -466,7 +512,7 @@ export function CanvasWorkspace() {
               ]
             }
             useKoharuStore.setState({ camera: { zoom, translation, fitted: false } })
-            dispatch(commands.setCanvasView, zoom, translation)
+            viewUpdates.schedule({ zoom, translation })
           }}
         >
           {page && presentation.image !== 'rendered' && (
@@ -517,4 +563,63 @@ function rgbaToHex(color: [number, number, number, number]): string {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
+}
+
+function mergeStrokeUpdates(current: StrokeUpdate, next: StrokeUpdate): StrokeUpdate {
+  if (current.kind !== next.kind) return next
+  current.points.push(...next.points)
+  return current
+}
+
+function useFrameCommand<Value>(
+  execute: (value: Value) => Promise<unknown>,
+  merge?: (current: Value, next: Value) => Value,
+): FrameCommand<Value> {
+  const executeRef = useRef(execute)
+  executeRef.current = execute
+  const command = useRef<FrameCommand<Value> | null>(null)
+  command.current ??= new FrameCommand((value) => executeRef.current(value), merge)
+
+  useEffect(() => () => command.current?.clear(), [])
+  return command.current
+}
+
+class FrameCommand<Value> {
+  private pending: Value | undefined
+  private frame: number | null = null
+
+  constructor(
+    private readonly execute: (value: Value) => Promise<unknown>,
+    private readonly merge: (current: Value, next: Value) => Value = (_current, next) => next,
+  ) {}
+
+  schedule(value: Value): void {
+    this.pending = this.pending === undefined ? value : this.merge(this.pending, value)
+    if (this.frame !== null) return
+    this.frame = requestAnimationFrame(() => {
+      this.frame = null
+      this.executePending()
+    })
+  }
+
+  commit(): void {
+    if (this.frame !== null) {
+      cancelAnimationFrame(this.frame)
+      this.frame = null
+    }
+    this.executePending()
+  }
+
+  clear(): void {
+    if (this.frame !== null) cancelAnimationFrame(this.frame)
+    this.frame = null
+    this.pending = undefined
+  }
+
+  private executePending(): void {
+    const value = this.pending
+    if (value === undefined) return
+    this.pending = undefined
+    void this.execute(value).catch(() => undefined)
+  }
 }
