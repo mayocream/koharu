@@ -28,6 +28,7 @@ const preferences: Preferences = {
         provider: 'local',
         model: 'lfm2.5-1.2b-instruct',
         quantization: null,
+        vision: true,
       },
       generation: {},
       target_language: 'en-US',

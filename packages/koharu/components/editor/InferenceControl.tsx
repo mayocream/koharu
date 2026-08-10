@@ -456,6 +456,7 @@ function availableModels(
       model: selected.model ?? null,
       name: selected.model ?? providerName(providers, selected.provider),
       quantizations: [],
+      vision: selected.vision,
     },
     ...models,
   ]

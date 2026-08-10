@@ -312,6 +312,7 @@ export type Model = {
 	model: string | null,
 	name: string,
 	quantizations: Quantization[],
+	vision: boolean,
 };
 
 export type ModelResources = {
@@ -325,12 +326,14 @@ export type ModelSelection = {
 	provider: Provider,
 	model?: string | null,
 	quantization?: string | null,
+	vision: boolean,
 };
 
 export type OcrModel = { model: "paddleocr-vl-1.6" } | { model: "manga-ocr" } | { model: "baberu-ocr" };
 
 export type OpenAiCompatibleConfig = {
 	base_url?: string | null,
+	vision?: boolean,
 };
 
 export type OpenAiConfig = Record<string, never>;

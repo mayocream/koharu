@@ -81,7 +81,7 @@ export function ProviderPreferences({
               {hasVision(entry.config) && (
                 <ToggleField
                   label={t('settings.providers.vision')}
-                  value={entry.config.settings.vision}
+                  value={entry.config.settings.vision ?? false}
                   onChange={(vision) =>
                     onChange(
                       replaceEntry(value, {

@@ -80,6 +80,7 @@ const preferences: Preferences = {
         provider: 'local',
         model: 'lfm2.5-1.2b-instruct',
         quantization: null,
+        vision: true,
       },
       generation: {},
       target_language: 'en-US',
@@ -157,6 +158,7 @@ function installProject() {
         model: 'lfm2.5-1.2b-instruct',
         name: 'LFM 2.5 1.2B Instruct',
         quantizations: [],
+        vision: true,
       },
     ],
     selectedPages: ['page'],
@@ -627,7 +629,12 @@ describe('greenfield editor', () => {
         ...preferences.pipeline,
         translation: {
           ...preferences.pipeline.translation,
-          model: { provider: 'local', model: 'gemma4-12b-it', quantization: null },
+          model: {
+            provider: 'local',
+            model: 'gemma4-12b-it',
+            quantization: null,
+            vision: true,
+          },
         },
       },
     }
@@ -640,6 +647,7 @@ describe('greenfield editor', () => {
           model: 'gemma4-12b-it',
           name: 'Gemma 4 12B',
           quantizations: [],
+          vision: true,
         },
       ],
     })
@@ -678,6 +686,7 @@ describe('greenfield editor', () => {
           model: 'long-model',
           name: longName,
           quantizations: [],
+          vision: true,
         },
       ],
     })
