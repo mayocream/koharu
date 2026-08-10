@@ -72,7 +72,7 @@ macro_rules! define_providers {
         }
 
         #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-        #[serde(default, deny_unknown_fields)]
+        #[serde(default)]
         pub struct ProvidersConfig {
             $(
                 #[serde(rename = $id)]

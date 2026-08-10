@@ -1,8 +1,5 @@
 import { defineConfig } from 'sponsorkit'
 
-if (process.env.SPONSORKIT_GITHUB_TOKEN) providers.push('github')
-if (process.env.SPONSORKIT_PATREON_TOKEN) providers.push('patreon')
-
 export default defineConfig({
   github: {
     login: 'mayocream',
@@ -10,6 +7,7 @@ export default defineConfig({
   },
   outputDir: '.',
   formats: ['svg'],
+  providers: ['github', 'patreon'],
   width: 800,
   onSponsorsAllFetched(sponsors) {
     let anonymousCount = 0

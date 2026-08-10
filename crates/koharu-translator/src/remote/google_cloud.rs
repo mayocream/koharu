@@ -13,7 +13,7 @@ use crate::{Model, Provider, Result, TranslationRequest};
 const URL: &str = "https://translation.googleapis.com/language/translate/v2";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct GoogleCloudConfig {}
 
 pub(super) async fn models() -> Result<Vec<Model>> {

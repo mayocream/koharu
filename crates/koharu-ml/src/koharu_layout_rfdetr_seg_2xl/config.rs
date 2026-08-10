@@ -17,7 +17,6 @@ pub struct KoharuLayoutRFDetrSeg2XLConfig {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct KoharuLayoutThresholds {
     pub text: f32,
     pub onomatopoeia: f32,

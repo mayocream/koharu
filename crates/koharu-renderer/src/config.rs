@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct TypesettingConfig {
     pub font_families: Vec<String>,
 }

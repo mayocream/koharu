@@ -12,7 +12,7 @@ use crate::{Error, Language, Model, Provider, Result, TranslationRequest};
 const URL: &str = "https://api.interpreter.caiyunai.com/v1/translator";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct CaiyunConfig {}
 
 pub(super) async fn models() -> Result<Vec<Model>> {

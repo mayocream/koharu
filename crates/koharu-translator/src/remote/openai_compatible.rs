@@ -13,7 +13,7 @@ use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, displ
 const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct OpenAiCompatibleConfig {
     pub base_url: Option<Url>,
 }

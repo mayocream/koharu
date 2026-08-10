@@ -32,7 +32,7 @@ pub(crate) struct LocalModelDescriptor {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct LocalConfig {}
 
 pub(super) static MODELS: &[LocalModelDescriptor] = &[

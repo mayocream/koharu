@@ -5,7 +5,7 @@ use specta::Type;
 use crate::Provider;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct GenerationConfig {
     pub temperature: Option<f32>,
     pub top_k: Option<u32>,
@@ -19,7 +19,6 @@ pub struct GenerationConfig {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
 pub struct ModelSelection {
     pub provider: Provider,
     #[serde(default)]

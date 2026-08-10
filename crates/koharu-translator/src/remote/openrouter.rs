@@ -12,7 +12,7 @@ const CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
 const MODELS_URL: &str = "https://openrouter.ai/api/v1/models";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct OpenRouterConfig {}
 
 pub(super) static MODELS: &[(&str, &str)] = &[("openrouter/auto", "OpenRouter Auto")];

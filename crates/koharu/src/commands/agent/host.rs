@@ -501,37 +501,31 @@ fn entities(values: &[String]) -> Result<Vec<EntityId>> {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct InspectProject {}
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct ViewPage {
     page: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct RenamePage {
     page: String,
     label: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct MovePage {
     page: String,
     index: usize,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct DeletePages {
     pages: Vec<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct AddTextBox {
     page: String,
     x: f32,
@@ -543,14 +537,12 @@ struct AddTextBox {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct SetText {
     element: String,
     text: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct SetTranslation {
     element: String,
     text: Option<String>,
@@ -611,7 +603,6 @@ impl From<AgentWritingMode> for koharu_scene::WritingMode {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct SetTypography {
     element: String,
     preferred_font: Option<String>,
@@ -627,21 +618,18 @@ struct SetTypography {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct SetGeometry {
     element: String,
     points: Vec<AgentPoint>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct AgentPoint {
     x: f64,
     y: f64,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct SetVisibility {
     elements: Vec<String>,
     visible: Option<bool>,
@@ -649,13 +637,11 @@ struct SetVisibility {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct DeleteElements {
     elements: Vec<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct MoveElement {
     element: String,
     parent: String,
@@ -691,7 +677,6 @@ impl From<AgentPipelineOperation> for Operation {
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 struct RunPipeline {
     operation: AgentPipelineOperation,
     #[serde(default)]

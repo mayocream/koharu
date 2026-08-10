@@ -12,7 +12,7 @@ use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, promp
 const URL: &str = "https://api.anthropic.com/v1/messages";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct ClaudeConfig {}
 
 pub(super) static MODELS: &[(&str, &str)] = &[

@@ -8,7 +8,7 @@ use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest};
 const URL: &str = "https://api.deepseek.com/chat/completions";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct DeepSeekConfig {}
 
 pub(super) static MODELS: &[(&str, &str)] = &[

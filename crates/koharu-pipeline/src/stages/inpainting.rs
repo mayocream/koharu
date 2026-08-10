@@ -29,7 +29,7 @@ use crate::{InpaintingModel, ModelCell};
 const PRODUCER: &str = "dev.koharu.pipeline.inpainting";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct Flux2KleinConfig {
     pub prompt: String,
 }
@@ -43,7 +43,7 @@ impl Default for Flux2KleinConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct RoremMixedConfig {
     pub prompt: String,
     pub negative_prompt: String,

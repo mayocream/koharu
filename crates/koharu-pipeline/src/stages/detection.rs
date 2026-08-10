@@ -43,7 +43,7 @@ const NMS_CONTAINMENT_THRESHOLD: f32 = 0.9;
 const DIALOGUE_MASK_CONTAINMENT_THRESHOLD: f32 = 0.9;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct KoharuLayoutRFDetrSeg2XLConfig {
     pub text_threshold: Option<f32>,
     pub bubble_threshold: Option<f32>,

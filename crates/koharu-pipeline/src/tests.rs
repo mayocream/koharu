@@ -1,9 +1,9 @@
 use super::*;
 
 #[test]
-fn configuration_rejects_unknown_fields() {
-    let result = toml::from_str::<PipelineConfig>("legacy_limit = 1");
-    assert!(result.is_err());
+fn configuration_ignores_unknown_fields() {
+    let config = toml::from_str::<PipelineConfig>("legacy_limit = 1").unwrap();
+    assert_eq!(config, PipelineConfig::default());
 }
 
 #[tokio::test]

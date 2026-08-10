@@ -17,7 +17,7 @@ pub struct PipelineConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 struct PipelineFile {
     detection: ModelSelection,
     ocr: ModelSelection,
@@ -46,7 +46,7 @@ impl Default for PipelineFile {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 struct ModelSelection {
     model: String,
 }
@@ -170,7 +170,6 @@ impl Default for PipelineConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(deny_unknown_fields)]
 pub struct TranslationConfig {
     pub model: koharu_translator::ModelSelection,
     pub generation: GenerationConfig,
@@ -241,7 +240,7 @@ impl PipelineConfig {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct ProcessorConfig {
     #[serde(rename = "koharu-layout-rfdetr-seg-2xl")]
     pub koharu_layout_rfdetr_seg_2xl: Option<KoharuLayoutRFDetrSeg2XLConfig>,
@@ -252,14 +251,14 @@ pub struct ProcessorConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "model", deny_unknown_fields)]
+#[serde(tag = "model")]
 pub enum DetectionModel {
     #[serde(rename = "koharu-layout-rfdetr-seg-2xl")]
     KoharuLayoutRFDetrSeg2XL(KoharuLayoutRFDetrSeg2XLConfig),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "model", deny_unknown_fields)]
+#[serde(tag = "model")]
 pub enum OcrModel {
     #[serde(rename = "paddleocr-vl-1.6")]
     PaddleOcrVl1_6,
@@ -270,7 +269,7 @@ pub enum OcrModel {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
-#[serde(tag = "model", deny_unknown_fields)]
+#[serde(tag = "model")]
 pub enum InpaintingModel {
     #[serde(rename = "lama")]
     LaMa {},
@@ -355,8 +354,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_model_configuration_fields() {
-        let result = toml::from_str::<PipelineConfig>(
+    fn ignores_unknown_model_configuration_fields() {
+        let config = toml::from_str::<PipelineConfig>(
             r#"
                 [detection]
                 model = "koharu-layout-rfdetr-seg-2xl"
@@ -370,9 +369,15 @@ mod tests {
                 model = "lama"
                 legacy_resolution = 1024
             "#,
-        );
+        )
+        .unwrap();
 
-        assert!(result.is_err());
+        assert!(matches!(
+            config.detection,
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(_)
+        ));
+        assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6));
+        assert!(matches!(config.inpainting(), Ok(InpaintingModel::LaMa {})));
     }
 
     #[test]

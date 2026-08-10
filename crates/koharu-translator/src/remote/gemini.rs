@@ -15,7 +15,7 @@ use crate::{
 const ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct GeminiConfig {}
 
 pub(super) static MODELS: &[(&str, &str)] = &[

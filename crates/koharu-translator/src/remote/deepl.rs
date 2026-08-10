@@ -11,7 +11,7 @@ use super::send_json;
 use crate::{Error, Language, Model, Provider, Result, TranslationRequest};
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct DeepLConfig {
     pub base_url: Option<Url>,
 }
