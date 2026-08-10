@@ -48,7 +48,6 @@
     },
     "providers": {
       "local": "Local",
-      "atlas_cloud": "Atlas Cloud",
       "openai": "OpenAI",
       "gemini": "Gemini",
       "claude": "Claude",
@@ -62,7 +61,6 @@
     },
     "providerDescriptions": {
       "local": "Modelos executados neste dispositivo.",
-      "atlas-cloud": "Modelos de linguagem hospedados pela Atlas.",
       "openai": "Modelos de linguagem da OpenAI.",
       "gemini": "Modelos Google Gemini.",
       "claude": "Modelos Claude da Anthropic.",

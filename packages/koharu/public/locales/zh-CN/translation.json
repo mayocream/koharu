@@ -43,7 +43,6 @@
     },
     "providers": {
       "local": "本地",
-      "atlas_cloud": "Atlas Cloud",
       "openai": "OpenAI",
       "gemini": "Gemini",
       "claude": "Claude",
@@ -57,7 +56,6 @@
     },
     "providerDescriptions": {
       "local": "在此设备上运行的模型。",
-      "atlas-cloud": "由 Atlas 托管的语言模型。",
       "openai": "OpenAI 语言模型。",
       "gemini": "Google Gemini 模型。",
       "claude": "Anthropic Claude 模型。",

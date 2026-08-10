@@ -76,7 +76,7 @@ Koharu 也可以通过远程或自托管 API 翻译，而不下载本地模型�
 
 支持的提供商家族包括：
 
-- LLM 驱动：`Atlas Cloud`、`OpenAI`、`Gemini`、`Claude`、`DeepSeek`、`OpenRouter`、`LM Studio`，以及任何暴露 `/v1/models` 与 `/v1/chat/completions` 的 `OpenAI 兼容` 端点（vLLM、llama-server 等）
+- LLM 驱动：`OpenAI`、`Gemini`、`Claude`、`DeepSeek`、`OpenRouter`、`LM Studio`，以及任何暴露 `/v1/models` 与 `/v1/chat/completions` 的 `OpenAI 兼容` 端点（vLLM、llama-server 等）
 - 机器翻译：`DeepL`、`Google Cloud Translation`、`Caiyun`
 
 机器翻译提供商是纯翻译服务，而不是聊天模型。它们接受源文本和目标语言并返回译文，没有 system prompt，也没有模型选择器。
@@ -89,7 +89,6 @@ LLM 驱动提供商的内置目录包括：
 - Gemini：Gemini 3.5 Flash、Gemini 3.1 Pro 和 Flash-Lite、Gemini 3 Flash，以及 Gemini 2.5 文本输出模型
 - Claude：Claude Fable 5、Opus 4.8、Sonnet 5、Haiku 4.5，以及部分早期 Claude 4 模型
 - DeepSeek：DeepSeek V4 Flash 和 DeepSeek V4 Pro
-- Atlas Cloud：从 Atlas Cloud 动态发现当前聊天模型
 - OpenRouter：从 OpenRouter 动态发现文本输出模型
 - LM Studio：通过原生 v1 REST API 动态发现本地 LLM
 - OpenAI 兼容 API：模型列表会从你配置的端点动态发现

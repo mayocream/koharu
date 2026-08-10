@@ -43,7 +43,6 @@
     },
     "providers": {
       "local": "로컬",
-      "atlas_cloud": "Atlas Cloud",
       "openai": "OpenAI",
       "gemini": "Gemini",
       "claude": "Claude",
@@ -57,7 +56,6 @@
     },
     "providerDescriptions": {
       "local": "이 기기에서 실행되는 모델입니다.",
-      "atlas-cloud": "Atlas에서 호스팅되는 언어 모델입니다.",
       "openai": "OpenAI 언어 모델입니다.",
       "gemini": "Google Gemini 모델입니다.",
       "claude": "Anthropic Claude 모델입니다.",

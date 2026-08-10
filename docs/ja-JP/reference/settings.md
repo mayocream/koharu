@@ -45,7 +45,6 @@ title: 設定リファレンス
 `API Keys` タブで現在扱う組み込み provider は次の通りです。
 
 - `OpenAI`
-- `Atlas Cloud`
 - `Gemini`
 - `Claude`
 - `DeepSeek`
