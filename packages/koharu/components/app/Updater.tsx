@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from '@koharu/ui/components/alert-dialog'
 import { Progress } from '@koharu/ui/components/progress'
+import { ScrollArea } from '@koharu/ui/components/scroll-area'
 
 type UpdateState =
   | { kind: 'available'; update: Update }
@@ -118,9 +119,12 @@ export function Updater() {
         </AlertDialogHeader>
 
         {state.kind === 'available' && (
-          <div className='max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/45 p-3 text-xs leading-5 text-muted-foreground'>
-            {state.update.body || t('updater.noNotes')}
-          </div>
+          <ScrollArea
+            className='max-h-40 rounded-lg bg-muted/45'
+            viewportClassName='whitespace-pre-wrap p-3 text-xs leading-5 text-muted-foreground'
+          >
+            <p>{state.update.body || t('updater.noNotes')}</p>
+          </ScrollArea>
         )}
         {state.kind === 'downloading' && (
           <Progress value={percent} aria-label={t('updater.downloading.title')}>
@@ -130,9 +134,12 @@ export function Updater() {
           </Progress>
         )}
         {state.kind === 'error' && (
-          <p className='max-h-28 overflow-y-auto text-xs leading-5 text-muted-foreground'>
-            {state.message}
-          </p>
+          <ScrollArea
+            className='max-h-28'
+            viewportClassName='text-xs leading-5 text-muted-foreground'
+          >
+            <p>{state.message}</p>
+          </ScrollArea>
         )}
 
         {!downloading && (

@@ -60,6 +60,7 @@ static READY: OnceCell<()> = OnceCell::const_new();
 /// backend that completed successfully is retained and is not initialized
 /// again. Retry timing belongs to the application bootstrap rather than this
 /// deterministic, single-attempt API.
+#[tracing::instrument(skip_all)]
 pub async fn init() -> anyhow::Result<()> {
     READY
         .get_or_try_init(|| async {

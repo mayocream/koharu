@@ -1,176 +1,161 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::fs;
 
-use tempfile::tempdir;
+use bytes::Bytes;
 
-use crate::{Blob, Commit, DocumentId, Error, Options, Revision, Session};
+use crate::{BlobId, DocumentId, Error, Revision, Session};
 
-fn commit(document: DocumentId, parent: Revision, forward: &[u8]) -> Commit {
-    Commit::new(document, parent, forward.to_vec(), b"inverse".to_vec())
+fn blob_path(root: &std::path::Path, id: BlobId) -> std::path::PathBuf {
+    let name = id.to_string();
+    root.join("blobs").join(&name[..2]).join(name)
 }
 
-#[test]
-fn project_reopens_with_history_and_blobdb_payloads() {
-    let directory = tempdir().unwrap();
-    let path = directory.path().join("project.khrproj");
+#[tokio::test]
+async fn saves_reopens_and_maps_large_blobs() {
+    let root = tempfile::tempdir().unwrap();
     let document = DocumentId::new();
-    let bytes = vec![0x5a; 128 * 1024];
-    let blob = Blob::new(Arc::<[u8]>::from(bytes.clone()));
-    let id = blob.id();
-    {
-        let mut session = Session::create(&path, document, b"initial".to_vec()).unwrap();
-        let mut change = commit(document, Revision::ZERO, b"forward");
-        change.attach(blob);
-        session.commit(change, None).unwrap();
-        session
-            .compact(Revision::ZERO, b"current".to_vec(), BTreeSet::from([id]))
-            .unwrap();
-    }
-
-    assert!(
-        std::fs::read_dir(&path)
-            .unwrap()
-            .filter_map(|entry| entry.ok())
-            .any(|entry| entry
-                .path()
-                .extension()
-                .is_some_and(|extension| extension == "blob")),
-        "the blobs column family should materialize large values in BlobDB files"
-    );
-    let session = Session::open(&path).unwrap();
-    let recovery = session.recover().unwrap();
-    assert_eq!(recovery.document, document);
-    assert_eq!(recovery.head, Revision::new(1));
-    assert_eq!(
-        session
-            .snapshot(BTreeSet::from([id]))
-            .unwrap()
-            .read_blob(id)
-            .unwrap()
-            .as_ref(),
-        bytes
-    );
-}
-
-#[test]
-fn stale_writer_is_rejected_at_the_database_head() {
-    let directory = tempdir().unwrap();
-    let path = directory.path().join("project.khrproj");
-    let document = DocumentId::new();
-    let mut first = Session::create(&path, document, Vec::new()).unwrap();
-    let mut stale = Session::open(&path).unwrap();
-
-    first
-        .commit(commit(document, Revision::ZERO, b"one"), None)
+    let session = Session::create(root.path(), document, Bytes::from_static(b"initial"))
+        .await
         .unwrap();
-    let error = stale
-        .commit(commit(document, Revision::ZERO, b"two"), None)
-        .unwrap_err();
-    assert!(matches!(
-        error,
-        Error::RevisionConflict {
-            expected: Revision::ZERO,
-            actual
-        } if actual == Revision::new(1)
-    ));
-}
-
-#[test]
-fn refreshed_writer_preserves_the_latest_checkpoint_boundary() {
-    let directory = tempdir().unwrap();
-    let path = directory.path().join("project.khrproj");
-    let document = DocumentId::new();
-    let mut checkpointing = Session::create_with(
-        &path,
-        document,
-        b"zero".to_vec(),
-        Options {
-            checkpoint_commits: 1,
-            checkpoint_bytes: 0,
-            ..Options::default()
-        },
-    )
-    .unwrap();
-    let mut refreshed = Session::open_with(
-        &path,
-        Options {
-            checkpoint_commits: 0,
-            checkpoint_bytes: 0,
-            ..Options::default()
-        },
-    )
-    .unwrap();
-
-    checkpointing
-        .commit(
-            commit(document, Revision::ZERO, b"one"),
-            Some(b"checkpoint-one".to_vec()),
+    let initial = session.load().await.unwrap();
+    let bytes = Bytes::from(vec![7; 512 * 1024]);
+    let id = BlobId::for_bytes(&bytes);
+    let proposed = initial
+        .update(
+            Revision::new(1),
+            Bytes::from_static(b"updated"),
+            [id],
+            [(id, bytes.clone())],
         )
         .unwrap();
-    let changes = refreshed.changes().unwrap();
-    refreshed.accept(&changes).unwrap();
-    refreshed
-        .commit(commit(document, Revision::new(1), b"two"), None)
-        .unwrap();
-    drop((checkpointing, refreshed));
+    let saved = session.save(&proposed).await.unwrap();
+    assert_eq!(saved.blobs().get(id).await.unwrap(), bytes);
+    assert!(!root.path().join("temporary").exists());
+    drop((initial, proposed, saved, session));
 
-    let recovery = Session::open(&path).unwrap().recover().unwrap();
-    assert_eq!(recovery.checkpoint_revision, Revision::new(1));
-    assert_eq!(recovery.checkpoint.as_ref(), b"checkpoint-one");
+    let reopened = Session::open(root.path()).await.unwrap();
+    let loaded = reopened.load().await.unwrap();
+    assert_eq!(loaded.document_id(), document);
+    assert_eq!(loaded.revision(), Revision::new(1));
+    assert_eq!(loaded.payload(), &Bytes::from_static(b"updated"));
+    assert_eq!(loaded.blobs().get(id).await.unwrap(), bytes);
+}
+
+#[tokio::test]
+async fn corrupt_newest_state_falls_back_to_previous_slot() {
+    let root = tempfile::tempdir().unwrap();
+    let session = Session::create(
+        root.path(),
+        DocumentId::new(),
+        Bytes::from_static(b"initial"),
+    )
+    .await
+    .unwrap();
+    let initial = session.load().await.unwrap();
+    let proposed = initial
+        .update(Revision::new(1), Bytes::from_static(b"newest"), [], [])
+        .unwrap();
+    let saved = session.save(&proposed).await.unwrap();
+    drop((initial, proposed, saved, session));
+
+    fs::write(root.path().join("state-b.khr"), b"torn").unwrap();
+    let reopened = Session::open(root.path()).await.unwrap();
+    assert_eq!(reopened.revision(), Revision::ZERO);
     assert_eq!(
-        recovery
-            .entries
-            .iter()
-            .map(|entry| entry.revision)
-            .collect::<Vec<_>>(),
-        [Revision::new(2)]
+        reopened.load().await.unwrap().payload(),
+        &Bytes::from_static(b"initial")
     );
 }
 
-#[test]
-fn preview_blobs_are_not_persisted() {
-    let document = DocumentId::new();
-    let session = Session::memory(document, Vec::new()).unwrap();
-    let blob = Blob::new(&b"preview"[..]);
-    let id = blob.id();
-    let snapshot = session
-        .snapshot(BTreeSet::new())
-        .unwrap()
-        .preview(Revision::ZERO, [blob], BTreeSet::from([id]))
-        .unwrap();
-    assert_eq!(snapshot.read_blob(id).unwrap().as_ref(), b"preview");
-    assert!(matches!(
-        session.snapshot(BTreeSet::from([id])).unwrap_err(),
-        Error::BlobNotFound(missing) if missing == id
-    ));
-}
-
-#[test]
-fn configured_checkpoint_threshold_is_enforced() {
-    let document = DocumentId::new();
-    let mut session = Session::memory_with(
-        document,
-        b"zero".to_vec(),
-        Options {
-            checkpoint_commits: 1,
-            checkpoint_bytes: 0,
-            ..Options::default()
-        },
+#[tokio::test]
+async fn missing_newest_blob_falls_back_to_previous_slot() {
+    let root = tempfile::tempdir().unwrap();
+    let session = Session::create(
+        root.path(),
+        DocumentId::new(),
+        Bytes::from_static(b"initial"),
     )
+    .await
     .unwrap();
-    assert!(matches!(
-        session
-            .commit(commit(document, Revision::ZERO, b"one"), None)
-            .unwrap_err(),
-        Error::Invalid(_)
-    ));
-    session
-        .commit(
-            commit(document, Revision::ZERO, b"one"),
-            Some(b"checkpoint".to_vec()),
+    let initial = session.load().await.unwrap();
+    let bytes = Bytes::from_static(b"blob");
+    let id = BlobId::for_bytes(&bytes);
+    let proposed = initial
+        .update(
+            Revision::new(1),
+            Bytes::from_static(b"newest"),
+            [id],
+            [(id, bytes)],
         )
         .unwrap();
-    assert_eq!(
-        session.recover().unwrap().checkpoint.as_ref(),
-        b"checkpoint"
-    );
+    let saved = session.save(&proposed).await.unwrap();
+    drop((initial, proposed, saved, session));
+    fs::remove_file(blob_path(root.path(), id)).unwrap();
+
+    let reopened = Session::open(root.path()).await.unwrap();
+    assert_eq!(reopened.revision(), Revision::ZERO);
+}
+
+#[tokio::test]
+async fn project_lock_lives_as_long_as_blob_scopes() {
+    let root = tempfile::tempdir().unwrap();
+    let session = Session::create(root.path(), DocumentId::new(), Bytes::new())
+        .await
+        .unwrap();
+    let state = session.load().await.unwrap();
+    drop(session);
+    assert!(matches!(
+        Session::open(root.path()).await,
+        Err(Error::Locked)
+    ));
+    drop(state);
+    Session::open(root.path()).await.unwrap();
+}
+
+#[tokio::test]
+async fn garbage_collection_keeps_both_slots_and_active_states() {
+    let root = tempfile::tempdir().unwrap();
+    let session = Session::create(root.path(), DocumentId::new(), Bytes::new())
+        .await
+        .unwrap();
+    let initial = session.load().await.unwrap();
+    let bytes = Bytes::from_static(b"retained");
+    let id = BlobId::for_bytes(&bytes);
+    let first_proposed = initial
+        .update(
+            Revision::new(1),
+            Bytes::from_static(b"one"),
+            [id],
+            [(id, bytes)],
+        )
+        .unwrap();
+    let first = session.save(&first_proposed).await.unwrap();
+    drop(first_proposed);
+    let second_proposed = first
+        .update(Revision::new(2), Bytes::from_static(b"two"), [], [])
+        .unwrap();
+    let second = session.save(&second_proposed).await.unwrap();
+    drop(second_proposed);
+    assert_eq!(session.collect_garbage().await.unwrap().blobs, 0);
+
+    let third_proposed = second
+        .update(Revision::new(3), Bytes::from_static(b"three"), [], [])
+        .unwrap();
+    let third = session.save(&third_proposed).await.unwrap();
+    drop(third_proposed);
+    drop((initial, first, second, third));
+    let report = session.collect_garbage().await.unwrap();
+    assert_eq!(report.blobs, 1);
+    assert!(!blob_path(root.path(), id).exists());
+}
+
+#[tokio::test]
+async fn rejects_stale_saves() {
+    let session = Session::memory(DocumentId::new(), Bytes::new())
+        .await
+        .unwrap();
+    let state = session.load().await.unwrap();
+    assert!(matches!(
+        session.save(&state).await,
+        Err(Error::RevisionConflict { .. })
+    ));
 }

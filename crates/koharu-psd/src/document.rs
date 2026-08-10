@@ -7,7 +7,8 @@
 
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage};
 use koharu_renderer::{
-    Frame, RasterOptions, Rasterizer, TextAlign, VisualLayerKind, VisualText, WritingMode,
+    Frame, ImageKind, LayerKind, RasterOptions, Renderer, TextAlign, TextMetadata as RenderedText,
+    WritingMode,
 };
 use koharu_scene::{AssetRole, Snapshot};
 
@@ -82,19 +83,19 @@ pub(crate) struct TextMetadata {
     pub box_height: f64,
 }
 
-pub(crate) fn build(
+pub(crate) async fn build(
     snapshot: &Snapshot,
     frame: &Frame,
-    rasterizer: &Rasterizer,
+    renderer: &Renderer,
     raster_options: RasterOptions,
     options: &PsdExportOptions,
 ) -> Result<Document, PsdExportError> {
-    let merged = rasterizer.rasterize(frame, raster_options)?;
+    let merged = renderer.rasterize(frame, raster_options).await?;
     let width = merged.image.width();
     let height = merged.image.height();
     validate_dimensions(width, height)?;
 
-    let source = read_image(snapshot, frame.page(), SOURCE_ROLE)?;
+    let source = read_image(snapshot, frame.page(), SOURCE_ROLE).await?;
     if options.include_source && source.is_none() {
         return Err(PsdExportError::MissingAsset {
             page: frame.page(),
@@ -103,8 +104,9 @@ pub(crate) fn build(
     }
     let has_raster_layers = frame.layers().iter().any(|layer| {
         matches!(
-            layer.kind,
-            VisualLayerKind::Cleanup | VisualLayerKind::Paint
+            layer.kind(),
+            LayerKind::Image(metadata)
+                if matches!(metadata.kind, ImageKind::Cleanup | ImageKind::Paint)
         )
     });
     let mut layers = Vec::new();
@@ -118,8 +120,8 @@ pub(crate) fn build(
     }
     if options.include_removal_mask {
         let mask = combine_masks(
-            read_image(snapshot, frame.page(), TEXT_MASK_ROLE)?,
-            read_image(snapshot, frame.page(), COO_MASK_ROLE)?,
+            read_image(snapshot, frame.page(), TEXT_MASK_ROLE).await?,
+            read_image(snapshot, frame.page(), COO_MASK_ROLE).await?,
         )?;
         if let Some(mask) = mask {
             push_raster_layer(
@@ -133,30 +135,37 @@ pub(crate) fn build(
     let text_entities = frame
         .layers()
         .iter()
-        .filter_map(|entity| entity.text.as_ref().map(|text| (entity.entity, text)))
+        .filter_map(|layer| match layer.kind() {
+            LayerKind::Text(text) => Some((layer.entity(), text)),
+            LayerKind::Image(_) => None,
+        })
         .filter(|(_, text)| !text.text.trim().is_empty())
         .collect::<Vec<_>>();
     let font_set = collect_fonts(text_entities.iter().map(|(_, text)| *text));
     // GIMP writes the application layer list in reverse so PSD records remain bottom-to-top.
     // Reversing the complete visual list preserves interleaving between text and raster layers.
     for visual in frame.layers().iter().rev() {
-        let raster = matches!(
-            visual.kind,
-            VisualLayerKind::Cleanup | VisualLayerKind::Paint
-        );
-        let ordinary_image = visual.kind == VisualLayerKind::Image && visual.entity != frame.page();
+        let image = match visual.kind() {
+            LayerKind::Image(image) => Some(image),
+            LayerKind::Text(_) => None,
+        };
+        let raster =
+            image.is_some_and(|image| matches!(image.kind, ImageKind::Cleanup | ImageKind::Paint));
+        let ordinary_image = image.is_some_and(|image| image.kind == ImageKind::Embedded);
         if (raster && options.include_raster_layers) || ordinary_image {
-            let rendered = rasterizer.rasterize(
-                &frame
-                    .entity(visual.entity)?
-                    .ok_or(PsdExportError::MissingRenderedEntity(visual.entity))?,
-                raster_options,
-            )?;
-            let name = visual.name.clone().unwrap_or_else(|| match visual.kind {
-                VisualLayerKind::Cleanup => "Cleanup".to_owned(),
-                VisualLayerKind::Paint => "Paint".to_owned(),
-                VisualLayerKind::Image => "Image".to_owned(),
-                VisualLayerKind::Text => unreachable!("text is handled separately"),
+            let rendered = renderer
+                .rasterize(
+                    &frame
+                        .cropped(visual.entity())?
+                        .ok_or(PsdExportError::MissingRenderedEntity(visual.entity()))?,
+                    raster_options,
+                )
+                .await?;
+            let image = image.expect("image branch was selected above");
+            let name = image.name.clone().unwrap_or_else(|| match image.kind {
+                ImageKind::Source | ImageKind::Embedded => "Image".to_owned(),
+                ImageKind::Cleanup => "Cleanup".to_owned(),
+                ImageKind::Paint => "Paint".to_owned(),
             });
             validate_pixels(&name, &rendered.image)?;
             layers.push(Layer {
@@ -168,27 +177,28 @@ pub(crate) fn build(
                 hidden: false,
                 text: None,
             });
-        } else if let Some(text) = visual
-            .text
-            .as_ref()
-            .filter(|text| !text.text.trim().is_empty())
-        {
+        } else if let Some(text) = match visual.kind() {
+            LayerKind::Text(text) if !text.text.trim().is_empty() => Some(text),
+            LayerKind::Text(_) | LayerKind::Image(_) => None,
+        } {
             let offset = text_entities
                 .iter()
-                .position(|(entity, _)| *entity == visual.entity)
+                .position(|(entity, _)| *entity == visual.entity())
                 .expect("nonempty visual text was collected before layer projection");
             let index =
                 i32::try_from(offset + 1).map_err(|_| PsdExportError::TooManyLayers(offset + 1))?;
-            let rendered = rasterizer.rasterize(
-                &frame
-                    .entity(visual.entity)?
-                    .ok_or(PsdExportError::MissingRenderedEntity(visual.entity))?,
-                raster_options,
-            )?;
-            validate_pixels(&visual.entity.to_string(), &rendered.image)?;
+            let rendered = renderer
+                .rasterize(
+                    &frame
+                        .cropped(visual.entity())?
+                        .ok_or(PsdExportError::MissingRenderedEntity(visual.entity()))?,
+                    raster_options,
+                )
+                .await?;
+            validate_pixels(&visual.entity().to_string(), &rendered.image)?;
             layers.push(Layer {
                 id: 0,
-                name: format!("TL {index:03} {}", visual.entity),
+                name: format!("TL {index:03} {}", visual.entity()),
                 left: rendered.left,
                 top: rendered.top,
                 pixels: rendered.image,
@@ -224,7 +234,7 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), PsdExportError> {
     Ok(())
 }
 
-fn read_image(
+async fn read_image(
     snapshot: &Snapshot,
     page: koharu_scene::EntityId,
     role: &'static str,
@@ -232,9 +242,12 @@ fn read_image(
     let Some(asset) = snapshot.asset(page, &AssetRole::new(role)?)? else {
         return Ok(None);
     };
-    Ok(Some(image::load_from_memory(
-        &snapshot.read_blob(asset.blob)?,
-    )?))
+    let bytes = snapshot.read_blob(asset.blob).await?;
+    Ok(Some(
+        tokio::task::spawn_blocking(move || image::load_from_memory(&bytes))
+            .await
+            .map_err(|error| PsdExportError::Task(error.to_string()))??,
+    ))
 }
 
 fn combine_masks(
@@ -305,7 +318,7 @@ fn validate_pixels(layer: &str, pixels: &RgbaImage) -> Result<(), PsdExportError
     Ok(())
 }
 
-fn collect_fonts<'a>(texts: impl Iterator<Item = &'a VisualText>) -> Vec<String> {
+fn collect_fonts<'a>(texts: impl Iterator<Item = &'a RenderedText>) -> Vec<String> {
     let mut fonts = Vec::new();
     for font in texts.flat_map(|text| &text.post_script_fonts) {
         if !fonts.iter().any(|candidate| candidate == font) {
@@ -315,7 +328,7 @@ fn collect_fonts<'a>(texts: impl Iterator<Item = &'a VisualText>) -> Vec<String>
     fonts
 }
 
-fn text_metadata(index: i32, text: &VisualText, font_set: &[String]) -> TextMetadata {
+fn text_metadata(index: i32, text: &RenderedText, font_set: &[String]) -> TextMetadata {
     let angle = f64::from(text.angle_degrees).to_radians();
     let bounds = text.layout_bounds;
     let primary_font = text.post_script_fonts.first();
@@ -341,7 +354,7 @@ fn text_metadata(index: i32, text: &VisualText, font_set: &[String]) -> TextMeta
         ],
         orientation: match text.writing_mode {
             WritingMode::Horizontal => TextOrientation::Horizontal,
-            WritingMode::VerticalRl | WritingMode::VerticalLr => TextOrientation::Vertical,
+            WritingMode::VerticalRl => TextOrientation::Vertical,
         },
         justification: match text.alignment {
             TextAlign::Left | TextAlign::Justify => TextJustification::Left,
@@ -359,12 +372,12 @@ fn text_metadata(index: i32, text: &VisualText, font_set: &[String]) -> TextMeta
 
 #[cfg(test)]
 mod tests {
-    use koharu_renderer::{RenderBounds, VisualText};
+    use koharu_renderer::{RenderBounds, TextMetadata as RenderedText};
 
     use super::*;
 
-    fn rendered_text(fonts: &[&str]) -> VisualText {
-        VisualText {
+    fn rendered_text(fonts: &[&str]) -> RenderedText {
+        RenderedText {
             text: "Hello".to_owned(),
             language: None,
             rendered_bounds: RenderBounds {

@@ -71,11 +71,9 @@ export function CanvasWorkspace() {
   const tool = useKoharuStore((state) => state.tool)
   const brush = useKoharuStore((state) => state.brush)
   const selected = useKoharuStore((state) => state.selectedLayers)
-  const presentation = useKoharuStore((state) => state.presentation)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setTool = useKoharuStore((state) => state.setTool)
   const setBrush = useKoharuStore((state) => state.setBrush)
-  const setPresentation = useKoharuStore((state) => state.setPresentation)
   const activeRaster =
     selected.length === 1
       ? page?.layers.find((layer) => layer.id === selected[0] && layer.type === 'raster')
@@ -191,14 +189,6 @@ export function CanvasWorkspace() {
       window.visualViewport?.removeEventListener('resize', report)
     }
   }, [report])
-
-  useEffect(() => {
-    if (!page) return
-    let next = presentation
-    if (next.image === 'rendered' && !page.assets.rendered) next = { ...next, image: 'source' }
-    if (next !== presentation) setPresentation(next)
-    dispatch(commands.setPresentation, next)
-  }, [page, presentation, setPresentation])
 
   useEffect(() => cancelGesture, [cancelGesture, page?.id, tool])
 
@@ -412,8 +402,6 @@ export function CanvasWorkspace() {
                 start: physical,
                 translation: camera.translation,
               }
-            } else if (presentation.image === 'rendered') {
-              return
             } else if (tool === 'select') {
               const target = hitTestLayers(page.layers, point, layerFrames)
               const additive = event.shiftKey || event.ctrlKey || event.metaKey
@@ -515,7 +503,7 @@ export function CanvasWorkspace() {
             viewUpdates.schedule({ zoom, translation })
           }}
         >
-          {page && presentation.image !== 'rendered' && (
+          {page && (
             <CanvasOverlay
               page={page}
               camera={camera}

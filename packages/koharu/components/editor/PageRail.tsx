@@ -45,6 +45,8 @@ import {
   DropdownMenuTrigger,
 } from '@koharu/ui/components/dropdown-menu'
 import { Input } from '@koharu/ui/components/input'
+import { ScrollArea } from '@koharu/ui/components/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import { cn } from '@koharu/ui/lib/utils'
 
 const emptyPages: PageSummary[] = []
@@ -146,16 +148,15 @@ export function PageRail() {
   return (
     <>
       <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-sidebar)]'>
-        <header className='flex h-10 shrink-0 items-center justify-between px-2.5'>
+        <header className='flex h-10 shrink-0 items-center px-2.5'>
           <div className='flex min-w-0 items-center gap-2'>
             <h2 className='text-[11px] font-semibold'>
               {t('native.navigator.pages', { defaultValue: 'Pages' })}
             </h2>
-            <span className='rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
+            <span className='rounded-full bg-primary/[0.07] px-1.5 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
               {pages.length}
             </span>
           </div>
-          <PageImportMenu compact importing={importing} onImport={importPages} />
         </header>
 
         {importing && (
@@ -165,19 +166,21 @@ export function PageRail() {
             className='flex h-7 shrink-0 items-center gap-1.5 px-2.5 text-[9px] text-muted-foreground'
           >
             <LoaderCircle className='size-3 animate-spin' aria-hidden='true' />
-            {t('native.navigator.importing', { defaultValue: 'Importing pages…' })}
+            {t('native.navigator.importing', {
+              defaultValue: 'Importing pages…',
+            })}
           </div>
         )}
 
         {pages.length > 0 && (
           <div className='border-b px-2 py-1.5'>
-            <label className='flex h-7 items-center gap-1.5 rounded-lg border border-input bg-background/70 px-2'>
+            <label className='flex h-6 items-center gap-1.5 rounded-md border border-input bg-background/70 px-1.5'>
               <Search className='size-3 text-muted-foreground' />
               <Input
                 value={query}
                 aria-label='Filter pages'
                 placeholder='Filter pages'
-                className='h-6 min-w-0 border-0 bg-transparent p-0 text-[10px] shadow-none focus-visible:ring-0'
+                className='h-5 min-w-0 border-0 bg-transparent p-0 text-[11px] shadow-none focus-visible:ring-0 md:text-[11px]'
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
             </label>
@@ -199,7 +202,11 @@ export function PageRail() {
             No matching pages
           </div>
         ) : (
-          <div ref={pageList} className='min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5'>
+          <ScrollArea
+            className='min-h-0 flex-1'
+            viewportClassName='px-1.5 py-1.5'
+            viewportRef={pageList}
+          >
             <div className='relative w-full' style={{ height: pageVirtualizer.getTotalSize() }}>
               {pageVirtualizer.getVirtualItems().map((virtualRow) => {
                 const item = visiblePages[virtualRow.index]
@@ -235,21 +242,27 @@ export function PageRail() {
                 )
               })}
             </div>
-          </div>
+          </ScrollArea>
         )}
 
         <div className='mt-auto flex shrink-0 items-center gap-2 px-2 py-2'>
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon'
-            className='size-8 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
-            aria-label='Settings'
-            title='Settings'
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className='size-4' />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  className='size-8 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
+                  aria-label='Settings'
+                  onClick={() => setSettingsOpen(true)}
+                />
+              }
+            >
+              <Settings className='size-4' />
+            </TooltipTrigger>
+            <TooltipContent side='right'>Settings</TooltipContent>
+          </Tooltip>
           <ResourceMonitor />
         </div>
       </aside>
@@ -294,49 +307,41 @@ export function PageRail() {
 }
 
 function PageImportMenu({
-  compact = false,
   importing,
   onImport,
 }: {
-  compact?: boolean
   importing: boolean
   onImport: (source: PageImportSource) => void
 }) {
   const { t } = useTranslation()
-  const label = t('native.navigator.import', { defaultValue: 'Import pages' })
+  const icon = importing ? (
+    <LoaderCircle className='size-3.5 animate-spin' />
+  ) : (
+    <FilePlus2 className='size-3.5' />
+  )
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          compact ? (
-            <Button
-              variant='ghost'
-              size='icon-sm'
-              disabled={importing}
-              aria-busy={importing}
-              aria-label={label}
-              title={label}
-            />
-          ) : (
-            <Button
-              size='sm'
-              variant='outline'
-              disabled={importing}
-              aria-busy={importing}
-              className='rounded-lg text-[10px]'
-            />
-          )
+          <Button
+            size='sm'
+            variant='outline'
+            disabled={importing}
+            aria-busy={importing}
+            className='rounded-lg text-[10px]'
+          />
         }
       >
-        {importing ? <LoaderCircle className='animate-spin' /> : <FilePlus2 />}
-        {!compact &&
-          (importing
-            ? t('native.navigator.importingAction', { defaultValue: 'Importing…' })
-            : t('native.navigator.importAction', { defaultValue: 'Import' }))}
+        {icon}
+        {importing
+          ? t('native.navigator.importingAction', {
+              defaultValue: 'Importing…',
+            })
+          : t('native.navigator.importAction', { defaultValue: 'Import' })}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align={compact ? 'end' : 'start'}
+        align='start'
         className='w-auto min-w-20 border border-border/50 p-0.5 shadow-sm ring-0'
       >
         <DropdownMenuItem
@@ -391,8 +396,12 @@ function PageItem({
       data-active={active}
       data-selected={selected}
       className={cn(
-        'group grid cursor-default grid-cols-[48px_minmax(0,1fr)] gap-2 rounded-xl border border-transparent p-1 transition-colors select-none',
-        'hover:bg-foreground/[0.045] data-[active=true]:border-primary/60 data-[active=true]:bg-[var(--surface-floating)] data-[selected=true]:bg-accent',
+        'group grid cursor-default grid-cols-[48px_minmax(0,1fr)] gap-2.5 rounded-xl p-1.5 transition-colors select-none',
+        active
+          ? 'bg-primary/[0.09] hover:bg-primary/[0.09]'
+          : selected
+            ? 'bg-foreground/[0.06] hover:bg-foreground/[0.08]'
+            : 'hover:bg-foreground/[0.045]',
         dragged && 'opacity-50',
       )}
       onClick={(event) => {

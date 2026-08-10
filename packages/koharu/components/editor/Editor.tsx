@@ -45,7 +45,7 @@ export function Editor() {
             maxSize='27%'
             collapsible
             collapsedSize='4%'
-            className='min-h-0 overflow-hidden border-l border-border/40'
+            className='min-h-0 overflow-hidden border-l border-border/40 bg-[var(--surface-panel)]'
           >
             <RightSidebar />
           </ResizablePanel>

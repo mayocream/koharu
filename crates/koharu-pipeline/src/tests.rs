@@ -19,7 +19,7 @@ async fn stop_is_a_successful_partial_result() {
 
     let report = pipeline
         .execute(
-            koharu_scene::Session::memory().unwrap().snapshot(),
+            koharu_scene::Session::memory().await.unwrap().snapshot(),
             request,
             &mut committer,
         )
@@ -41,7 +41,7 @@ async fn stop_after_a_page_keeps_completed_progress() {
         ..Default::default()
     };
     let pipeline = pipeline(translation);
-    let mut session = koharu_scene::Session::memory().unwrap();
+    let mut session = koharu_scene::Session::memory().await.unwrap();
     let patch = session
         .snapshot()
         .patch(|edit| {
@@ -56,7 +56,7 @@ async fn stop_after_a_page_keeps_completed_progress() {
             Ok(())
         })
         .unwrap();
-    session.commit(patch).unwrap();
+    session.commit(patch).await.unwrap();
     let stop = StopToken::default();
     let progress_stop = stop.clone();
     let request = Request {

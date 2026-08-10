@@ -98,12 +98,12 @@ struct RenderTarget {
 /// GPU setup, Vello's glyph caches, and a small target pool live for the lifetime of this value.
 /// Command encoding is serialized because Vello mutates its caches, but GPU completion and
 /// readback happen after releasing the lock so independent callers can overlap that work.
-pub struct Rasterizer {
+pub(crate) struct Rasterizer {
     gpu: Mutex<GpuState>,
 }
 
 impl Rasterizer {
-    pub fn new() -> crate::Result<Self> {
+    pub(crate) fn new() -> crate::Result<Self> {
         Self::try_new().map_err(crate::Error::Backend)
     }
 
@@ -130,7 +130,11 @@ impl Rasterizer {
         })
     }
 
-    pub fn rasterize(&self, frame: &crate::Frame, options: RasterOptions) -> crate::Result<Raster> {
+    pub(crate) fn rasterize(
+        &self,
+        frame: &crate::Frame,
+        options: RasterOptions,
+    ) -> crate::Result<Raster> {
         let (width, height) = frame.size();
         let (left, top) = frame.origin();
         let image = self
@@ -139,7 +143,7 @@ impl Rasterizer {
         Ok(Raster { image, left, top })
     }
 
-    pub fn rasterize_scene(
+    pub(crate) fn rasterize_scene(
         &self,
         scene: &Scene,
         width: u32,

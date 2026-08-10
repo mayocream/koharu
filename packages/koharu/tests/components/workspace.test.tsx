@@ -61,13 +61,6 @@ function installProject() {
     id: 'page',
     label: 'Page',
     size: { width: 1000, height: 1000 },
-    assets: {
-      source: 'source',
-      rendered: null,
-      text_mask: null,
-      coo_mask: null,
-      bubble_mask: null,
-    },
     layers: [layer],
     regions: [],
   }
@@ -84,7 +77,6 @@ function installProject() {
 }
 
 function renderWorkspace() {
-  vi.spyOn(commands, 'setPresentation').mockResolvedValue(null)
   vi.spyOn(commands, 'setViewport').mockResolvedValue(null)
   render(
     <QueryClientProvider client={queryClient}>

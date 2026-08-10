@@ -126,10 +126,11 @@ impl Model {
         let page = input.page;
         let image = input
             .images
-            .get(&input.scene, page, "source")?
+            .get(&input.scene, page, "source")
+            .await?
             .ok_or_else(|| anyhow!("page {page} has no source image"))?;
         let output = self.detect(image.clone()).await?;
-        build_patch(&input, &image, output, &generation(PRODUCER, MODEL_ID)?)
+        build_patch(&input, &image, output, &generation(PRODUCER, MODEL_ID)?).await
     }
 
     async fn detect(&self, image: Arc<DynamicImage>) -> Result<KoharuLayoutDetections> {
@@ -186,7 +187,7 @@ struct ImageSize {
     height: u32,
 }
 
-fn build_patch(
+async fn build_patch(
     input: &StageInput,
     image: &DynamicImage,
     output: KoharuLayoutDetections,
@@ -209,6 +210,7 @@ fn build_patch(
         &mut previous_texts,
         &mut reused_contents,
     )
+    .await
     .context("failed to write detection output")?;
     remove_unmatched_texts(
         input,
@@ -330,7 +332,7 @@ fn remove_unmatched_texts(
     Ok(())
 }
 
-fn write_page(
+async fn write_page(
     input: &StageInput,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
@@ -369,7 +371,9 @@ fn write_page(
     .context("failed to write detected regions")?;
     link_dialogue_regions(edit, &regions, generation)
         .context("failed to associate detected text with dialogue regions")?;
-    write_masks(input, edit, page, &detections, size).context("failed to write detection masks")
+    write_masks(input, edit, page, &detections, size)
+        .await
+        .context("failed to write detection masks")
 }
 
 fn write_regions<'a>(
@@ -877,7 +881,7 @@ fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
     })
 }
 
-fn write_masks(
+async fn write_masks(
     input: &StageInput,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
@@ -896,7 +900,7 @@ fn write_masks(
             dilate: false,
         },
     ] {
-        write_mask(input, edit, page, detections, spec, size)?;
+        write_mask(input, edit, page, detections, spec, size).await?;
     }
     Ok(())
 }
@@ -908,7 +912,7 @@ struct MaskSpec {
     dilate: bool,
 }
 
-fn write_mask(
+async fn write_mask(
     input: &StageInput,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
@@ -925,7 +929,7 @@ fn write_mask(
         mask = close(&mask, Norm::L2, radius);
     }
     if let Some(bounds) = input.region {
-        preserve_mask_outside_region(input, page, spec.role, bounds, &mut mask)?;
+        preserve_mask_outside_region(input, page, spec.role, bounds, &mut mask).await?;
     }
 
     let mut bytes = Cursor::new(Vec::new());
@@ -946,7 +950,7 @@ fn write_mask(
     Ok(())
 }
 
-fn preserve_mask_outside_region(
+async fn preserve_mask_outside_region(
     input: &StageInput,
     page: EntityId,
     role: &str,
@@ -955,7 +959,8 @@ fn preserve_mask_outside_region(
 ) -> Result<()> {
     let previous = input
         .images
-        .get(&input.scene, page, role)?
+        .get(&input.scene, page, role)
+        .await?
         .map(|image| image.to_luma8());
     if previous
         .as_ref()

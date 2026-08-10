@@ -197,10 +197,7 @@ async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
 
     let previous = {
         let current = handle.state::<CurrentProject>();
-        let mut current = current.project.lock();
-        if let Some(project) = current.as_ref() {
-            project.flush()?;
-        }
+        let mut current = current.project.lock().await;
         current.replace(opened)
     };
 
@@ -208,12 +205,9 @@ async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
         .state::<CanvasView>()
         .fitted
         .store(true, Ordering::Release);
-    let canvas = {
-        let desktop = handle.state::<Desktop>();
-        let mut desktop = desktop.lock();
-        desktop.show_page(&snapshot, page)?;
-        desktop.canvas_state(true)
-    };
+    let desktop = handle.state::<Desktop>();
+    desktop.show_page(&snapshot, page).await?;
+    let canvas = desktop.lock().canvas_state(true);
     drop(previous);
     handle.state::<CanvasChannel>().channel.publish(canvas);
     handle.state::<ProjectChannel>().channel.publish(Some(info));
@@ -225,7 +219,7 @@ async fn replace_project(handle: &AppHandle, opened: Project) -> Result<()> {
 pub(crate) async fn get_project(
     project: State<'_, CurrentProject>,
 ) -> std::result::Result<Option<ProjectInfo>, Error> {
-    Ok(project.project.lock().as_ref().map(Project::info))
+    Ok(project.project.lock().await.as_ref().map(Project::info))
 }
 
 #[tauri::command]
@@ -236,6 +230,7 @@ pub(crate) async fn get_pages(
     let snapshot = project
         .project
         .lock()
+        .await
         .as_ref()
         .context("no project is open")?
         .snapshot();
@@ -248,7 +243,7 @@ pub(crate) async fn get_page(
     project: State<'_, CurrentProject>,
 ) -> std::result::Result<Option<Page>, Error> {
     let current = {
-        let project = project.project.lock();
+        let project = project.project.lock().await;
         project
             .as_ref()
             .map(|project| (project.snapshot(), project.active_page()))
@@ -274,9 +269,7 @@ pub(crate) async fn create_project(
     handle: AppHandle,
 ) -> std::result::Result<(), Error> {
     let library = handle.state::<ProjectLibrary>().inner().clone();
-    let opened = tokio::task::spawn_blocking(move || library.create(&name))
-        .await
-        .context("project create worker stopped unexpectedly")??;
+    let opened = library.create(&name).await?;
     replace_project(&handle, opened).await?;
     Ok(())
 }
@@ -288,9 +281,7 @@ pub(crate) async fn open_project(
     handle: AppHandle,
 ) -> std::result::Result<(), Error> {
     let library = handle.state::<ProjectLibrary>().inner().clone();
-    let opened = tokio::task::spawn_blocking(move || library.open(&name))
-        .await
-        .context("project open worker stopped unexpectedly")??;
+    let opened = library.open(&name).await?;
     replace_project(&handle, opened).await?;
     Ok(())
 }
@@ -312,6 +303,7 @@ pub(crate) async fn delete_project(
         .state::<CurrentProject>()
         .project
         .lock()
+        .await
         .as_ref()
         .is_some_and(|project| project.name == name);
     if active {
@@ -334,22 +326,16 @@ async fn close_current_project(handle: &AppHandle) -> Result<()> {
     processing.jobs.lock().clear();
     let previous = {
         let current = handle.state::<CurrentProject>();
-        let mut current = current.project.lock();
-        if let Some(project) = current.as_ref() {
-            project.flush()?;
-        }
+        let mut current = current.project.lock().await;
         current.take()
     };
     handle
         .state::<CanvasView>()
         .fitted
         .store(true, Ordering::Release);
-    let result = {
-        let desktop = handle.state::<Desktop>();
-        let mut desktop = desktop.lock();
-        desktop.canvas().clear_page();
-        desktop.canvas_state(true)
-    };
+    let desktop = handle.state::<Desktop>();
+    desktop.clear().await;
+    let result = desktop.lock().canvas_state(true);
     drop(previous);
     handle.state::<CanvasChannel>().channel.publish(result);
     handle.state::<ProjectChannel>().channel.publish(None);
@@ -446,7 +432,7 @@ pub(crate) async fn import_pages(
     .context("page import worker stopped unexpectedly")??;
 
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let source = AssetRole::new("source")?;
         let patch = project.snapshot().patch(|edit| {
@@ -471,19 +457,18 @@ pub(crate) async fn import_pages(
             }
             Ok(())
         })?;
-        let commit = project.session.commit(patch)?;
+        let commit = project.session.commit(patch).await?;
         project.record(vec![commit.revision]);
         project.reconcile_page();
         let page = project.active_page();
         (commit, page)
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        if desktop.synchronize(&commit.snapshot, page, &commit)? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    if desktop.synchronize(&commit.snapshot, page, &commit).await? {
+        canvas_view.fitted.store(true, Ordering::Release);
+    }
+    let canvas = desktop
+        .lock()
+        .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -498,17 +483,14 @@ pub(crate) async fn select_page(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> std::result::Result<(), Error> {
     let snapshot = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         project.select_page(page)?;
         project.snapshot()
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.show_page(&snapshot, Some(page))?;
-        canvas_view.fitted.store(true, Ordering::Release);
-        desktop.canvas_state(true)
-    };
+    desktop.show_page(&snapshot, Some(page)).await?;
+    canvas_view.fitted.store(true, Ordering::Release);
+    let canvas = desktop.lock().canvas_state(true);
     canvas_channel.channel.publish(canvas);
     Ok(())
 }

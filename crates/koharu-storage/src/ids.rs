@@ -130,11 +130,6 @@ hash_id!(PatchId);
 
 impl BlobId {
     #[must_use]
-    pub(crate) const fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    #[must_use]
     pub fn for_bytes(bytes: &[u8]) -> Self {
         Self(*blake3::hash(bytes).as_bytes())
     }

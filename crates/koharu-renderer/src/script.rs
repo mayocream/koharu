@@ -103,6 +103,16 @@ pub(crate) fn is_cjk_text(text: &str) -> bool {
     })
 }
 
+pub(crate) fn is_chinese_or_japanese_text(text: &str) -> bool {
+    let script_map = CodePointMapData::<IcuScript>::new();
+    text.chars().any(|character| {
+        matches!(
+            script_map.get(character),
+            IcuScript::Han | IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Bopomofo
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,5 +144,13 @@ mod tests {
     fn cjk_detection_includes_korean() {
         assert!(is_cjk_text("한국어"));
         assert!(!is_cjk_text("English"));
+    }
+
+    #[test]
+    fn source_writing_mode_is_limited_to_chinese_and_japanese() {
+        assert!(is_chinese_or_japanese_text("日本語"));
+        assert!(is_chinese_or_japanese_text("繁體中文"));
+        assert!(!is_chinese_or_japanese_text("한국어"));
+        assert!(!is_chinese_or_japanese_text("English"));
     }
 }

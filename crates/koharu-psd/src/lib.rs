@@ -14,4 +14,4 @@ mod writer;
 
 pub use document::{PsdExportOptions, TextLayerMode};
 pub use error::PsdExportError;
-pub use export::{export_page, write_page};
+pub use export::export_page;

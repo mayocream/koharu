@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { queryClient } from '@/lib/queries'
-import { defaultPresentation, defaultShortcuts, useKoharuStore } from '@/lib/store'
+import { defaultShortcuts, useKoharuStore } from '@/lib/store'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -63,7 +63,6 @@ beforeEach(() => {
     selectedPages: [],
     tool: 'select',
     brush: { diameter: 48, color: '#111111' },
-    presentation: defaultPresentation,
     inspector: 'copy',
     settingsOpen: false,
     shortcuts: defaultShortcuts,

@@ -5,6 +5,7 @@ import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { TitleBar } from '@/components/app/TitleBar'
 import { ActivityCenter } from '@/components/editor/ActivityCenter'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
 import { Inspector } from '@/components/editor/Inspector'
@@ -20,11 +21,17 @@ import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 const nativeWindow = vi.hoisted(() => ({
   close: vi.fn(async () => undefined),
+  isMaximized: vi.fn(async () => false),
   minimize: vi.fn(async () => undefined),
+  onResized: vi.fn(async () => () => undefined),
   toggleMaximize: vi.fn(async () => undefined),
 }))
+const nativeOpenUrl = vi.hoisted(() => vi.fn(async () => undefined))
+const nativeGetVersion = vi.hoisted(() => vi.fn(async () => '0.62.0'))
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => nativeWindow }))
+vi.mock('@tauri-apps/api/app', () => ({ getVersion: nativeGetVersion }))
+vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: nativeOpenUrl }))
 
 const emptyCredential = () => ({ configured: false, value: null, clear: false })
 
@@ -119,13 +126,6 @@ function installProject() {
     id: 'page',
     label: 'Page 1',
     size: { width: 1000, height: 1500 },
-    assets: {
-      source: 'source',
-      rendered: null,
-      text_mask: null,
-      coo_mask: null,
-      bubble_mask: null,
-    },
     layers: [textLayer],
     regions: [],
   }
@@ -173,6 +173,7 @@ function render(ui: ReactNode) {
 
 describe('greenfield editor', () => {
   it('shows import activity and prevents duplicate imports', async () => {
+    const user = userEvent.setup()
     installProject()
     let finishImport: (() => void) | undefined
     const importPages = vi.spyOn(commands, 'importPages').mockImplementation(
@@ -181,18 +182,56 @@ describe('greenfield editor', () => {
           finishImport = () => resolve(null)
         }),
     )
-    render(<PageRail />)
+    render(
+      <>
+        <TitleBar />
+        <PageRail />
+      </>,
+    )
 
-    const trigger = screen.getByRole('button', { name: 'Import pages' })
-    fireEvent.click(trigger)
+    expect(screen.queryByRole('button', { name: 'Import pages' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Import Pages…' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Files...' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Importing pages…')
-    expect(trigger).toBeDisabled()
     expect(importPages).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    expect(await screen.findByRole('menuitem', { name: 'Importing pages…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
 
     finishImport?.()
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+  })
+
+  it('opens community links through the Tauri opener plugin', async () => {
+    nativeOpenUrl.mockClear()
+    const user = userEvent.setup()
+    render(<TitleBar />)
+
+    await user.click(screen.getByRole('menuitem', { name: 'Help' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Discord' }))
+    expect(nativeOpenUrl).toHaveBeenLastCalledWith('https://discord.gg/mHvHkxGnUY')
+
+    await user.click(screen.getByRole('menuitem', { name: 'Help' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'GitHub' }))
+    expect(nativeOpenUrl).toHaveBeenLastCalledWith('https://github.com/mayocream/koharu')
+  })
+
+  it('shows the current version and author in About', async () => {
+    const user = userEvent.setup()
+    render(<TitleBar />)
+
+    await user.click(screen.getByRole('menuitem', { name: 'Help' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'About' }))
+
+    expect(await screen.findByRole('heading', { name: 'Koharu' })).toBeInTheDocument()
+    expect(await screen.findByText('0.62.0')).toBeInTheDocument()
+    expect(screen.getByText('Mayo Takanashi')).toBeInTheDocument()
+    expect(nativeGetVersion).toHaveBeenCalledTimes(1)
   })
 
   it('loads page thumbnails into the filmstrip', async () => {
@@ -486,16 +525,61 @@ describe('greenfield editor', () => {
       ),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    const selector = screen.getByRole('button', { name: 'AI runtime selector' })
+    const runButton = screen.getByRole('button', { name: 'Run AI processing' })
+    expect(selector).toHaveClass('h-7')
+    expect(runButton).toHaveClass('h-7', 'bg-primary/80', 'hover:bg-primary/90')
+    fireEvent.click(selector)
+    await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Scope Page/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Stages 4 stages/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Output English/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(useKoharuStore.getState().settingsOpen).toBe(true)
   })
 
+  it('configures translation output from the runtime selector', async () => {
+    installProject()
+    const user = userEvent.setup()
+    const nextPreferences: Preferences = {
+      ...preferences,
+      pipeline: {
+        ...preferences.pipeline,
+        translation: {
+          ...preferences.pipeline.translation,
+          target_language: 'ja-JP',
+          instructions: 'Keep character names unchanged.',
+        },
+      },
+    }
+    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(nextPreferences)
+    render(<CanvasCommandBar />)
+
+    await user.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: /Output English/ }))
+    const language = screen.getByRole('combobox', { name: 'Output target language' })
+    expect(language).toHaveTextContent('English')
+    expect(language).not.toHaveTextContent('en-US')
+    await user.click(language)
+    await user.click(await screen.findByRole('option', { name: 'Japanese' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Output instructions' }), {
+      target: { value: 'Keep character names unchanged.' },
+    })
+    expect(screen.queryByRole('button', { name: 'Apply output' })).not.toBeInTheDocument()
+
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(nextPreferences.pipeline, preferences.providers),
+    )
+    expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
+      nextPreferences.pipeline.translation,
+    )
+  })
+
   it('changes the translation model from the runtime selector', async () => {
     installProject()
+    const user = userEvent.setup()
     const nextPreferences: Preferences = {
       ...preferences,
       pipeline: {
@@ -522,6 +606,12 @@ describe('greenfield editor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
     fireEvent.click(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ }))
+    const search = screen.getByRole('textbox', { name: 'Search models' })
+    expect(search).toHaveFocus()
+    await user.type(search, 'gemma')
+    expect(
+      screen.queryByRole('button', { name: 'Use LFM 2.5 1.2B Instruct from Local' }),
+    ).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Use Gemma 4 12B from Local' }))
 
     await waitFor(() =>
@@ -532,8 +622,38 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('constrains long model names inside the runtime selector', async () => {
+    installProject()
+    const longName = 'Llama 3.2 8x3b Moe Dark Champion Instruct Uncensored Abliterated 18.4b'
+    useKoharuStore.setState({
+      translationModels: [
+        ...useKoharuStore.getState().translationModels,
+        {
+          provider: 'local',
+          model: 'long-model',
+          name: longName,
+          quantizations: [],
+        },
+      ],
+    })
+    render(<CanvasCommandBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    fireEvent.click(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ }))
+
+    const label = await screen.findByText(longName)
+    await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
+    expect(label).toHaveClass('truncate')
+    expect(label.parentElement).toHaveClass('overflow-hidden')
+    expect(label.closest('button')).toHaveClass('max-w-full', 'min-w-0', 'overflow-hidden')
+    const content = label.closest('[data-slot="scroll-area-content"]')
+    expect(content).toHaveStyle({ width: '100%' })
+    expect(content?.closest('[data-slot="scroll-area-viewport"]')).toHaveClass('h-auto', 'max-h-64')
+  })
+
   it('edits and persists pipeline and translation preferences from the settings page', async () => {
     installProject()
+    const user = userEvent.setup()
     useKoharuStore.setState({ settingsOpen: true })
     const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(preferences)
     render(
@@ -564,13 +684,23 @@ describe('greenfield editor', () => {
     expect(screen.getAllByLabelText('Base URL')).toHaveLength(3)
     fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Translation' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Translation model')).toHaveTextContent(
-      'LFM 2.5 1.2B Instruct',
-    )
+    expect(screen.getByRole('switch', { name: 'Enable thinking' })).toBeInTheDocument()
+    expect(screen.queryByText('Enable thinking')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Translation model')).toHaveTextContent('LFM 2.5 1.2B Instruct')
+    await user.click(screen.getByLabelText('Translation model'))
+    const modelSearch = screen.getByRole('textbox', { name: 'Search models' })
+    expect(modelSearch).toHaveFocus()
+    await user.type(modelSearch, 'missing model')
+    expect(screen.getByText('No matching models')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(
+      screen.getByRole('button', { name: 'Use LFM 2.5 1.2B Instruct from Local' }),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Target language')).toHaveTextContent('American English')
   })
 
-  it('shows Koharu model resources in the left sidebar footer', () => {
+  it('shows model resources in the left sidebar footer', () => {
     useKoharuStore.setState({
       resources: {
         process_memory: 2 * 1024 ** 3,
@@ -588,8 +718,8 @@ describe('greenfield editor', () => {
       },
     })
     render(<ResourceMonitor />)
-    expect(screen.getByText('8.0%')).toBeInTheDocument()
-    expect(screen.getByText('3.1%')).toBeInTheDocument()
+    expect(screen.getByText('8%')).toBeInTheDocument()
+    expect(screen.getByText('3%')).toBeInTheDocument()
   })
 
   it('keeps running work visible and stoppable', async () => {

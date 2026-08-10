@@ -153,7 +153,7 @@ impl Model {
     }
 
     async fn run(&self, input: StageInput) -> Result<koharu_scene::Patch> {
-        let mut prepared = prepare(&input)?;
+        let mut prepared = prepare(&input).await?;
         if prepared.mask.as_raw().iter().all(|value| *value == 0) {
             return finish(input.scene.edit());
         }
@@ -409,11 +409,12 @@ struct InpaintInput {
     flat_fill_regions: Vec<FlatFillRegion>,
 }
 
-fn prepare(input: &StageInput) -> Result<InpaintInput> {
+async fn prepare(input: &StageInput) -> Result<InpaintInput> {
     let page = input.page;
     let original = input
         .images
-        .get(&input.scene, page, "source")?
+        .get(&input.scene, page, "source")
+        .await?
         .ok_or_else(|| anyhow!("page {page} has no source image"))?;
     let cleanup_entity = input.scene.children(page)?.find(|entity| {
         input
@@ -423,11 +424,15 @@ fn prepare(input: &StageInput) -> Result<InpaintInput> {
             .flatten()
             .is_some_and(|layer| layer.kind == RasterLayerKind::Cleanup)
     });
-    let cleanup = cleanup_entity
-        .map(|entity| input.images.get(&input.scene, entity, "source"))
-        .transpose()?
-        .flatten()
-        .map(|image| image.to_rgba8());
+    let cleanup = if let Some(entity) = cleanup_entity {
+        input
+            .images
+            .get(&input.scene, entity, "source")
+            .await?
+            .map(|image| image.to_rgba8())
+    } else {
+        None
+    };
     if cleanup
         .as_ref()
         .is_some_and(|image| image.dimensions() != original.dimensions())
@@ -455,7 +460,7 @@ fn prepare(input: &StageInput) -> Result<InpaintInput> {
         mask = layer;
     } else {
         for role in ["text-mask", "coo-mask"] {
-            if let Some(image) = input.images.get(&input.scene, page, role)? {
+            if let Some(image) = input.images.get(&input.scene, page, role).await? {
                 let layer = image.to_luma8();
                 if layer.dimensions() != mask.dimensions() {
                     bail!("{role} dimensions do not match page {page}");
@@ -771,9 +776,9 @@ fn composite_generated(
 mod tests {
     use super::*;
 
-    #[test]
-    fn transient_inpainting_mask_replaces_persistent_page_masks() {
-        let mut session = koharu_scene::Session::memory().unwrap();
+    #[tokio::test]
+    async fn transient_inpainting_mask_replaces_persistent_page_masks() {
+        let mut session = koharu_scene::Session::memory().await.unwrap();
         let mut page = None;
         let source = DynamicImage::new_rgb8(8, 8);
         let persistent = DynamicImage::ImageLuma8(GrayImage::from_pixel(8, 8, Luma([255])));
@@ -808,7 +813,7 @@ mod tests {
                 Ok(())
             })
             .unwrap();
-        let snapshot = session.commit(patch).unwrap().snapshot;
+        let snapshot = session.commit(patch).await.unwrap().snapshot;
         let page = page.unwrap();
         let mut transient = GrayImage::new(8, 8);
         transient.put_pixel(3, 4, Luma([255]));
@@ -824,7 +829,7 @@ mod tests {
             }),
         );
 
-        let prepared = prepare(&input).unwrap();
+        let prepared = prepare(&input).await.unwrap();
         assert_eq!(prepared.mask.get_pixel(3, 4), &Luma([255]));
         assert_eq!(prepared.mask.get_pixel(0, 0), &Luma([0]));
         assert!(prepared.text_mask.pixels().all(|pixel| pixel[0] == 0));

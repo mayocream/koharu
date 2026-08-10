@@ -31,7 +31,6 @@ export const commands = {
 	id: EntityId,
 	label: string,
 	size: PageSize,
-	assets: PageAssets,
 	layers: Layer[],
 	regions: AnalysisRegion[],
 } | null>("get_page").then((v) => (v==null?v:({...v,regions:v.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))}) as typeof v)),
@@ -66,7 +65,6 @@ export const commands = {
 	setZoom: (zoom: number) => __TAURI_INVOKE<null>("set_zoom", { zoom }),
 	setCanvasView: (zoom: number, translation: [number, number]) => __TAURI_INVOKE<null>("set_canvas_view", { zoom, translation: translation.map(i=>i) }),
 	fitCanvas: () => __TAURI_INVOKE<null>("fit_canvas"),
-	setPresentation: (presentation: CanvasPresentation) => __TAURI_INVOKE<null>("set_presentation", { presentation: ({...presentation,text_mask:presentation.text_mask==null?presentation.text_mask:presentation.text_mask}) }),
 	addPointText: (point: Point) => __TAURI_INVOKE<LayerCommit>("add_point_text", { point }),
 	addTextBox: (frame: Frame) => __TAURI_INVOKE<LayerCommit>("add_text_box", { frame }),
 	beginPaint: (layer: string | null, point: Point, brush: PaintBrush) => __TAURI_INVOKE<null>("begin_paint", { layer, point, brush }),
@@ -82,10 +80,6 @@ export const commands = {
 	previewOpacity: (element: EntityId, opacity: number | null) => __TAURI_INVOKE<null>("preview_opacity", { element, opacity: opacity==null?opacity:opacity }),
 	finishTransform: () => __TAURI_INVOKE<number | null>("finish_transform").then((v) => (v==null?v:v as typeof v)),
 	cancelTransform: () => __TAURI_INVOKE<null>("cancel_transform"),
-	beginTextMask: (point: Point, brush: MaskBrush) => __TAURI_INVOKE<null>("begin_text_mask", { point, brush }),
-	extendTextMask: (points: Point[]) => __TAURI_INVOKE<null>("extend_text_mask", { points: points.map(i=>i) }),
-	finishTextMask: () => __TAURI_INVOKE<number | null>("finish_text_mask").then((v) => (v==null?v:v as typeof v)),
-	cancelTextMask: () => __TAURI_INVOKE<null>("cancel_text_mask"),
 	beginInpaint: (point: Point, diameter: number) => __TAURI_INVOKE<null>("begin_inpaint", { point, diameter }),
 	extendInpaint: (points: Point[]) => __TAURI_INVOKE<null>("extend_inpaint", { points: points.map(i=>i) }),
 	finishInpaint: () => __TAURI_INVOKE<string | null>("finish_inpaint"),
@@ -126,12 +120,6 @@ export type Bounds = {
 };
 
 export type CaiyunConfig = Record<string, never>;
-
-export type CanvasPresentation = {
-	image: PageImage,
-	show_text: boolean,
-	text_mask: MaskTint | null,
-};
 
 export type CanvasState = {
 	zoom: number,
@@ -321,16 +309,6 @@ export type LocalConfig = Record<string, never>;
 
 export type LoginEvent = { type: "progress"; message: string } | { type: "device_code"; verification_url: string; user_code: string };
 
-export type MaskBrush = {
-	diameter: number,
-	erase: boolean,
-};
-
-export type MaskTint = {
-	color: [number, number, number, number],
-	opacity: number,
-};
-
 export type Model = {
 	provider: Provider,
 	model: string | null,
@@ -367,20 +345,9 @@ export type Page = {
 	id: EntityId,
 	label: string,
 	size: PageSize,
-	assets: PageAssets,
 	layers: Layer[],
 	regions: AnalysisRegion[],
 };
-
-export type PageAssets = {
-	source: string | null,
-	rendered: string | null,
-	text_mask: string | null,
-	coo_mask: string | null,
-	bubble_mask: string | null,
-};
-
-export type PageImage = "source" | "rendered";
 
 export type PageImportSource = "files" | "folder";
 

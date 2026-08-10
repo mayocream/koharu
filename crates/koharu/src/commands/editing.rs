@@ -12,6 +12,21 @@ use super::{
     project::{CurrentProject, Page, Project, Typography},
 };
 use crate::desktop::Desktop;
+
+async fn synchronize_canvas(
+    desktop: &Desktop,
+    canvas_view: &CanvasView,
+    commit: &koharu_scene::Commit,
+    page: Option<EntityId>,
+) -> anyhow::Result<super::canvas::CanvasState> {
+    if desktop.synchronize(&commit.snapshot, page, commit).await? {
+        canvas_view.fitted.store(true, Ordering::Release);
+    }
+    Ok(desktop
+        .lock()
+        .canvas_state(canvas_view.fitted.load(Ordering::Acquire)))
+}
+
 #[derive(Clone, Debug, Deserialize, Type)]
 pub struct GeometryUpdate {
     pub layer: EntityId,
@@ -35,19 +50,13 @@ pub(crate) async fn rename_page(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.rename_page(page, label)?;
+        let commit = project.rename_page(page, label).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        if desktop.synchronize(&commit.snapshot, page, &commit)? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -62,20 +71,14 @@ pub(crate) async fn delete_pages(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.delete_pages(pages)?;
+        let commit = project.delete_pages(pages).await?;
         project.record_commit(&commit);
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        if desktop.synchronize(&commit.snapshot, page, &commit)? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -91,17 +94,13 @@ pub(crate) async fn move_page(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.move_page(page, index as usize)?;
+        let commit = project.move_page(page, index as usize).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -117,17 +116,13 @@ pub(crate) async fn set_source_text(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.set_source_text(layer, text)?;
+        let commit = project.set_source_text(layer, text).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -143,17 +138,13 @@ pub(crate) async fn set_translation(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.set_translation(layer, text)?;
+        let commit = project.set_translation(layer, text).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -168,17 +159,13 @@ pub(crate) async fn set_typography(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.set_typography(updates)?;
+        let commit = project.set_typography(updates).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -193,17 +180,13 @@ pub(crate) async fn set_geometry(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.set_geometry(updates)?;
+        let commit = project.set_geometry(updates).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -220,17 +203,13 @@ pub(crate) async fn set_visibility(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.set_visibility(layers, visible, opacity)?;
+        let commit = project.set_visibility(layers, visible, opacity).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -245,17 +224,13 @@ pub(crate) async fn delete_layers(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.delete_layers(layers)?;
+        let commit = project.delete_layers(layers).await?;
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, page, &commit)?;
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -269,27 +244,18 @@ pub(crate) async fn move_layer(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
 ) -> Result<Page, Error> {
-    let _command = tracing::info_span!("move_layer").entered();
     let (commit, page, view) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = {
-            let _span = tracing::info_span!("commit_move").entered();
-            project.move_layer(layer, parent, index as usize)?
-        };
+        let commit = project.move_layer(layer, parent, index as usize).await?;
         project.record_commit(&commit);
         let page = project.active_page().context("no active page")?;
-        let view = {
-            let _span = tracing::info_span!("build_page_view").entered();
-            Project::page(&commit.snapshot, page)?
-        };
+        let view = Project::page(&commit.snapshot, page)?;
         (commit, page, view)
     };
-    {
-        let _span = tracing::info_span!("sync_canvas").entered();
-        let mut desktop = desktop.lock();
-        desktop.synchronize(&commit.snapshot, Some(page), &commit)?;
-    }
+    desktop
+        .synchronize(&commit.snapshot, Some(page), &commit)
+        .await?;
     Ok(view)
 }
 
@@ -302,19 +268,13 @@ pub(crate) async fn undo(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.undo()?;
+        let commit = project.undo().await?;
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        if desktop.synchronize(&commit.snapshot, page, &commit)? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -328,19 +288,13 @@ pub(crate) async fn redo(
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
-        let mut project = project.project.lock();
+        let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project.redo()?;
+        let commit = project.redo().await?;
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        if desktop.synchronize(&commit.snapshot, page, &commit)? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
+    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }

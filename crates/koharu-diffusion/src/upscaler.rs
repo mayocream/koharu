@@ -91,6 +91,7 @@ impl Upscaler {
     }
 
     /// Upscales an image and returns the native output as owned Rust images.
+    #[tracing::instrument(skip_all)]
     pub fn upscale(&mut self, image: &RgbImage, requested_factor: u32) -> Result<Vec<RgbImage>> {
         if requested_factor == 0 {
             return Err(Error::InvalidParameter {

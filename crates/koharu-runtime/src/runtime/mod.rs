@@ -78,6 +78,7 @@ impl Runtime {
     }
 
     /// Installs and activates packages sequentially in topological order.
+    #[tracing::instrument(skip_all)]
     pub async fn initialize(&self) -> Result<()> {
         self.plan.initialize().await
     }

@@ -3,9 +3,9 @@ use std::collections::{BTreeSet, HashSet};
 use smallvec::SmallVec;
 
 use crate::{
-    Asset, AssetInput, AssetRole, ComponentOwner, EntityId, EntityOrigin, Error, Generation, Group,
-    Origin, Page, PageDraft, Patch, Relation, RelationId, RelationKind, RelationSpec, Result,
-    Snapshot, TextGroup, Visibility,
+    Asset, AssetInput, AssetRole, BlobId, ComponentOwner, EntityId, EntityOrigin, Error,
+    Generation, Group, Origin, Page, PageDraft, Patch, Relation, RelationId, RelationKind,
+    RelationSpec, Result, Snapshot, TextGroup, Visibility,
     component::{Component, ComponentKey, ComponentRecord, ValidationContext, decode, encode, key},
     components::Assets,
     patch::{Observation, Operation},
@@ -33,7 +33,7 @@ pub struct Edit {
     state: State,
     observations: BTreeSet<Observation>,
     operations: Vec<Operation>,
-    attachments: Vec<koharu_storage::Blob>,
+    attachments: Vec<(BlobId, bytes::Bytes)>,
     validate_entities: HashSet<EntityId>,
     generation: Option<Generation>,
 }
@@ -238,6 +238,13 @@ impl Edit {
         if policy != RemovePolicy::Cascade && !incident.is_empty() {
             return Err(Error::IncidentRelations(entity));
         }
+        if policy == RemovePolicy::Cascade {
+            for id in &subtree {
+                self.validate_entities.remove(id);
+            }
+        } else {
+            self.validate_entities.remove(&entity);
+        }
 
         match policy {
             RemovePolicy::RejectNonEmpty => self.remove_leaf(entity),
@@ -339,9 +346,9 @@ impl Edit {
         role: &AssetRole,
         value: AssetInput,
     ) -> Result<()> {
-        let attachment = koharu_storage::Blob::new(value.bytes);
-        let blob = attachment.id();
-        self.attachments.push(attachment);
+        let bytes = bytes::Bytes::from_owner(value.bytes);
+        let blob = BlobId::for_bytes(&bytes);
+        self.attachments.push((blob, bytes));
         let owner = ComponentOwner::Entity(entity);
         let key = key::<Assets>()?;
         let previous = self.component(owner, &key)?;
@@ -419,7 +426,8 @@ impl Edit {
         };
         let record_exists = |id| self.state.contains_entity(id);
         let blob_exists = |id| {
-            self.attachments.iter().any(|blob| blob.id() == id) || self.base.blobs.has_blob(id)
+            self.attachments.iter().any(|(blob, _)| *blob == id)
+                || self.base.storage.blobs().contains(id)
         };
         schema::validate_new_relation(
             &self.state,
@@ -526,7 +534,8 @@ impl Edit {
             .collect::<HashSet<_>>();
         let record_exists = |id| self.state.contains_entity(id);
         let blob_exists = |id| {
-            self.attachments.iter().any(|blob| blob.id() == id) || self.base.blobs.has_blob(id)
+            self.attachments.iter().any(|(blob, _)| *blob == id)
+                || self.base.storage.blobs().contains(id)
         };
         let context = ValidationContext::new(&record_exists, &blob_exists);
         for relation in relations {
@@ -740,7 +749,8 @@ impl Edit {
     fn encode_value<T: Component>(&self, value: &T) -> Result<ComponentRecord> {
         let record_exists = |id| self.state.contains_entity(id);
         let blob_exists = |id| {
-            self.attachments.iter().any(|blob| blob.id() == id) || self.base.blobs.has_blob(id)
+            self.attachments.iter().any(|(blob, _)| *blob == id)
+                || self.base.storage.blobs().contains(id)
         };
         encode(value, &ValidationContext::new(&record_exists, &blob_exists))
     }

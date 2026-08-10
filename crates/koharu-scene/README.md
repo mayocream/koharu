@@ -12,9 +12,23 @@ has three ownership layers:
   so consumers do not have to reconstruct a text layer from raw components and
   relation strings.
 
-`koharu-storage` only persists opaque checkpoints, operations, and blob bytes.
+`koharu-storage` only persists the latest opaque complete scene state and blob
+bytes. Native operations exist for patching, change reporting, explicit rebase,
+and session-local undo; they are not a persistent file format.
 Rendering, ML execution, and desktop synchronization remain consumers of the
 scene rather than responsibilities of it.
+
+The kernel is purpose-built rather than based on `bevy_ecs`. Koharu needs
+ordered parent/child ownership, immutable page-level copy-on-write snapshots,
+explicit patch preconditions, revisioned component payloads, and typed relation
+indexes; adapting an archetype scheduler would add ownership translation without
+removing these responsibilities.
+
+Built-in component registration is declared once in the schema registry. That
+declaration drives decoding and a compact component-presence mask used by entity
+validation, so adding a built-in component does not require another chain of
+repeated per-entity string scans. Cross-component and relation rules remain
+ordinary Rust where their conditions need hierarchy or adjacency context.
 
 ## Runtime model
 
@@ -44,7 +58,7 @@ clones only the source and destination arenas.
 Hierarchy is native state, not a synthetic component. Scene operations include
 page and entity insertion, removal and movement, component replacement, and
 relation lifecycle changes. Every operation carries the exact inverse needed
-for undo and exact preconditions needed for explicit rebase.
+for in-memory undo and exact preconditions needed for explicit rebase.
 
 ## Performance invariants
 
@@ -54,8 +68,8 @@ for undo and exact preconditions needed for explicit rebase.
 - Component lookup and page-local membership queries use page indexes.
 - Subtree observation compares one page epoch; exact component observation
   compares one fingerprint.
-- Commit encodes only the native operations and optional threshold checkpoint.
-- Full structural validation happens when loading a checkpoint; edits perform
+- Saving encodes one complete scene state, then storage atomically publishes it.
+- Full structural validation happens when loading a scene state; edits perform
   incremental validation for the state they touch.
 - Derived renderer, canvas, and UI state consumes explicit hierarchy,
   component, entity, and relation changes.
@@ -92,6 +106,21 @@ Snapshots are immutable and cheap to clone. A patch is bound to a project and
 base revision. Stale independent work must call explicit `rebase_on`; commits
 never silently merge or apply last-writer-wins behavior.
 
+Scene I/O is asynchronous. `Session::create`, `open`, `memory`, `commit`,
+`undo`, and blob reads may cross the filesystem boundary and must never block
+the UI executor. Pure snapshot queries, edits, rebases, and typed component
+decoding remain synchronous because they are in-memory work.
+
+Each successful commit stores the complete new scene state and retains the
+inverse operations in session memory. Closing the session discards undo history;
+reopening restores the newest valid state, not an operation log. Undo states
+retain their blob scopes so storage collection cannot remove bytes they may
+restore.
+
 Assets follow the same boundary: the scene owns their semantic role and blob
 reference, while storage owns bytes and leases. Image decoding, layout,
 rendering, ML execution, and desktop synchronization remain outside this crate.
+
+Blob reads return `bytes::Bytes`. Callers do not know whether bytes are newly
+produced, buffered, or backed by a read-only memory map, and scene does not add
+another blob-data or batch wrapper.

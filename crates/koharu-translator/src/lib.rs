@@ -76,6 +76,7 @@ impl Translator {
             .unwrap_or(false)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn load_model(&self, selection: &ModelSelection) -> anyhow::Result<()> {
         if selection.provider == Provider::Local {
             self.local(selection).await?;
@@ -83,6 +84,7 @@ impl Translator {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn translate(
         &self,
         selection: &ModelSelection,
@@ -116,6 +118,7 @@ impl Translator {
         Ok((provider_id, translated))
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn models() -> anyhow::Result<Vec<Model>> {
         let providers = ProvidersConfig::load()?;
         let providers = providers.read()?.clone();

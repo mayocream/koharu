@@ -48,6 +48,7 @@ impl fmt::Debug for Context {
 
 impl Context {
     /// Loads a model context with the supplied components and backend settings.
+    #[tracing::instrument(skip_all)]
     pub fn new(params: &ContextParams) -> Result<Self> {
         let native = params.to_native()?;
         let _call = NativeCall::enter();

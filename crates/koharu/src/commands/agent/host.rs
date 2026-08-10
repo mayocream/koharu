@@ -1,4 +1,8 @@
-use std::sync::{OnceLock, atomic::Ordering};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{OnceLock, atomic::Ordering},
+};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -37,7 +41,7 @@ impl KoharuHost {
     async fn project_context(&self) -> Result<Value> {
         let (project, pages) = {
             let current = self.handle.state::<CurrentProject>();
-            let current = current.project.lock();
+            let current = current.project.lock().await;
             let project = current.as_ref().context("no project is open")?;
             let snapshot = project.snapshot();
             let pages = Project::pages(&snapshot)?
@@ -47,7 +51,12 @@ impl KoharuHost {
             (project.info(), pages)
         };
         let preferences = Preferences::load()?;
-        let fonts = koharu_renderer::SceneRenderer::available_fonts().await?;
+        let fonts = self
+            .handle
+            .state::<Desktop>()
+            .renderer()
+            .available_fonts()
+            .await?;
         let providers = preferences
             .providers
             .entries
@@ -76,16 +85,20 @@ impl KoharuHost {
 
     async fn mutate<T>(
         &self,
-        mutation: impl FnOnce(&mut Project) -> Result<(Commit, T)>,
+        mutation: impl for<'project> FnOnce(
+            &'project mut Project,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<(Commit, T)>> + Send + 'project>,
+        >,
     ) -> Result<Invocation>
     where
-        T: serde::Serialize,
+        T: serde::Serialize + Send,
     {
         let (commit, value, page, project) = {
             let current = self.handle.state::<CurrentProject>();
-            let mut current = current.project.lock();
+            let mut current = current.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
-            let (commit, value) = mutation(project)?;
+            let (commit, value) = mutation(project).await?;
             project.record_commit(&commit);
             project.reconcile_page();
             (commit, value, project.active_page(), project.info())
@@ -100,27 +113,15 @@ impl KoharuHost {
     }
 
     async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<()> {
-        let handle = self.handle.clone();
-        let (send, receive) = tokio::sync::oneshot::channel();
-        self.handle.run_on_main_thread(move || {
-            let result = (|| {
-                let canvas_view = handle.state::<CanvasView>();
-                let canvas = {
-                    let desktop = handle.state::<Desktop>();
-                    let mut desktop = desktop.lock();
-                    if desktop.synchronize(&commit.snapshot, page, &commit)? {
-                        canvas_view.fitted.store(true, Ordering::Release);
-                    }
-                    desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-                };
-                handle.state::<CanvasChannel>().channel.publish(canvas);
-                Result::<()>::Ok(())
-            })();
-            let _ = send.send(result);
-        })?;
-        receive
-            .await
-            .context("the desktop closed while applying an agent change")??;
+        let canvas_view = self.handle.state::<CanvasView>();
+        let desktop = self.handle.state::<Desktop>();
+        if desktop.synchronize(&commit.snapshot, page, &commit).await? {
+            canvas_view.fitted.store(true, Ordering::Release);
+        }
+        let canvas = desktop
+            .lock()
+            .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
+        self.handle.state::<CanvasChannel>().channel.publish(canvas);
         Ok(())
     }
 
@@ -132,6 +133,7 @@ impl KoharuHost {
             .state::<CurrentProject>()
             .project
             .lock()
+            .await
             .as_ref()
             .context("no project is open")?
             .snapshot();
@@ -246,14 +248,16 @@ impl Host for KoharuHost {
             "view_page" => {
                 let arguments: ViewPage = arguments(&call)?;
                 let page = entity(&arguments.page)?;
-                let (label, bytes) = {
+                let (label, snapshot) = {
                     let current = self.handle.state::<CurrentProject>();
-                    let current = current.project.lock();
+                    let current = current.project.lock().await;
                     let project = current.as_ref().context("no project is open")?;
                     let snapshot = project.snapshot();
                     let label = snapshot.page(page)?.page()?.label;
-                    (label, output::rendered_preview(&snapshot, page)?)
+                    (label, snapshot)
                 };
+                let renderer = self.handle.state::<Desktop>().renderer();
+                let bytes = output::rendered_preview(&renderer, &snapshot, page).await?;
                 Ok(
                     Invocation::read(json!({ "page": page, "label": label }))?.with_image(
                         format!("Rendered page {label} ({page})"),
@@ -265,10 +269,12 @@ impl Host for KoharuHost {
                 let arguments: RenamePage = arguments(&call)?;
                 let page = entity(&arguments.page)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.rename_page(page, arguments.label)?,
-                        json!({ "page": page }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.rename_page(page, arguments.label).await?,
+                            json!({ "page": page }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -276,10 +282,12 @@ impl Host for KoharuHost {
                 let arguments: MovePage = arguments(&call)?;
                 let page = entity(&arguments.page)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.move_page(page, arguments.index)?,
-                        json!({ "page": page }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.move_page(page, arguments.index).await?,
+                            json!({ "page": page }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -287,10 +295,12 @@ impl Host for KoharuHost {
                 let arguments: DeletePages = arguments(&call)?;
                 let pages = entities(&arguments.pages)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.delete_pages(pages.clone())?,
-                        json!({ "pages": pages }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.delete_pages(pages.clone()).await?,
+                            json!({ "pages": pages }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -305,8 +315,10 @@ impl Host for KoharuHost {
                     angle_degrees: arguments.angle_degrees,
                 };
                 self.mutate(|project| {
-                    let (commit, element) = project.add_text_box(page, frame)?;
-                    Ok((commit, json!({ "page": page, "element": element })))
+                    Box::pin(async move {
+                        let (commit, element) = project.add_text_box(page, frame).await?;
+                        Ok((commit, json!({ "page": page, "element": element })))
+                    })
                 })
                 .await
             }
@@ -314,10 +326,12 @@ impl Host for KoharuHost {
                 let arguments: SetText = arguments(&call)?;
                 let element = entity(&arguments.element)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.set_source_text(element, arguments.text)?,
-                        json!({ "element": element }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.set_source_text(element, arguments.text).await?,
+                            json!({ "element": element }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -325,10 +339,12 @@ impl Host for KoharuHost {
                 let arguments: SetTranslation = arguments(&call)?;
                 let element = entity(&arguments.element)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.set_translation(element, arguments.text)?,
-                        json!({ "element": element }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.set_translation(element, arguments.text).await?,
+                            json!({ "element": element }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -348,13 +364,17 @@ impl Host for KoharuHost {
                     writing_mode: arguments.writing_mode.map(Into::into),
                 };
                 self.mutate(|project| {
-                    Ok((
-                        project.set_typography(vec![TypographyUpdate {
-                            layer: element,
-                            typography,
-                        }])?,
-                        json!({ "element": element }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project
+                                .set_typography(vec![TypographyUpdate {
+                                    layer: element,
+                                    typography,
+                                }])
+                                .await?,
+                            json!({ "element": element }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -370,13 +390,17 @@ impl Host for KoharuHost {
                     })
                     .collect();
                 self.mutate(|project| {
-                    Ok((
-                        project.set_geometry(vec![GeometryUpdate {
-                            layer: element,
-                            points: Some(points),
-                        }])?,
-                        json!({ "element": element }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project
+                                .set_geometry(vec![GeometryUpdate {
+                                    layer: element,
+                                    points: Some(points),
+                                }])
+                                .await?,
+                            json!({ "element": element }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -384,14 +408,18 @@ impl Host for KoharuHost {
                 let arguments: SetVisibility = arguments(&call)?;
                 let elements = entities(&arguments.elements)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.set_visibility(
-                            elements.clone(),
-                            arguments.visible,
-                            arguments.opacity,
-                        )?,
-                        json!({ "elements": elements }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project
+                                .set_visibility(
+                                    elements.clone(),
+                                    arguments.visible,
+                                    arguments.opacity,
+                                )
+                                .await?,
+                            json!({ "elements": elements }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -399,10 +427,12 @@ impl Host for KoharuHost {
                 let arguments: DeleteElements = arguments(&call)?;
                 let elements = entities(&arguments.elements)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.delete_layers(elements.clone())?,
-                        json!({ "elements": elements }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.delete_layers(elements.clone()).await?,
+                            json!({ "elements": elements }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -411,10 +441,12 @@ impl Host for KoharuHost {
                 let element = entity(&arguments.element)?;
                 let parent = entity(&arguments.parent)?;
                 self.mutate(|project| {
-                    Ok((
-                        project.move_layer(element, parent, arguments.index)?,
-                        json!({ "element": element, "parent": parent }),
-                    ))
+                    Box::pin(async move {
+                        Ok((
+                            project.move_layer(element, parent, arguments.index).await?,
+                            json!({ "element": element, "parent": parent }),
+                        ))
+                    })
                 })
                 .await
             }
@@ -433,9 +465,9 @@ impl Committer for AgentCommitter {
     async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
         let (commit, page) = {
             let current = self.host.handle.state::<CurrentProject>();
-            let mut current = current.project.lock();
+            let mut current = current.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
-            let commit = project.session.commit(output.patch)?;
+            let commit = project.session.commit(output.patch).await?;
             project.record_commit(&commit);
             (commit, project.active_page())
         };

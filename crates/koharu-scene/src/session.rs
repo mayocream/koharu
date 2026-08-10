@@ -1,14 +1,29 @@
-use std::{collections::BTreeSet, path::Path, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
+
+use bytes::Bytes;
 
 use crate::{
     Change, Error, Patch, ProjectId, Result, Snapshot,
-    patch::{apply_operations, decode_operations},
+    patch::{Operation, apply_operations},
     state::{State, StoredState},
 };
 
+struct HistoryEntry {
+    inverse: Arc<[Operation]>,
+    // A revision's inverse may restore blobs that the current state no longer
+    // references. Retain their lease for as long as that revision is undoable.
+    _blobs: koharu_storage::Blobs,
+}
+
+/// One open project and its in-memory undo history.
+///
+/// Every successful commit publishes a complete scene snapshot. Undo commands
+/// are retained only for the lifetime of this session; they are UI history, not
+/// part of the durable project format.
 pub struct Session {
     storage: koharu_storage::Session,
     current: Snapshot,
+    history: BTreeMap<crate::Revision, HistoryEntry>,
 }
 
 impl std::fmt::Debug for Session {
@@ -16,48 +31,44 @@ impl std::fmt::Debug for Session {
         formatter
             .debug_struct("Session")
             .field("project", &self.project_id())
-            .field("revision", &self.storage.revision())
+            .field("revision", &self.current.revision())
+            .field("undoable", &self.history.len())
             .finish_non_exhaustive()
     }
 }
 
 impl Session {
-    pub fn create(path: impl AsRef<Path>) -> Result<Self> {
-        Self::create_with(path, koharu_storage::Options::default())
-    }
-
-    pub fn create_with(path: impl AsRef<Path>, options: koharu_storage::Options) -> Result<Self> {
+    #[tracing::instrument(level = "info", skip_all, fields(path = %path.as_ref().display()))]
+    pub async fn create(path: impl AsRef<Path>) -> Result<Self> {
         let document = koharu_storage::DocumentId::new();
         let state = State::empty(document);
-        let checkpoint = encode_checkpoint(&state)?;
-        let storage = koharu_storage::Session::create_with(path, document, checkpoint, options)?;
-        Self::assemble_new(storage, state)
+        let storage = koharu_storage::Session::create(
+            path,
+            document,
+            Bytes::from(encode_checkpoint(&state)?),
+        )
+        .await?;
+        Self::assemble(storage, state).await
     }
 
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Self::open_with(path, koharu_storage::Options::default())
+    #[tracing::instrument(level = "info", skip_all, fields(path = %path.as_ref().display()))]
+    pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let storage = koharu_storage::Session::open(path).await?;
+        Self::recover(storage).await
     }
 
-    pub fn open_with(path: impl AsRef<Path>, options: koharu_storage::Options) -> Result<Self> {
-        let storage = koharu_storage::Session::open_with(path, options)?;
-        Self::recover(storage)
-    }
-
-    pub fn memory() -> Result<Self> {
-        Self::memory_with(koharu_storage::Options::default())
-    }
-
-    pub fn memory_with(options: koharu_storage::Options) -> Result<Self> {
+    pub async fn memory() -> Result<Self> {
         let document = koharu_storage::DocumentId::new();
         let state = State::empty(document);
-        let checkpoint = encode_checkpoint(&state)?;
-        let storage = koharu_storage::Session::memory_with(document, checkpoint, options)?;
-        Self::assemble_new(storage, state)
+        let storage =
+            koharu_storage::Session::memory(document, Bytes::from(encode_checkpoint(&state)?))
+                .await?;
+        Self::assemble(storage, state).await
     }
 
     #[must_use]
     pub fn project_id(&self) -> ProjectId {
-        ProjectId(self.storage.document_id())
+        ProjectId(self.current.state.document)
     }
 
     #[must_use]
@@ -65,16 +76,17 @@ impl Session {
         self.current.clone()
     }
 
-    pub fn commit(&mut self, patch: Patch) -> Result<Commit> {
-        if patch.project != self.storage.document_id() {
+    #[tracing::instrument(level = "info", skip_all, fields(project = %self.project_id(), base = %patch.base_revision))]
+    pub async fn commit(&mut self, patch: Patch) -> Result<Commit> {
+        if patch.project != self.current.state.document {
             return Err(Error::invalid("patch belongs to another project"));
         }
-        if patch.base_revision != self.storage.revision()
+        if patch.base_revision != self.current.revision()
             || !Arc::ptr_eq(&patch.base_state, &self.current.state)
         {
             return Err(Error::Storage(koharu_storage::Error::RevisionConflict {
-                expected: patch.base_revision,
-                actual: self.storage.revision(),
+                current: self.current.revision(),
+                proposed: patch.base_revision,
             }));
         }
         if patch.is_empty() {
@@ -85,72 +97,53 @@ impl Session {
             });
         }
 
-        let forward = patch.forward_bytes()?;
-        let inverse = patch.inverse_bytes()?;
         let next_revision = self
-            .storage
+            .current
             .revision()
             .next()
             .ok_or_else(|| Error::invalid("project revision overflow"))?;
         let mut state = (*patch.state).clone();
         state.revision = next_revision;
-        let referenced = state.referenced_blobs();
+        let proposed = self.current.storage.update(
+            next_revision,
+            Bytes::from(encode_checkpoint(&state)?),
+            state.referenced_blobs(),
+            patch.attachments.iter().cloned(),
+        )?;
+        let stored = self.storage.save(&proposed).await?;
 
-        let mut request = koharu_storage::Commit::new(
-            self.storage.document_id(),
-            self.storage.revision(),
-            forward,
-            inverse,
-        )
-        .with_label(patch.label.clone());
-        request.reference_blobs(patch.referenced_blobs());
-        for attachment in patch.attachments.iter().cloned() {
-            request.attach(attachment);
-        }
-        let checkpoint = self
-            .storage
-            .needs_checkpoint(request.payload_len())
-            .then(|| encode_checkpoint(&state))
-            .transpose()?;
-        let revision = self.storage.commit(request, checkpoint)?;
-        let blobs = self.storage.snapshot(referenced)?;
+        let inverse = patch
+            .operations
+            .iter()
+            .rev()
+            .map(Operation::reversed)
+            .collect::<Vec<_>>();
+        self.history.insert(
+            next_revision,
+            HistoryEntry {
+                inverse: inverse.into(),
+                _blobs: self.current.storage.blobs().clone(),
+            },
+        );
+
         let state = Arc::new(state);
-        let snapshot = Snapshot::new(state, blobs)?;
-        let changes = Change::from_operations(patch.base_revision, revision, &patch.operations);
+        let snapshot = Snapshot::new(state, stored)?;
+        let changes =
+            Change::from_operations(patch.base_revision, next_revision, &patch.operations);
         self.current = snapshot.clone();
         Ok(Commit {
-            revision,
+            revision: next_revision,
             changes,
             snapshot,
         })
     }
 
-    pub fn refresh(&mut self) -> Result<Change> {
-        let refresh = self.storage.changes()?;
-        if refresh.from == refresh.to {
-            return Ok(Change::empty(refresh.from));
-        }
-        let mut state = (*self.current.state).clone();
-        let mut operations = Vec::new();
-        for commit in &refresh.entries {
-            let decoded = decode_operations(&commit.forward)?;
-            state = apply_operations(&state, &decoded)?;
-            state.revision = commit.revision;
-            operations.extend(decoded);
-        }
-        self.storage.accept(&refresh)?;
-        let blobs = self.storage.snapshot(state.referenced_blobs())?;
-        let snapshot = Snapshot::new(Arc::new(state), blobs)?;
-        let changes = Change::from_operations(refresh.from, refresh.to, &operations);
-        self.current = snapshot;
-        Ok(changes)
+    pub async fn undo(&mut self, revision: crate::Revision) -> Result<Commit> {
+        self.undo_many([revision]).await
     }
 
-    pub fn undo(&mut self, revision: crate::Revision) -> Result<Commit> {
-        self.undo_many([revision])
-    }
-
-    pub fn undo_many(
+    #[tracing::instrument(level = "info", skip_all)]
+    pub async fn undo_many(
         &mut self,
         revisions: impl IntoIterator<Item = crate::Revision>,
     ) -> Result<Commit> {
@@ -162,9 +155,12 @@ impl Session {
         }
         let mut operations = Vec::new();
         for revision in &revisions {
-            operations.extend(decode_operations(
-                &self.storage.history(*revision)?.inverse,
-            )?);
+            let entry = self.history.get(revision).ok_or_else(|| {
+                Error::invalid(format!(
+                    "revision {revision} is not undoable in this session"
+                ))
+            })?;
+            operations.extend(entry.inverse.iter().cloned());
         }
         let state = apply_operations(&self.current.state, &operations)?;
         let label: Arc<str> = if revisions.len() == 1 {
@@ -180,60 +176,34 @@ impl Session {
             Vec::new(),
             Some(label),
         )?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub fn checkpoint(&mut self) -> Result<()> {
-        self.storage
-            .checkpoint(encode_checkpoint(&self.current.state)?)?;
-        Ok(())
+    pub async fn collect_garbage(&self) -> Result<koharu_storage::GcReport> {
+        self.storage.collect_garbage().await.map_err(Into::into)
     }
 
-    pub fn prune_history(
-        &mut self,
-        keep_from: crate::Revision,
-    ) -> Result<koharu_storage::GcReport> {
-        self.storage
-            .prune_history(
-                keep_from,
-                encode_checkpoint(&self.current.state)?,
-                self.current.state.referenced_blobs(),
-            )
-            .map_err(Into::into)
+    async fn assemble(storage: koharu_storage::Session, state: State) -> Result<Self> {
+        let stored = storage.load().await?;
+        let current = Snapshot::new(Arc::new(state), stored)?;
+        Ok(Self {
+            storage,
+            current,
+            history: BTreeMap::new(),
+        })
     }
 
-    pub fn gc(&mut self) -> Result<koharu_storage::GcReport> {
-        self.storage
-            .gc(self.current.state.referenced_blobs())
-            .map_err(Into::into)
-    }
-
-    pub fn flush(&self) -> Result<()> {
-        self.storage.flush().map_err(Into::into)
-    }
-
-    fn assemble_new(storage: koharu_storage::Session, state: State) -> Result<Self> {
-        let blobs = storage.snapshot(BTreeSet::new())?;
-        let current = Snapshot::new(Arc::new(state), blobs)?;
-        Ok(Self { storage, current })
-    }
-
-    fn recover(storage: koharu_storage::Session) -> Result<Self> {
-        let recovery = storage.recover()?;
-        let checkpoint: StoredState = revision::from_slice(&recovery.checkpoint)?;
-        let mut state =
-            State::from_checkpoint(recovery.document, recovery.checkpoint_revision, checkpoint)?;
-        for commit in &recovery.entries {
-            state = apply_operations(&state, &decode_operations(&commit.forward)?)?;
-            state.revision = commit.revision;
-        }
-        if state.revision != recovery.head {
-            return Err(Error::invalid("project history does not reach its head"));
-        }
+    async fn recover(storage: koharu_storage::Session) -> Result<Self> {
+        let stored = storage.load().await?;
+        let checkpoint: StoredState = revision::from_slice(stored.payload())?;
+        let state = State::from_checkpoint(stored.document_id(), stored.revision(), checkpoint)?;
         state.validate()?;
-        let blobs = storage.snapshot(state.referenced_blobs())?;
-        let current = Snapshot::new(Arc::new(state), blobs)?;
-        Ok(Self { storage, current })
+        let current = Snapshot::new(Arc::new(state), stored)?;
+        Ok(Self {
+            storage,
+            current,
+            history: BTreeMap::new(),
+        })
     }
 }
 

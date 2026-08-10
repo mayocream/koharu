@@ -61,19 +61,19 @@ fn source(text: &str) -> SourceText {
     }
 }
 
-#[test]
-fn fresh_scene_has_an_empty_project_hierarchy() {
+#[tokio::test]
+async fn fresh_scene_has_an_empty_project_hierarchy() {
     assert_send_sync::<Snapshot>();
     assert_send_sync::<Patch>();
-    let session = Session::memory().unwrap();
+    let session = Session::memory().await.unwrap();
     let snapshot = session.snapshot();
     assert_eq!(snapshot.revision(), Revision::ZERO);
     assert_eq!(snapshot.pages().len(), 0);
 }
 
-#[test]
-fn components_on_new_entities_do_not_observe_missing_base_state() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn components_on_new_entities_do_not_observe_missing_base_state() {
+    let mut session = Session::memory().await.unwrap();
     let mut entity = None;
     let patch = session
         .snapshot()
@@ -92,7 +92,7 @@ fn components_on_new_entities_do_not_observe_missing_base_state() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     assert!(
         snapshot
             .component::<Visibility>(entity.unwrap())
@@ -101,8 +101,8 @@ fn components_on_new_entities_do_not_observe_missing_base_state() {
     );
 }
 
-#[test]
-fn built_in_component_schemas_remain_revision_one() {
+#[tokio::test]
+async fn built_in_component_schemas_remain_revision_one() {
     fn schema<T: Component>() -> u16 {
         <T as revision::Revisioned>::revision()
     }
@@ -133,8 +133,8 @@ fn built_in_component_schemas_remain_revision_one() {
     );
 }
 
-#[test]
-fn built_in_component_kinds_express_domain_ownership() {
+#[tokio::test]
+async fn built_in_component_kinds_express_domain_ownership() {
     assert_eq!(
         [
             Project::KIND,
@@ -181,13 +181,13 @@ fn built_in_component_kinds_express_domain_ownership() {
     );
 }
 
-#[test]
-fn revision_one_project_components_upgrade_when_their_schema_evolves() {
+#[tokio::test]
+async fn revision_one_project_components_upgrade_when_their_schema_evolves() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("evolving.khrproj");
     let entity;
     {
-        let mut session = Session::create(&path).unwrap();
+        let mut session = Session::create(&path).await.unwrap();
         let mut created = None;
         let patch = session
             .snapshot()
@@ -205,12 +205,11 @@ fn revision_one_project_components_upgrade_when_their_schema_evolves() {
                 Ok(())
             })
             .unwrap();
-        session.commit(patch).unwrap();
-        session.checkpoint().unwrap();
+        session.commit(patch).await.unwrap();
         entity = created.unwrap();
     }
 
-    let mut session = Session::open(&path).unwrap();
+    let mut session = Session::open(&path).await.unwrap();
     let upgraded = session
         .snapshot()
         .component::<EvolvingComponentV2>(entity)
@@ -229,11 +228,10 @@ fn revision_one_project_components_upgrade_when_their_schema_evolves() {
         .snapshot()
         .patch(|edit| edit.set(entity, &upgraded))
         .unwrap();
-    session.commit(patch).unwrap();
-    session.checkpoint().unwrap();
+    session.commit(patch).await.unwrap();
     drop(session);
 
-    let reopened = Session::open(&path).unwrap();
+    let reopened = Session::open(&path).await.unwrap();
     assert_eq!(
         reopened
             .snapshot()
@@ -243,9 +241,9 @@ fn revision_one_project_components_upgrade_when_their_schema_evolves() {
     );
 }
 
-#[test]
-fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
+    let mut session = Session::memory().await.unwrap();
     let mut entities = None;
     let create = session
         .snapshot()
@@ -258,7 +256,7 @@ fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let (left, right) = entities.unwrap();
     let left_patch = base
         .patch(|edit| edit.set(left, &Geometry::rectangle(0.0, 0.0, 10.0, 10.0)))
@@ -270,17 +268,18 @@ fn stale_disjoint_patches_can_rebase_without_hiding_conflicts() {
         .patch(|edit| edit.set(left, &Geometry::rectangle(2.0, 2.0, 10.0, 10.0)))
         .unwrap();
 
-    let current = session.commit(left_patch).unwrap().snapshot;
+    let current = session.commit(left_patch).await.unwrap().snapshot;
     let current = session
         .commit(right_patch.rebase_on(&current).unwrap())
+        .await
         .unwrap()
         .snapshot;
     assert!(conflicting.rebase_on(&current).is_err());
 }
 
-#[test]
-fn hierarchy_insertion_rebases_across_component_edits_but_not_sibling_changes() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn hierarchy_insertion_rebases_across_component_edits_but_not_sibling_changes() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let create = session
         .snapshot()
@@ -291,7 +290,7 @@ fn hierarchy_insertion_rebases_across_component_edits_but_not_sibling_changes() 
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let (page, content) = ids.unwrap();
 
     let insert = base
@@ -316,9 +315,9 @@ fn hierarchy_insertion_rebases_across_component_edits_but_not_sibling_changes() 
     assert!(insert.rebase_on(&current).is_err());
 }
 
-#[test]
-fn observed_page_subtree_guards_pipeline_rebase_inputs() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn observed_page_subtree_guards_pipeline_rebase_inputs() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let create = session
         .snapshot()
@@ -330,7 +329,7 @@ fn observed_page_subtree_guards_pipeline_rebase_inputs() {
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let (left_page, left_entity, right_page) = ids.unwrap();
 
     let observed = base
@@ -342,7 +341,7 @@ fn observed_page_subtree_guards_pipeline_rebase_inputs() {
     let unrelated = base
         .patch(|edit| edit.set_page(right_page, PageDraft::new("right changed", 100.0, 100.0)))
         .unwrap();
-    let current = session.commit(unrelated).unwrap().snapshot;
+    let current = session.commit(unrelated).await.unwrap().snapshot;
     assert!(observed.rebase_on(&current).is_ok());
 
     let observed = current
@@ -354,13 +353,13 @@ fn observed_page_subtree_guards_pipeline_rebase_inputs() {
     let changed_input = current
         .patch(|edit| edit.set_page(left_page, PageDraft::new("left changed", 100.0, 100.0)))
         .unwrap();
-    let current = session.commit(changed_input).unwrap().snapshot;
+    let current = session.commit(changed_input).await.unwrap().snapshot;
     assert!(observed.rebase_on(&current).is_err());
 }
 
-#[test]
-fn project_and_relation_metadata_use_typed_components() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn project_and_relation_metadata_use_typed_components() {
+    let mut session = Session::memory().await.unwrap();
     let settings = Project {
         source_locale: Some(LanguageTag::new("ja").unwrap()),
         target_locales: vec![LanguageTag::new("en").unwrap()],
@@ -387,7 +386,7 @@ fn project_and_relation_metadata_use_typed_components() {
             Ok(())
         })
         .unwrap();
-    let commit = session.commit(patch).unwrap();
+    let commit = session.commit(patch).await.unwrap();
     let snapshot = commit.snapshot;
     assert!(
         commit.changes.components.iter().any(|change| {
@@ -414,9 +413,9 @@ fn project_and_relation_metadata_use_typed_components() {
     );
 }
 
-#[test]
-fn producer_reruns_respect_component_ownership() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn producer_reruns_respect_component_ownership() {
+    let mut session = Session::memory().await.unwrap();
     let mut entities = None;
     let patch = session
         .snapshot()
@@ -429,7 +428,7 @@ fn producer_reruns_respect_component_ownership() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let (user, generated) = entities.unwrap();
     let producer = ProducerId::new("dev.koharu.pipeline.ocr").unwrap();
     let generation = Generation::new(producer.clone());
@@ -439,11 +438,19 @@ fn producer_reruns_respect_component_ownership() {
         Err(Error::Authorship(_))
     ));
     edit.set(generated, &source("generated")).unwrap();
-    let snapshot = session.commit(edit.finish().unwrap()).unwrap().snapshot;
+    let snapshot = session
+        .commit(edit.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
 
     let mut rerun = snapshot.edit_as(generation);
     rerun.set(generated, &source("generated again")).unwrap();
-    let snapshot = session.commit(rerun.finish().unwrap()).unwrap().snapshot;
+    let snapshot = session
+        .commit(rerun.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
     let other = Generation::new(ProducerId::new("dev.koharu.pipeline.other-ocr").unwrap());
     let mut other_edit = snapshot.edit_as(other);
     assert!(matches!(
@@ -452,9 +459,9 @@ fn producer_reruns_respect_component_ownership() {
     ));
 }
 
-#[test]
-fn pipeline_removal_respects_entity_lifecycle_owner() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn pipeline_removal_respects_entity_lifecycle_owner() {
+    let mut session = Session::memory().await.unwrap();
     let mut page_id = None;
     let patch = session
         .snapshot()
@@ -463,12 +470,16 @@ fn pipeline_removal_respects_entity_lifecycle_owner() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let page = page_id.unwrap();
     let owner = Generation::new(ProducerId::new("dev.koharu.pipeline.detector").unwrap());
     let mut edit = snapshot.edit_as(owner.clone());
     let generated = edit.add_entity(page, At::End).unwrap();
-    let snapshot = session.commit(edit.finish().unwrap()).unwrap().snapshot;
+    let snapshot = session
+        .commit(edit.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
 
     let mut other = snapshot.edit_as(Generation::new(
         ProducerId::new("dev.koharu.pipeline.other-detector").unwrap(),
@@ -484,14 +495,15 @@ fn pipeline_removal_respects_entity_lifecycle_owner() {
         .unwrap();
     let snapshot = session
         .commit(owner_edit.finish().unwrap())
+        .await
         .unwrap()
         .snapshot;
     assert!(snapshot.entity(generated).is_err());
 }
 
-#[test]
-fn typed_page_entity_and_components_round_trip() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn typed_page_entity_and_components_round_trip() {
+    let mut session = Session::memory().await.unwrap();
     let patch = session
         .snapshot()
         .patch(|edit| {
@@ -501,7 +513,7 @@ fn typed_page_entity_and_components_round_trip() {
             Ok(())
         })
         .unwrap();
-    let commit = session.commit(patch).unwrap();
+    let commit = session.commit(patch).await.unwrap();
     let page = commit.snapshot.pages().next().unwrap();
     assert_eq!(page.page().unwrap().label, "page");
     let text = commit.snapshot.children(page.id()).unwrap().next().unwrap();
@@ -517,9 +529,9 @@ fn typed_page_entity_and_components_round_trip() {
     );
 }
 
-#[test]
-fn text_analysis_content_and_presentation_have_distinct_ownership() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn text_analysis_content_and_presentation_have_distinct_ownership() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let patch = session
         .snapshot()
@@ -548,7 +560,7 @@ fn text_analysis_content_and_presentation_have_distinct_ownership() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let (content, layer) = ids.unwrap();
     assert_eq!(
         snapshot
@@ -565,9 +577,9 @@ fn text_analysis_content_and_presentation_have_distinct_ownership() {
     ));
 }
 
-#[test]
-fn text_group_owns_the_canonical_text_order() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn text_group_owns_the_canonical_text_order() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let patch = session
         .snapshot()
@@ -597,7 +609,7 @@ fn text_group_owns_the_canonical_text_order() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let (page, first, second) = ids.unwrap();
     let group = snapshot.page(page).unwrap().text_group().unwrap().unwrap();
     assert_eq!(
@@ -612,7 +624,7 @@ fn text_group_owns_the_canonical_text_order() {
     let patch = snapshot
         .patch(|edit| edit.move_entity(second, Some(group.id()), At::Start))
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     assert_eq!(
         snapshot
             .page(page)
@@ -628,9 +640,9 @@ fn text_group_owns_the_canonical_text_order() {
     );
 }
 
-#[test]
-fn typed_relations_enforce_endpoints_and_functional_cardinality() {
-    let session = Session::memory().unwrap();
+#[tokio::test]
+async fn typed_relations_enforce_endpoints_and_functional_cardinality() {
+    let session = Session::memory().await.unwrap();
     let result = session.snapshot().patch(|edit| {
         let page = edit.add_page(page(), At::End)?;
         let region = edit.add_analysis_region::<TextRegion>(
@@ -671,9 +683,9 @@ fn typed_relations_enforce_endpoints_and_functional_cardinality() {
     assert!(matches!(result, Err(Error::Invalid(_))));
 }
 
-#[test]
-fn component_changes_cannot_invalidate_incident_typed_relations() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn component_changes_cannot_invalidate_incident_typed_relations() {
+    let mut session = Session::memory().await.unwrap();
     let mut layer = None;
     let patch = session
         .snapshot()
@@ -692,14 +704,14 @@ fn component_changes_cannot_invalidate_incident_typed_relations() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let result = snapshot.patch(|edit| edit.remove::<TextLayout>(layer.unwrap()));
     assert!(matches!(result, Err(Error::Invalid(_))));
 }
 
-#[test]
-fn hierarchy_move_and_promote_are_ordered() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn hierarchy_move_and_promote_are_ordered() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let patch = session
         .snapshot()
@@ -712,7 +724,7 @@ fn hierarchy_move_and_promote_are_ordered() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let (page, group, child, sibling) = ids.unwrap();
     let patch = snapshot
         .patch(|edit| {
@@ -720,7 +732,7 @@ fn hierarchy_move_and_promote_are_ordered() {
             edit.remove_entity(group, RemovePolicy::PromoteChildren)
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     assert_eq!(
         snapshot.children(page).unwrap().collect::<Vec<_>>(),
         vec![sibling, child]
@@ -732,9 +744,9 @@ fn hierarchy_move_and_promote_are_ordered() {
     ));
 }
 
-#[test]
-fn cross_page_subtree_move_preserves_identity_components_relations_and_undo() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn cross_page_subtree_move_preserves_identity_components_relations_and_undo() {
+    let mut session = Session::memory().await.unwrap();
     let kind = RelationKind::new("dev.koharu.test.cross-page").unwrap();
     let mut ids = None;
     let create = session
@@ -750,14 +762,14 @@ fn cross_page_subtree_move_preserves_identity_components_relations_and_undo() {
             Ok(())
         })
         .unwrap();
-    session.commit(create).unwrap();
+    session.commit(create).await.unwrap();
     let (source_page, target_page, group, child, relation) = ids.unwrap();
 
     let moved = session
         .snapshot()
         .patch(|edit| edit.move_entity(group, Some(target_page), At::End))
         .unwrap();
-    let commit = session.commit(moved).unwrap();
+    let commit = session.commit(moved).await.unwrap();
     assert!(
         commit
             .snapshot
@@ -783,15 +795,15 @@ fn cross_page_subtree_move_preserves_identity_components_relations_and_undo() {
         child
     );
 
-    let undone = session.undo(commit.revision).unwrap().snapshot;
+    let undone = session.undo(commit.revision).await.unwrap().snapshot;
     assert_eq!(undone.parent(group).unwrap(), Some(source_page));
     assert_eq!(undone.parent(child).unwrap(), Some(group));
     assert_eq!(undone.relation(relation).unwrap().value().source, child);
 }
 
-#[test]
-fn relations_are_records_with_typed_adjacency() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn relations_are_records_with_typed_adjacency() {
+    let mut session = Session::memory().await.unwrap();
     let kind = RelationKind::new("dev.koharu.test.reading-order").unwrap();
     let mut ids = None;
     let patch = session
@@ -805,7 +817,7 @@ fn relations_are_records_with_typed_adjacency() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let (first, second, relation) = ids.unwrap();
     assert_eq!(
         snapshot
@@ -831,13 +843,13 @@ fn relations_are_records_with_typed_adjacency() {
     let patch = snapshot
         .patch(|edit| edit.remove_entity(first, RemovePolicy::Cascade))
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     assert!(snapshot.relation(relation).is_err());
 }
 
-#[test]
-fn translation_requires_source_text() {
-    let session = Session::memory().unwrap();
+#[tokio::test]
+async fn translation_requires_source_text() {
+    let session = Session::memory().await.unwrap();
     let result = session.snapshot().patch(|edit| {
         let page = edit.add_page(page(), At::End)?;
         let entity = edit.add_entity(page, At::End)?;
@@ -852,9 +864,9 @@ fn translation_requires_source_text() {
     assert!(matches!(result, Err(Error::Invalid(_))));
 }
 
-#[test]
-fn text_components_have_one_value_per_entity() {
-    let session = Session::memory().unwrap();
+#[tokio::test]
+async fn text_components_have_one_value_per_entity() {
+    let session = Session::memory().await.unwrap();
     let result = session.snapshot().patch(|edit| {
         let page = edit.add_page(page(), At::End)?;
         let entity = edit.add_text_content(page, At::End)?;
@@ -870,9 +882,9 @@ fn text_components_have_one_value_per_entity() {
     assert!(result.is_ok());
 }
 
-#[test]
-fn independent_pipeline_components_rebase() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn independent_pipeline_components_rebase() {
+    let mut session = Session::memory().await.unwrap();
     let mut entities = None;
     let create = session
         .snapshot()
@@ -893,7 +905,7 @@ fn independent_pipeline_components_rebase() {
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let (content, layer) = entities.unwrap();
     let translation = base
         .patch(|edit| {
@@ -927,9 +939,9 @@ fn independent_pipeline_components_rebase() {
             )
         })
         .unwrap();
-    let current = session.commit(translation).unwrap().snapshot;
+    let current = session.commit(translation).await.unwrap().snapshot;
     let typography = typography.rebase_on(&current).unwrap();
-    let snapshot = session.commit(typography).unwrap().snapshot;
+    let snapshot = session.commit(typography).await.unwrap().snapshot;
     assert!(
         snapshot
             .component::<Translation>(content)
@@ -939,9 +951,9 @@ fn independent_pipeline_components_rebase() {
     assert!(snapshot.component::<Typography>(layer).unwrap().is_some());
 }
 
-#[test]
-fn descendant_scene_patch_rebases_after_ancestor_commit() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn descendant_scene_patch_rebases_after_ancestor_commit() {
+    let mut session = Session::memory().await.unwrap();
     let base = session.snapshot();
     let mut edit = base.edit();
     let page = edit.add_page(page(), At::End).unwrap();
@@ -954,15 +966,15 @@ fn descendant_scene_patch_rebases_after_ancestor_commit() {
         })
         .unwrap();
     assert!(base.preview([&ancestor, &descendant]).is_ok());
-    let current = session.commit(ancestor).unwrap().snapshot;
+    let current = session.commit(ancestor).await.unwrap().snapshot;
     let descendant = descendant.rebase_on(&current).unwrap();
-    let snapshot = session.commit(descendant).unwrap().snapshot;
+    let snapshot = session.commit(descendant).await.unwrap().snapshot;
     assert_eq!(snapshot.children(page).unwrap().len(), 1);
 }
 
-#[test]
-fn assets_attach_bytes_without_decoding() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn assets_attach_bytes_without_decoding() {
+    let mut session = Session::memory().await.unwrap();
     let role = AssetRole::new("source").unwrap();
     let mut entity = None;
     let patch = session
@@ -985,17 +997,17 @@ fn assets_attach_bytes_without_decoding() {
             )
         })
         .unwrap();
-    let snapshot = session.commit(patch).unwrap().snapshot;
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
     let asset = snapshot.asset(entity.unwrap(), &role).unwrap().unwrap();
-    assert_eq!(&*snapshot.read_blob(asset.blob).unwrap(), b"encoded image");
-    let batch = snapshot.read_blobs([asset.blob, asset.blob]).unwrap();
-    assert_eq!(batch.len(), 1);
-    assert_eq!(&**batch.get(asset.blob).unwrap(), b"encoded image");
+    assert_eq!(
+        snapshot.read_blob(asset.blob).await.unwrap().as_ref(),
+        b"encoded image"
+    );
 }
 
-#[test]
-fn repeated_asset_writes_rebase_over_an_unrelated_page_edit() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn repeated_asset_writes_rebase_over_an_unrelated_page_edit() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let create = session
         .snapshot()
@@ -1006,7 +1018,7 @@ fn repeated_asset_writes_rebase_over_an_unrelated_page_edit() {
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let (first_page, second_page) = ids.unwrap();
 
     let assets = base
@@ -1046,10 +1058,10 @@ fn repeated_asset_writes_rebase_over_an_unrelated_page_edit() {
             )
         })
         .unwrap();
-    let current = session.commit(unrelated).unwrap().snapshot;
+    let current = session.commit(unrelated).await.unwrap().snapshot;
 
     let assets = assets.rebase_on(&current).unwrap();
-    let snapshot = session.commit(assets).unwrap().snapshot;
+    let snapshot = session.commit(assets).await.unwrap().snapshot;
     for role in ["text-mask", "bubble-mask"] {
         assert!(
             snapshot
@@ -1060,29 +1072,27 @@ fn repeated_asset_writes_rebase_over_an_unrelated_page_edit() {
     }
 }
 
-#[test]
-fn disk_scene_reopens_and_validates() {
+#[tokio::test]
+async fn disk_scene_reopens_and_validates() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("scene.khrproj");
     {
-        let mut session = Session::create(&path).unwrap();
+        let mut session = Session::create(&path).await.unwrap();
         let patch = session
             .snapshot()
             .patch(|edit| edit.add_page(page(), At::End).map(|_| ()))
             .unwrap();
-        session.commit(patch).unwrap();
-        session.checkpoint().unwrap();
+        session.commit(patch).await.unwrap();
     }
-    let session = Session::open(&path).unwrap();
+    let session = Session::open(&path).await.unwrap();
     assert_eq!(session.snapshot().pages().len(), 1);
 }
 
-#[test]
-fn refresh_updates_page_local_component_queries() {
+#[tokio::test]
+async fn reopen_updates_page_local_component_queries() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("refresh.khrproj");
-    let mut writer = Session::create(&path).unwrap();
-    let mut reader = Session::open(&path).unwrap();
+    let mut writer = Session::create(&path).await.unwrap();
     let mut entity = None;
     let create = writer
         .snapshot()
@@ -1092,17 +1102,17 @@ fn refresh_updates_page_local_component_queries() {
             Ok(())
         })
         .unwrap();
-    writer.commit(create).unwrap();
-    reader.refresh().unwrap();
+    writer.commit(create).await.unwrap();
     let entity = entity.unwrap();
 
     let update = writer
         .snapshot()
         .patch(|edit| edit.set(entity, &source("refreshed")))
         .unwrap();
-    writer.commit(update).unwrap();
-    reader.refresh().unwrap();
+    writer.commit(update).await.unwrap();
+    drop(writer);
 
+    let reader = Session::open(&path).await.unwrap();
     let snapshot = reader.snapshot();
     assert_eq!(
         snapshot
@@ -1115,9 +1125,9 @@ fn refresh_updates_page_local_component_queries() {
     );
 }
 
-#[test]
-fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
+    let mut session = Session::memory().await.unwrap();
     let role = AssetRole::new("source").unwrap();
     let relation_kind = RelationKind::new("dev.koharu.test.association").unwrap();
     let mut ids = None;
@@ -1156,7 +1166,7 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(create).unwrap().snapshot;
+    let snapshot = session.commit(create).await.unwrap().snapshot;
     let (entity, analysis_entity, relation) = ids.unwrap();
     let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.detector").unwrap());
     let mut pipeline = snapshot.edit_as(generation.clone());
@@ -1183,7 +1193,11 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
     pipeline
         .set(analysis_entity, &analysis)
         .expect("new pipeline analysis is stamped by the edit context");
-    let snapshot = session.commit(pipeline.finish().unwrap()).unwrap().snapshot;
+    let snapshot = session
+        .commit(pipeline.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
     let stored = snapshot
         .component::<DetectionAnalysis>(analysis_entity)
         .unwrap()
@@ -1203,9 +1217,9 @@ fn pipeline_component_removal_and_relation_lifecycle_respect_ownership() {
     ));
 }
 
-#[test]
-fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
+    let mut session = Session::memory().await.unwrap();
     let mut ids = None;
     let create = session
         .snapshot()
@@ -1229,7 +1243,7 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(create).unwrap().snapshot;
+    let snapshot = session.commit(create).await.unwrap().snapshot;
     let (page, first, nested, second) = ids.unwrap();
     assert_eq!(
         snapshot.entities().map(EntityRef::id).collect::<Vec<_>>(),
@@ -1277,7 +1291,11 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
         },
     )
     .unwrap();
-    let snapshot = session.commit(edit.finish().unwrap()).unwrap().snapshot;
+    let snapshot = session
+        .commit(edit.finish().unwrap())
+        .await
+        .unwrap()
+        .snapshot;
     assert!(matches!(
         snapshot
             .component::<OcrAnalysis>(second)
@@ -1288,9 +1306,9 @@ fn pipeline_queries_and_analysis_components_are_semantic_and_ordered() {
     ));
 }
 
-#[test]
-fn scene_patch_exposes_stable_identity_and_base() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn scene_patch_exposes_stable_identity_and_base() {
+    let mut session = Session::memory().await.unwrap();
     let mut entity = None;
     let create = session
         .snapshot()
@@ -1300,7 +1318,7 @@ fn scene_patch_exposes_stable_identity_and_base() {
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let entity = entity.unwrap();
     let patch = base
         .patch(|edit| edit.set(entity, &source("identity")))
@@ -1317,9 +1335,9 @@ fn scene_patch_exposes_stable_identity_and_base() {
     );
 }
 
-#[test]
-fn component_snapshots_clone_only_the_touched_page() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn component_snapshots_clone_only_the_touched_page() {
+    let mut session = Session::memory().await.unwrap();
     let mut entity = None;
     let create = session
         .snapshot()
@@ -1329,7 +1347,7 @@ fn component_snapshots_clone_only_the_touched_page() {
             Ok(())
         })
         .unwrap();
-    let base = session.commit(create).unwrap().snapshot;
+    let base = session.commit(create).await.unwrap().snapshot;
     let entity = entity.unwrap();
     let page = base.state.page_for(entity).unwrap();
     let base_page = base.state.pages[&page].clone();
@@ -1340,16 +1358,16 @@ fn component_snapshots_clone_only_the_touched_page() {
     let preview = base.preview([&patch]).unwrap();
     assert!(!Arc::ptr_eq(&preview.state.pages[&page], &base_page));
     assert_eq!(preview.entities_with::<SourceText>().unwrap().len(), 1);
-    let committed = session.commit(patch).unwrap().snapshot;
+    let committed = session.commit(patch).await.unwrap().snapshot;
     assert!(!Arc::ptr_eq(&committed.state.pages[&page], &base_page));
     let first = session.snapshot();
     let second = session.snapshot();
     assert!(Arc::ptr_eq(&first.state, &second.state));
 }
 
-#[test]
-fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
-    let mut session = Session::memory().unwrap();
+#[tokio::test]
+async fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
+    let mut session = Session::memory().await.unwrap();
     let mut endpoints = None;
     let create = session
         .snapshot()
@@ -1361,7 +1379,7 @@ fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
             Ok(())
         })
         .unwrap();
-    let snapshot = session.commit(create).unwrap().snapshot;
+    let snapshot = session.commit(create).await.unwrap().snapshot;
     let (left, right) = endpoints.unwrap();
     let generation = Generation::new(ProducerId::new("dev.koharu.pipeline.detector").unwrap());
     let mut generated = snapshot.edit_as(generation.clone());
@@ -1375,6 +1393,7 @@ fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
         .unwrap();
     let snapshot = session
         .commit(generated.finish().unwrap())
+        .await
         .unwrap()
         .snapshot;
 
@@ -1384,7 +1403,7 @@ fn user_promotion_protects_generated_entity_and_relation_lifecycle() {
             edit.promote_relation_to_user(relation)
         })
         .unwrap();
-    let snapshot = session.commit(promoted).unwrap().snapshot;
+    let snapshot = session.commit(promoted).await.unwrap().snapshot;
     let mut rerun = snapshot.edit_as(generation);
     assert!(matches!(
         rerun.remove_relation(relation),

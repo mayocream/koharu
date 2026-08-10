@@ -11,17 +11,17 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     pub(crate) state: Arc<State>,
-    pub(crate) blobs: koharu_storage::Snapshot,
+    pub(crate) storage: koharu_storage::State,
 }
 
 impl Snapshot {
-    pub(crate) fn new(state: Arc<State>, blobs: koharu_storage::Snapshot) -> Result<Self> {
-        if state.document != blobs.document_id() || state.revision != blobs.revision() {
+    pub(crate) fn new(state: Arc<State>, storage: koharu_storage::State) -> Result<Self> {
+        if state.document != storage.document_id() || state.revision != storage.revision() {
             return Err(Error::invalid(
                 "scene state and blob snapshot identify different revisions",
             ));
         }
-        Ok(Self { state, blobs })
+        Ok(Self { state, storage })
     }
 
     #[must_use]
@@ -145,7 +145,7 @@ impl Snapshot {
             return Ok(None);
         };
         let record_exists = |id| self.state.contains_entity(id);
-        let blob_exists = |id| self.blobs.has_blob(id);
+        let blob_exists = |id| self.storage.blobs().contains(id);
         decode::<T>(raw, &ValidationContext::new(&record_exists, &blob_exists)).map(Some)
     }
 
@@ -210,12 +210,8 @@ impl Snapshot {
         Ok(relation)
     }
 
-    pub fn read_blob(&self, id: BlobId) -> Result<Arc<[u8]>> {
-        self.blobs.read_blob(id).map_err(Into::into)
-    }
-
-    pub fn read_blobs(&self, ids: impl IntoIterator<Item = BlobId>) -> Result<crate::BlobBatch> {
-        self.blobs.read_blobs(ids).map_err(Into::into)
+    pub async fn read_blob(&self, id: BlobId) -> Result<bytes::Bytes> {
+        self.storage.blobs().get(id).await.map_err(Into::into)
     }
 
     #[must_use]
@@ -241,12 +237,13 @@ impl Snapshot {
             let mut state = (*patch.state).clone();
             state.revision = current.state.revision;
             let state = Arc::new(state);
-            let blobs = current.blobs.preview(
+            let storage = current.storage.update(
                 state.revision,
-                patch.attachments.iter().cloned(),
+                current.storage.payload().clone(),
                 state.referenced_blobs(),
+                patch.attachments.iter().cloned(),
             )?;
-            current = Self { state, blobs };
+            current = Self { state, storage };
         }
         Ok(current)
     }

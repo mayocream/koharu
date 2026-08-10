@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::sync::Arc;
 
 use revision::revisioned;
 
@@ -324,28 +324,6 @@ impl Operation {
             },
         }
     }
-
-    pub(crate) fn blob_refs(&self, result: &mut BTreeSet<BlobId>) {
-        let mut add = |components: &[StoredComponentEntry]| {
-            for component in components {
-                result.extend(component.value.blob_refs.iter().copied());
-            }
-        };
-        match self {
-            Self::InsertPage { components, .. }
-            | Self::RemovePage { components, .. }
-            | Self::InsertEntity { components, .. }
-            | Self::RemoveEntity { components, .. }
-            | Self::InsertRelation { components, .. }
-            | Self::RemoveRelation { components, .. } => add(components),
-            Self::ReplaceComponent { before, after, .. } => {
-                for value in [before, after].into_iter().flatten() {
-                    result.extend(value.blob_refs.iter().copied());
-                }
-            }
-            Self::MovePage { .. } | Self::MoveEntity { .. } | Self::ReplaceRelation { .. } => {}
-        }
-    }
 }
 
 #[revisioned(revision = 1)]
@@ -430,7 +408,7 @@ pub struct Patch {
     pub(crate) state: Arc<State>,
     pub(crate) observations: Arc<[Observation]>,
     pub(crate) operations: Arc<[Operation]>,
-    pub(crate) attachments: Arc<[koharu_storage::Blob]>,
+    pub(crate) attachments: Arc<[(BlobId, bytes::Bytes)]>,
     pub(crate) label: Option<Arc<str>>,
     fingerprint: koharu_storage::PatchId,
 }
@@ -441,7 +419,7 @@ impl Patch {
         state: State,
         observations: Vec<Observation>,
         operations: Vec<Operation>,
-        attachments: Vec<koharu_storage::Blob>,
+        attachments: Vec<(BlobId, bytes::Bytes)>,
         label: Option<Arc<str>>,
     ) -> Result<Self> {
         let identity = PatchIdentity {
@@ -449,7 +427,7 @@ impl Patch {
             base: base.state.revision,
             observations: observations.clone(),
             operations: operations.clone(),
-            attachments: attachments.iter().map(|blob| blob.id()).collect(),
+            attachments: attachments.iter().map(|(blob, _)| *blob).collect(),
             label: label.as_deref().map(str::to_owned),
         };
         let fingerprint = koharu_storage::PatchId::for_bytes(&revision::to_vec(&identity)?);
@@ -521,45 +499,19 @@ impl Patch {
         )
     }
 
-    pub(crate) fn forward_bytes(&self) -> Result<Vec<u8>> {
-        revision::to_vec(&self.operations.to_vec()).map_err(Into::into)
-    }
-
-    pub(crate) fn inverse_bytes(&self) -> Result<Vec<u8>> {
-        let inverse = self
-            .operations
-            .iter()
-            .rev()
-            .map(Operation::reversed)
-            .collect::<Vec<_>>();
-        revision::to_vec(&inverse).map_err(Into::into)
-    }
-
-    pub(crate) fn referenced_blobs(&self) -> BTreeSet<BlobId> {
-        let mut result = BTreeSet::new();
-        for operation in self.operations.iter() {
-            operation.blob_refs(&mut result);
-        }
-        result
-    }
-
     fn rehash(&mut self) {
         let identity = PatchIdentity {
             project: self.project,
             base: self.base_revision,
             observations: self.observations.to_vec(),
             operations: self.operations.to_vec(),
-            attachments: self.attachments.iter().map(|blob| blob.id()).collect(),
+            attachments: self.attachments.iter().map(|(blob, _)| *blob).collect(),
             label: self.label.as_deref().map(str::to_owned),
         };
         self.fingerprint = koharu_storage::PatchId::for_bytes(
             &revision::to_vec(&identity).expect("patch identity is serializable"),
         );
     }
-}
-
-pub(crate) fn decode_operations(bytes: &[u8]) -> Result<Vec<Operation>> {
-    revision::from_slice(bytes).map_err(Into::into)
 }
 
 pub(crate) fn apply_operations(state: &State, operations: &[Operation]) -> Result<State> {

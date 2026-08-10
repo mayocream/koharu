@@ -1,23 +1,17 @@
-//! RocksDB-backed project storage.
-//!
-//! A project directory is the database. Document state, ordered history, and
-//! content-addressed blobs occupy separate column families; only the blob
-//! column family uses RocksDB's integrated BlobDB.
+//! Filesystem-native project snapshots and immutable content-addressed blobs.
 
-mod blob;
-mod commit;
-mod database;
+mod blobs;
+mod durability;
 mod error;
+mod format;
 mod ids;
 mod session;
-mod snapshot;
 
-pub use blob::{Blob, BlobBatch};
-pub use commit::{Commit, HistoryEntry, Recovery, Refresh};
+pub use blobs::Blobs;
+pub use bytes::Bytes;
 pub use error::{Error, Result};
 pub use ids::{BlobId, DocumentId, PatchId, Revision};
-pub use session::{GcReport, Options, Session};
-pub use snapshot::Snapshot;
+pub use session::{GcReport, Session, State};
 
 #[cfg(test)]
 mod tests;

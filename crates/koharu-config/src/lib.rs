@@ -337,6 +337,7 @@ impl Manager {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     fn save<T>(&self, target: &Target, value: &T) -> Result<()>
     where
         T: Serialize + ?Sized,
@@ -376,6 +377,7 @@ pub fn path() -> Result<PathBuf> {
 }
 
 /// Load or retrieve a live, process-wide top-level configuration section.
+#[tracing::instrument(skip_all)]
 pub fn load<T>(section: &str) -> Result<Config<T>>
 where
     T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,
@@ -388,6 +390,7 @@ where
 ///
 /// Prefer `load(section)` for independently owned configuration. This exists
 /// for applications whose schema intentionally covers the complete file.
+#[tracing::instrument(skip_all)]
 pub fn load_root<T>() -> Result<Config<T>>
 where
     T: Default + DeserializeOwned + Serialize + Send + Sync + 'static,

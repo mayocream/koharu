@@ -1,57 +1,167 @@
-use std::hint::black_box;
+use std::{collections::BTreeMap, hint::black_box, io::Cursor, sync::Arc};
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use koharu_renderer::{
-    FontSystem, RasterOptions, Rasterizer, TextLayout, TextRenderOptions, TextRenderer, WritingMode,
+use koharu_renderer::{RasterOptions, Renderer};
+use koharu_scene::{
+    AssetInput, AssetMetadata, AssetRole, At, Change, Geometry, PageDraft, Session, Snapshot,
 };
-use vello::{Scene, kurbo::Affine};
+use vello::Scene;
 
-const FONT_SIZE: f32 = 24.0;
-const SAMPLE_TEXT: &str = "The quick brown fox jumps over the lazy dog.";
+struct Fixture {
+    renderer: Renderer,
+    page: koharu_scene::EntityId,
+    snapshot: Snapshot,
+    moved: Snapshot,
+    change: Change,
+    frame: koharu_renderer::Frame,
+}
+
+fn png(width: u32, height: u32, color: [u8; 4]) -> Arc<[u8]> {
+    let image = image::RgbaImage::from_pixel(width, height, image::Rgba(color));
+    let mut bytes = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    bytes.into_inner().into()
+}
+
+async fn fixture() -> Fixture {
+    let mut session = Session::memory().await.unwrap();
+    let source = AssetRole::new("source").unwrap();
+    let mut ids = None;
+    let create = session
+        .snapshot()
+        .patch(|edit| {
+            let page = edit.add_page(PageDraft::new("bench", 512.0, 768.0), At::End)?;
+            edit.set_asset(
+                page,
+                &source,
+                AssetInput::new(
+                    png(512, 768, [240, 240, 240, 255]),
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(512),
+                        height: Some(768),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            let overlay = edit.add_entity(page, At::End)?;
+            edit.set(overlay, &Geometry::rectangle(40.0, 60.0, 256.0, 384.0))?;
+            edit.set_asset(
+                overlay,
+                &source,
+                AssetInput::new(
+                    png(256, 384, [40, 80, 120, 180]),
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(256),
+                        height: Some(384),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            ids = Some((page, overlay));
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(create).await.unwrap().snapshot;
+    let (page, overlay) = ids.unwrap();
+    let renderer = Renderer::new().unwrap();
+    let frame = renderer.render(&snapshot, page).await.unwrap();
+    let placement = snapshot
+        .patch(|edit| edit.set(overlay, &Geometry::rectangle(48.0, 64.0, 256.0, 384.0)))
+        .unwrap();
+    let commit = session.commit(placement).await.unwrap();
+    Fixture {
+        renderer,
+        page,
+        snapshot,
+        moved: commit.snapshot,
+        change: commit.changes,
+        frame,
+    }
+}
 
 fn rendering_benchmark(c: &mut Criterion) {
-    let mut fonts = FontSystem::new();
-    let text_renderer = TextRenderer::new();
-    let rasterizer = Rasterizer::new().expect("failed to create rasterizer");
-    let font = fonts.first_font().expect("failed to find font");
-    let layout = TextLayout::new(&font)
-        .with_font_size(FONT_SIZE)
-        .run(SAMPLE_TEXT)
-        .expect("failed to create layout");
-    let options = TextRenderOptions::default();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let fixture = runtime.block_on(fixture());
 
-    c.bench_function("layout", |b| {
+    c.bench_function("renderer/render_cold_512x768_2_layers", |b| {
         b.iter(|| {
-            let layout = TextLayout::new(&font)
-                .with_font_size(FONT_SIZE)
-                .run(black_box(SAMPLE_TEXT))
-                .expect("failed to create layout");
-            black_box(layout);
-        })
+            let renderer = Renderer::new().unwrap();
+            black_box(runtime.block_on(renderer.render(&fixture.snapshot, fixture.page))).unwrap();
+        });
     });
 
-    c.bench_function("render", |b| {
+    c.bench_function("renderer/render_retained_512x768_2_layers", |b| {
         b.iter(|| {
-            let mut scene = Scene::new();
-            text_renderer.render(
-                &mut scene,
-                &layout,
-                WritingMode::Horizontal,
-                &options,
-                Affine::IDENTITY,
-            );
-            let image = rasterizer
-                .rasterize_scene(
-                    &scene,
-                    layout.width.ceil() as u32,
-                    layout.height.ceil() as u32,
-                    [0, 0, 0, 0],
-                    RasterOptions::default(),
+            black_box(runtime.block_on(fixture.renderer.render(&fixture.snapshot, fixture.page)))
+                .unwrap();
+        });
+    });
+
+    let no_op = Change {
+        from: fixture.snapshot.revision(),
+        to: fixture.snapshot.revision(),
+        entities: Vec::new(),
+        hierarchy: Vec::new(),
+        components: Vec::new(),
+        relations: Vec::new(),
+    };
+    c.bench_function("renderer/update_noop_512x768_2_layers", |b| {
+        b.iter(|| {
+            black_box(runtime.block_on(fixture.renderer.update(
+                &fixture.frame,
+                &fixture.snapshot,
+                &no_op,
+            )))
+            .unwrap();
+        });
+    });
+
+    c.bench_function("renderer/update_placement_512x768_2_layers", |b| {
+        b.iter(|| {
+            black_box(runtime.block_on(fixture.renderer.update(
+                &fixture.frame,
+                &fixture.moved,
+                &fixture.change,
+            )))
+            .unwrap();
+        });
+    });
+
+    c.bench_function("frame/append_cached_512x768_2_layers", |b| {
+        let mut scene = Scene::new();
+        fixture.frame.append_to(&mut scene, None);
+        b.iter(|| {
+            let mut output = Scene::new();
+            fixture.frame.append_to(&mut output, None);
+            black_box(output);
+        });
+    });
+
+    if runtime
+        .block_on(
+            fixture
+                .renderer
+                .rasterize(&fixture.frame, RasterOptions::default()),
+        )
+        .is_ok()
+    {
+        c.bench_function("renderer/rasterize_warm_512x768_2_layers", |b| {
+            b.iter(|| {
+                black_box(
+                    runtime.block_on(
+                        fixture
+                            .renderer
+                            .rasterize(&fixture.frame, RasterOptions::default()),
+                    ),
                 )
-                .expect("failed to render");
-            black_box(image);
-        })
-    });
+                .unwrap();
+            });
+        });
+    }
 }
 
 criterion_group!(benches, rendering_benchmark);

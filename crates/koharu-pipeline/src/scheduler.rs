@@ -155,21 +155,7 @@ mod tests {
     use super::*;
 
     fn pages(count: usize) -> Vec<EntityId> {
-        let session = koharu_scene::Session::memory().unwrap();
-        let snapshot = session.snapshot();
-        let mut pages = Vec::new();
-        snapshot
-            .patch(|edit| {
-                for index in 0..count {
-                    pages.push(edit.add_page(
-                        koharu_scene::PageDraft::new(index.to_string(), 1.0, 1.0),
-                        koharu_scene::At::End,
-                    )?);
-                }
-                Ok(())
-            })
-            .unwrap();
-        pages
+        (0..count).map(|_| EntityId::new()).collect()
     }
 
     #[test]

@@ -8,11 +8,11 @@ use koharu_scene::{AssetRole, BlobId, EntityId, Snapshot};
 
 #[derive(Default)]
 pub(crate) struct ImageCache {
-    decoded: Mutex<HashMap<BlobId, Arc<image::DynamicImage>>>,
+    decoded: Mutex<HashMap<BlobId, Arc<tokio::sync::OnceCell<Arc<image::DynamicImage>>>>>,
 }
 
 impl ImageCache {
-    pub(crate) fn get(
+    pub(crate) async fn get(
         &self,
         scene: &Snapshot,
         entity: EntityId,
@@ -22,29 +22,31 @@ impl ImageCache {
         let Some(asset) = scene.asset(entity, &role)? else {
             return Ok(None);
         };
-        if let Some(image) = self
-            .decoded
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .get(&asset.blob)
-            .cloned()
-        {
-            return Ok(Some(image));
-        }
-
-        let bytes = scene.read_blob(asset.blob)?;
-        let image = Arc::new(image::load_from_memory(&bytes).with_context(|| {
-            format!(
-                "failed to decode {} image for entity {entity}",
-                role.as_str()
-            )
-        })?);
-        let image = self
+        let cell = self
             .decoded
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .entry(asset.blob)
-            .or_insert(image)
+            .or_default()
+            .clone();
+        let image = cell
+            .get_or_try_init(|| async {
+                let bytes = scene.read_blob(asset.blob).await?;
+                let role = role.clone();
+                tokio::task::spawn_blocking(move || {
+                    image::load_from_memory(&bytes)
+                        .map(Arc::new)
+                        .with_context(|| {
+                            format!(
+                                "failed to decode {} image for entity {entity}",
+                                role.as_str()
+                            )
+                        })
+                })
+                .await
+                .context("image decode worker stopped unexpectedly")?
+            })
+            .await?
             .clone();
         Ok(Some(image))
     }

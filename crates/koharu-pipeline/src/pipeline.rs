@@ -38,6 +38,7 @@ impl Pipeline {
         )
     }
 
+    #[tracing::instrument(skip_all)]
     pub fn from_config(
         config: Config<PipelineConfig>,
         providers: Config<koharu_translator::ProvidersConfig>,
@@ -83,6 +84,7 @@ impl Pipeline {
         self.resources.subscribe()
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn execute(
         &self,
         snapshot: Snapshot,

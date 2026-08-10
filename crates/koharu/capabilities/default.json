@@ -13,6 +13,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
     "core:window:allow-set-progress-bar",
+    "opener:default",
     "process:default",
     "updater:default"
   ]

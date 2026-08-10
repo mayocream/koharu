@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { resources } from '@/lib/i18n'
+import { orderedLanguageChoices } from '@/lib/translation'
 
 function keys(value: object, prefix = ''): string[] {
   return Object.entries(value).flatMap(([key, item]) => {
@@ -15,5 +16,26 @@ describe('native editor localization', () => {
     for (const [locale, resource] of Object.entries(resources)) {
       expect(keys(resource.translation.native).sort(), locale).toEqual(expected)
     }
+  })
+
+  it('orders language choices by their displayed name without mutating the source', () => {
+    const languages = [
+      { tag: 'ja-JP', name: 'Japanese' },
+      { tag: 'en-US', name: 'English' },
+      { tag: 'de-DE', name: 'German' },
+    ]
+
+    expect(orderedLanguageChoices(languages).map((language) => language.name)).toEqual([
+      'English',
+      'German',
+      'Japanese',
+    ])
+    expect(
+      orderedLanguageChoices(
+        languages,
+        (language) => ({ 'ja-JP': 'Alpha', 'en-US': 'Zulu', 'de-DE': 'Middle' })[language.tag]!,
+      ).map((language) => language.name),
+    ).toEqual(['Alpha', 'Middle', 'Zulu'])
+    expect(languages.map((language) => language.name)).toEqual(['Japanese', 'English', 'German'])
   })
 })

@@ -3,11 +3,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fmt,
-    future::Future,
-    sync::{
-        Arc, LazyLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, LazyLock},
 };
 
 use anyhow::{Context, Result, bail};
@@ -224,6 +220,7 @@ impl Font {
             .context("failed to create HarfRust font reference")
     }
 
+    #[cfg(test)]
     pub fn has_glyph(&self, character: char) -> bool {
         self.skrifa_ref()
             .is_ok_and(|font| font.charmap().map(character).is_some())
@@ -312,11 +309,6 @@ impl Font {
     /// Original font bytes for consumers that need a rasterizer other than Vello.
     pub fn data(&self) -> &[u8] {
         self.data.as_ref()
-    }
-
-    /// Face index within [`Self::data`], including font collections.
-    pub const fn face_index(&self) -> u32 {
-        self.index
     }
 }
 
@@ -533,6 +525,7 @@ impl FontSystem {
         .with_context(|| format!("no font found for family {family:?}"))
     }
 
+    #[cfg(test)]
     pub fn first_font(&mut self) -> Result<Font> {
         self.resolve(
             &[],
@@ -600,10 +593,16 @@ impl Default for FontSystem {
 }
 
 pub(crate) struct Fonts {
-    system: Mutex<FontSystem>,
+    system: OnceCell<Arc<Mutex<FontSystem>>>,
     catalog: OnceCell<Arc<FontCatalog>>,
     cache: Mutex<FontCache>,
-    generation: AtomicU64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct FontRequest {
+    pub(crate) family: String,
+    pub(crate) weight: Option<u16>,
+    pub(crate) style: Option<PublicFontStyle>,
 }
 
 pub(crate) enum FontPreview {
@@ -612,29 +611,28 @@ pub(crate) enum FontPreview {
 }
 
 impl Fonts {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            system: Mutex::new(FontSystem::new()),
+            system: OnceCell::new(),
             catalog: OnceCell::new(),
             cache: Mutex::new(FontCache::new(DEFAULT_FONT_CACHE_BYTES)),
-            generation: AtomicU64::new(0),
         }
     }
 
-    pub(crate) fn shared() -> Arc<Self> {
-        static FONTS: LazyLock<Arc<Fonts>> = LazyLock::new(|| Arc::new(Fonts::new()));
-        FONTS.clone()
-    }
-
-    pub(crate) fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
+    #[cfg(test)]
+    pub(crate) fn is_system_initialized(&self) -> bool {
+        self.system.get().is_some()
     }
 
     pub(crate) async fn families(&self) -> Result<Vec<FontFamily>> {
+        let system = self.ensure_system().await?;
         let catalog = self.catalog().await?;
         let mut families = BTreeMap::<String, FontFamily>::new();
 
-        for face in self.system.lock().system_faces() {
+        let faces = tokio::task::spawn_blocking(move || system.lock().system_faces())
+            .await
+            .context("system font discovery worker stopped unexpectedly")?;
+        for face in faces {
             let key = normalize(&face.family_name);
             let family = families.entry(key).or_insert_with(|| FontFamily {
                 name: face.family_name.clone(),
@@ -726,23 +724,17 @@ impl Fonts {
             };
         }
 
-        let bundled = if let Some(family) = families.first().filter(|family| {
-            self.system
-                .lock()
-                .collection
-                .family_by_name(family)
-                .is_none()
-        }) {
-            let catalog = match self.catalog.get() {
-                Some(catalog) => catalog.clone(),
-                None => block_on(self.catalog())?.clone(),
-            };
+        let system = self
+            .system
+            .get()
+            .context("font system was not prepared before shaping")?;
+        let bundled = if let Some(family) = families
+            .first()
+            .filter(|family| system.lock().collection.family_by_name(family).is_none())
+            && let Some(catalog) = self.catalog.get()
+        {
             if let Some(face) = catalog.select(family, attributes) {
-                let cached = self.cache.lock().get(&face.post_script_name);
-                match cached {
-                    Some(font) => Some(font),
-                    None => Some(block_on(self.load(face))?),
-                }
+                self.cache.lock().get(&face.post_script_name)
             } else {
                 None
             }
@@ -750,7 +742,7 @@ impl Fonts {
             None
         };
 
-        let mut resolved = self.system.lock().resolve_with_fallback_families(
+        let mut resolved = system.lock().resolve_with_fallback_families(
             &families,
             symbol_fallback_families(),
             attributes,
@@ -767,6 +759,7 @@ impl Fonts {
     }
 
     pub(crate) async fn preview(&self, family_name: &str) -> Result<FontPreview> {
+        let system = self.ensure_system().await?;
         let catalog = self.catalog().await?;
         if let Some(face) = catalog.select(family_name, Attributes::default()) {
             let path =
@@ -778,10 +771,63 @@ impl Fonts {
                 .with_context(|| format!("failed to read {}", path.display()))
                 .map(FontPreview::Webp);
         }
+        tokio::task::spawn_blocking({
+            let family_name = family_name.to_owned();
+            move || {
+                system
+                    .lock()
+                    .query_family(&family_name)
+                    .map(FontPreview::System)
+            }
+        })
+        .await
+        .context("font preview worker stopped unexpectedly")?
+    }
+
+    pub(crate) async fn prepare(&self, requests: &[FontRequest]) -> Result<()> {
+        if requests.is_empty() {
+            return Ok(());
+        }
+        let system = self.ensure_system().await?;
+        let missing = {
+            let mut system = system.lock();
+            requests
+                .iter()
+                .filter(|request| system.collection.family_by_name(&request.family).is_none())
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        if missing.is_empty() {
+            return Ok(());
+        }
+        let catalog = self.catalog().await?;
+        for request in missing {
+            let style = match request.style.unwrap_or(PublicFontStyle::Normal) {
+                PublicFontStyle::Normal => FontStyle::Normal,
+                PublicFontStyle::Italic => FontStyle::Italic,
+                PublicFontStyle::Oblique => FontStyle::Oblique(None),
+            };
+            let attributes = Attributes {
+                weight: fontique::FontWeight::new(f32::from(request.weight.unwrap_or(400))),
+                style,
+                ..Attributes::default()
+            };
+            if let Some(face) = catalog.select(&request.family, attributes) {
+                self.load(face).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn ensure_system(&self) -> Result<Arc<Mutex<FontSystem>>> {
         self.system
-            .lock()
-            .query_family(family_name)
-            .map(FontPreview::System)
+            .get_or_try_init(|| async {
+                tokio::task::spawn_blocking(|| Arc::new(Mutex::new(FontSystem::new())))
+                    .await
+                    .context("font-system worker stopped unexpectedly")
+            })
+            .await
+            .cloned()
     }
 
     async fn catalog(&self) -> Result<&Arc<FontCatalog>> {
@@ -794,15 +840,19 @@ impl Fonts {
                 let bytes = tokio::fs::read(&path)
                     .await
                     .with_context(|| format!("failed to read {}", path.display()))?;
-                let index: CatalogIndex =
-                    serde_json::from_slice(&bytes).context("invalid bundled font index")?;
-                if index.schema_version != FONT_INDEX_SCHEMA {
-                    bail!(
-                        "unsupported bundled font index schema {}",
-                        index.schema_version
-                    );
-                }
-                Ok(Arc::new(FontCatalog::from_index(index)))
+                tokio::task::spawn_blocking(move || {
+                    let index: CatalogIndex =
+                        serde_json::from_slice(&bytes).context("invalid bundled font index")?;
+                    if index.schema_version != FONT_INDEX_SCHEMA {
+                        bail!(
+                            "unsupported bundled font index schema {}",
+                            index.schema_version
+                        );
+                    }
+                    Ok(Arc::new(FontCatalog::from_index(index)))
+                })
+                .await
+                .context("font catalog worker stopped unexpectedly")?
             })
             .await
     }
@@ -821,19 +871,23 @@ impl Fonts {
         let data = tokio::fs::read(&path)
             .await
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let font = font_from_blob(
-            Blob::from(data),
-            &face,
-            Attributes {
-                weight: fontique::FontWeight::new(f32::from(face.weight)),
-                style: face.style.into(),
-                ..Attributes::default()
-            },
-        )?;
+        let face_for_worker = face.clone();
+        let font = tokio::task::spawn_blocking(move || {
+            font_from_blob(
+                Blob::from(data),
+                &face_for_worker,
+                Attributes {
+                    weight: fontique::FontWeight::new(f32::from(face_for_worker.weight)),
+                    style: face_for_worker.style.into(),
+                    ..Attributes::default()
+                },
+            )
+        })
+        .await
+        .context("font decode worker stopped unexpectedly")??;
         self.cache
             .lock()
             .insert(face.post_script_name.clone(), font.clone());
-        self.generation.fetch_add(1, Ordering::AcqRel);
         Ok(font)
     }
 }
@@ -879,31 +933,6 @@ fn font_from_blob(blob: Blob<u8>, face: &BundledFace, attributes: Attributes) ->
         fallback.get_or_insert(font);
     }
     fallback.with_context(|| format!("could not load bundled font {:?}", face.family_name))
-}
-
-fn block_on<F>(future: F) -> F::Output
-where
-    F: Future + Send,
-    F::Output: Send,
-{
-    static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .thread_name("koharu-fonts")
-            .enable_all()
-            .build()
-            .expect("the bundled font runtime must initialize")
-    });
-    if tokio::runtime::Handle::try_current().is_ok() {
-        std::thread::scope(|scope| {
-            scope
-                .spawn(|| RUNTIME.block_on(future))
-                .join()
-                .expect("the bundled font loader must not panic")
-        })
-    } else {
-        RUNTIME.block_on(future)
-    }
 }
 
 struct FontCatalog {

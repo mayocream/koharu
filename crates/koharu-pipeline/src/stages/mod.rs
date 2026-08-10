@@ -211,9 +211,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn translation_and_inpainting_compose_without_weakening_text_guards() {
-        let mut session = koharu_scene::Session::memory().unwrap();
+    #[tokio::test]
+    async fn translation_and_inpainting_compose_without_weakening_text_guards() {
+        let mut session = koharu_scene::Session::memory().await.unwrap();
         let mut setup = session.snapshot().edit();
         let page = setup
             .add_page(
@@ -238,7 +238,7 @@ mod tests {
                 asset(b"source"),
             )
             .unwrap();
-        session.commit(setup.finish().unwrap()).unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
         let base = session.snapshot();
 
         let mut text_edit = base.edit();

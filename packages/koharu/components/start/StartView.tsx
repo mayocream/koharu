@@ -20,6 +20,8 @@ import {
 } from '@koharu/ui/components/alert-dialog'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
+import { ScrollArea } from '@koharu/ui/components/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
 export function StartView() {
   const { t } = useTranslation()
@@ -85,11 +87,12 @@ export function StartView() {
         if (!open && busy === null) setProjectToDelete(null)
       }}
     >
-      <main className='min-h-0 flex-1 overflow-auto bg-[var(--surface-canvas)]'>
-        <section
-          className='mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-10 sm:px-10 sm:py-14'
-          aria-labelledby='start-title'
-        >
+      <main className='min-h-0 flex-1 overflow-hidden bg-[var(--surface-canvas)]'>
+        <ScrollArea className='size-full'>
+          <section
+            className='mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-10 sm:px-10 sm:py-14'
+            aria-labelledby='start-title'
+          >
           <header className='flex items-start justify-between gap-6'>
             <div>
               <h1 id='start-title' className='text-[24px] font-semibold tracking-[-0.03em]'>
@@ -99,17 +102,27 @@ export function StartView() {
                 Open a workspace or start a new translation.
               </p>
             </div>
-            <Button
-              type='button'
-              variant='ghost'
-              size='icon-sm'
-              className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
-              aria-label={t('native.menu.settings', { defaultValue: 'Settings' })}
-              title={t('native.menu.settings', { defaultValue: 'Settings' })}
-              onClick={() => setSettingsOpen(true)}
-            >
-              <Settings className='size-4' />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon-sm'
+                    className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
+                    aria-label={t('native.menu.settings', {
+                      defaultValue: 'Settings',
+                    })}
+                    onClick={() => setSettingsOpen(true)}
+                  />
+                }
+              >
+                <Settings className='size-4' />
+              </TooltipTrigger>
+              <TooltipContent side='bottom'>
+                {t('native.menu.settings', { defaultValue: 'Settings' })}
+              </TooltipContent>
+            </Tooltip>
           </header>
 
           <div className='mt-7 grid min-h-[390px] overflow-hidden rounded-2xl border border-border/80 bg-[var(--surface-panel)] md:grid-cols-[300px_minmax(0,1fr)]'>
@@ -165,7 +178,11 @@ export function StartView() {
                 </span>
               </header>
 
-              <div className='min-h-0 flex-1 overflow-y-auto p-2' aria-busy={busy === 'list'}>
+              <ScrollArea
+                className='min-h-0 flex-1'
+                viewportClassName='p-2'
+                aria-busy={busy === 'list'}
+              >
                 {busy === 'list' && projects.length === 0 ? (
                   <p className='grid min-h-full place-items-center text-[11px] text-muted-foreground'>
                     Loading projects…
@@ -225,10 +242,11 @@ export function StartView() {
                     ))}
                   </ul>
                 )}
-              </div>
+              </ScrollArea>
             </section>
           </div>
-        </section>
+          </section>
+        </ScrollArea>
       </main>
 
       <AlertDialogContent>

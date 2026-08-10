@@ -56,6 +56,7 @@ impl Codex {
         self.auth.account()
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn login_device<F>(&self, control: &Control, publish: F) -> Result<Account>
     where
         F: FnMut(LoginEvent),
@@ -67,6 +68,7 @@ impl Codex {
         self.auth.logout()
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn models(&self) -> Result<Vec<CodexModel>> {
         catalog::models(&self.client, &self.auth).await
     }

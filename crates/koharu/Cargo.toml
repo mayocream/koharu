@@ -17,8 +17,10 @@ alphanumeric-sort = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+clap = { workspace = true }
 console = { workspace = true }
 dirs = { workspace = true }
+futures = { workspace = true }
 image = { workspace = true }
 koharu-agent = { workspace = true }
 koharu-canvas = { workspace = true }
@@ -41,6 +43,7 @@ sentry = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 tauri = { workspace = true }
+tauri-plugin-opener = { workspace = true }
 tauri-plugin-process = { workspace = true }
 tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-updater = { workspace = true }

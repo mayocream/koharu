@@ -15,11 +15,14 @@ publish.workspace = true
 image = { workspace = true }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
-rayon = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 vello = { workspace = true }
 
 [dev-dependencies]
-anyhow = { workspace = true }
-pollster = { workspace = true }
-winit = { workspace = true }
+criterion = { workspace = true }
+tokio = { workspace = true }
+
+[[bench]]
+name = "hot_paths"
+harness = false

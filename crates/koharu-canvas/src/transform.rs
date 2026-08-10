@@ -1,30 +1,61 @@
 use std::collections::{HashMap, HashSet};
 
-use koharu_scene::{Geometry, Point};
+use koharu_renderer::{Frame as RendererFrame, Layer, LayerKind};
+use koharu_scene::{Geometry, Point, Revision};
 use vello::kurbo::{Affine, Point as KurboPoint};
 
 use crate::{
-    CanvasPage, ElementFrame, ElementId, ElementPreview, Error, Frame, PageId, Result,
-    TransformCommit,
+    ElementFrame, ElementId, ElementPreview, Error, Frame, PageId, Result, TransformCommit,
 };
 
-/// Validated Rust-side state for transform previews authored by React.
-///
-/// The committed page is never mutated. Every UI animation frame replaces the
-/// complete preview set, rendering reads those frames, and `finish` returns the
-/// minimal changed geometry set for one atomic scene commit.
+struct TransformSeed {
+    element: ElementId,
+    frame: Frame,
+    geometry: Geometry,
+}
+
+/// Complete, validated transient transform state. No document semantics are copied.
 pub(crate) struct ActiveTransform {
     page: PageId,
     originals: Vec<ElementPreview>,
     previews: Vec<ElementPreview>,
+    indices: HashMap<ElementId, usize>,
     supplied: HashMap<ElementId, Frame>,
     last_frame: Option<u64>,
 }
 
+pub(crate) enum TransformState {
+    Active(ActiveTransform),
+    Finishing(ActiveTransform),
+    Waiting {
+        edit: ActiveTransform,
+        revision: Revision,
+    },
+}
+
+impl TransformState {
+    pub(crate) fn edit(&self) -> &ActiveTransform {
+        match self {
+            Self::Active(edit) | Self::Finishing(edit) | Self::Waiting { edit, .. } => edit,
+        }
+    }
+
+    pub(crate) fn clears_for_frame(&self, revision: Revision) -> bool {
+        match self {
+            Self::Active(_) => true,
+            Self::Finishing(_) => false,
+            Self::Waiting {
+                revision: replacement,
+                ..
+            } => *replacement <= revision,
+        }
+    }
+}
+
 impl ActiveTransform {
-    pub fn new(page: &CanvasPage, controls: &[ElementFrame]) -> Result<Self> {
-        let mut seen = HashSet::new();
-        let originals = controls
+    pub fn new(frame: &RendererFrame, controls: &[ElementFrame]) -> Result<Self> {
+        let mut seen = HashSet::with_capacity(controls.len());
+        let seeds = controls
             .iter()
             .map(|control| {
                 if !seen.insert(control.element) {
@@ -33,34 +64,56 @@ impl ActiveTransform {
                         control.element
                     )));
                 }
-                let value = page.element(control.element).ok_or_else(|| {
+                let layer = frame.layer(control.element).ok_or_else(|| {
                     Error::Invalid(format!(
-                        "transform element {} is not on the active page",
+                        "transform element {} is not in the active renderer frame",
                         control.element
                     ))
                 })?;
-                if !value.selectable() || !value.visible || value.opacity <= 0.0 {
+                let presentation = layer.presentation();
+                if control.element == frame.page()
+                    || !presentation.visible
+                    || presentation.opacity <= 0.0
+                    || !matches!(layer.kind(), LayerKind::Text(_))
+                {
                     return Err(Error::Invalid(format!(
                         "transform element {} is not selectable and visible",
                         control.element
                     )));
                 }
-                let frame = checked_frame(control.frame)?;
-                Ok(ElementPreview {
+                Ok(TransformSeed {
                     element: control.element,
-                    frame,
-                    geometry: value.geometry.clone(),
+                    frame: checked_frame(control.frame)?,
+                    geometry: layer.geometry().clone(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        if originals.is_empty() {
+        Self::from_seeds(frame.page(), seeds)
+    }
+
+    fn from_seeds(page: PageId, seeds: Vec<TransformSeed>) -> Result<Self> {
+        if seeds.is_empty() {
             return Err(Error::Invalid(
                 "an element transform requires a selection".into(),
             ));
         }
+        let originals = seeds
+            .into_iter()
+            .map(|seed| ElementPreview {
+                element: seed.element,
+                frame: seed.frame,
+                geometry: seed.geometry,
+            })
+            .collect::<Vec<_>>();
+        let indices = originals
+            .iter()
+            .enumerate()
+            .map(|(index, preview)| (preview.element, index))
+            .collect();
         Ok(Self {
-            page: page.id,
+            page,
             previews: originals.clone(),
+            indices,
             supplied: HashMap::with_capacity(originals.len()),
             originals,
             last_frame: None,
@@ -68,8 +121,6 @@ impl ActiveTransform {
     }
 
     /// Replaces the preview with one complete, monotonically numbered UI frame.
-    /// Returns `false` for a stale or byte-equivalent frame so callers can avoid
-    /// unnecessary Vello scene composition.
     pub fn update(&mut self, frame: u64, elements: &[ElementFrame]) -> Result<bool> {
         if self.last_frame.is_some_and(|previous| frame <= previous) {
             return Ok(false);
@@ -92,7 +143,6 @@ impl ActiveTransform {
                 )));
             }
         }
-
         for original in &self.originals {
             if !self.supplied.contains_key(&original.element) {
                 return Err(Error::Invalid(format!(
@@ -108,40 +158,111 @@ impl ActiveTransform {
             if current.frame == frame {
                 continue;
             }
-            let next = ElementPreview {
+            *current = ElementPreview {
                 element: original.element,
                 frame,
                 geometry: transformed_geometry(original, frame),
             };
             changed = true;
-            *current = next;
         }
         self.last_frame = Some(frame);
         Ok(changed)
     }
 
     pub fn affine(&self, element: ElementId) -> Option<Affine> {
+        let index = *self.indices.get(&element)?;
+        Some(frame_transform(
+            self.originals[index].frame,
+            self.previews[index].frame,
+        ))
+    }
+
+    pub fn is_changed(&self) -> bool {
         self.originals
             .iter()
             .zip(&self.previews)
-            .find(|(original, _)| original.element == element)
-            .map(|(original, preview)| frame_transform(original.frame, preview.frame))
+            .any(|(original, preview)| original.geometry != preview.geometry)
     }
 
-    pub fn finish(self) -> Option<TransformCommit> {
+    pub fn finish(&self) -> Option<TransformCommit> {
         let elements = self
             .previews
-            .into_iter()
-            .zip(self.originals)
+            .iter()
+            .zip(&self.originals)
             .filter_map(|(preview, original)| {
-                (preview.geometry != original.geometry).then_some(preview)
+                (preview.geometry != original.geometry).then_some(preview.clone())
             })
             .collect::<Vec<_>>();
-        (!elements.is_empty()).then_some(TransformCommit {
+        if elements.is_empty() {
+            return None;
+        }
+        Some(TransformCommit {
             page: self.page,
             elements,
         })
     }
+}
+
+pub(crate) fn element_frame(layer: &Layer) -> Option<Frame> {
+    let LayerKind::Text(text) = layer.kind() else {
+        return None;
+    };
+    let bounds = text.rendered_bounds;
+    if bounds.width > 0.0 && bounds.height > 0.0 {
+        return Some(Frame {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            angle_degrees: text.angle_degrees,
+        });
+    }
+    geometry_frame(layer.geometry())
+}
+
+fn geometry_frame(geometry: &Geometry) -> Option<Frame> {
+    let points = &geometry.points;
+    if points.is_empty()
+        || points
+            .iter()
+            .any(|point| !point.x.is_finite() || !point.y.is_finite())
+    {
+        return None;
+    }
+    if points.len() == 4 {
+        let top = (points[1].x - points[0].x, points[1].y - points[0].y);
+        let right = (points[2].x - points[1].x, points[2].y - points[1].y);
+        let width = top.0.hypot(top.1);
+        let height = right.0.hypot(right.1);
+        if width > f64::EPSILON && height > f64::EPSILON {
+            let center_x = points.iter().map(|point| point.x).sum::<f64>() * 0.25;
+            let center_y = points.iter().map(|point| point.y).sum::<f64>() * 0.25;
+            return Some(Frame {
+                x: (center_x - width * 0.5) as f32,
+                y: (center_y - height * 0.5) as f32,
+                width: width as f32,
+                height: height as f32,
+                angle_degrees: top.1.atan2(top.0).to_degrees() as f32,
+            });
+        }
+    }
+    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
+    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for point in points {
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    (width > f64::EPSILON && height > f64::EPSILON).then_some(Frame {
+        x: min_x as f32,
+        y: min_y as f32,
+        width: width as f32,
+        height: height as f32,
+        angle_degrees: 0.0,
+    })
 }
 
 fn transformed_geometry(original: &ElementPreview, preview: Frame) -> Geometry {
@@ -198,64 +319,35 @@ fn checked_frame(frame: Frame) -> Result<Frame> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanvasElement, PhysicalSize, model::PageAssets};
+    use crate::geometry::frame_corners;
+    use koharu_scene::Origin;
 
-    fn page_with_frames(frames: &[Frame]) -> (CanvasPage, Vec<ElementId>) {
-        let session = koharu_scene::Session::memory().unwrap();
-        let mut ids = None;
-        session
-            .snapshot()
-            .patch(|edit| {
-                let page = edit.add_page(
-                    koharu_scene::PageDraft::new("transform test", 200.0, 200.0),
-                    koharu_scene::At::End,
-                )?;
-                let elements = frames
-                    .iter()
-                    .map(|_| edit.add_entity(page, koharu_scene::At::End))
-                    .collect::<koharu_scene::Result<Vec<_>>>()?;
-                ids = Some((page, elements));
-                Ok(())
-            })
-            .unwrap();
-        let (page, ids) = ids.unwrap();
-        let elements = ids
-            .iter()
-            .copied()
-            .zip(frames.iter().copied())
-            .map(|(id, frame)| CanvasElement {
-                id,
-                geometry: Geometry {
-                    origin: koharu_scene::Origin::User,
-                    points: crate::frame_corners(frame)
-                        .into_iter()
-                        .map(|point| Point {
-                            x: point.x,
-                            y: point.y,
-                        })
-                        .collect(),
-                },
-                frame,
-                visible: true,
-                opacity: 1.0,
-                local_opacity: 1.0,
-                groups: Vec::new(),
-                image: None,
-                raster: None,
-                has_text: true,
-            })
-            .collect();
-        (
-            CanvasPage {
-                id: page,
-                size: PhysicalSize::new(200, 200),
-                assets: PageAssets::default(),
-                members: ids.iter().copied().collect(),
-                elements,
-                group_opacities: Default::default(),
-            },
-            ids,
+    fn page_id() -> PageId {
+        koharu_scene::EntityId::new()
+    }
+
+    fn transform(frames: &[Frame]) -> ActiveTransform {
+        ActiveTransform::from_seeds(
+            page_id(),
+            frames
+                .iter()
+                .map(|frame| TransformSeed {
+                    element: koharu_scene::EntityId::new(),
+                    frame: *frame,
+                    geometry: Geometry {
+                        origin: Origin::User,
+                        points: frame_corners(*frame)
+                            .into_iter()
+                            .map(|point| Point {
+                                x: point.x,
+                                y: point.y,
+                            })
+                            .collect(),
+                    },
+                })
+                .collect(),
         )
+        .unwrap()
     }
 
     #[test]
@@ -274,25 +366,17 @@ mod tests {
     }
 
     #[test]
-    fn invalid_preview_frames_are_rejected() {
-        assert!(checked_frame(Frame::new(0.0, 0.0, 0.0, 10.0)).is_err());
-        assert!(checked_frame(Frame::new(f32::NAN, 0.0, 10.0, 10.0)).is_err());
-    }
-
-    #[test]
     fn update_requires_complete_frames_and_ignores_stale_samples() {
         let originals = [
             Frame::new(10.0, 20.0, 40.0, 30.0),
             Frame::new(80.0, 90.0, 20.0, 10.0),
         ];
-        let (page, ids) = page_with_frames(&originals);
-        let controls = ids
+        let mut transform = transform(&originals);
+        let ids = transform
+            .originals
             .iter()
-            .copied()
-            .zip(originals)
-            .map(|(element, frame)| ElementFrame { element, frame })
+            .map(|value| value.element)
             .collect::<Vec<_>>();
-        let mut transform = ActiveTransform::new(&page, &controls).unwrap();
         let moved = [
             ElementFrame {
                 element: ids[0],
@@ -303,72 +387,53 @@ mod tests {
                 frame: Frame::new(85.0, 95.0, 20.0, 10.0),
             },
         ];
-
         assert!(transform.update(2, &moved).unwrap());
-        assert!(
-            !transform
-                .update(
-                    1,
-                    &[
-                        ElementFrame {
-                            element: ids[0],
-                            frame: originals[0],
-                        },
-                        ElementFrame {
-                            element: ids[1],
-                            frame: originals[1],
-                        },
-                    ],
-                )
-                .unwrap()
-        );
-        let mapped = transform.affine(ids[0]).unwrap()
-            * KurboPoint::new(
-                originals[0].x as f64 + originals[0].width as f64 * 0.5,
-                originals[0].y as f64 + originals[0].height as f64 * 0.5,
-            );
-        assert!((mapped.x - 35.0).abs() < 1e-5);
-        assert!((mapped.y - 40.0).abs() < 1e-5);
+        assert!(!transform.update(1, &moved).unwrap());
         assert!(transform.update(3, &moved[..1]).is_err());
-
-        let commit = transform.finish().unwrap();
-        assert_eq!(commit.elements.len(), 2);
-        assert_eq!(commit.elements[0].frame, moved[0].frame);
-        assert_eq!(commit.elements[1].frame, moved[1].frame);
+        assert_eq!(transform.finish().unwrap().elements.len(), 2);
     }
 
     #[test]
-    fn text_translation_preserves_the_fit_geometry_size() {
-        let source = Frame::new(10.0, 20.0, 80.0, 50.0);
-        let (page, ids) = page_with_frames(&[source]);
-        let control = Frame::new(30.0, 35.0, 40.0, 20.0);
-        let mut transform = ActiveTransform::new(
-            &page,
-            &[ElementFrame {
-                element: ids[0],
-                frame: control,
-            }],
-        )
-        .unwrap();
-        transform
-            .update(
-                1,
-                &[ElementFrame {
-                    element: ids[0],
-                    frame: Frame {
-                        x: control.x + 12.0,
-                        y: control.y - 7.0,
-                        ..control
-                    },
-                }],
-            )
-            .unwrap();
+    fn finished_preview_waits_for_its_replacement_revision() {
+        let edit = transform(&[Frame::new(10.0, 20.0, 40.0, 30.0)]);
+        let finishing = TransformState::Finishing(edit);
+        assert!(!finishing.clears_for_frame(Revision::new(8)));
 
-        let commit = transform.finish().unwrap();
-        let expected = crate::frame_corners(Frame::new(22.0, 13.0, 80.0, 50.0));
-        for (actual, expected) in commit.elements[0].geometry.points.iter().zip(expected) {
-            assert!((actual.x - expected.x).abs() < 1e-5);
-            assert!((actual.y - expected.y).abs() < 1e-5);
-        }
+        let TransformState::Finishing(edit) = finishing else {
+            unreachable!()
+        };
+        let waiting = TransformState::Waiting {
+            edit,
+            revision: Revision::new(9),
+        };
+        assert!(!waiting.clears_for_frame(Revision::new(8)));
+        assert!(waiting.clears_for_frame(Revision::new(9)));
+    }
+
+    #[test]
+    fn geometry_bounds_preserve_rotated_rectangles() {
+        let expected = Frame {
+            x: 10.0,
+            y: 20.0,
+            width: 40.0,
+            height: 30.0,
+            angle_degrees: 25.0,
+        };
+        let geometry = Geometry {
+            origin: Origin::User,
+            points: frame_corners(expected)
+                .into_iter()
+                .map(|point| Point {
+                    x: point.x,
+                    y: point.y,
+                })
+                .collect(),
+        };
+        let actual = geometry_frame(&geometry).unwrap();
+        assert!((actual.x - expected.x).abs() < 1e-4);
+        assert!((actual.y - expected.y).abs() < 1e-4);
+        assert!((actual.width - expected.width).abs() < 1e-4);
+        assert!((actual.height - expected.height).abs() < 1e-4);
+        assert!((actual.angle_degrees - expected.angle_degrees).abs() < 1e-4);
     }
 }

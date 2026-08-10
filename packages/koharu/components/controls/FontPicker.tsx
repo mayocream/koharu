@@ -28,6 +28,7 @@ import {
   InputGroupInput,
 } from '@koharu/ui/components/input-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
+import { ScrollArea } from '@koharu/ui/components/scroll-area'
 import { Separator } from '@koharu/ui/components/separator'
 import { cn } from '@koharu/ui/lib/utils'
 
@@ -352,11 +353,12 @@ function FontList({
   })
 
   return (
-    <div
-      ref={list}
+    <ScrollArea
+      viewportRef={list}
       role='listbox'
       aria-label='Fonts'
-      className='relative overflow-x-hidden overflow-y-auto'
+      className='relative'
+      viewportClassName='overflow-x-hidden'
       style={{
         height:
           families.length === 0
@@ -401,7 +403,7 @@ function FontList({
           </EmptyTitle>
         </Empty>
       )}
-    </div>
+    </ScrollArea>
   )
 }
 

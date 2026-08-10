@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  LoaderCircle,
   Play,
   Settings,
   Sparkles,
@@ -14,6 +13,8 @@ import {
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
+import { ModelPicker } from '@/components/controls/ModelPicker'
+import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
 import { call, refreshTranslationModels } from '@/lib/backend'
 import {
   commands,
@@ -31,7 +32,7 @@ import { cn } from '@koharu/ui/lib/utils'
 export type PipelineScope = 'page' | 'selected-pages' | 'project'
 export const pipelineStages: readonly Stage[] = ['detection', 'ocr', 'translation', 'inpainting']
 
-type SelectorView = 'root' | 'model' | 'scope' | 'stages'
+type SelectorView = 'root' | 'model' | 'scope' | 'stages' | 'output'
 
 export function InferenceControl({
   onRun,
@@ -66,7 +67,10 @@ export function InferenceControl({
       <Button
         type='button'
         size='sm'
-        className='rounded-lg px-2.5 text-[11px]'
+        className={cn(
+          'rounded-lg px-2.5 text-[11px]',
+          !running && 'bg-primary/80 hover:bg-primary/90',
+        )}
         disabled={(disabled || unavailable) && !running}
         aria-label={running ? 'Stop AI processing' : 'Run AI processing'}
         onClick={running ? stop : () => onRun(scope, stages)}
@@ -97,15 +101,22 @@ function RuntimeSelector({
   const [view, setView] = useState<SelectorView>('root')
   const [loadingModels, setLoadingModels] = useState(false)
   const [savingModel, setSavingModel] = useState<string | null>(null)
+  const [savingOutput, setSavingOutput] = useState(false)
   const preferences = useKoharuStore((state) => state.preferences)
   const translationModels = useKoharuStore((state) => state.translationModels)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const model = preferences?.pipeline.translation.model ?? null
+  const translation = preferences?.pipeline.translation ?? null
   const providers = preferences?.providers.entries ?? []
+  const languages = preferences?.languages ?? []
   const choices = availableModels(model, translationModels, providers)
   const modelLabel =
     choices.find((choice) => model && modelKey(choice) === modelKey(model))?.name ??
     shortModelName(model)
+  const outputLabel =
+    languages.find((language) => language.tag === translation?.target_language)?.name ??
+    translation?.target_language ??
+    'Not set'
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
@@ -140,7 +151,6 @@ function RuntimeSelector({
     void call(commands.savePreferences, pipeline, preferences.providers)
       .then((saved) => {
         receivePreferences(saved)
-        setView('root')
       })
       .catch(() => undefined)
       .finally(() => setSavingModel(null))
@@ -149,6 +159,26 @@ function RuntimeSelector({
   const chooseScope = (next: PipelineScope) => {
     onScopeChange(next)
     setView('root')
+  }
+
+  const saveOutput = (draft: OutputDraft) => {
+    if (!preferences || !translation || savingOutput) return
+    setSavingOutput(true)
+    const pipeline = {
+      ...preferences.pipeline,
+      translation: {
+        ...translation,
+        target_language: draft.targetLanguage,
+        instructions: draft.instructions || null,
+      },
+    }
+    void call(commands.savePreferences, pipeline, preferences.providers)
+      .then((saved) => {
+        receivePreferences(saved)
+        setView('root')
+      })
+      .catch(() => undefined)
+      .finally(() => setSavingOutput(false))
   }
 
   const toggleStage = (stage: Stage) => {
@@ -167,7 +197,7 @@ function RuntimeSelector({
         type='button'
         aria-label='AI runtime selector'
         className={cn(
-          'flex h-6 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
+          'flex h-7 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
           running && 'text-foreground',
         )}
       >
@@ -183,7 +213,7 @@ function RuntimeSelector({
       <PopoverContent
         align='start'
         sideOffset={4}
-        className='w-64 gap-0 rounded-xl border border-border/50 p-1 shadow-sm ring-0'
+        className='w-64 min-w-0 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
       >
         {view === 'root' && (
           <div className='grid gap-0.5' aria-label='AI runtime shortcuts'>
@@ -194,6 +224,7 @@ function RuntimeSelector({
               value={stageSelectionLabel(stages)}
               onClick={() => setView('stages')}
             />
+            <SelectorRow label='Output' value={outputLabel} onClick={() => setView('output')} />
             <div className='my-1 border-t border-border/70' />
             <Button
               type='button'
@@ -211,50 +242,16 @@ function RuntimeSelector({
         )}
 
         {view === 'model' && (
-          <SelectorPanel title='Model' onBack={() => setView('root')}>
-            <div className='max-h-64 overflow-y-auto overscroll-contain'>
-              {choices.map((choice) => {
-                const key = modelKey(choice)
-                const selected = model ? key === modelKey(model) : false
-                return (
-                  <Button
-                    key={key}
-                    type='button'
-                    variant='ghost'
-                    aria-label={`Use ${choice.name} from ${providerName(providers, choice.provider)}`}
-                    aria-pressed={selected}
-                    disabled={running || Boolean(savingModel)}
-                    className='h-auto min-h-9 w-full justify-start gap-2 rounded-lg px-2 py-1 text-left font-normal hover:bg-primary/10'
-                    onClick={() => chooseModel(choice)}
-                  >
-                    <span className='min-w-0 flex-1'>
-                      <span className='block truncate text-[11px] text-foreground'>
-                        {choice.name}
-                      </span>
-                      <span className='block truncate text-[9px] text-muted-foreground'>
-                        {providerName(providers, choice.provider)}
-                      </span>
-                    </span>
-                    {savingModel === key ? (
-                      <LoaderCircle className='size-3.5 shrink-0 animate-spin text-primary' />
-                    ) : (
-                      selected && <Check className='size-3.5 shrink-0 text-primary' />
-                    )}
-                  </Button>
-                )
-              })}
-              {loadingModels && choices.length === 0 && (
-                <div className='flex h-20 items-center justify-center gap-2 text-[11px] text-muted-foreground'>
-                  <LoaderCircle className='size-3.5 animate-spin' /> Loading models…
-                </div>
-              )}
-              {!loadingModels && choices.length === 0 && (
-                <div className='px-2.5 py-5 text-center text-[11px] text-muted-foreground'>
-                  No configured models
-                </div>
-              )}
-            </div>
-          </SelectorPanel>
+          <ModelPicker
+            value={model}
+            models={choices}
+            providers={providers}
+            loading={loadingModels}
+            disabled={running}
+            busyModel={savingModel}
+            onBack={() => setView('root')}
+            onSelect={chooseModel}
+          />
         )}
 
         {view === 'scope' && (
@@ -316,6 +313,18 @@ function RuntimeSelector({
             />
           </SelectorPanel>
         )}
+
+        {view === 'output' && translation && (
+          <OutputPicker
+            targetLanguage={translation.target_language}
+            instructions={translation.instructions}
+            languages={languages}
+            disabled={running}
+            saving={savingOutput}
+            onBack={() => setView('root')}
+            onChange={saveOutput}
+          />
+        )}
       </PopoverContent>
     </Popover>
   )
@@ -335,11 +344,14 @@ function SelectorRow({
       type='button'
       variant='ghost'
       size='sm'
-      className='h-8 justify-start gap-3 rounded-lg px-2 text-[11px] font-normal hover:bg-primary/10'
+      aria-label={`${label} ${value}`}
+      className='h-8 min-w-0 justify-start gap-3 overflow-hidden rounded-lg px-2 text-[11px] font-normal hover:bg-primary/10'
       onClick={onClick}
     >
-      <span>{label}</span>
-      <span className='ml-auto max-w-40 truncate text-muted-foreground'>{value}</span>
+      <span className='shrink-0'>{label}</span>
+      <span className='ml-auto min-w-0 flex-1 truncate text-right text-muted-foreground'>
+        {value}
+      </span>
       <ChevronRight className='size-3.5 shrink-0 text-muted-foreground' />
     </Button>
   )
@@ -355,7 +367,7 @@ function SelectorPanel({
   children: ReactNode
 }) {
   return (
-    <div>
+    <div className='min-w-0 overflow-hidden'>
       <div className='mb-1 flex h-7 items-center border-b border-border/60 px-0.5 pb-1'>
         <Button
           type='button'
@@ -369,7 +381,7 @@ function SelectorPanel({
         </Button>
         <span className='ml-1 text-[11px] font-medium'>{title}</span>
       </div>
-      <div className='grid gap-0.5'>{children}</div>
+      <div className='grid min-w-0 gap-0.5 overflow-hidden'>{children}</div>
     </div>
   )
 }

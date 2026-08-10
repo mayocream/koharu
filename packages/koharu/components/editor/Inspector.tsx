@@ -70,6 +70,7 @@ import {
   SelectValue,
 } from '@koharu/ui/components/select'
 import { Slider } from '@koharu/ui/components/slider'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 
 const defaultFont: FontFamily = {
   name: 'CCWildWords',
@@ -133,7 +134,10 @@ function TypeInspector() {
   const selected =
     page?.layers.filter(isTextLayer).filter((layer) => expandedSelection.includes(layer.id)) ?? []
   const current = selected[0]
-  const [draft, setDraft] = useState<{ layer: EntityId; typography: Typography } | null>(null)
+  const [draft, setDraft] = useState<{
+    layer: EntityId
+    typography: Typography
+  } | null>(null)
   const updateSequence = useRef(0)
 
   useEffect(() => setDraft(null), [current?.id])
@@ -225,7 +229,11 @@ function TypeInspector() {
               autoFit={typography.auto_fit}
               onChange={(next) => apply((value) => ({ ...value, size: next, auto_fit: false }))}
               onAutoFit={() =>
-                apply((value) => ({ ...value, size: value.size ?? size, auto_fit: true }))
+                apply((value) => ({
+                  ...value,
+                  size: value.size ?? size,
+                  auto_fit: true,
+                }))
               }
             />
           </InspectorField>
@@ -234,7 +242,10 @@ function TypeInspector() {
               disabled={disabled}
               value={String(weight)}
               onValueChange={(font_weight) =>
-                apply((value) => ({ ...value, font_weight: Number(font_weight) }))
+                apply((value) => ({
+                  ...value,
+                  font_weight: Number(font_weight),
+                }))
               }
             >
               <SelectTrigger size='sm' aria-label='Font weight' className='w-full min-w-0'>
@@ -295,7 +306,10 @@ function TypeInspector() {
                   data-active={(typography.alignment ?? 'Center') === alignment}
                   className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
                   onClick={() =>
-                    apply((value) => ({ ...value, alignment: alignment as TextAlignment }))
+                    apply((value) => ({
+                      ...value,
+                      alignment: alignment as TextAlignment,
+                    }))
                   }
                 >
                   <Icon className='size-3' />
@@ -308,7 +322,10 @@ function TypeInspector() {
               disabled={disabled}
               value={typography.writing_mode ?? 'Horizontal'}
               onValueChange={(writing_mode) =>
-                apply((value) => ({ ...value, writing_mode: writing_mode as WritingMode }))
+                apply((value) => ({
+                  ...value,
+                  writing_mode: writing_mode as WritingMode,
+                }))
               }
             >
               <SelectTrigger size='sm' aria-label='Text direction' className='w-full'>
@@ -340,8 +357,7 @@ function TypeInspector() {
                       stroke_width: width > 0 ? width : 1.5,
                     }
                   }
-                  const [red, green, blue] =
-                    value.stroke_color ?? defaultTypography.stroke_color!
+                  const [red, green, blue] = value.stroke_color ?? defaultTypography.stroke_color!
                   return {
                     ...value,
                     stroke_color: [red, green, blue, 0],
@@ -657,14 +673,20 @@ function LayerRow({
             </span>
           )}
           {locked ? (
-            <span
-              role='img'
-              className='grid size-6 shrink-0 place-items-center text-muted-foreground'
-              aria-label={`${name} is locked`}
-              title='Locked'
-            >
-              <Lock className='size-3.5' />
-            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    role='img'
+                    className='grid size-6 shrink-0 place-items-center text-muted-foreground'
+                    aria-label={`${name} is locked`}
+                  />
+                }
+              >
+                <Lock className='size-3.5' />
+              </TooltipTrigger>
+              <TooltipContent side='left'>Locked</TooltipContent>
+            </Tooltip>
           ) : (
             <button
               type='button'
@@ -741,17 +763,23 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
           </span>
         </div>
         {onDelete && (
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon-xs'
-            aria-label={`Delete ${name}`}
-            title={`Delete ${name}`}
-            className='size-5 rounded-md text-muted-foreground hover:text-foreground'
-            onClick={onDelete}
-          >
-            <Trash2 className='size-3' />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon-xs'
+                  aria-label={`Delete ${name}`}
+                  className='size-5 rounded-md text-muted-foreground hover:text-foreground'
+                  onClick={onDelete}
+                />
+              }
+            >
+              <Trash2 className='size-3' />
+            </TooltipTrigger>
+            <TooltipContent side='left'>Delete {name}</TooltipContent>
+          </Tooltip>
         )}
       </div>
       {isTextLayer(layer) && (
@@ -764,18 +792,24 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
               {layer.geometry ? 'Custom frame' : layer.fit_region ? 'Auto fit' : 'Unplaced'}
             </span>
             {layer.geometry && layer.fit_region && (
-              <Button
-                type='button'
-                variant='ghost'
-                size='xs'
-                aria-label='Reset to auto fit'
-                title='Reset to auto fit'
-                className='ml-auto h-5 gap-1 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
-                onClick={resetTextFrame}
-              >
-                <RotateCcw className='size-3' />
-                Reset
-              </Button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='xs'
+                      aria-label='Reset to auto fit'
+                      className='ml-auto h-5 gap-1 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
+                      onClick={resetTextFrame}
+                    />
+                  }
+                >
+                  <RotateCcw className='size-3' />
+                  Reset
+                </TooltipTrigger>
+                <TooltipContent side='left'>Reset to auto fit</TooltipContent>
+              </Tooltip>
             )}
           </div>
           <InspectorField label='Source'>

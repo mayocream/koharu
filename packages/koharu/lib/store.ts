@@ -5,7 +5,6 @@ import { create } from 'zustand'
 import { toast } from '@koharu/ui/components/toast'
 
 import type {
-  CanvasPresentation,
   CanvasState,
   Download,
   EntityId,
@@ -39,26 +38,18 @@ interface KoharuStore {
   selectedPages: EntityId[]
   tool: CanvasTool
   brush: CanvasBrush
-  presentation: CanvasPresentation
   inspector: InspectorSection
   settingsOpen: boolean
   shortcuts: Shortcuts
   selectPages: (pages: EntityId[]) => void
   showInspector: (section: InspectorSection) => void
   setSettingsOpen: (open: boolean) => void
-  setPresentation: (presentation: CanvasPresentation) => void
   selectLayers: (layers: EntityId[]) => void
   setTool: (tool: CanvasTool) => void
   setBrush: (brush: CanvasBrush) => void
   setShortcut: (action: ShortcutAction, key: string) => void
   dismissJob: (id: string) => void
   dismissDownload: (id: number) => void
-}
-
-export const defaultPresentation: CanvasPresentation = {
-  image: 'source',
-  show_text: true,
-  text_mask: null,
 }
 
 export const defaultShortcuts: Shortcuts = {
@@ -85,14 +76,12 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   selectedPages: [],
   tool: 'select',
   brush: { diameter: 48, color: '#111111' },
-  presentation: defaultPresentation,
   inspector: 'copy',
   settingsOpen: false,
   shortcuts: defaultShortcuts,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
   showInspector: (inspector) => set({ inspector }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
-  setPresentation: (presentation) => set({ presentation }),
   selectLayers: (selectedLayers) => set({ selectedLayers: [...new Set(selectedLayers)] }),
   setTool: (tool) => set({ tool }),
   setBrush: (brush) => set({ brush }),

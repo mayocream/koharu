@@ -146,6 +146,7 @@ where
         self.history.lock().await.clear();
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn run<F>(
         &self,
         run: RunId,

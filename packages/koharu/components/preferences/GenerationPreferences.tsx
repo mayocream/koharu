@@ -4,9 +4,9 @@ import {
   NumberField,
   PreferenceRow,
   PreferenceSection,
-  ToggleField,
 } from '@/components/preferences/PreferenceFields'
 import type { GenerationConfig } from '@/lib/protocol'
+import { Switch } from '@koharu/ui/components/switch'
 
 export function GenerationPreferences({
   value,
@@ -86,11 +86,13 @@ export function GenerationPreferences({
         title='Thinking'
         description='Ask reasoning-capable models to use their thinking mode.'
       >
-        <ToggleField
-          label='Enable thinking'
-          value={value.thinking ?? false}
-          onChange={(thinking) => update({ thinking })}
-        />
+        <div className='flex h-8 items-center justify-end'>
+          <Switch
+            aria-label='Enable thinking'
+            checked={value.thinking ?? false}
+            onCheckedChange={(thinking) => update({ thinking })}
+          />
+        </div>
       </PreferenceRow>
     </PreferenceSection>
   )

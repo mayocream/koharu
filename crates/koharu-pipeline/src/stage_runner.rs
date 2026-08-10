@@ -33,6 +33,7 @@ impl StageRunner {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     pub(crate) async fn run(&self, job: StageJob) -> StageCompletion {
         let started = Instant::now();
         let page = job.input.page();

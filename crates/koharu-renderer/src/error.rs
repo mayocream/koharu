@@ -8,8 +8,8 @@ pub enum Error {
     #[error(transparent)]
     Scene(#[from] koharu_scene::Error),
 
-    #[error("invalid render request: {0}")]
-    InvalidRequest(String),
+    #[error("invalid renderer input: {0}")]
+    InvalidInput(String),
 
     #[error("failed to decode image blob {blob}")]
     Image {
@@ -41,6 +41,6 @@ pub enum Error {
 
 impl Error {
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
-        Self::InvalidRequest(message.into())
+        Self::InvalidInput(message.into())
     }
 }

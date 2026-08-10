@@ -103,21 +103,30 @@ export function ToolBar() {
 }
 
 function BrushSize({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const roundedValue = Math.round(value)
+
   return (
     <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon'
-            aria-label='Brush size'
-            className='text-[9px] font-semibold text-muted-foreground tabular-nums hover:bg-foreground/[0.06] hover:text-foreground'
-          />
-        }
-      >
-        {Math.round(value)}
-      </PopoverTrigger>
+      <Tooltip>
+        <PopoverTrigger
+          render={
+            <TooltipTrigger
+              render={
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  aria-label={`Brush size: ${roundedValue} pixels`}
+                  className='size-8 rounded-xl font-sans text-[11px] leading-none font-medium tracking-[-0.02em] text-muted-foreground tabular-nums hover:bg-foreground/[0.06] hover:text-foreground'
+                />
+              }
+            >
+              {roundedValue}
+            </TooltipTrigger>
+          }
+        />
+        <TooltipContent side='right'>Brush size: {roundedValue} px</TooltipContent>
+      </Tooltip>
       <PopoverContent
         side='right'
         align='center'
@@ -130,7 +139,7 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
             min={1}
             max={MAX_BRUSH_DIAMETER}
             step={1}
-            value={Math.round(value)}
+            value={roundedValue}
             className='w-20'
             onValueChange={(next) => {
               if (next !== null) onChange(clamp(next, 1, MAX_BRUSH_DIAMETER))

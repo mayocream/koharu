@@ -1,5 +1,9 @@
 'use client'
 
+import { ChevronDown } from 'lucide-react'
+import { useMemo, useState } from 'react'
+
+import { ModelPicker } from '@/components/controls/ModelPicker'
 import { GenerationPreferences } from '@/components/preferences/GenerationPreferences'
 import {
   PreferencePage,
@@ -12,8 +16,9 @@ import type {
   ProviderPreference,
   TranslationConfig as TranslationSettings,
 } from '@/lib/protocol'
-import { modelKey, providerName } from '@/lib/translation'
+import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
 import { Badge } from '@koharu/ui/components/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {
   Select,
   SelectContent,
@@ -38,6 +43,7 @@ export function TranslationPreferences({
   locale: string
   onChange: (value: TranslationSettings) => void
 }) {
+  const [modelOpen, setModelOpen] = useState(false)
   const selected =
     modelChoices.find((candidate) => modelKey(candidate) === modelKey(value.model)) ?? null
   const current: Model = selected ?? {
@@ -48,7 +54,14 @@ export function TranslationPreferences({
   }
   const choices = selected ? modelChoices : [current, ...modelChoices]
   const quantizations = current.quantizations
-  const displayNames = new Intl.DisplayNames([locale], { type: 'language' })
+  const languagesByName = useMemo(() => {
+    const displayNames = new Intl.DisplayNames([locale], { type: 'language' })
+    return orderedLanguageChoices(
+      languages,
+      (language) => displayNames.of(language.tag) ?? language.name,
+      locale,
+    )
+  }, [languages, locale])
   return (
     <PreferencePage
       title='Translation'
@@ -59,34 +72,41 @@ export function TranslationPreferences({
         description='Provider labels identify where each model runs; connections are configured separately.'
       >
         <PreferenceRow title='Translation model'>
-          <Select
-            value={modelKey(value.model)}
-            onValueChange={(key) => {
-              const model = choices.find((candidate) => modelKey(candidate) === key)
-              if (!model) return
-              onChange({
-                ...value,
-                model: {
-                  provider: model.provider,
-                  model: model.model,
-                  quantization: model.quantizations[0]?.id ?? null,
-                },
-              })
-            }}
-          >
-            <SelectTrigger aria-label='Translation model' className='h-9 w-full text-[11px]'>
-              <SelectValue placeholder='Select a configured model'>
+          <Popover open={modelOpen} onOpenChange={setModelOpen}>
+            <PopoverTrigger
+              type='button'
+              aria-label='Translation model'
+              className='flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-[11px] transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
+            >
+              <span className='min-w-0 flex-1 text-left'>
                 <ModelLabel model={current} providers={providers} />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {choices.map((model) => (
-                <SelectItem key={modelKey(model)} value={modelKey(model)}>
-                  <ModelLabel model={model} providers={providers} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              </span>
+              <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
+            </PopoverTrigger>
+            <PopoverContent
+              align='start'
+              sideOffset={4}
+              className='w-(--anchor-width) min-w-64 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
+            >
+              <ModelPicker
+                value={value.model}
+                models={choices}
+                providers={providers}
+                onBack={() => setModelOpen(false)}
+                onSelect={(model) => {
+                  onChange({
+                    ...value,
+                    model: {
+                      provider: model.provider,
+                      model: model.model,
+                      quantization: model.quantizations[0]?.id ?? null,
+                    },
+                  })
+                  setModelOpen(false)
+                }}
+              />
+            </PopoverContent>
+          </Popover>
         </PreferenceRow>
         {quantizations.length > 0 && (
           <PreferenceRow
@@ -124,10 +144,7 @@ export function TranslationPreferences({
           <Select
             value={value.target_language}
             items={Object.fromEntries(
-              languages.map((language) => [
-                language.tag,
-                displayNames.of(language.tag) ?? language.name,
-              ]),
+              languagesByName.map((language) => [language.tag, language.name]),
             )}
             onValueChange={(target_language) =>
               target_language && onChange({ ...value, target_language })
@@ -137,9 +154,9 @@ export function TranslationPreferences({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {languages.map((language) => (
+              {languagesByName.map((language) => (
                 <SelectItem key={language.tag} value={language.tag}>
-                  {displayNames.of(language.tag) ?? language.name}
+                  {language.name}
                 </SelectItem>
               ))}
             </SelectContent>

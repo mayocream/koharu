@@ -13,6 +13,55 @@ use crate::{
     state::{Components, State},
 };
 
+macro_rules! component_schema {
+    ($($mask:ident = $bit:literal => $component:ty),+ $(,)?) => {
+        $(const $mask: u32 = 1 << $bit;)+
+
+        fn component_mask(kind: &str) -> u32 {
+            $(if kind == <$component as Component>::KIND {
+                return $mask;
+            })+
+            0
+        }
+
+        fn validate_component(
+            kind: &str,
+            raw: &ComponentRecord,
+            context: &ValidationContext<'_>,
+        ) -> Result<()> {
+            $(if kind == <$component as Component>::KIND {
+                decode::<$component>(raw, context)?;
+                return Ok(());
+            })+
+            // Extension components remain open-ended. Their owning crate is
+            // responsible for decoding them; the kernel still preserves their
+            // revision, references, and fingerprints.
+            Ok(())
+        }
+    };
+}
+
+component_schema! {
+    PROJECT = 0 => Project,
+    PAGE = 1 => Page,
+    GROUP = 2 => Group,
+    TEXT_GROUP = 3 => TextGroup,
+    GEOMETRY = 4 => Geometry,
+    RASTER_LAYER = 5 => RasterLayer,
+    VISIBILITY = 6 => Visibility,
+    SOURCE_TEXT = 7 => SourceText,
+    TEXT_CONTENT = 8 => TextContent,
+    TEXT_LAYOUT = 9 => TextLayout,
+    OCR_ANALYSIS = 10 => OcrAnalysis,
+    TRANSLATION = 11 => Translation,
+    TEXT_ROLE = 12 => TextRole,
+    TYPOGRAPHY = 13 => Typography,
+    REGION = 14 => Region,
+    DETECTION_ANALYSIS = 15 => DetectionAnalysis,
+    ASSETS = 16 => Assets,
+    ENTITY_ORIGIN = 17 => EntityOrigin,
+}
+
 pub(crate) fn validate_components(
     components: &Components,
     context: &ValidationContext<'_>,
@@ -25,31 +74,35 @@ pub(crate) fn validate_components(
 
 pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
     let entity = state.entity(id)?;
-    let has = |kind: &str| entity.components.iter().any(|(key, _)| key.kind == kind);
-    let has_source = has(SourceText::KIND);
-    let has_content = has(TextContent::KIND);
-    let has_translation = has(Translation::KIND);
-    let has_region = has(Region::KIND);
-    let has_geometry = has(Geometry::KIND);
-    let has_raster = has(RasterLayer::KIND);
-    let has_assets = has(Assets::KIND);
-    let has_layout = has(TextLayout::KIND);
-    let has_typography = has(Typography::KIND);
-    let has_detection = has(DetectionAnalysis::KIND);
-    let has_ocr = has(OcrAnalysis::KIND);
-    let has_group = has(Group::KIND);
-    let has_text_group = has(TextGroup::KIND);
+    let kinds = entity
+        .components
+        .iter()
+        .fold(0, |kinds, (key, _)| kinds | component_mask(&key.kind));
+    let has = |component| kinds & component != 0;
+    let has_source = has(SOURCE_TEXT);
+    let has_content = has(TEXT_CONTENT);
+    let has_translation = has(TRANSLATION);
+    let has_region = has(REGION);
+    let has_geometry = has(GEOMETRY);
+    let has_raster = has(RASTER_LAYER);
+    let has_assets = has(ASSETS);
+    let has_layout = has(TEXT_LAYOUT);
+    let has_typography = has(TYPOGRAPHY);
+    let has_detection = has(DETECTION_ANALYSIS);
+    let has_ocr = has(OCR_ANALYSIS);
+    let has_group = has(GROUP);
+    let has_text_group = has(TEXT_GROUP);
     let parent = state.parent_and_position(id)?.0;
     let parent_is_text_group = parent.is_some_and(|parent| {
         state.entity(parent).is_ok_and(|entity| {
             entity
                 .components
                 .iter()
-                .any(|(key, _)| key.kind == TextGroup::KIND)
+                .any(|(key, _)| component_mask(&key.kind) == TEXT_GROUP)
         })
     });
 
-    if (has_source || has_translation || has(TextRole::KIND)) && !has_content {
+    if (has_source || has_translation || has(TEXT_ROLE)) && !has_content {
         Err(Error::invalid(format!(
             "entity {id} carries text content data but is not text content"
         )))
@@ -62,7 +115,7 @@ pub(crate) fn validate_entity(state: &State, id: EntityId) -> Result<()> {
             "text group {id} does not carry the group component"
         )))
     } else if has_group
-        && (has(Page::KIND)
+        && (has(PAGE)
             || has_content
             || has_region
             || has_geometry
@@ -227,38 +280,4 @@ fn is_functional(kind: &crate::RelationKind) -> bool {
             | <crate::RecognizedFrom as crate::RelationSpec>::KIND
             | <crate::FitsTo as crate::RelationSpec>::KIND
     )
-}
-
-fn validate_component(
-    kind: &str,
-    raw: &ComponentRecord,
-    context: &ValidationContext<'_>,
-) -> Result<()> {
-    macro_rules! validate {
-        ($type:ty) => {
-            if kind == <$type as Component>::KIND {
-                decode::<$type>(raw, context)?;
-                return Ok(());
-            }
-        };
-    }
-    validate!(Project);
-    validate!(Page);
-    validate!(Group);
-    validate!(TextGroup);
-    validate!(Geometry);
-    validate!(RasterLayer);
-    validate!(Visibility);
-    validate!(SourceText);
-    validate!(TextContent);
-    validate!(TextLayout);
-    validate!(OcrAnalysis);
-    validate!(Translation);
-    validate!(TextRole);
-    validate!(Typography);
-    validate!(Region);
-    validate!(DetectionAnalysis);
-    validate!(Assets);
-    validate!(EntityOrigin);
-    Ok(())
 }

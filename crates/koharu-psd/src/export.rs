@@ -9,10 +9,8 @@
 //! GIMP reference: merged image data and Photoshop white matte:
 //! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-export.c#L2252-L2378
 
-use std::io::Write;
-
 use image::RgbaImage;
-use koharu_renderer::{Frame, RasterOptions, Rasterizer};
+use koharu_renderer::{Frame, RasterOptions, Renderer};
 use koharu_scene::Snapshot;
 
 use crate::{
@@ -26,36 +24,19 @@ use crate::{
     writer::PsdWriter,
 };
 
-pub fn export_page(
+#[tracing::instrument(skip_all)]
+pub async fn export_page(
+    renderer: &Renderer,
     snapshot: &Snapshot,
     frame: &Frame,
-    rasterizer: &Rasterizer,
-    raster_options: RasterOptions,
     options: &PsdExportOptions,
 ) -> Result<Vec<u8>, PsdExportError> {
-    let mut bytes = Vec::new();
-    write_page(
-        &mut bytes,
-        snapshot,
-        frame,
-        rasterizer,
-        raster_options,
-        options,
-    )?;
-    Ok(bytes)
-}
-
-pub fn write_page<W: Write>(
-    mut output: W,
-    snapshot: &Snapshot,
-    frame: &Frame,
-    rasterizer: &Rasterizer,
-    raster_options: RasterOptions,
-    options: &PsdExportOptions,
-) -> Result<(), PsdExportError> {
-    let document = crate::document::build(snapshot, frame, rasterizer, raster_options, options)?;
-    output.write_all(&serialize(&document)?)?;
-    Ok(())
+    let document =
+        crate::document::build(snapshot, frame, renderer, RasterOptions::default(), options)
+            .await?;
+    tokio::task::spawn_blocking(move || serialize(&document))
+        .await
+        .map_err(|error| PsdExportError::Task(error.to_string()))?
 }
 
 fn serialize(document: &Document) -> Result<Vec<u8>, PsdExportError> {

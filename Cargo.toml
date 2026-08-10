@@ -95,7 +95,6 @@ imbl = "7.0.1"
 hashbrown = "0.17.1"
 slotmap = "1.1.1"
 smallvec = "1.15.2"
-rocksdb = { version = "0.24.0", default-features = false, features = ["lz4", "mt_static", "multi-threaded-cf"] }
 revision = { version = "0.30.0", features = ["uuid"] }
 flate2 = { version = "1.0", features = [
     "zlib-ng-compat",
@@ -149,11 +148,11 @@ tauri = { version = "=2.11.5", features = [
     "dynamic-acl",
     "macos-private-api",
     "specta",
-    "tracing",
     "wry",
     "x11",
 ] }
 tauri-build = "=2.6.3"
+tauri-plugin-opener = "=2.5.4"
 tauri-plugin-process = "=2.3.1"
 tauri-plugin-single-instance = "=2.4.3"
 tauri-plugin-updater = "=2.10.1"

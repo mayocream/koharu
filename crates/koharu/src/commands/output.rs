@@ -1,15 +1,14 @@
-use std::fs;
-
 use anyhow::{Context as _, Result};
+use futures::{StreamExt as _, TryStreamExt as _, stream};
 use koharu_psd::{PsdExportOptions, export_page};
-use koharu_renderer::{Compositor, RasterOptions, Rasterizer, RenderRequest, SceneRenderer};
+use koharu_renderer::{RasterOptions, Renderer};
 use koharu_scene::{AssetRole, EntityId, Snapshot};
-use rayon::prelude::*;
 use serde::Deserialize;
 use specta::Type;
 use tauri::{State, WebviewWindow, ipc::IpcResponse};
 
 use super::{Error, project::CurrentProject};
+use crate::desktop::Desktop;
 
 const THUMBNAIL_EDGE: u32 = 128;
 
@@ -37,11 +36,11 @@ pub(crate) async fn export_pages(
     pages: Vec<EntityId>,
     format: ExportFormat,
     project: State<'_, CurrentProject>,
+    desktop: State<'_, Desktop>,
 ) -> std::result::Result<(), Error> {
     let snapshot = {
-        let project = project.project.lock();
+        let project = project.project.lock().await;
         let project = project.as_ref().context("no project is open")?;
-        project.flush()?;
         project.snapshot()
     };
     let Some(directory) = rfd::AsyncFileDialog::new()
@@ -60,17 +59,12 @@ pub(crate) async fn export_pages(
     if pages.is_empty() {
         return Err(anyhow::anyhow!("there are no pages to export").into());
     }
-    let compositor = Compositor::new();
-    let renderer = SceneRenderer::new();
-    let rasterizer = Rasterizer::new().context("failed to initialize the export rasterizer")?;
-    let options = RasterOptions::default();
-    pages
-        .into_par_iter()
+    let renderer = desktop.renderer();
+    let jobs = pages
+        .into_iter()
         .enumerate()
-        .try_for_each(|(index, page_id)| -> Result<()> {
+        .map(|(index, page_id)| {
             let page = snapshot.page(page_id)?.page()?;
-            let composition = compositor.compile(&snapshot, &RenderRequest::new(page_id))?;
-            let frame = renderer.render(&snapshot, &composition)?;
             let name = page
                 .label
                 .trim()
@@ -94,24 +88,41 @@ pub(crate) async fn export_pages(
                 index + 1,
                 if name.is_empty() { "page" } else { &name }
             );
-            match format {
-                ExportFormat::Png => rasterizer
-                    .rasterize(&frame, options)?
-                    .image
-                    .save(directory.join(format!("{stem}.png")))?,
-                ExportFormat::Psd => {
-                    let bytes = export_page(
-                        &snapshot,
-                        &frame,
-                        &rasterizer,
-                        options,
-                        &PsdExportOptions::default(),
-                    )?;
-                    fs::write(directory.join(format!("{stem}.psd")), bytes)?;
+            Ok::<_, anyhow::Error>((page_id, stem))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    stream::iter(jobs)
+        .map(|(page_id, stem)| {
+            let renderer = renderer.clone();
+            let snapshot = snapshot.clone();
+            let directory = directory.clone();
+            async move {
+                let frame = renderer.render(&snapshot, page_id).await?;
+                match format {
+                    ExportFormat::Png => {
+                        let image = renderer
+                            .rasterize(&frame, RasterOptions::default())
+                            .await?
+                            .image;
+                        tokio::task::spawn_blocking(move || {
+                            image.save(directory.join(format!("{stem}.png")))
+                        })
+                        .await
+                        .context("PNG export worker stopped unexpectedly")??;
+                    }
+                    ExportFormat::Psd => {
+                        let bytes =
+                            export_page(&renderer, &snapshot, &frame, &PsdExportOptions::default())
+                                .await?;
+                        tokio::fs::write(directory.join(format!("{stem}.psd")), bytes).await?;
+                    }
                 }
+                Ok::<_, anyhow::Error>(())
             }
-            Ok(())
-        })?;
+        })
+        .buffer_unordered(4)
+        .try_collect::<Vec<_>>()
+        .await?;
     Ok(())
 }
 
@@ -124,6 +135,7 @@ pub(crate) async fn get_thumbnail(
     let snapshot = project
         .project
         .lock()
+        .await
         .as_ref()
         .context("no project is open")?
         .snapshot();
@@ -132,8 +144,8 @@ pub(crate) async fn get_thumbnail(
         .asset(page, &AssetRole::new("source")?)?
         .with_context(|| format!("page {page} has no source image"))?
         .blob;
+    let bytes = snapshot.read_blob(blob).await?;
     let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
-        let bytes = snapshot.read_blob(blob)?;
         let image = image::load_from_memory(&bytes).context("failed to decode source image")?;
         if image.width() == 0 || image.height() == 0 {
             return Err(anyhow::anyhow!("source image is empty"));
@@ -147,18 +159,24 @@ pub(crate) async fn get_thumbnail(
     Ok(ThumbnailBytes(bytes))
 }
 
-pub(crate) fn rendered_preview(snapshot: &Snapshot, page: EntityId) -> Result<Vec<u8>> {
+pub(crate) async fn rendered_preview(
+    renderer: &Renderer,
+    snapshot: &Snapshot,
+    page: EntityId,
+) -> Result<Vec<u8>> {
     snapshot.page(page)?;
-    let composition = Compositor::new().compile(snapshot, &RenderRequest::new(page))?;
-    let frame = SceneRenderer::new().render(snapshot, &composition)?;
-    let rasterizer = Rasterizer::new().context("failed to initialize the preview rasterizer")?;
-    let image = image::DynamicImage::ImageRgba8(
-        rasterizer
-            .rasterize(&frame, RasterOptions::default())?
-            .image,
-    )
-    .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
-    .to_rgba8();
-    let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
-    Ok(encoder.encode(85.0).to_vec())
+    let frame = renderer.render(snapshot, page).await?;
+    let image = renderer
+        .rasterize(&frame, RasterOptions::default())
+        .await?
+        .image;
+    tokio::task::spawn_blocking(move || {
+        let image = image::DynamicImage::ImageRgba8(image)
+            .resize(1024, 1024, image::imageops::FilterType::Lanczos3)
+            .to_rgba8();
+        let encoder = webp::Encoder::from_rgba(image.as_raw(), image.width(), image.height());
+        Ok::<_, anyhow::Error>(encoder.encode(85.0).to_vec())
+    })
+    .await
+    .context("preview encode worker stopped unexpectedly")?
 }

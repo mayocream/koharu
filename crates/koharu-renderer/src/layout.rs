@@ -42,14 +42,12 @@ pub enum WritingMode {
     Horizontal,
     /// Vertical text, right-to-left columns (traditional CJK).
     VerticalRl,
-    /// Vertical text, left-to-right columns.
-    VerticalLr,
 }
 
 impl WritingMode {
     /// Returns true if the writing mode is vertical.
     pub const fn is_vertical(self) -> bool {
-        matches!(self, WritingMode::VerticalRl | WritingMode::VerticalLr)
+        matches!(self, WritingMode::VerticalRl)
     }
 }
 
@@ -64,8 +62,6 @@ pub struct LayoutLine<'a> {
     pub advance: f32,
     /// Baseline position for this line (x, y).
     pub baseline: (f32, f32),
-    /// Writing direction of this line.
-    pub direction: harfrust::Direction,
 }
 
 /// A collection of laid out lines.
@@ -292,27 +288,8 @@ impl<'a> TextLayout<'a> {
     }
 
     #[must_use]
-    pub fn with_center_vertical_punctuation(mut self, enabled: bool) -> Self {
-        self.center_vertical_punctuation = enabled;
-        self
-    }
-
-    #[must_use]
-    pub fn with_hyphenation_language(mut self, lang: Lang) -> Self {
-        self.hyphenation_lang = Some(lang);
-        self
-    }
-
-    #[must_use]
     pub fn with_hyphenation_language_tag(mut self, tag: &str) -> Self {
         self.hyphenation_lang = hyphenation_lang_from_tag(tag);
-        self
-    }
-
-    #[must_use]
-    pub fn without_hyphenation(mut self) -> Self {
-        self.hyphenation_lang = None;
-        self.hyphenation_policy = HyphenationPolicy::Disabled;
         self
     }
 
@@ -391,7 +368,6 @@ impl<'a> TextLayout<'a> {
     }
 
     fn run_auto(&self, text: &str) -> Result<LayoutRun<'a>> {
-        let _s = tracing::info_span!("auto_size").entered();
         let max_height = self.max_height.unwrap_or(f32::INFINITY);
         let max_width = self.max_width.unwrap_or(f32::INFINITY);
         let maximum = self.max_font_size.unwrap_or(300.0).max(0.5);
@@ -416,7 +392,6 @@ impl<'a> TextLayout<'a> {
                 |size| self.run_with_size(text, size),
                 fits,
             )? {
-                tracing::info!(font_size = best.font_size, "auto_size done");
                 return Ok(best);
             }
             return self.run_with_size(text, minimum);
@@ -446,12 +421,10 @@ impl<'a> TextLayout<'a> {
                 high = size;
             }
         }
-        tracing::info!(iterations, font_size = best.font_size, "auto_size done");
         Ok(best)
     }
 
     fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
-        let _s = tracing::debug_span!("layout_size", font_size = font_size as u32).entered();
         let shaper = TextShaper::new();
         let mut line_breaker = LineBreaker::new().with_chinese_word_segmentation();
         if !self.writing_mode.is_vertical()
@@ -742,15 +715,6 @@ impl<'a> TextLayout<'a> {
                                 + line_height * 0.5,
                             |profile| profile.block_baseline,
                         ),
-                    vertical_y(),
-                ),
-                WritingMode::VerticalLr => (
-                    self.comic_balloon
-                        .as_ref()
-                        .and_then(|_| line_profiles.get(i))
-                        .map_or(i as f32 * line_height + line_height * 0.5, |profile| {
-                            profile.block_baseline
-                        }),
                     vertical_y(),
                 ),
                 WritingMode::Horizontal => {
@@ -1109,7 +1073,7 @@ impl<'a> TextLayout<'a> {
         next_offset: usize,
         break_suffix: Option<ShapedBreakSuffix<'a>>,
         force_push: bool,
-        bidi_info: &BidiInfo<'_>,
+        _bidi_info: &BidiInfo<'_>,
         lines: &mut Vec<LayoutLine<'a>>,
     ) -> usize {
         if runs.is_empty() && !force_push {
@@ -1125,22 +1089,6 @@ impl<'a> TextLayout<'a> {
 
         let mut line = LayoutLine {
             range: offset..visible_end,
-            direction: if self.writing_mode.is_vertical() {
-                harfrust::Direction::TopToBottom
-            } else {
-                bidi_info
-                    .paragraphs
-                    .iter()
-                    .find(|p| offset >= p.range.start && offset <= p.range.end)
-                    .map(|p| {
-                        if p.level.is_rtl() {
-                            harfrust::Direction::RightToLeft
-                        } else {
-                            harfrust::Direction::LeftToRight
-                        }
-                    })
-                    .unwrap_or(harfrust::Direction::LeftToRight)
-            },
             ..Default::default()
         };
 
@@ -3004,24 +2952,6 @@ mod tests {
             assert_approx_eq(dx, line_height);
         }
 
-        Ok(())
-    }
-
-    #[test]
-    fn vertical_lr_columns_flow_left_to_right() -> anyhow::Result<()> {
-        let font = any_system_font();
-        let layout = TextLayout::new(&font)
-            .with_font_size(16.0)
-            .with_writing_mode(WritingMode::VerticalLr)
-            .run("A\nB\nC")?;
-
-        assert_eq!(layout.lines.len(), 3);
-        assert!(
-            layout
-                .lines
-                .windows(2)
-                .all(|pair| { pair[0].baseline.0 < pair[1].baseline.0 })
-        );
         Ok(())
     }
 

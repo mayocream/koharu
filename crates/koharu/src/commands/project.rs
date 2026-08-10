@@ -1,4 +1,4 @@
-use std::{collections::HashSet, io::Cursor, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, io::Cursor, path::PathBuf};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -10,9 +10,9 @@ use koharu_scene::{
     TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
     Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
-use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
+use tokio::sync::Mutex;
 
 use super::{
     canvas::{Frame, Point},
@@ -54,18 +54,8 @@ pub struct Page {
     pub id: EntityId,
     pub label: String,
     pub size: PageSize,
-    pub assets: PageAssets,
     pub layers: Vec<Layer>,
     pub regions: Vec<AnalysisRegion>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Type)]
-pub struct PageAssets {
-    pub source: Option<String>,
-    pub rendered: Option<String>,
-    pub text_mask: Option<String>,
-    pub coo_mask: Option<String>,
-    pub bubble_mask: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -203,7 +193,7 @@ impl ProjectLibrary {
                     .extension()
                     .and_then(|extension| extension.to_str())
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("khrproj"))
-                    && path.join("CURRENT").is_file();
+                    && (path.join("state-a.khr").is_file() || path.join("state-b.khr").is_file());
                 if !is_project_directory {
                     return None;
                 }
@@ -216,14 +206,14 @@ impl ProjectLibrary {
         Ok(projects)
     }
 
-    pub(crate) fn create(&self, name: &str) -> Result<Project> {
+    pub(crate) async fn create(&self, name: &str) -> Result<Project> {
         let (name, path) = self.resolve(name)?;
-        Project::create(name, path)
+        Project::create(name, path).await
     }
 
-    pub(crate) fn open(&self, name: &str) -> Result<Project> {
+    pub(crate) async fn open(&self, name: &str) -> Result<Project> {
         let (name, path) = self.resolve(name)?;
-        Project::open(name, path)
+        Project::open(name, path).await
     }
 
     pub(crate) fn delete(&self, name: &str) -> Result<()> {
@@ -244,31 +234,31 @@ impl ProjectLibrary {
 pub(crate) struct Project {
     pub(crate) session: Session,
     pub(crate) name: String,
-    pub(crate) path: PathBuf,
     pub(crate) active_page: Option<EntityId>,
     pub(crate) undo: Vec<Vec<Revision>>,
     pub(crate) redo: Vec<Vec<Revision>>,
 }
 
 impl Project {
-    pub(crate) fn create(name: String, path: PathBuf) -> Result<Self> {
+    pub(crate) async fn create(name: String, path: PathBuf) -> Result<Self> {
         let session = Session::create(&path)
+            .await
             .with_context(|| format!("failed to create {}", path.display()))?;
-        Ok(Self::new(session, name, path))
+        Ok(Self::new(session, name))
     }
 
-    pub(crate) fn open(name: String, path: PathBuf) -> Result<Self> {
-        let session =
-            Session::open(&path).with_context(|| format!("failed to open {}", path.display()))?;
-        Ok(Self::new(session, name, path))
+    pub(crate) async fn open(name: String, path: PathBuf) -> Result<Self> {
+        let session = Session::open(&path)
+            .await
+            .with_context(|| format!("failed to open {}", path.display()))?;
+        Ok(Self::new(session, name))
     }
 
-    fn new(session: Session, name: String, path: PathBuf) -> Self {
+    fn new(session: Session, name: String) -> Self {
         let active_page = session.snapshot().pages().next().map(|page| page.id());
         Self {
             session,
             name,
-            path,
             active_page,
             undo: Vec::new(),
             redo: Vec::new(),
@@ -285,12 +275,6 @@ impl Project {
 
     pub(crate) fn active_page(&self) -> Option<EntityId> {
         self.active_page
-    }
-
-    pub(crate) fn flush(&self) -> Result<()> {
-        self.session
-            .flush()
-            .with_context(|| format!("failed to persist {}", self.path.display()))
     }
 
     pub(crate) fn select_page(&mut self, page: EntityId) -> Result<()> {
@@ -347,16 +331,16 @@ impl Project {
             .collect()
     }
 
-    pub(crate) fn rename_page(&mut self, page: EntityId, label: String) -> Result<Commit> {
+    pub(crate) async fn rename_page(&mut self, page: EntityId, label: String) -> Result<Commit> {
         let snapshot = self.snapshot();
         let current = snapshot.page(page)?.page()?;
         let patch = snapshot.patch(|edit| {
             edit.set_page(page, PageDraft::new(label, current.width, current.height))
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn delete_pages(&mut self, pages: Vec<EntityId>) -> Result<Commit> {
+    pub(crate) async fn delete_pages(&mut self, pages: Vec<EntityId>) -> Result<Commit> {
         let snapshot = self.snapshot();
         let pages = Self::unique_roots(&snapshot, pages)?;
         let patch = snapshot.patch(|edit| {
@@ -365,18 +349,18 @@ impl Project {
             }
             Ok(())
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn move_page(&mut self, page: EntityId, index: usize) -> Result<Commit> {
+    pub(crate) async fn move_page(&mut self, page: EntityId, index: usize) -> Result<Commit> {
         let snapshot = self.snapshot();
         let siblings = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
         let at = Self::placement(&siblings, page, index);
         let patch = snapshot.patch(|edit| edit.move_entity(page, None, at))?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn add_point_text(
+    pub(crate) async fn add_point_text(
         &mut self,
         page: EntityId,
         point: Point,
@@ -399,17 +383,18 @@ impl Project {
             },
             TextLayoutKind::Point,
         )
+        .await
     }
 
-    pub(crate) fn add_text_box(
+    pub(crate) async fn add_text_box(
         &mut self,
         page: EntityId,
         frame: Frame,
     ) -> Result<(Commit, EntityId)> {
-        self.add_text(page, frame, TextLayoutKind::Paragraph)
+        self.add_text(page, frame, TextLayoutKind::Paragraph).await
     }
 
-    fn add_text(
+    async fn add_text(
         &mut self,
         page: EntityId,
         frame: Frame,
@@ -461,12 +446,16 @@ impl Project {
             Ok(())
         })?;
         Ok((
-            self.commit(patch)?,
+            self.commit(patch).await?,
             layer.expect("text layer was added while building the patch"),
         ))
     }
 
-    pub(crate) fn set_source_text(&mut self, layer: EntityId, text: String) -> Result<Commit> {
+    pub(crate) async fn set_source_text(
+        &mut self,
+        layer: EntityId,
+        text: String,
+    ) -> Result<Commit> {
         let snapshot = self.snapshot();
         let content = Self::text_content(&snapshot, layer)?;
         let language = snapshot
@@ -483,10 +472,10 @@ impl Project {
                 },
             )
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn set_translation(
+    pub(crate) async fn set_translation(
         &mut self,
         layer: EntityId,
         text: Option<String>,
@@ -510,10 +499,13 @@ impl Project {
                 None => edit.remove::<SceneTranslation>(content),
             }
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn set_typography(&mut self, updates: Vec<TypographyUpdate>) -> Result<Commit> {
+    pub(crate) async fn set_typography(
+        &mut self,
+        updates: Vec<TypographyUpdate>,
+    ) -> Result<Commit> {
         let snapshot = self.snapshot();
         let updates = updates
             .into_iter()
@@ -546,22 +538,23 @@ impl Project {
             }
             Ok(())
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn set_geometry(&mut self, updates: Vec<GeometryUpdate>) -> Result<Commit> {
+    pub(crate) async fn set_geometry(&mut self, updates: Vec<GeometryUpdate>) -> Result<Commit> {
         let snapshot = self.snapshot();
         let updates = updates
             .into_iter()
             .map(|update| {
-                let text = snapshot
+                if snapshot
                     .component::<SceneTextLayout>(update.layer)?
-                    .is_some();
-                let content = text
-                    .then(|| Self::text_content(&snapshot, update.layer))
-                    .transpose()?;
+                    .is_none()
+                {
+                    bail!("only text layers can change geometry");
+                }
+                let content = Self::text_content(&snapshot, update.layer)?;
                 if update.points.is_none()
-                    && (!text || snapshot.text_layer(update.layer)?.fit_target()?.is_none())
+                    && snapshot.text_layer(update.layer)?.fit_target()?.is_none()
                 {
                     bail!("only text fitted to an analysis region can reset its geometry");
                 }
@@ -571,9 +564,7 @@ impl Project {
         let patch = snapshot.patch(|edit| {
             for (update, content) in updates {
                 edit.promote_entity_to_user(update.layer)?;
-                if let Some(content) = content {
-                    edit.promote_entity_to_user(content)?;
-                }
+                edit.promote_entity_to_user(content)?;
                 match update.points {
                     Some(points) => edit.set(
                         update.layer,
@@ -593,10 +584,10 @@ impl Project {
             }
             Ok(())
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn set_visibility(
+    pub(crate) async fn set_visibility(
         &mut self,
         layers: Vec<EntityId>,
         visible: Option<bool>,
@@ -624,10 +615,10 @@ impl Project {
             }
             Ok(())
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn delete_layers(&mut self, layers: Vec<EntityId>) -> Result<Commit> {
+    pub(crate) async fn delete_layers(&mut self, layers: Vec<EntityId>) -> Result<Commit> {
         let snapshot = self.snapshot();
         let mut expanded = Vec::new();
         for layer in layers {
@@ -664,16 +655,16 @@ impl Project {
             }
             Ok(())
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn move_layer(
+    #[tracing::instrument(level = "info", skip_all, fields(layer = %layer, parent = %parent))]
+    pub(crate) async fn move_layer(
         &mut self,
         layer: EntityId,
         parent: EntityId,
         index: usize,
     ) -> Result<Commit> {
-        let _span = tracing::info_span!("prepare_move_patch").entered();
         let snapshot = self.snapshot();
         let siblings = snapshot
             .children(parent)?
@@ -690,12 +681,10 @@ impl Project {
             }
             edit.move_entity(layer, Some(parent), at)
         })?;
-        drop(_span);
-        let _span = tracing::info_span!("commit_scene_patch").entered();
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn set_geometries(
+    pub(crate) async fn set_geometries(
         &mut self,
         geometries: impl IntoIterator<Item = (EntityId, SceneGeometry)>,
     ) -> Result<Commit> {
@@ -703,29 +692,26 @@ impl Project {
         let geometries = geometries
             .into_iter()
             .map(|(element, geometry)| {
-                let content = snapshot
-                    .component::<SceneTextLayout>(element)?
-                    .is_some()
-                    .then(|| Self::text_content(&snapshot, element))
-                    .transpose()?;
+                if snapshot.component::<SceneTextLayout>(element)?.is_none() {
+                    bail!("only text layers can change geometry");
+                }
+                let content = Self::text_content(&snapshot, element)?;
                 Ok((element, geometry, content))
             })
             .collect::<Result<Vec<_>>>()?;
         let patch = snapshot.patch(|edit| {
             for (element, mut geometry, content) in geometries {
                 edit.promote_entity_to_user(element)?;
-                if let Some(content) = content {
-                    edit.promote_entity_to_user(content)?;
-                }
+                edit.promote_entity_to_user(content)?;
                 geometry.origin = Origin::User;
                 edit.set(element, &geometry)?;
             }
             Ok(())
         })?;
-        self.commit(patch)
+        self.commit(patch).await
     }
 
-    pub(crate) fn apply_raster_stroke(
+    pub(crate) async fn apply_raster_stroke(
         &mut self,
         page: EntityId,
         layer: Option<EntityId>,
@@ -766,7 +752,8 @@ impl Project {
             raster_layer = Some(target);
             match snapshot.asset(layer, &AssetRole::new("source")?)? {
                 Some(asset) => {
-                    image::load_from_memory(&snapshot.read_blob(asset.blob)?)?.to_rgba8()
+                    let bytes = snapshot.read_blob(asset.blob).await?;
+                    image::load_from_memory(&bytes)?.to_rgba8()
                 }
                 None => RgbaImage::new(width, height),
             }
@@ -841,30 +828,14 @@ impl Project {
             )
         })?;
         Ok((
-            self.commit(patch)?,
+            self.commit(patch).await?,
             committed_layer.expect("raster layer was selected or added while building the patch"),
         ))
     }
 
-    pub(crate) fn set_asset(
-        &mut self,
-        entity: EntityId,
-        role: &str,
-        bytes: impl Into<Arc<[u8]>>,
-        media_type: &str,
-        metadata: AssetMetadata,
-    ) -> Result<Commit> {
-        let snapshot = self.snapshot();
-        let role = AssetRole::new(role)?;
-        let patch = snapshot.patch(|edit| {
-            edit.set_asset(entity, &role, AssetInput::new(bytes, media_type, metadata))
-        })?;
-        self.commit(patch)
-    }
-
-    pub(crate) fn undo(&mut self) -> Result<Commit> {
+    pub(crate) async fn undo(&mut self) -> Result<Commit> {
         let revisions = self.undo.pop().ok_or_else(|| anyhow!("nothing to undo"))?;
-        let commit = match self.session.undo_many(revisions.iter().copied()) {
+        let commit = match self.session.undo_many(revisions.iter().copied()).await {
             Ok(commit) => commit,
             Err(error) => {
                 self.undo.push(revisions);
@@ -875,9 +846,9 @@ impl Project {
         Ok(commit)
     }
 
-    pub(crate) fn redo(&mut self) -> Result<Commit> {
+    pub(crate) async fn redo(&mut self) -> Result<Commit> {
         let revisions = self.redo.pop().ok_or_else(|| anyhow!("nothing to redo"))?;
-        let commit = match self.session.undo_many(revisions.iter().copied()) {
+        let commit = match self.session.undo_many(revisions.iter().copied()).await {
             Ok(commit) => commit,
             Err(error) => {
                 self.redo.push(revisions);
@@ -901,8 +872,8 @@ impl Project {
         }
     }
 
-    fn commit(&mut self, patch: koharu_scene::Patch) -> Result<Commit> {
-        Ok(self.session.commit(patch)?)
+    async fn commit(&mut self, patch: koharu_scene::Patch) -> Result<Commit> {
+        Ok(self.session.commit(patch).await?)
     }
 
     pub(crate) fn page(snapshot: &Snapshot, page: EntityId) -> Result<Page> {
@@ -960,13 +931,6 @@ impl Project {
             size: PageSize {
                 width: value.width,
                 height: value.height,
-            },
-            assets: PageAssets {
-                source,
-                rendered: Self::asset_id(snapshot, page, "rendered")?,
-                text_mask: Self::asset_id(snapshot, page, "text-mask")?,
-                coo_mask: Self::asset_id(snapshot, page, "coo-mask")?,
-                bubble_mask: Self::asset_id(snapshot, page, "bubble-mask")?,
             },
             layers,
             regions,
@@ -1306,14 +1270,6 @@ fn rasterize_stroke(
                     }
                 }
             }
-        }
-    }
-}
-
-impl Drop for Project {
-    fn drop(&mut self) {
-        if let Err(error) = self.session.gc() {
-            tracing::warn!(%error, path = %self.path.display(), "automatic project garbage collection failed");
         }
     }
 }

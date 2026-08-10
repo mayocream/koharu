@@ -7,27 +7,27 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    RocksDb(#[from] rocksdb::Error),
-    #[error(transparent)]
     Codec(#[from] revision::Error),
-    #[error("not a Koharu project database")]
+    #[error("not a Koharu project")]
     NotAProject,
-    #[error("unsupported Koharu project schema {0}")]
-    UnsupportedSchema(u32),
-    #[error("patch belongs to document {patch}, not {session}")]
+    #[error("project is already open for writing")]
+    Locked,
+    #[error("unsupported Koharu project format {0}")]
+    UnsupportedFormat(u32),
+    #[error("state belongs to document {state}, not {session}")]
     DocumentMismatch {
-        patch: DocumentId,
+        state: DocumentId,
         session: DocumentId,
     },
     #[error("blob {0} was not found")]
     BlobNotFound(BlobId),
-    #[error("revision conflict: expected {expected}, current revision is {actual}")]
+    #[error("state generation conflict: expected newer than {current}, got {proposed}")]
     RevisionConflict {
-        expected: Revision,
-        actual: Revision,
+        current: Revision,
+        proposed: Revision,
     },
-    #[error("revision {0} is no longer retained")]
-    HistoryNotFound(Revision),
+    #[error("background storage task failed: {0}")]
+    Task(String),
     #[error("invalid storage data: {0}")]
     Invalid(String),
 }

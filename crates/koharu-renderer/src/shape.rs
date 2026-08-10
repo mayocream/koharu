@@ -58,7 +58,6 @@ impl TextShaper {
         Self
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
     pub fn shape<'a>(
         &self,
         text: &str,
@@ -132,7 +131,6 @@ impl TextShaper {
     }
 }
 
-#[tracing::instrument(level = "debug", skip_all)]
 pub(crate) fn shape_script_runs<'a>(
     shaper: &TextShaper,
     text: &str,

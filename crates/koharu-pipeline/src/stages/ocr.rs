@@ -91,7 +91,8 @@ impl Model {
         let mut targets = Vec::new();
         let source = input
             .images
-            .get(&input.scene, page, "source")?
+            .get(&input.scene, page, "source")
+            .await?
             .ok_or_else(|| anyhow!("page {page} has no source image"))?;
         for entity in input.scene.descendants(page)? {
             let region = entity.id();

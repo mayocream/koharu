@@ -1,37 +1,101 @@
 use std::{
-    cell::Cell,
     collections::{BTreeMap, BTreeSet},
-    marker::PhantomData,
-    path::Path,
+    fs::{self, File, OpenOptions},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
+use bytes::Bytes;
+use fs4::FileExt;
+use parking_lot::RwLock;
+use tempfile::TempDir;
+use tokio::sync::Mutex;
+
 use crate::{
-    BlobId, Commit, DocumentId, Error, HistoryEntry, Recovery, Refresh, Result, Revision, Snapshot,
-    commit::StoredEntry,
-    database::{Engine, Head},
+    BlobId, Blobs, DocumentId, Error, Result, Revision,
+    blobs::BlobStore,
+    format::{self, Slot, StoredState},
 };
 
-const MAX_RECORD_BYTES: usize = 512 * 1024 * 1024;
-
 #[derive(Clone, Debug)]
-pub struct Options {
-    pub database_cache_bytes: usize,
-    pub blob_cache_bytes: usize,
-    pub max_blob_bytes: usize,
-    pub checkpoint_commits: u64,
-    pub checkpoint_bytes: u64,
+struct Head {
+    slot: Slot,
+    stored: Arc<StoredState>,
 }
 
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            database_cache_bytes: 64 * 1024 * 1024,
-            blob_cache_bytes: 256 * 1024 * 1024,
-            max_blob_bytes: 512 * 1024 * 1024,
-            checkpoint_commits: 1_024,
-            checkpoint_bytes: 64 * 1024 * 1024,
-        }
+struct Inner {
+    root: PathBuf,
+    blobs: Arc<BlobStore>,
+    head: RwLock<Head>,
+    writer: Mutex<()>,
+}
+
+/// One open project. Clones share the same writer lock and durable head.
+#[derive(Clone)]
+pub struct Session {
+    inner: Arc<Inner>,
+}
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let head = self.inner.head.read();
+        formatter
+            .debug_struct("Session")
+            .field("document", &head.stored.document)
+            .field("revision", &head.stored.revision)
+            .field("root", &self.inner.root)
+            .finish_non_exhaustive()
+    }
+}
+
+/// One immutable serialized scene state and its complete blob closure.
+#[derive(Clone, Debug)]
+pub struct State {
+    document: DocumentId,
+    revision: Revision,
+    payload: Bytes,
+    blobs: Blobs,
+}
+
+impl State {
+    #[must_use]
+    pub const fn document_id(&self) -> DocumentId {
+        self.document
+    }
+
+    #[must_use]
+    pub const fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    #[must_use]
+    pub fn payload(&self) -> &Bytes {
+        &self.payload
+    }
+
+    #[must_use]
+    pub const fn blobs(&self) -> &Blobs {
+        &self.blobs
+    }
+
+    /// Builds another immutable state while retaining still-referenced pending
+    /// content from this state. `available` contains bytes already produced by
+    /// the edit; storage determines which of them actually need publication.
+    pub fn update(
+        &self,
+        revision: Revision,
+        payload: Bytes,
+        referenced: impl IntoIterator<Item = BlobId>,
+        available: impl IntoIterator<Item = (BlobId, Bytes)>,
+    ) -> Result<Self> {
+        let referenced = referenced.into_iter().collect::<BTreeSet<_>>();
+        let blobs = self.blobs.derive(referenced, available)?;
+        Ok(Self {
+            document: self.document,
+            revision,
+            payload,
+            blobs,
+        })
     }
 }
 
@@ -41,367 +105,224 @@ pub struct GcReport {
     pub bytes: u64,
 }
 
-/// One document owner. RocksDB serializes its atomic batches; the Rust type is
-/// deliberately not `Sync` so application code cannot accidentally create a
-/// second writer around the same session value.
-pub struct Session {
-    engine: Arc<Engine>,
-    head: Head,
-    options: Options,
-    _single_writer: PhantomData<Cell<()>>,
-}
-
-impl std::fmt::Debug for Session {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Session")
-            .field("document", &self.head.document)
-            .field("revision", &self.head.revision)
-            .finish_non_exhaustive()
-    }
-}
-
 impl Session {
-    pub fn create(
+    #[tracing::instrument(level = "info", skip_all, fields(path = %path.as_ref().display(), document = %document))]
+    pub async fn create(
         path: impl AsRef<Path>,
         document: DocumentId,
-        checkpoint: Vec<u8>,
+        payload: Bytes,
     ) -> Result<Self> {
-        Self::create_with(path, document, checkpoint, Options::default())
+        let path = path.as_ref().to_owned();
+        tokio::task::spawn_blocking(move || create_project(path, document, payload, None))
+            .await
+            .map_err(|error| Error::Task(error.to_string()))?
     }
 
-    pub fn create_with(
-        path: impl AsRef<Path>,
-        document: DocumentId,
-        checkpoint: Vec<u8>,
-        options: Options,
-    ) -> Result<Self> {
-        validate_options(&options)?;
-        validate_size(&checkpoint, "checkpoint")?;
-        let engine = Engine::create(
-            path.as_ref(),
-            options.database_cache_bytes,
-            options.blob_cache_bytes,
-        )?;
-        let head = Head::empty(document);
-        engine.initialize(&head, &checkpoint)?;
-        Ok(Self::new(engine, head, options))
+    #[tracing::instrument(level = "info", skip_all, fields(path = %path.as_ref().display()))]
+    pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref().to_owned();
+        tokio::task::spawn_blocking(move || open_project(path, None))
+            .await
+            .map_err(|error| Error::Task(error.to_string()))?
     }
 
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Self::open_with(path, Options::default())
-    }
-
-    pub fn open_with(path: impl AsRef<Path>, options: Options) -> Result<Self> {
-        validate_options(&options)?;
-        let engine = Engine::open(
-            path.as_ref(),
-            options.database_cache_bytes,
-            options.blob_cache_bytes,
-        )?;
-        let head = engine.head()?;
-        Ok(Self::new(engine, head, options))
-    }
-
-    pub fn memory(document: DocumentId, checkpoint: Vec<u8>) -> Result<Self> {
-        Self::memory_with(document, checkpoint, Options::default())
-    }
-
-    pub fn memory_with(
-        document: DocumentId,
-        checkpoint: Vec<u8>,
-        options: Options,
-    ) -> Result<Self> {
-        validate_options(&options)?;
-        validate_size(&checkpoint, "checkpoint")?;
-        let engine = Engine::memory(options.database_cache_bytes, options.blob_cache_bytes)?;
-        let head = Head::empty(document);
-        engine.initialize(&head, &checkpoint)?;
-        Ok(Self::new(engine, head, options))
-    }
-
-    fn new(engine: Arc<Engine>, head: Head, options: Options) -> Self {
-        Self {
-            engine,
-            head,
-            options,
-            _single_writer: PhantomData,
-        }
+    pub async fn memory(document: DocumentId, payload: Bytes) -> Result<Self> {
+        tokio::task::spawn_blocking(move || {
+            let temporary = tempfile::tempdir()?;
+            create_project(
+                temporary.path().to_owned(),
+                document,
+                payload,
+                Some(temporary),
+            )
+        })
+        .await
+        .map_err(|error| Error::Task(error.to_string()))?
     }
 
     #[must_use]
-    pub const fn document_id(&self) -> DocumentId {
-        self.head.document
+    pub fn document_id(&self) -> DocumentId {
+        self.inner.head.read().stored.document
     }
 
     #[must_use]
-    pub const fn revision(&self) -> Revision {
-        self.head.revision
+    pub fn revision(&self) -> Revision {
+        self.inner.head.read().stored.revision
     }
 
-    pub fn snapshot(&self, referenced: BTreeSet<BlobId>) -> Result<Snapshot> {
-        Snapshot::durable(
-            self.head.document,
-            self.head.revision,
-            self.engine.clone(),
-            referenced,
-        )
-    }
-
-    pub fn recover(&self) -> Result<Recovery> {
-        let (head, checkpoint, entries) = self.engine.recovery()?;
-        if head.document != self.head.document || head.revision != self.head.revision {
-            return Err(Error::NotAProject);
-        }
-        validate_size(&checkpoint, "checkpoint")?;
-        Ok(Recovery {
-            document: head.document,
-            checkpoint_revision: head.checkpoint_revision,
-            head: head.revision,
-            checkpoint: Arc::from(checkpoint),
-            entries: decode_entries(entries)?,
+    pub async fn load(&self) -> Result<State> {
+        let stored = self.inner.head.read().stored.clone();
+        let referenced = stored.blobs.iter().copied().collect();
+        let blobs = self.inner.blobs.durable_scope(referenced)?;
+        Ok(State {
+            document: stored.document,
+            revision: stored.revision,
+            payload: Bytes::from(stored.payload.clone()),
+            blobs,
         })
     }
 
-    #[must_use]
-    pub fn needs_checkpoint(&self, commit_bytes: usize) -> bool {
-        reached(
-            self.head.commits_since_checkpoint.saturating_add(1),
-            self.options.checkpoint_commits,
-        ) || reached(
-            self.head
-                .bytes_since_checkpoint
-                .saturating_add(commit_bytes as u64),
-            self.options.checkpoint_bytes,
-        )
-    }
-
-    pub fn commit(&mut self, commit: Commit, checkpoint: Option<Vec<u8>>) -> Result<Revision> {
-        if commit.document != self.head.document {
+    /// Publishes all missing blob contents and then the complete state. The
+    /// returned state has a durable blob scope and drops pending byte owners.
+    #[tracing::instrument(level = "info", skip_all, fields(document = %state.document, revision = %state.revision))]
+    pub async fn save(&self, state: &State) -> Result<State> {
+        if state.document != self.document_id() {
             return Err(Error::DocumentMismatch {
-                patch: commit.document,
-                session: self.head.document,
+                state: state.document,
+                session: self.document_id(),
             });
         }
-        if commit.parent != self.head.revision {
+        if !state.blobs.belongs_to(&self.inner.blobs) {
+            return Err(Error::invalid("state blobs belong to another session"));
+        }
+
+        let _writer = self.inner.writer.lock().await;
+        let current = self.inner.head.read().clone();
+        if state.revision <= current.stored.revision {
             return Err(Error::RevisionConflict {
-                expected: commit.parent,
-                actual: self.head.revision,
+                current: current.stored.revision,
+                proposed: state.revision,
             });
         }
-        validate_size(&commit.forward, "forward history")?;
-        validate_size(&commit.inverse, "inverse history")?;
-        if let Some(checkpoint) = &checkpoint {
-            validate_size(checkpoint, "checkpoint")?;
-        }
-        let commit_bytes = commit.payload_len();
-        let checkpoint_required = self.needs_checkpoint(commit_bytes);
-        if checkpoint_required && checkpoint.is_none() {
-            return Err(Error::invalid(
-                "checkpoint required by the configured threshold",
-            ));
-        }
 
-        let revision = self
-            .head
-            .revision
-            .next()
-            .ok_or_else(|| Error::invalid("document revision overflow"))?;
-        let mut attached = BTreeMap::new();
-        for blob in commit.blobs {
-            let bytes = blob.bytes();
-            if bytes.len() > self.options.max_blob_bytes {
-                return Err(Error::invalid(format!(
-                    "blob {} exceeds the configured size limit",
-                    blob.id()
-                )));
-            }
-            attached.insert(blob.id(), bytes);
-        }
-        let existing_references = commit
-            .references
-            .iter()
-            .filter(|id| !attached.contains_key(*id))
-            .copied()
-            .collect();
-        if let Some(id) = self.engine.missing_blobs(&existing_references)?.first() {
-            return Err(Error::BlobNotFound(*id));
-        }
-        let attached_ids = attached.keys().copied().collect();
-        let missing_attached = self
-            .engine
-            .missing_blobs(&attached_ids)?
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-        attached.retain(|id, _| missing_attached.contains(id));
+        let root = self.inner.root.clone();
+        let store = self.inner.blobs.clone();
+        let blobs = state.blobs.clone();
+        let document = state.document;
+        let revision = state.revision;
+        let payload = state.payload.clone();
+        let slot = current.slot.other();
+        let stored = tokio::task::spawn_blocking(move || {
+            store.persist(&blobs)?;
+            let stored = StoredState {
+                document,
+                revision,
+                blobs: blobs.ids().collect(),
+                payload: payload.to_vec(),
+            };
+            format::save(&root, slot, &stored)?;
+            Ok::<_, Error>(stored)
+        })
+        .await
+        .map_err(|error| Error::Task(error.to_string()))??;
 
-        let stored = StoredEntry {
-            label: commit.label.as_deref().map(str::to_owned),
-            forward: commit.forward,
-            inverse: commit.inverse,
-            blobs: commit.references.iter().copied().collect(),
-        };
-        let encoded = revision::to_vec(&stored)?;
-        validate_size(&encoded, "history entry")?;
-
-        let mut next = self.head.clone();
-        next.revision = revision;
-        if checkpoint_required {
-            next.checkpoint_revision = revision;
-            next.commits_since_checkpoint = 0;
-            next.bytes_since_checkpoint = 0;
-        } else {
-            next.commits_since_checkpoint = next.commits_since_checkpoint.saturating_add(1);
-            next.bytes_since_checkpoint = next
-                .bytes_since_checkpoint
-                .saturating_add(commit_bytes as u64);
-        }
-        self.engine.commit(
-            &self.head,
-            &next,
+        self.inner.head.write().clone_from(&Head {
+            slot,
+            stored: Arc::new(stored),
+        });
+        let durable = self
+            .inner
+            .blobs
+            .scope(state.blobs.ids().collect(), BTreeMap::new())?;
+        Ok(State {
+            document,
             revision,
-            &encoded,
-            &attached,
-            checkpoint.filter(|_| checkpoint_required).as_deref(),
-        )?;
-        self.head = next;
-        Ok(revision)
-    }
-
-    pub fn changes(&self) -> Result<Refresh> {
-        let head = self.engine.head()?;
-        if head.document != self.head.document || head.revision < self.head.revision {
-            return Err(Error::NotAProject);
-        }
-        Ok(Refresh {
-            from: self.head.revision,
-            to: head.revision,
-            entries: decode_entries(
-                self.engine
-                    .history_range(self.head.revision, head.revision)?,
-            )?,
-            checkpoint_revision: head.checkpoint_revision,
-            commits_since_checkpoint: head.commits_since_checkpoint,
-            bytes_since_checkpoint: head.bytes_since_checkpoint,
+            payload: state.payload.clone(),
+            blobs: durable,
         })
     }
 
-    pub fn accept(&mut self, refresh: &Refresh) -> Result<()> {
-        if refresh.from != self.head.revision
-            || refresh
-                .entries
-                .last()
-                .map_or(refresh.from, |entry| entry.revision)
-                != refresh.to
-        {
-            return Err(Error::RevisionConflict {
-                expected: refresh.from,
-                actual: self.head.revision,
-            });
+    #[tracing::instrument(level = "info", skip_all)]
+    pub async fn collect_garbage(&self) -> Result<GcReport> {
+        let _writer = self.inner.writer.lock().await;
+        let root = self.inner.root.clone();
+        let store = self.inner.blobs.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut saved = BTreeSet::new();
+            for slot in [Slot::A, Slot::B] {
+                if let Ok(Some(state)) = format::load(&root, slot) {
+                    saved.extend(state.blobs);
+                }
+            }
+            let (blobs, bytes) = store.collect(saved)?;
+            Ok::<_, Error>(GcReport { blobs, bytes })
+        })
+        .await
+        .map_err(|error| Error::Task(error.to_string()))?
+    }
+}
+
+fn create_project(
+    root: PathBuf,
+    document: DocumentId,
+    payload: Bytes,
+    temporary: Option<TempDir>,
+) -> Result<Session> {
+    fs::create_dir_all(root.join("blobs"))?;
+    if format::path(&root, Slot::A).try_exists()? || format::path(&root, Slot::B).try_exists()? {
+        return Err(Error::invalid("project already contains a state"));
+    }
+    let lock = lock_project(&root)?;
+    let stored = StoredState {
+        document,
+        revision: Revision::ZERO,
+        blobs: Vec::new(),
+        payload: payload.to_vec(),
+    };
+    format::save(&root, Slot::A, &stored)?;
+    Ok(Session {
+        inner: Arc::new(Inner {
+            blobs: Arc::new(BlobStore::new(root.clone(), lock, temporary)),
+            root,
+            head: RwLock::new(Head {
+                slot: Slot::A,
+                stored: Arc::new(stored),
+            }),
+            writer: Mutex::new(()),
+        }),
+    })
+}
+
+fn open_project(root: PathBuf, temporary: Option<TempDir>) -> Result<Session> {
+    if !root.is_dir() {
+        return Err(Error::NotAProject);
+    }
+    let lock = lock_project(&root)?;
+    let store = Arc::new(BlobStore::new(root.clone(), lock, temporary));
+    let mut candidates = Vec::new();
+    let mut first_error = None;
+    for slot in [Slot::A, Slot::B] {
+        match format::load(&root, slot) {
+            Ok(Some(state)) => candidates.push((slot, state)),
+            Ok(None) => {}
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
         }
-        self.head.revision = refresh.to;
-        self.head.checkpoint_revision = refresh.checkpoint_revision;
-        self.head.commits_since_checkpoint = refresh.commits_since_checkpoint;
-        self.head.bytes_since_checkpoint = refresh.bytes_since_checkpoint;
-        Ok(())
     }
-
-    pub fn history(&self, revision: Revision) -> Result<HistoryEntry> {
-        let encoded = self
-            .engine
-            .history(revision)?
-            .ok_or(Error::HistoryNotFound(revision))?;
-        decode_entry(revision, &encoded)
-    }
-
-    pub fn checkpoint(&mut self, checkpoint: Vec<u8>) -> Result<()> {
-        validate_size(&checkpoint, "checkpoint")?;
-        let mut next = self.head.clone();
-        next.checkpoint_revision = self.head.revision;
-        next.commits_since_checkpoint = 0;
-        next.bytes_since_checkpoint = 0;
-        self.engine.checkpoint(&self.head, &next, &checkpoint)?;
-        self.head = next;
-        self.engine.flush()
-    }
-
-    pub fn prune_history(
-        &mut self,
-        keep_from: Revision,
-        checkpoint: Vec<u8>,
-        referenced: BTreeSet<BlobId>,
-    ) -> Result<GcReport> {
-        if keep_from > self.head.revision.next().unwrap_or(self.head.revision) {
-            return Err(Error::invalid("history retention begins after the head"));
+    candidates.sort_by_key(|(_, state)| std::cmp::Reverse(state.revision));
+    let mut selected = None;
+    for (slot, state) in candidates {
+        let ids = state.blobs.iter().copied().collect();
+        if store.verify_references(&ids).is_ok() {
+            selected = Some((slot, state));
+            break;
         }
-        validate_size(&checkpoint, "checkpoint")?;
-        let mut next = self.head.clone();
-        next.checkpoint_revision = self.head.revision;
-        next.commits_since_checkpoint = 0;
-        next.bytes_since_checkpoint = 0;
-        let (report, _) = self.engine.collect(
-            &self.head,
-            Some((&next, &checkpoint, keep_from)),
-            referenced,
-        )?;
-        self.head = next;
-        self.engine.flush()?;
-        Ok(report)
     }
-
-    pub fn gc(&mut self, referenced: BTreeSet<BlobId>) -> Result<GcReport> {
-        let (report, _) = self.engine.collect(&self.head, None, referenced)?;
-        self.engine.flush()?;
-        Ok(report)
-    }
-
-    pub fn compact(
-        &mut self,
-        keep_from: Revision,
-        checkpoint: Vec<u8>,
-        referenced: BTreeSet<BlobId>,
-    ) -> Result<GcReport> {
-        let report = self.prune_history(keep_from, checkpoint, referenced)?;
-        self.engine.compact()?;
-        Ok(report)
-    }
-
-    pub fn flush(&self) -> Result<()> {
-        self.engine.flush()
-    }
+    let (slot, stored) = selected.ok_or_else(|| first_error.unwrap_or(Error::NotAProject))?;
+    Ok(Session {
+        inner: Arc::new(Inner {
+            root,
+            blobs: store,
+            head: RwLock::new(Head {
+                slot,
+                stored: Arc::new(stored),
+            }),
+            writer: Mutex::new(()),
+        }),
+    })
 }
 
-fn decode_entries(entries: Vec<(Revision, Vec<u8>)>) -> Result<Vec<HistoryEntry>> {
-    entries
-        .into_iter()
-        .map(|(revision, encoded)| decode_entry(revision, &encoded))
-        .collect()
-}
-
-fn decode_entry(revision: Revision, encoded: &[u8]) -> Result<HistoryEntry> {
-    validate_size(encoded, "history entry")?;
-    let stored: StoredEntry = revision::from_slice(encoded)?;
-    Ok(stored.into_history(revision))
-}
-
-fn validate_options(options: &Options) -> Result<()> {
-    if options.database_cache_bytes == 0 {
-        return Err(Error::invalid("database cache size must be non-zero"));
-    }
-    if options.max_blob_bytes == 0 {
-        return Err(Error::invalid("maximum blob size must be non-zero"));
-    }
-    Ok(())
-}
-
-fn validate_size(bytes: &[u8], name: &str) -> Result<()> {
-    if bytes.len() > MAX_RECORD_BYTES {
-        Err(Error::invalid(format!("{name} exceeds the storage limit")))
-    } else {
-        Ok(())
-    }
-}
-
-fn reached(value: u64, threshold: u64) -> bool {
-    threshold != 0 && value >= threshold
+fn lock_project(root: &Path) -> Result<File> {
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(root.join("project.lock"))?;
+    FileExt::try_lock(&lock).map_err(|error| match error {
+        fs4::TryLockError::WouldBlock => Error::Locked,
+        fs4::TryLockError::Error(error) => Error::Io(error),
+    })?;
+    Ok(lock)
 }

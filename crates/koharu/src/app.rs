@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context as _, Result};
-use parking_lot::Mutex;
 use tauri::{AppHandle, Manager as _, WindowEvent};
+use tokio::sync::Mutex;
 
 use crate::commands::{
     agent::AgentState,
@@ -41,15 +41,16 @@ pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
         .state::<CurrentProject>()
         .project
         .lock()
+        .await
         .as_ref()
         .map(|project| (project.snapshot(), project.active_page()));
     let canvas_view = handle.state::<CanvasView>();
     let desktop = handle.state::<crate::desktop::Desktop>();
     if let Some((snapshot, page)) = project {
-        desktop.lock().show_page(&snapshot, page)?;
+        desktop.show_page(&snapshot, page).await?;
         canvas_view.fitted.store(true, Ordering::Release);
     } else {
-        desktop.lock().canvas().clear_page();
+        desktop.clear().await;
     }
     Ok(())
 }
@@ -73,6 +74,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) -> Result<()> {
                 )
                 .build(),
         )
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
@@ -93,7 +95,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) -> Result<()> {
             application.manage(Initialization::default());
 
             let handle = application.handle().clone();
-            application.manage(crate::desktop::Desktop::new(handle.clone()));
+            application.manage(crate::desktop::Desktop::new(handle.clone())?);
             application.manage(AgentState::new(handle.clone())?);
 
             let window = application
@@ -181,12 +183,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) -> Result<()> {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() == "main"
-                && matches!(
-                    event,
-                    WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
-                )
-            {
+            if matches!(
+                event,
+                WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed
+            ) {
                 let processing = window.state::<Processing>();
                 for stop in processing.stops.lock().values() {
                     stop.stop();
