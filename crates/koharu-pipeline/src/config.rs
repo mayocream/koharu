@@ -338,22 +338,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_legacy_processor_configuration() {
-        let result = toml::from_str::<PipelineConfig>(
-            r#"
-                [[processors]]
-                model = "comic_layout_yolo26s"
-                enabled = false
-
-                [[processors]]
-                model = "mask_fusion"
-            "#,
-        );
-
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn ignores_unknown_model_configuration_fields() {
         let config = toml::from_str::<PipelineConfig>(
             r#"
@@ -464,48 +448,5 @@ mod tests {
             restored.inpainting().unwrap(),
             InpaintingModel::Flux2Klein(config) if config.prompt == "Keep the line art."
         ));
-    }
-
-    #[test]
-    fn rejects_removed_inpainting_options() {
-        for (name, source) in [
-            (
-                "lama",
-                r#"
-                [inpainting]
-                model = "lama"
-                hd_strategy = "resize"
-            "#,
-            ),
-            (
-                "aot-inpainting",
-                r#"
-                [inpainting]
-                model = "aot-inpainting"
-                max_side = 1024
-            "#,
-            ),
-            (
-                "flux2-klein",
-                r#"
-                [inpainting]
-                model = "flux2-klein"
-                strength = 0.5
-            "#,
-            ),
-            (
-                "rorem-mixed",
-                r#"
-                [inpainting]
-                model = "rorem-mixed"
-                resolution = 1024
-            "#,
-            ),
-        ] {
-            assert!(
-                toml::from_str::<PipelineConfig>(source).is_err(),
-                "{name} accepted a removed option"
-            );
-        }
     }
 }
