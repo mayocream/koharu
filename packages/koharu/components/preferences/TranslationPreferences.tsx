@@ -33,14 +33,12 @@ export function TranslationPreferences({
   modelChoices,
   providers,
   languages,
-  locale,
   onChange,
 }: {
   value: TranslationSettings
   modelChoices: Model[]
   providers: ProviderPreference[]
   languages: LanguageChoice[]
-  locale: string
   onChange: (value: TranslationSettings) => void
 }) {
   const [modelOpen, setModelOpen] = useState(false)
@@ -54,14 +52,7 @@ export function TranslationPreferences({
   }
   const choices = selected ? modelChoices : [current, ...modelChoices]
   const quantizations = current.quantizations
-  const languagesByName = useMemo(() => {
-    const displayNames = new Intl.DisplayNames([locale], { type: 'language' })
-    return orderedLanguageChoices(
-      languages,
-      (language) => displayNames.of(language.tag) ?? language.name,
-      locale,
-    )
-  }, [languages, locale])
+  const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
     <PreferencePage
       title='Translation'
@@ -144,7 +135,7 @@ export function TranslationPreferences({
           <Select
             value={value.target_language}
             items={Object.fromEntries(
-              languagesByName.map((language) => [language.tag, language.name]),
+              languageChoices.map((language) => [language.tag, language.name]),
             )}
             onValueChange={(target_language) =>
               target_language && onChange({ ...value, target_language })
@@ -154,7 +145,7 @@ export function TranslationPreferences({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {languagesByName.map((language) => (
+              {languageChoices.map((language) => (
                 <SelectItem key={language.tag} value={language.tag}>
                   {language.name}
                 </SelectItem>

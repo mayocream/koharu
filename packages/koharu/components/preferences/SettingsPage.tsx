@@ -56,7 +56,6 @@ const tabs = [
 type Tab = (typeof tabs)[number][0]
 
 export function SettingsPage() {
-  const { i18n } = useTranslation()
   const open = useKoharuStore((state) => state.settingsOpen)
   const setOpen = useKoharuStore((state) => state.setSettingsOpen)
   const preferences = useKoharuStore((state) => state.preferences)
@@ -173,7 +172,6 @@ export function SettingsPage() {
                   modelChoices={translationModels}
                   providers={providers?.entries ?? []}
                   languages={preferences?.languages ?? []}
-                  locale={i18n.resolvedLanguage ?? i18n.language}
                   onChange={(translation) =>
                     setPipeline((current) => (current ? { ...current, translation } : current))
                   }

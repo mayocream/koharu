@@ -21,6 +21,7 @@ describe('native editor localization', () => {
   it('orders language choices by their displayed name without mutating the source', () => {
     const languages = [
       { tag: 'ja-JP', name: 'Japanese' },
+      { tag: 'zh-CN', name: 'Simplified Chinese' },
       { tag: 'en-US', name: 'English' },
       { tag: 'de-DE', name: 'German' },
     ]
@@ -29,13 +30,13 @@ describe('native editor localization', () => {
       'English',
       'German',
       'Japanese',
+      'Simplified Chinese',
     ])
-    expect(
-      orderedLanguageChoices(
-        languages,
-        (language) => ({ 'ja-JP': 'Alpha', 'en-US': 'Zulu', 'de-DE': 'Middle' })[language.tag]!,
-      ).map((language) => language.name),
-    ).toEqual(['Alpha', 'Middle', 'Zulu'])
-    expect(languages.map((language) => language.name)).toEqual(['Japanese', 'English', 'German'])
+    expect(languages.map((language) => language.name)).toEqual([
+      'Japanese',
+      'Simplified Chinese',
+      'English',
+      'German',
+    ])
   })
 })

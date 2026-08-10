@@ -16,12 +16,10 @@ export function modelKey(model: Model | ModelSelection): string {
 
 export function orderedLanguageChoices(
   languages: readonly LanguageChoice[],
-  displayName: (language: LanguageChoice) => string = (language) => language.name,
-  locale?: string,
 ): Array<{ tag: string; name: string }> {
   return languages
-    .map((language) => ({ tag: language.tag, name: displayName(language) }))
+    .map((language) => ({ tag: language.tag, name: language.name }))
     .sort((left, right) =>
-      left.name.localeCompare(right.name, locale, { numeric: true, sensitivity: 'base' }),
+      left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }),
     )
 }
