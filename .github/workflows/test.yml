@@ -1,8 +1,9 @@
 name: Test
 
-# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  workflow_dispatch:
+  push:
+    branches: ['main']
+  pull_request:
 
 permissions:
   contents: read
@@ -33,25 +34,8 @@ jobs:
             gnome-keyring
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
-        with:
-          cache-targets: false
-      # The integration-tests crate prepares a shared llama.cpp runtime once
-      # per `cargo test` invocation under `tests/integration-tests/.cache`;
-      # caching that directory across runs avoids re-downloading the dylib
-      # on every PR.
-      - uses: actions/cache@v6
-        with:
-          path: tests/integration-tests/.cache
-          key: ${{ runner.os }}-integration-runtime-${{ hashFiles('koharu-runtime/**/*.rs', 'koharu-llm/**/*.rs') }}
-          restore-keys: ${{ runner.os }}-integration-runtime-
-      - name: Run headless Rust tests (unit + non-GUI integration)
+      - name: Run headless Rust tests
         run: |
-          # Headless dbus + gnome-keyring so the provider-secret integration
-          # tests can talk to secret-service on Linux runners.
-          eval "$(dbus-launch --sh-syntax)"
-          echo -n "" | gnome-keyring-daemon --unlock --components=secrets &>/dev/null &
-          export $(echo -n "" | gnome-keyring-daemon --start --components=secrets 2>/dev/null)
-          # Native Playwright and ignored GPU tests are intentionally excluded.
           cargo test --workspace --tests
 
   ui:

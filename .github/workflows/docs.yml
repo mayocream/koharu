@@ -1,7 +1,8 @@
 name: Documentation
-# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  workflow_dispatch:
+  push:
+    branches: ['main']
+
 permissions:
   contents: read
   pages: write

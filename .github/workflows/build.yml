@@ -1,8 +1,9 @@
 name: Build
 
-# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  workflow_dispatch:
+  push:
+    branches: ['main']
+  pull_request:
 
 permissions:
   contents: read

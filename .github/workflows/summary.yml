@@ -1,8 +1,8 @@
 name: Summarize new issues
 
-# Temporarily manual-only while monitoring llama.cpp builds.
 on:
-  workflow_dispatch:
+  issues:
+    types: [opened]
 
 jobs:
   summary:
