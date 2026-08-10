@@ -13,8 +13,10 @@ publish.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 image = { workspace = true }
 fast_image_resize = { workspace = true }
+koharu-config = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-runtime = { workspace = true }
 skrifa = { workspace = true }
@@ -30,6 +32,7 @@ pollster = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+specta = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

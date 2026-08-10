@@ -115,6 +115,9 @@ const preferences: Preferences = {
       },
     ],
   },
+  typesetting: {
+    font_families: ['Noto Sans'],
+  },
   languages: [
     { tag: 'en-US', name: 'English' },
     { tag: 'ja-JP', name: 'Japanese' },
@@ -571,7 +574,11 @@ describe('greenfield editor', () => {
     expect(screen.queryByRole('button', { name: 'Apply output' })).not.toBeInTheDocument()
 
     await waitFor(() =>
-      expect(save).toHaveBeenCalledWith(nextPreferences.pipeline, preferences.providers),
+      expect(save).toHaveBeenCalledWith(
+        nextPreferences.pipeline,
+        preferences.providers,
+        preferences.typesetting,
+      ),
     )
     expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
       nextPreferences.pipeline.translation,
@@ -616,7 +623,11 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use Gemma 4 12B from Local' }))
 
     await waitFor(() =>
-      expect(save).toHaveBeenCalledWith(nextPreferences.pipeline, preferences.providers),
+      expect(save).toHaveBeenCalledWith(
+        nextPreferences.pipeline,
+        preferences.providers,
+        preferences.typesetting,
+      ),
     )
     expect(useKoharuStore.getState().preferences?.pipeline.translation.model).toEqual(
       nextPreferences.pipeline.translation.model,
@@ -677,6 +688,7 @@ describe('greenfield editor', () => {
           }),
         }),
         preferences.providers,
+        preferences.typesetting,
       ),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }))
@@ -699,6 +711,84 @@ describe('greenfield editor', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Target language')).toHaveTextContent('American English')
+  })
+
+  it('adds and removes default font families from typesetting settings', async () => {
+    installProject()
+    const user = userEvent.setup()
+    useKoharuStore.setState({ settingsOpen: true })
+    queryClient.setQueryData(fontsKey, [
+      {
+        name: 'Noto Sans',
+        metadata: {
+          primary_script: 'latn',
+          scripts: ['latn'],
+          languages: ['en'],
+          category: 'SANS_SERIF',
+          classifications: ['sans-serif'],
+          use_cases: ['body-text'],
+        },
+        sources: ['system'],
+        faces: [
+          {
+            postscript_name: 'NotoSans-Regular',
+            weight: 400,
+            weight_range: null,
+            style: 'normal',
+          },
+        ],
+      },
+      {
+        name: 'Arial',
+        metadata: {
+          primary_script: 'latn',
+          scripts: ['latn'],
+          languages: ['en'],
+          category: 'SANS_SERIF',
+          classifications: ['sans-serif'],
+          use_cases: ['body-text'],
+        },
+        sources: ['system'],
+        faces: [
+          {
+            postscript_name: 'ArialMT',
+            weight: 400,
+            weight_range: null,
+            style: 'normal',
+          },
+        ],
+      },
+    ])
+    const save = vi
+      .spyOn(commands, 'savePreferences')
+      .mockImplementation(async (pipeline, providers, typesetting) => ({
+        ...preferences,
+        pipeline,
+        providers,
+        typesetting,
+      }))
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsPage />
+      </ThemeProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Typesetting' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Typesetting' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add default font family' }))
+    await user.click(await screen.findByRole('option', { name: 'Arial, System' }))
+
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith(preferences.pipeline, preferences.providers, {
+        font_families: ['Noto Sans', 'Arial'],
+      }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Remove Noto Sans' }))
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith(preferences.pipeline, preferences.providers, {
+        font_families: ['Arial'],
+      }),
+    )
   })
 
   it('shows model resources in the left sidebar footer', () => {

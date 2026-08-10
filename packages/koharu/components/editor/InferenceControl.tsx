@@ -148,7 +148,7 @@ function RuntimeSelector({
         },
       },
     }
-    void call(commands.savePreferences, pipeline, preferences.providers)
+    void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
       .then((saved) => {
         receivePreferences(saved)
       })
@@ -172,7 +172,7 @@ function RuntimeSelector({
         instructions: draft.instructions || null,
       },
     }
-    void call(commands.savePreferences, pipeline, preferences.providers)
+    void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
       .then((saved) => {
         receivePreferences(saved)
         setView('root')

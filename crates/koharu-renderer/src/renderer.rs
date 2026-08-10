@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, anyhow};
+use arc_swap::ArcSwap;
 use koharu_scene::{
     Asset, AssetRole, BlobId, BubbleRegion, Change, Component, ComponentOwner, EntityChange,
     EntityId, FitsTo, Geometry, Group, OcrAnalysis, Origin, Page, Presents, RasterLayer,
@@ -30,7 +31,7 @@ use vello::{
 use crate::{
     Error, FontFamily, FontStyle, Frame, ImageKind, ImageMetadata, Layer, LayerKind, Presentation,
     Raster, RasterOptions, RenderBounds, RenderDependency, RenderDiagnostic, Result,
-    RetentionStats, TextAlign, TextMetadata, WritingMode,
+    RetentionStats, TextAlign, TextMetadata, TypesettingConfig, WritingMode,
     bubble::{GeometryFrame, LayoutBox, contour, geometry_bounds, geometry_frame},
     fonts::{FontPreview, FontRequest, Fonts},
     frame::{
@@ -48,7 +49,6 @@ const DEFAULT_RETAINED_NODES: usize = 2_048;
 const MAX_RESOURCE_READS: usize = 8;
 const ASSETS_KIND: &str = "dev.koharu.assets";
 const MINIMUM_FONT_SIZE: f32 = 9.0;
-const DEFAULT_FONT_FAMILIES: &[&str] = &["CCWildWords", "Arial"];
 
 #[derive(Clone)]
 pub struct Renderer {
@@ -56,6 +56,7 @@ pub struct Renderer {
 }
 
 struct RendererInner {
+    typesetting: Arc<ArcSwap<TypesettingConfig>>,
     fonts: Arc<Fonts>,
     images: Mutex<ImageCache>,
     image_loads: Mutex<HashMap<BlobId, Weak<ImageLoad>>>,
@@ -73,8 +74,33 @@ impl std::fmt::Debug for Renderer {
 impl Renderer {
     /// Creates a renderer without discovering fonts, reading blobs, or initializing a GPU.
     pub fn new() -> Result<Self> {
-        Ok(Self {
+        Self::from_config(TypesettingConfig::load().map_err(Error::Backend)?)
+    }
+
+    pub fn from_config(config: koharu_config::Config<TypesettingConfig>) -> Result<Self> {
+        let renderer = Self::with_typesetting(config.read().map_err(Error::Backend)?.clone());
+        let watched = renderer.inner.typesetting.clone();
+        let _watcher = tokio::runtime::Handle::try_current()
+            .context("renderer requires a Tokio runtime")
+            .map_err(Error::Backend)?
+            .spawn(async move {
+                let mut changes = config.subscribe();
+                while changes.changed().await.is_ok() {
+                    match config.read() {
+                        Ok(config) => {
+                            watched.store(Arc::new(config.clone()));
+                        }
+                        Err(error) => tracing::error!(%error, "failed to reload typesetting"),
+                    }
+                }
+            });
+        Ok(renderer)
+    }
+
+    fn with_typesetting(typesetting: TypesettingConfig) -> Self {
+        Self {
             inner: Arc::new(RendererInner {
+                typesetting: Arc::new(ArcSwap::from_pointee(typesetting)),
                 fonts: Arc::new(Fonts::new()),
                 images: Mutex::new(ImageCache::new()),
                 image_loads: Mutex::new(HashMap::new()),
@@ -82,13 +108,13 @@ impl Renderer {
                 workers: OnceLock::new(),
                 rasterizer: OnceCell::new(),
             }),
-        })
+        }
     }
 
     /// Completely renders one page, including resources needed by retained nodes.
     #[tracing::instrument(level = "info", skip_all, fields(page = %page, revision = %snapshot.revision()))]
     pub async fn render(&self, snapshot: &Snapshot, page: EntityId) -> Result<Frame> {
-        let compiled = compile(snapshot, page)?;
+        let compiled = self.compile(snapshot, page)?;
         self.finish(snapshot, compiled, None, None).await
     }
 
@@ -123,7 +149,7 @@ impl Renderer {
                 },
             ));
         }
-        let compiled = compile(snapshot, previous.page())?;
+        let compiled = self.compile(snapshot, previous.page())?;
         self.finish(snapshot, compiled, Some(previous), Some(&affected))
             .await
     }
@@ -216,6 +242,11 @@ impl Renderer {
         .context("font preview raster worker stopped unexpectedly")
         .and_then(|result| result)
         .map_err(Error::FontResource)
+    }
+
+    /// Discards retained Vello nodes after their presentation resource lifetime ends.
+    pub fn discard_retained_nodes(&self) {
+        self.inner.nodes.lock().entries.clear();
     }
 
     async fn rasterizer(&self) -> Result<Arc<Rasterizer>> {
@@ -453,7 +484,7 @@ impl Renderer {
 
 impl Default for Renderer {
     fn default() -> Self {
-        Self::new().expect("cheap renderer construction cannot fail")
+        Self::with_typesetting(TypesettingConfig::default())
     }
 }
 
@@ -496,79 +527,83 @@ struct CompiledPage {
     diagnostics: Vec<RenderDiagnostic>,
 }
 
-fn compile(snapshot: &Snapshot, page: EntityId) -> Result<CompiledPage> {
-    let page_value = snapshot.page(page)?.page()?;
-    let (width, height) = surface_size(&page_value)?;
-    let source_role = AssetRole::new("source")?;
-    let mut traversal = Traversal {
-        snapshot,
-        page,
-        width,
-        height,
-        source_role: &source_role,
-        layers: Vec::new(),
-        dependencies: BTreeSet::from([
-            RenderDependency::Entity(page),
-            RenderDependency::Hierarchy(page),
-            component_dependency::<Page>(page),
-            RenderDependency::Component {
-                entity: page,
-                kind: ASSETS_KIND.to_owned(),
-            },
-        ]),
-        diagnostics: Vec::new(),
-    };
-    if let Some(asset) = snapshot.asset(page, &source_role)? {
-        let geometry = Geometry::rectangle(0.0, 0.0, f64::from(width), f64::from(height));
-        let mut dependencies = BTreeSet::from([
-            RenderDependency::Entity(page),
-            component_dependency::<Page>(page),
-            RenderDependency::Component {
-                entity: page,
-                kind: ASSETS_KIND.to_owned(),
-            },
-            RenderDependency::Blob(asset.blob),
-        ]);
-        traversal.dependencies.extend(dependencies.iter().cloned());
-        traversal.layers.push(image_draft(
+impl Renderer {
+    fn compile(&self, snapshot: &Snapshot, page: EntityId) -> Result<CompiledPage> {
+        let typesetting = self.inner.typesetting.load();
+        let page_value = snapshot.page(page)?.page()?;
+        let (width, height) = surface_size(&page_value)?;
+        let source_role = AssetRole::new("source")?;
+        let mut traversal = Traversal {
+            snapshot,
             page,
-            geometry,
-            asset,
-            ImageMetadata {
-                name: None,
-                kind: ImageKind::Source,
-            },
+            width,
+            height,
+            source_role: &source_role,
+            font_families: &typesetting.font_families,
+            layers: Vec::new(),
+            dependencies: BTreeSet::from([
+                RenderDependency::Entity(page),
+                RenderDependency::Hierarchy(page),
+                component_dependency::<Page>(page),
+                RenderDependency::Component {
+                    entity: page,
+                    kind: ASSETS_KIND.to_owned(),
+                },
+            ]),
+            diagnostics: Vec::new(),
+        };
+        if let Some(asset) = snapshot.asset(page, &source_role)? {
+            let geometry = Geometry::rectangle(0.0, 0.0, f64::from(width), f64::from(height));
+            let mut dependencies = BTreeSet::from([
+                RenderDependency::Entity(page),
+                component_dependency::<Page>(page),
+                RenderDependency::Component {
+                    entity: page,
+                    kind: ASSETS_KIND.to_owned(),
+                },
+                RenderDependency::Blob(asset.blob),
+            ]);
+            traversal.dependencies.extend(dependencies.iter().cloned());
+            traversal.layers.push(image_draft(
+                page,
+                geometry,
+                asset,
+                ImageMetadata {
+                    name: None,
+                    kind: ImageKind::Source,
+                },
+                Presentation {
+                    visible: true,
+                    opacity: 1.0,
+                },
+                Arc::from([]),
+                &mut dependencies,
+                Some((width, height)),
+            )?);
+        } else {
+            traversal.diagnostics.push(RenderDiagnostic::MissingAsset {
+                entity: page,
+                role: source_role.as_str().to_owned(),
+            });
+        }
+        traversal.visit_children(
+            page,
             Presentation {
                 visible: true,
                 opacity: 1.0,
             },
-            Arc::from([]),
-            &mut dependencies,
-            Some((width, height)),
-        )?);
-    } else {
-        traversal.diagnostics.push(RenderDiagnostic::MissingAsset {
-            entity: page,
-            role: source_role.as_str().to_owned(),
-        });
+            &[],
+        )?;
+        Ok(CompiledPage {
+            revision: snapshot.revision(),
+            page,
+            width,
+            height,
+            layers: traversal.layers,
+            dependencies: traversal.dependencies.into_iter().collect(),
+            diagnostics: traversal.diagnostics,
+        })
     }
-    traversal.visit_children(
-        page,
-        Presentation {
-            visible: true,
-            opacity: 1.0,
-        },
-        &[],
-    )?;
-    Ok(CompiledPage {
-        revision: snapshot.revision(),
-        page,
-        width,
-        height,
-        layers: traversal.layers,
-        dependencies: traversal.dependencies.into_iter().collect(),
-        diagnostics: traversal.diagnostics,
-    })
 }
 
 struct Traversal<'a> {
@@ -577,6 +612,7 @@ struct Traversal<'a> {
     width: u32,
     height: u32,
     source_role: &'a AssetRole,
+    font_families: &'a [String],
     layers: Vec<LayerDraft>,
     dependencies: BTreeSet<RenderDependency>,
     diagnostics: Vec<RenderDiagnostic>,
@@ -781,10 +817,7 @@ impl Traversal<'_> {
         let preferred_font = typography
             .as_ref()
             .and_then(|value| value.preferred_font.clone());
-        let font_families = DEFAULT_FONT_FAMILIES
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect::<Vec<_>>();
+        let font_families = self.font_families.to_vec();
         for family in preferred_font.iter().chain(font_families.iter()) {
             dependencies.insert(RenderDependency::Font(family.clone()));
         }
@@ -1480,7 +1513,7 @@ mod tests {
 
     #[test]
     fn construction_and_clone_do_not_initialize_expensive_resources() {
-        let renderer = Renderer::new().unwrap();
+        let renderer = Renderer::default();
         let cloned = renderer.clone();
         assert!(Arc::ptr_eq(&renderer.inner, &cloned.inner));
         assert!(!renderer.inner.fonts.is_system_initialized());
@@ -1520,7 +1553,8 @@ mod tests {
             .unwrap();
         let snapshot = session.commit(create).await.unwrap().snapshot;
         let (page, content, text) = ids.unwrap();
-        let compiled = compile(&snapshot, page).unwrap();
+        let renderer = Renderer::default();
+        let compiled = renderer.compile(&snapshot, page).unwrap();
         assert!(compiled.layers.iter().all(|layer| layer.entity != text));
 
         let translation = snapshot
@@ -1535,7 +1569,7 @@ mod tests {
             })
             .unwrap();
         let commit = session.commit(translation).await.unwrap();
-        let compiled = compile(&commit.snapshot, page).unwrap();
+        let compiled = renderer.compile(&commit.snapshot, page).unwrap();
         assert!(compiled.layers.iter().any(|layer| layer.entity == text));
     }
 
@@ -1562,7 +1596,7 @@ mod tests {
         let snapshot = session.commit(create).await.unwrap().snapshot;
         let (page, region) = ids.unwrap();
 
-        let compiled = compile(&snapshot, page).unwrap();
+        let compiled = Renderer::default().compile(&snapshot, page).unwrap();
         assert!(compiled.layers.iter().all(|layer| layer.entity != region));
     }
 
@@ -1636,7 +1670,8 @@ mod tests {
             .unwrap();
         let base = session.commit(create).await.unwrap().snapshot;
         let (page, bubble, first, second) = ids.unwrap();
-        let base_compiled = compile(&base, page).unwrap();
+        let renderer = Renderer::default();
+        let base_compiled = renderer.compile(&base, page).unwrap();
         let first_dependencies = &base_compiled
             .layers
             .iter()
@@ -1658,7 +1693,7 @@ mod tests {
         assert!(affected.intersects(first_dependencies));
         assert!(!affected.intersects(second_dependencies));
 
-        let fitted_compiled = compile(&fitted.snapshot, page).unwrap();
+        let fitted_compiled = renderer.compile(&fitted.snapshot, page).unwrap();
         let first_dependencies = &fitted_compiled
             .layers
             .iter()

@@ -10,6 +10,7 @@ import {
   Moon,
   Palette,
   Sun,
+  Type,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useEffect, useRef, useState } from 'react'
@@ -23,12 +24,14 @@ import {
 } from '@/components/preferences/PreferenceFields'
 import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
 import { TranslationPreferences } from '@/components/preferences/TranslationPreferences'
+import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
 import { call, refreshPreferences, refreshTranslationModels } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
 import {
   commands,
   type PipelineConfig,
   type ProviderPreferences as ProviderSettings,
+  type TypesettingConfig,
 } from '@/lib/protocol'
 import { receivePreferences, useKoharuStore, type ShortcutAction } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
@@ -47,6 +50,7 @@ const tabs = [
   ['pipeline', Cpu, 'Pipeline'],
   ['providers', KeyRound, 'Providers'],
   ['translation', Languages, 'Translation'],
+  ['typesetting', Type, 'Typesetting'],
   ['shortcuts', Keyboard, 'Shortcuts'],
 ] as const
 type Tab = (typeof tabs)[number][0]
@@ -62,6 +66,9 @@ export function SettingsPage() {
   const [providers, setProviders] = useState<ProviderSettings | null>(
     preferences?.providers ?? null,
   )
+  const [typesetting, setTypesetting] = useState<TypesettingConfig | null>(
+    preferences?.typesetting ?? null,
+  )
   const translation = pipeline?.translation ?? null
   const lastSaved = useRef<string | null>(null)
   const lastSavedProviders = useRef<string | null>(null)
@@ -76,21 +83,26 @@ export function SettingsPage() {
     if (!open) return
     setPipeline(preferences?.pipeline ?? null)
     setProviders(preferences?.providers ?? null)
+    setTypesetting(preferences?.typesetting ?? null)
     if (preferences) {
-      lastSaved.current = JSON.stringify([preferences.pipeline, preferences.providers])
+      lastSaved.current = JSON.stringify([
+        preferences.pipeline,
+        preferences.providers,
+        preferences.typesetting,
+      ])
       lastSavedProviders.current = JSON.stringify(preferences.providers)
     }
   }, [open, preferences])
 
   useEffect(() => {
-    if (!open || !pipeline || !providers) return
-    const serialized = JSON.stringify([pipeline, providers])
+    if (!open || !pipeline || !providers || !typesetting) return
+    const serialized = JSON.stringify([pipeline, providers, typesetting])
     if (serialized === lastSaved.current) return
     const serializedProviders = JSON.stringify(providers)
     const timeout = window.setTimeout(() => {
       lastSaved.current = serialized
       const providersChanged = serializedProviders !== lastSavedProviders.current
-      void call(commands.savePreferences, pipeline, providers)
+      void call(commands.savePreferences, pipeline, providers, typesetting)
         .then((saved) => {
           receivePreferences(saved)
           if (providersChanged) {
@@ -101,7 +113,7 @@ export function SettingsPage() {
         .catch(() => undefined)
     }, 260)
     return () => window.clearTimeout(timeout)
-  }, [open, pipeline, providers])
+  }, [open, pipeline, providers, typesetting])
 
   if (!open) return null
 
@@ -166,6 +178,12 @@ export function SettingsPage() {
                     setPipeline((current) => (current ? { ...current, translation } : current))
                   }
                 />
+              ) : (
+                <LoadingPreferences />
+              ))}
+            {tab === 'typesetting' &&
+              (typesetting ? (
+                <TypesettingPreferences value={typesetting} onChange={setTypesetting} />
               ) : (
                 <LoadingPreferences />
               ))}

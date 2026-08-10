@@ -4244,6 +4244,7 @@ name = "koharu-renderer"
 version = "0.62.0"
 dependencies = [
  "anyhow",
+ "arc-swap",
  "criterion",
  "fast_image_resize",
  "fontique",
@@ -4253,6 +4254,7 @@ dependencies = [
  "icu_segmenter",
  "image 0.25.10",
  "jieba-rs",
+ "koharu-config",
  "koharu-runtime",
  "koharu-scene",
  "once_cell",
@@ -4262,6 +4264,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skrifa",
+ "specta",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

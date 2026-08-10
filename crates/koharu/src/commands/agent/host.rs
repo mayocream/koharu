@@ -78,6 +78,7 @@ impl KoharuHost {
             "configuration": {
                 "pipeline": preferences.pipeline,
                 "providers": providers,
+                "typesetting": preferences.typesetting,
                 "available_fonts": fonts.into_iter().map(|font| font.name).collect::<Vec<_>>(),
             },
         }))

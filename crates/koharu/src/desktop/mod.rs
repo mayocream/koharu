@@ -179,6 +179,7 @@ impl Desktop {
 
         let Some(page) = page else {
             self.lock().canvas().clear();
+            self.renderer.discard_retained_nodes();
             return Ok(false);
         };
         let frame = if commit.revision == snapshot.revision()
@@ -212,11 +213,13 @@ impl Desktop {
     pub(crate) async fn clear(&self) {
         let _preparation = self.preparation.lock().await;
         self.lock().canvas().clear();
+        self.renderer.discard_retained_nodes();
     }
 
     async fn show_page_locked(&self, snapshot: &Snapshot, page: Option<EntityId>) -> Result<()> {
         let Some(page) = page else {
             self.lock().canvas().clear();
+            self.renderer.discard_retained_nodes();
             return Ok(());
         };
         let frame = self.renderer.render(snapshot, page).await?;

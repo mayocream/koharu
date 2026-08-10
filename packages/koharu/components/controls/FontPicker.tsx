@@ -50,12 +50,16 @@ export function FontPicker({
   families,
   disabled,
   size = 'default',
+  ariaLabel,
+  placeholder = 'Choose a font',
   onChange,
 }: {
   value: string
   families: FontFamily[]
   disabled?: boolean
   size?: 'default' | 'sm'
+  ariaLabel?: string
+  placeholder?: string
   onChange: (family: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -120,6 +124,7 @@ export function FontPicker({
           />
         }
         disabled={disabled}
+        aria-label={ariaLabel}
         data-testid='type-font-picker'
         className={cn(
           'w-full min-w-0 justify-between font-normal',
@@ -132,7 +137,7 @@ export function FontPicker({
             className='min-w-0 flex-1 py-1 [&>img]:max-h-3.5'
           />
         ) : (
-          <span className='truncate'>{value || 'Choose a font'}</span>
+          <span className='truncate'>{value || placeholder}</span>
         )}
         <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
       </PopoverTrigger>

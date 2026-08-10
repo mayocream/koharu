@@ -39,6 +39,9 @@ const preferences: Preferences = {
   providers: {
     entries: [],
   },
+  typesetting: {
+    font_families: ['CCWildWords', 'Adobe 黑体 Std'],
+  },
   languages: [],
 }
 
