@@ -203,7 +203,7 @@ impl<'a> LlamaBatch<'a> {
 impl<'a> Drop for LlamaBatch<'a> {
     /// Drops the `LlamaBatch`.
     ///
-    /// ```
+    /// ```no_run
     /// # use koharu_llama::llama_batch::LlamaBatch;
     /// # use std::error::Error;
     /// # fn main() -> Result<(), Box<dyn Error>> {

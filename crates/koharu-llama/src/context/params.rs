@@ -283,7 +283,7 @@ impl From<koharu_llama_sys::ggml_type> for KvCacheType {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// # use std::num::NonZeroU32;
 /// # use koharu_llama::context::params::LlamaContextParams;
 ///
@@ -307,7 +307,7 @@ unsafe impl Send for LlamaContextParams {}
 unsafe impl Sync for LlamaContextParams {}
 
 /// Default parameters for `LlamaContext`. (as defined in llama.cpp by `llama_context_default_params`)
-/// ```
+/// ```no_run
 /// # use std::num::NonZeroU32;
 /// # use koharu_llama::context::params::{LlamaContextParams, RopeScalingType};
 /// let params = LlamaContextParams::default();

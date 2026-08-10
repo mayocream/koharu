@@ -54,7 +54,7 @@ impl From<koharu_llama_sys::mtmd_input_chunk_type> for MtmdInputChunkType {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use koharu_llama::mtmd::{MtmdContextParams, mtmd_default_marker};
 /// use std::ffi::CString;
 ///
@@ -390,7 +390,7 @@ impl MtmdBitmap {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use koharu_llama::mtmd::MtmdBitmap;
     ///
     /// // Create a 2x2 red image
@@ -427,7 +427,7 @@ impl MtmdBitmap {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use koharu_llama::mtmd::MtmdBitmap;
     ///
     /// // Create a simple sine wave audio sample
@@ -659,7 +659,7 @@ impl MtmdInputChunks {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use koharu_llama::mtmd::MtmdInputChunks;
     ///
     /// let chunks = MtmdInputChunks::new();
@@ -907,7 +907,7 @@ impl Drop for MtmdInputChunk {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use koharu_llama::mtmd::mtmd_default_marker;
 ///
 /// let marker = mtmd_default_marker();

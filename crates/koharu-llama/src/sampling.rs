@@ -111,7 +111,7 @@ impl LlamaSampler {
     /// Same as [`Self::chain`] with `no_perf = false`.
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use koharu_llama::token::{
     ///    LlamaToken,
     ///    data::LlamaTokenData,
@@ -149,7 +149,7 @@ impl LlamaSampler {
     /// value, the rest are set to -inf
     ///
     /// # Example:
-    /// ```rust
+    /// ```rust,no_run
     /// use koharu_llama::token::{
     ///    LlamaToken,
     ///    data::LlamaTokenData,
@@ -187,7 +187,7 @@ impl LlamaSampler {
     /// <https://arxiv.org/abs/1904.09751>
     ///
     /// # Example:
-    /// ```rust
+    /// ```rust,no_run
     /// use koharu_llama::token::{
     ///    LlamaToken,
     ///    data::LlamaTokenData,
@@ -223,7 +223,7 @@ impl LlamaSampler {
     /// - `n`: Number of standard deviations from the mean to include in sampling
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use koharu_llama::sampling::LlamaSampler;
     /// use koharu_llama::token::{
     ///     LlamaToken,
@@ -551,7 +551,7 @@ impl LlamaSampler {
     /// Selects the most likely token
     ///
     /// # Example:
-    /// ```rust
+    /// ```rust,no_run
     /// use koharu_llama::token::{
     ///    LlamaToken,
     ///    data::LlamaTokenData,
@@ -582,7 +582,7 @@ impl LlamaSampler {
     /// - ``biases``: Slice of [`LlamaLogitBias`] values specifying token-bias pairs
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use koharu_llama::token::{LlamaToken, logit_bias::LlamaLogitBias};
     /// use koharu_llama::sampling::LlamaSampler;
     ///

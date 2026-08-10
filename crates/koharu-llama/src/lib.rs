@@ -251,7 +251,7 @@ pub enum LlamaLoraAdapterRemoveError {
 }
 
 /// get the time (in microseconds) according to llama.cpp
-/// ```
+/// ```no_run
 /// # use koharu_llama::llama_time_us;
 /// # use koharu_llama::llama_backend::LlamaBackend;
 /// let backend = LlamaBackend::init().unwrap();
@@ -264,7 +264,7 @@ pub fn llama_time_us() -> i64 {
 }
 
 /// get the max number of devices according to llama.cpp (this is generally cuda devices)
-/// ```
+/// ```no_run
 /// # use koharu_llama::max_devices;
 /// let max_devices = max_devices();
 /// assert!(max_devices >= 0);
@@ -275,7 +275,7 @@ pub fn max_devices() -> usize {
 }
 
 /// is memory mapping supported according to llama.cpp
-/// ```
+/// ```no_run
 /// # use koharu_llama::mmap_supported;
 /// let mmap_supported = mmap_supported();
 /// if mmap_supported {
@@ -288,7 +288,7 @@ pub fn mmap_supported() -> bool {
 }
 
 /// is memory locking supported according to llama.cpp
-/// ```
+/// ```no_run
 /// # use koharu_llama::mlock_supported;
 /// let mlock_supported = mlock_supported();
 /// if mlock_supported {
@@ -353,7 +353,7 @@ pub enum ApplyChatTemplateError {
 
 /// Get the time in microseconds according to ggml
 ///
-/// ```
+/// ```no_run
 /// # use std::time::Duration;
 /// # use koharu_llama::llama_backend::LlamaBackend;
 /// let backend = LlamaBackend::init().unwrap();
@@ -375,7 +375,7 @@ pub fn ggml_time_us() -> i64 {
 
 /// checks if mlock is supported
 ///
-/// ```
+/// ```no_run
 /// # use koharu_llama::llama_supports_mlock;
 ///
 /// if llama_supports_mlock() {

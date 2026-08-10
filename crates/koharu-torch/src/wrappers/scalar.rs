@@ -99,6 +99,7 @@ impl From<&Scalar> for f64 {
 mod tests {
     use super::Scalar;
     #[test]
+    #[ignore = "requires the dynamically loaded LibTorch runtime"]
     fn scalar() {
         let pi = Scalar::float(std::f64::consts::PI);
         assert_eq!(i64::from(&pi), 3);

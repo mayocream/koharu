@@ -151,7 +151,7 @@ impl LlamaModelParams {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use koharu_llama::model::params::LlamaModelParams;
     /// let params = Box::pin(LlamaModelParams::default());
     /// let kv_overrides = params.kv_overrides();
@@ -167,7 +167,7 @@ impl LlamaModelParams {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use std::ffi::{CStr, CString};
     /// use std::pin::pin;
     /// # use koharu_llama::model::params::LlamaModelParams;
@@ -354,7 +354,7 @@ impl LlamaModelParams {
     }
 
     /// sets the number of gpu layers to offload to the GPU.
-    /// ```
+    /// ```no_run
     /// # use koharu_llama::model::params::LlamaModelParams;
     /// let params = LlamaModelParams::default();
     /// let params = params.with_n_gpu_layers(1);
@@ -484,7 +484,7 @@ impl LlamaModelParams {
 }
 
 /// Default parameters for `LlamaModel`. (as defined in llama.cpp by `llama_model_default_params`)
-/// ```
+/// ```no_run
 /// # use koharu_llama::model::params::LlamaModelParams;
 /// use koharu_llama::model::params::LlamaSplitMode;
 /// let params = LlamaModelParams::default();

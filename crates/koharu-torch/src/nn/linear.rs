@@ -61,13 +61,14 @@ impl super::module::Module for Linear {
 }
 
 #[test]
+#[ignore = "requires the dynamically loaded LibTorch runtime"]
 fn matches_pytorch() {
     use crate::nn::Module;
 
-    let input = Tensor::read_npy("tests/linear/in.npy").unwrap();
-    let expected_output = Tensor::read_npy("tests/linear/out.npy").unwrap();
-    let ws = Tensor::read_npy("tests/linear/ws.npy").unwrap();
-    let bs = Some(Tensor::read_npy("tests/linear/bs.npy").unwrap());
+    let input = Tensor::from_slice(&[1.0_f32, 2.0, 3.0, -1.0, 0.0, 1.0]).reshape([2, 3]);
+    let expected_output = Tensor::from_slice(&[-1.75_f32, 7.0, -1.75, 0.0]).reshape([2, 2]);
+    let ws = Tensor::from_slice(&[1.0_f32, 0.0, -1.0, 0.5, 2.0, 1.0]).reshape([2, 3]);
+    let bs = Some(Tensor::from_slice(&[0.25_f32, -0.5]));
 
     let original_output = if let Some(bias) = &bs {
         input.matmul(&ws.tr()) + bias

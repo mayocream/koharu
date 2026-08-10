@@ -897,6 +897,7 @@ mod tests {
         assert_eq!(ivalue, ivalue2);
     }
     #[test]
+    #[ignore = "requires the dynamically loaded LibTorch runtime"]
     fn ivalue_round_trip() {
         round_trip(());
         round_trip(true);

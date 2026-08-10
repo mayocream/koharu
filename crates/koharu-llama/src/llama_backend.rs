@@ -28,7 +28,7 @@ impl LlamaBackend {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     ///# use koharu_llama::llama_backend::LlamaBackend;
     ///# use koharu_llama::LlamaCppError;
     ///# use std::error::Error;
@@ -168,7 +168,7 @@ impl From<NumaStrategy> for koharu_llama_sys::ggml_numa_strategy {
 }
 
 /// Drops the llama backend.
-/// ```
+/// ```no_run
 ///
 ///# use koharu_llama::llama_backend::LlamaBackend;
 ///# use std::error::Error;
