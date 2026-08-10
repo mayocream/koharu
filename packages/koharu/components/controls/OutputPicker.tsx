@@ -2,6 +2,7 @@
 
 import { ChevronLeft, LoaderCircle } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { LanguageChoice } from '@/lib/protocol'
 import { orderedLanguageChoices } from '@/lib/translation'
@@ -37,6 +38,7 @@ export function OutputPicker({
   onBack: () => void
   onChange: (draft: OutputDraft) => void
 }) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState<OutputDraft>({
     targetLanguage,
     instructions: instructions ?? '',
@@ -69,16 +71,16 @@ export function OutputPicker({
           type='button'
           variant='ghost'
           size='icon-xs'
-          aria-label='Back'
+          aria-label={t('common.back')}
           className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
           onClick={back}
         >
           <ChevronLeft className='size-3.5' />
         </Button>
-        <span className='ml-1 text-[11px] font-medium'>Output</span>
+        <span className='ml-1 text-[11px] font-medium'>{t('outputPicker.title')}</span>
         {saving && (
           <LoaderCircle
-            aria-label='Saving output'
+            aria-label={t('outputPicker.saving')}
             className='mr-1 ml-auto size-3.5 animate-spin text-muted-foreground'
           />
         )}
@@ -86,7 +88,7 @@ export function OutputPicker({
 
       <div className='grid gap-2 p-1'>
         <label className='grid gap-1 text-[9px] text-muted-foreground'>
-          Target language
+          {t('model.targetLanguage')}
           <Select
             value={draft.targetLanguage}
             items={Object.fromEntries(
@@ -97,7 +99,10 @@ export function OutputPicker({
               targetLanguage && setDraft((current) => ({ ...current, targetLanguage }))
             }
           >
-            <SelectTrigger aria-label='Output target language' className='h-7 w-full text-[11px]'>
+            <SelectTrigger
+              aria-label={t('outputPicker.targetLanguage')}
+              className='h-7 w-full text-[11px]'
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -111,12 +116,12 @@ export function OutputPicker({
         </label>
 
         <label className='grid gap-1 text-[9px] text-muted-foreground'>
-          Instructions
+          {t('model.instructions')}
           <Textarea
             value={draft.instructions}
             disabled={disabled || saving}
-            aria-label='Output instructions'
-            placeholder='Names, tone, or terminology'
+            aria-label={t('outputPicker.instructions')}
+            placeholder={t('outputPicker.instructionsPlaceholder')}
             className='min-h-20 resize-none text-[11px] leading-4'
             onChange={(event) =>
               setDraft((current) => ({ ...current, instructions: event.currentTarget.value }))

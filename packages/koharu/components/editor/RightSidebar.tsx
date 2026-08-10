@@ -21,7 +21,7 @@ export function RightSidebar() {
           className='h-7 flex-1 text-[10px]'
           onClick={() => setPanel('properties')}
         >
-          <SlidersHorizontal className='size-3' /> {t('native.agent.properties')}
+          <SlidersHorizontal className='size-3' /> {t('agent.properties')}
         </Button>
         <Button
           variant={panel === 'agent' ? 'secondary' : 'ghost'}
@@ -29,7 +29,7 @@ export function RightSidebar() {
           className='h-7 flex-1 text-[10px]'
           onClick={() => setPanel('agent')}
         >
-          <Bot className='size-3' /> {t('native.agent.title')}
+          <Bot className='size-3' /> {t('agent.title')}
         </Button>
       </div>
       <div className={panel === 'agent' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>

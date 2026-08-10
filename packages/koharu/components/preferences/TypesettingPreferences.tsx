@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { FontPicker } from '@/components/controls/FontPicker'
 import { PreferencePage } from '@/components/preferences/PreferenceFields'
@@ -16,9 +17,10 @@ export function TypesettingPreferences({
   value: TypesettingConfig
   onChange: (value: TypesettingConfig) => void
 }) {
+  const { t } = useTranslation()
   const fonts = useFonts()
   const families = fonts.data ?? []
-  const fontFamilies = value.font_families ?? []
+  const fontFamilies = useMemo(() => value.font_families ?? [], [value.font_families])
   const selectedNames = useMemo(() => new Set(fontFamilies.map(normalizeFontName)), [fontFamilies])
   const availableFamilies = families.filter(
     (family) => !selectedNames.has(normalizeFontName(family.name)),
@@ -39,21 +41,24 @@ export function TypesettingPreferences({
 
   return (
     <PreferencePage
-      title='Typesetting'
-      description='Set the ordered font stack used when a text layer has no assigned family.'
+      title={t('settings.typesetting.title')}
+      description={t('settings.typesetting.description')}
     >
       <section aria-labelledby='typesetting-font-stack'>
         <header className='mb-3'>
           <h3 id='typesetting-font-stack' className='text-[12px] font-semibold'>
-            Font fallback
+            {t('settings.typesetting.fontFallback')}
           </h3>
           <p className='mt-0.5 text-[11px] leading-4 text-muted-foreground'>
-            Koharu uses the first available family that supports the text.
+            {t('settings.typesetting.fontFallbackDescription')}
           </p>
         </header>
         <div className='overflow-hidden rounded-xl border border-border/80 bg-[var(--surface-panel)]'>
           {fontFamilies.length > 0 ? (
-            <ol className='divide-y divide-border/80' aria-label='Default font families'>
+            <ol
+              className='divide-y divide-border/80'
+              aria-label={t('settings.typesetting.defaultFamilies')}
+            >
               {fontFamilies.map((family, index) => {
                 const choices = families.filter(
                   (candidate) =>
@@ -75,7 +80,7 @@ export function TypesettingPreferences({
                       <FontPicker
                         value={family}
                         families={choices}
-                        ariaLabel={`Default font family ${index + 1}`}
+                        ariaLabel={t('settings.typesetting.familyLabel', { index: index + 1 })}
                         onChange={(next) => replaceFamily(index, next)}
                       />
                     </div>
@@ -83,8 +88,8 @@ export function TypesettingPreferences({
                       type='button'
                       variant='ghost'
                       size='icon-sm'
-                      aria-label={`Remove ${family}`}
-                      title={`Remove ${family}`}
+                      aria-label={t('settings.typesetting.removeFamily', { family })}
+                      title={t('settings.typesetting.removeFamily', { family })}
                       className='shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
                       onClick={() => removeFamily(index)}
                     >
@@ -96,7 +101,7 @@ export function TypesettingPreferences({
             </ol>
           ) : (
             <p role='status' className='px-4 py-5 text-[11px] text-muted-foreground'>
-              No default families. Koharu will use the system fallback.
+              {t('settings.typesetting.empty')}
             </p>
           )}
           <div className='flex min-w-0 items-center gap-3 border-t border-border/80 bg-muted/20 px-3 py-2'>
@@ -108,8 +113,12 @@ export function TypesettingPreferences({
                 value=''
                 families={availableFamilies}
                 disabled={fonts.isPending || availableFamilies.length === 0}
-                ariaLabel='Add default font family'
-                placeholder={fonts.isPending ? 'Loading fonts...' : 'Add font family'}
+                ariaLabel={t('settings.typesetting.addFamily')}
+                placeholder={
+                  fonts.isPending
+                    ? t('settings.typesetting.loadingFonts')
+                    : t('settings.typesetting.addFamily')
+                }
                 onChange={(family) =>
                   onChange({ ...value, font_families: [...fontFamilies, family] })
                 }
@@ -120,7 +129,7 @@ export function TypesettingPreferences({
         </div>
         {fonts.isError && (
           <p role='status' className='mt-2 text-[10px] leading-4 text-destructive'>
-            Fonts could not be loaded. Existing families can still be removed.
+            {t('settings.typesetting.loadError')}
           </p>
         )}
       </section>

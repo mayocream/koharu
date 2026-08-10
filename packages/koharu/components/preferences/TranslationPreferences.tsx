@@ -2,6 +2,7 @@
 
 import { ChevronDown } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { GenerationPreferences } from '@/components/preferences/GenerationPreferences'
@@ -41,6 +42,7 @@ export function TranslationPreferences({
   languages: LanguageChoice[]
   onChange: (value: TranslationSettings) => void
 }) {
+  const { t } = useTranslation()
   const [modelOpen, setModelOpen] = useState(false)
   const selected =
     modelChoices.find((candidate) => modelKey(candidate) === modelKey(value.model)) ?? null
@@ -55,18 +57,18 @@ export function TranslationPreferences({
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
     <PreferencePage
-      title='Translation'
-      description='Choose any configured provider model, then apply one shared set of translation and generation options.'
+      title={t('settings.translation.title')}
+      description={t('settings.translation.description')}
     >
       <PreferenceSection
-        title='Model'
-        description='Provider labels identify where each model runs; connections are configured separately.'
+        title={t('settings.translation.model')}
+        description={t('settings.translation.modelDescription')}
       >
-        <PreferenceRow title='Translation model'>
+        <PreferenceRow title={t('settings.translation.translationModel')}>
           <Popover open={modelOpen} onOpenChange={setModelOpen}>
             <PopoverTrigger
               type='button'
-              aria-label='Translation model'
+              aria-label={t('settings.translation.translationModel')}
               className='flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2.5 text-[11px] transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
             >
               <span className='min-w-0 flex-1 text-left'>
@@ -101,8 +103,8 @@ export function TranslationPreferences({
         </PreferenceRow>
         {quantizations.length > 0 && (
           <PreferenceRow
-            title='Quantization'
-            description='Smaller formats use less memory, usually with a quality tradeoff.'
+            title={t('settings.translation.quantization')}
+            description={t('settings.translation.quantizationDescription')}
           >
             <Select
               value={value.model.quantization ?? ''}
@@ -110,8 +112,11 @@ export function TranslationPreferences({
                 onChange({ ...value, model: { ...value.model, quantization } })
               }
             >
-              <SelectTrigger aria-label='Model quantization' className='h-8 w-full text-[11px]'>
-                <SelectValue placeholder='Select a quantization' />
+              <SelectTrigger
+                aria-label={t('settings.translation.modelQuantization')}
+                className='h-8 w-full text-[11px]'
+              >
+                <SelectValue placeholder={t('settings.translation.selectQuantization')} />
               </SelectTrigger>
               <SelectContent>
                 {quantizations.map((quantization) => (
@@ -130,8 +135,8 @@ export function TranslationPreferences({
         onChange={(generation) => onChange({ ...value, generation })}
       />
 
-      <PreferenceSection title='Output'>
-        <PreferenceRow title='Target language'>
+      <PreferenceSection title={t('settings.translation.output')}>
+        <PreferenceRow title={t('model.targetLanguage')}>
           <Select
             value={value.target_language}
             items={Object.fromEntries(
@@ -141,7 +146,10 @@ export function TranslationPreferences({
               target_language && onChange({ ...value, target_language })
             }
           >
-            <SelectTrigger aria-label='Target language' className='h-8 w-full text-[11px]'>
+            <SelectTrigger
+              aria-label={t('model.targetLanguage')}
+              className='h-8 w-full text-[11px]'
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -154,15 +162,15 @@ export function TranslationPreferences({
           </Select>
         </PreferenceRow>
         <PreferenceRow
-          title='Instructions'
-          description='Names, tone, terminology, or formatting guidance.'
+          title={t('model.instructions')}
+          description={t('settings.translation.instructionsDescription')}
           align='start'
         >
           <Textarea
-            aria-label='Translation instructions'
+            aria-label={t('settings.translation.instructionsLabel')}
             value={value.instructions ?? ''}
             className='min-h-24 resize-y text-[12px] leading-5'
-            placeholder='Optional project-wide guidance'
+            placeholder={t('settings.translation.instructionsPlaceholder')}
             onChange={(event) =>
               onChange({ ...value, instructions: event.currentTarget.value || null })
             }

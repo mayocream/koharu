@@ -1,8 +1,10 @@
 'use client'
 
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
+import type { TFunction } from 'i18next'
 import { ChevronDown, ListFilter, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { FontFamily, FontSource } from '@/lib/protocol'
 import { useFontPreview } from '@/lib/queries'
@@ -51,7 +53,7 @@ export function FontPicker({
   disabled,
   size = 'default',
   ariaLabel,
-  placeholder = 'Choose a font',
+  placeholder,
   onChange,
 }: {
   value: string
@@ -62,6 +64,7 @@ export function FontPicker({
   placeholder?: string
   onChange: (family: string) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState<Filters>(emptyFilters)
@@ -137,7 +140,7 @@ export function FontPicker({
             className='min-w-0 flex-1 py-1 [&>img]:max-h-3.5'
           />
         ) : (
-          <span className='truncate'>{value || placeholder}</span>
+          <span className='truncate'>{value || placeholder || t('fontPicker.choose')}</span>
         )}
         <ChevronDown className='size-3.5 shrink-0 text-muted-foreground' />
       </PopoverTrigger>
@@ -154,14 +157,14 @@ export function FontPicker({
             <InputGroupInput
               ref={input}
               value={query}
-              aria-label='Search fonts'
-              placeholder='Search fonts'
+              aria-label={t('fontPicker.search')}
+              placeholder={t('fontPicker.search')}
               className='h-6 px-0 text-[11px]'
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
             <InputGroupAddon align='inline-end' className='gap-0.5 pr-0.5'>
               {query && (
-                <InputGroupButton aria-label='Clear search' onClick={() => setQuery('')}>
+                <InputGroupButton aria-label={t('common.clearSearch')} onClick={() => setQuery('')}>
                   <X />
                 </InputGroupButton>
               )}
@@ -207,6 +210,7 @@ function FontFilterMenu({
   onChange: (filters: Filters) => void
   onClear: () => void
 }) {
+  const { t } = useTranslation()
   const activeFilterCount = Object.values(filters).filter(Boolean).length
 
   return (
@@ -215,7 +219,9 @@ function FontFilterMenu({
         render={
           <InputGroupButton
             aria-label={
-              activeFilterCount > 0 ? `Filter fonts, ${activeFilterCount} active` : 'Filter fonts'
+              activeFilterCount > 0
+                ? t('fontPicker.filterActiveLabel', { count: activeFilterCount })
+                : t('fontPicker.filter')
             }
             className={cn(activeFilterCount > 0 && 'bg-accent text-foreground')}
           />
@@ -228,29 +234,33 @@ function FontFilterMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' sideOffset={6} className='w-40'>
         <FilterSubmenu
-          label='Source'
-          allLabel='All sources'
+          label={t('fontPicker.source')}
+          allLabel={t('fontPicker.allSources')}
+          kind='source'
           value={filters.source}
           options={facets.sources}
           onChange={(source) => onChange({ ...filters, source: source as Filters['source'] })}
         />
         <FilterSubmenu
-          label='Script'
-          allLabel='All scripts'
+          label={t('fontPicker.script')}
+          allLabel={t('fontPicker.allScripts')}
+          kind='script'
           value={filters.script}
           options={facets.scripts}
           onChange={(script) => onChange({ ...filters, script })}
         />
         <FilterSubmenu
-          label='Style'
-          allLabel='All styles'
+          label={t('fontPicker.style')}
+          allLabel={t('fontPicker.allStyles')}
+          kind='metadata'
           value={filters.category}
           options={facets.categories}
           onChange={(category) => onChange({ ...filters, category })}
         />
         <FilterSubmenu
-          label='Purpose'
-          allLabel='All purposes'
+          label={t('fontPicker.purpose')}
+          allLabel={t('fontPicker.allPurposes')}
+          kind='metadata'
           value={filters.useCase}
           options={facets.uses}
           onChange={(useCase) => onChange({ ...filters, useCase })}
@@ -261,7 +271,7 @@ function FontFilterMenu({
           className='text-[11px]'
           onClick={onClear}
         >
-          Clear filters
+          {t('fontPicker.clearFilters')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -271,16 +281,19 @@ function FontFilterMenu({
 function FilterSubmenu({
   label,
   allLabel,
+  kind,
   value,
   options,
   onChange,
 }: {
   label: string
   allLabel: string
+  kind: 'source' | 'script' | 'metadata'
   value: string
   options: string[]
   onChange: (value: string) => void
 }) {
+  const { t } = useTranslation()
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className='text-[11px]'>{label}</DropdownMenuSubTrigger>
@@ -294,7 +307,7 @@ function FilterSubmenu({
           </DropdownMenuRadioItem>
           {options.map((option) => (
             <DropdownMenuRadioItem className='text-[11px]' key={option} value={option}>
-              {formatFacet(label, option)}
+              {formatFacet(kind, option, t)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -312,14 +325,13 @@ function FontResultSummary({
   activeFilterCount: number
   onClear: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className='flex h-6 items-center justify-between px-2 text-[9px] text-muted-foreground'>
-      <span>
-        {count.toLocaleString()} {count === 1 ? 'font' : 'fonts'}
-      </span>
+      <span>{t('fontPicker.fontCount', { count })}</span>
       {activeFilterCount > 0 ? (
         <Button variant='ghost' size='xs' className='h-5 px-1.5 text-[9px]' onClick={onClear}>
-          {activeFilterCount} active {activeFilterCount === 1 ? 'filter' : 'filters'}
+          {t('fontPicker.activeFilterCount', { count: activeFilterCount })}
           <X />
         </Button>
       ) : null}
@@ -336,6 +348,7 @@ function FontList({
   value: string
   onSelect: (family: string) => void
 }) {
+  const { t } = useTranslation()
   const list = useRef<HTMLDivElement>(null)
   const selectedIndex = families.findIndex(
     (family) => normalizeFontName(family.name) === normalizeFontName(value),
@@ -361,7 +374,7 @@ function FontList({
     <ScrollArea
       viewportRef={list}
       role='listbox'
-      aria-label='Fonts'
+      aria-label={t('fontPicker.fonts')}
       className='relative'
       viewportClassName='overflow-x-hidden'
       style={{
@@ -376,12 +389,15 @@ function FontList({
           const family = families[virtualRow.index]
           if (!family) return null
           const selected = normalizeFontName(family.name) === normalizeFontName(value)
+          const source = t(
+            family.sources.includes('bundled') ? 'fontPicker.library' : 'fontPicker.system',
+          )
           return (
             <button
               key={virtualRow.key}
               type='button'
               role='option'
-              aria-label={`${family.name}, ${fontSource(family)}`}
+              aria-label={t('fontPicker.fontLabel', { family: family.name, source })}
               aria-selected={selected}
               className={cn(
                 'absolute inset-x-0 top-0 flex h-9.5 w-full items-center px-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
@@ -394,7 +410,7 @@ function FontList({
                 <FontPreviewLabel family={family} className='h-4.5 w-full min-w-0' />
                 <div className='flex min-w-0 items-center justify-between gap-2 text-[8px] leading-none text-muted-foreground'>
                   <span className='min-w-0 truncate'>{family.name}</span>
-                  <span className='shrink-0'>{fontSource(family)}</span>
+                  <span className='shrink-0'>{source}</span>
                 </div>
               </div>
             </button>
@@ -404,7 +420,7 @@ function FontList({
       {families.length === 0 && (
         <Empty role='status' className='absolute inset-1 rounded-md p-2'>
           <EmptyTitle className='text-[11px] text-muted-foreground'>
-            No fonts match this search
+            {t('fontPicker.noResults')}
           </EmptyTitle>
         </Empty>
       )}
@@ -475,42 +491,14 @@ function formatMetadata(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function formatFacet(label: string, value: string): string {
-  if (label === 'Script') return formatScript(value)
-  if (label === 'Source') {
-    if (value === 'bundled') return 'Font library'
-    if (value === 'system') return 'System fonts'
+function formatFacet(kind: 'source' | 'script' | 'metadata', value: string, t: TFunction): string {
+  if (kind === 'script') {
+    return t(`fontPicker.scripts.${value.toLowerCase()}`, { defaultValue: formatMetadata(value) })
+  }
+  if (kind === 'source') {
+    return t(`fontPicker.sources.${value}`, { defaultValue: formatMetadata(value) })
   }
   return formatMetadata(value)
-}
-
-function fontSource(family: FontFamily): string {
-  return family.sources.includes('bundled') ? 'Library' : 'System'
-}
-
-function formatScript(script: string): string {
-  const names: Record<string, string> = {
-    latn: 'Latin',
-    cyrl: 'Cyrillic',
-    hani: 'Han',
-    hans: 'Simplified Han',
-    hant: 'Traditional Han',
-    hira: 'Hiragana',
-    kana: 'Katakana',
-    hang: 'Hangul',
-    arab: 'Arabic',
-    hebr: 'Hebrew',
-    deva: 'Devanagari',
-    beng: 'Bengali',
-    guru: 'Gurmukhi',
-    gujr: 'Gujarati',
-    taml: 'Tamil',
-    telu: 'Telugu',
-    knda: 'Kannada',
-    mlym: 'Malayalam',
-    thai: 'Thai',
-  }
-  return names[script.toLowerCase()] ?? formatMetadata(script)
 }
 
 function normalizeFontName(value: string): string {

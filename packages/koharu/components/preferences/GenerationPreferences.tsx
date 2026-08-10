@@ -1,5 +1,7 @@
 'use client'
 
+import { useTranslation } from 'react-i18next'
+
 import {
   NumberField,
   PreferenceRow,
@@ -15,16 +17,17 @@ export function GenerationPreferences({
   value: GenerationConfig
   onChange: (value: GenerationConfig) => void
 }) {
+  const { t } = useTranslation()
   const update = (changes: Partial<GenerationConfig>) => onChange({ ...value, ...changes })
   return (
     <PreferenceSection
-      title='Generation'
-      description='These options are provider-independent. Unsupported options are safely ignored.'
+      title={t('settings.generation.title')}
+      description={t('settings.generation.description')}
     >
-      <PreferenceRow title='Sampling and limits' align='start'>
+      <PreferenceRow title={t('settings.generation.sampling')} align='start'>
         <div className='grid grid-cols-2 gap-2'>
           <NumberField
-            label='Temperature'
+            label={t('settings.generation.temperature')}
             value={value.temperature ?? null}
             min={0}
             max={2}
@@ -32,14 +35,14 @@ export function GenerationPreferences({
             onChange={(temperature) => update({ temperature })}
           />
           <NumberField
-            label='Top K'
+            label={t('settings.generation.topK')}
             value={value.top_k ?? null}
             min={1}
             step={1}
             onChange={(top_k) => update({ top_k })}
           />
           <NumberField
-            label='Top P'
+            label={t('settings.generation.topP')}
             value={value.top_p ?? null}
             min={0}
             max={1}
@@ -47,7 +50,7 @@ export function GenerationPreferences({
             onChange={(top_p) => update({ top_p })}
           />
           <NumberField
-            label='Min P'
+            label={t('settings.generation.minP')}
             value={value.min_p ?? null}
             min={0}
             max={1}
@@ -55,27 +58,27 @@ export function GenerationPreferences({
             onChange={(min_p) => update({ min_p })}
           />
           <NumberField
-            label='Maximum tokens'
+            label={t('settings.generation.maxTokens')}
             value={value.max_tokens ?? null}
             min={1}
             step={1}
             onChange={(max_tokens) => update({ max_tokens })}
           />
           <NumberField
-            label='Repeat penalty'
+            label={t('settings.generation.repeatPenalty')}
             value={value.repeat_penalty ?? null}
             min={0}
             step={0.05}
             onChange={(repeat_penalty) => update({ repeat_penalty })}
           />
           <NumberField
-            label='Frequency penalty'
+            label={t('settings.generation.frequencyPenalty')}
             value={value.frequency_penalty ?? null}
             step={0.1}
             onChange={(frequency_penalty) => update({ frequency_penalty })}
           />
           <NumberField
-            label='Presence penalty'
+            label={t('settings.generation.presencePenalty')}
             value={value.presence_penalty ?? null}
             step={0.1}
             onChange={(presence_penalty) => update({ presence_penalty })}
@@ -83,12 +86,12 @@ export function GenerationPreferences({
         </div>
       </PreferenceRow>
       <PreferenceRow
-        title='Thinking'
-        description='Ask reasoning-capable models to use their thinking mode.'
+        title={t('settings.generation.thinking')}
+        description={t('settings.generation.thinkingDescription')}
       >
         <div className='flex h-8 items-center justify-end'>
           <Switch
-            aria-label='Enable thinking'
+            aria-label={t('settings.generation.enableThinking')}
             checked={value.thinking ?? false}
             onCheckedChange={(thinking) => update({ thinking })}
           />

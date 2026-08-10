@@ -1,6 +1,7 @@
 'use client'
 
 import { CircleAlert, Download, Square, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
 import { commands, type Download as DownloadState, type Job } from '@/lib/protocol'
@@ -8,6 +9,7 @@ import { useKoharuStore } from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 
 export function ActivityCenter() {
+  const { t } = useTranslation()
   const jobs = useKoharuStore((state) => state.jobs)
   const downloads = useKoharuStore((state) => state.downloads)
   const visibleJobs = Object.values(jobs).filter(
@@ -23,7 +25,9 @@ export function ActivityCenter() {
   return (
     <aside className='absolute right-3 bottom-9 z-30 flex w-72 max-w-[calc(100%-1.5rem)] flex-col rounded-2xl border border-border/50 bg-popover shadow-md'>
       <div className='border-b px-3 py-2'>
-        <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>Activity</span>
+        <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>
+          {t('activity.title')}
+        </span>
       </div>
       {runningDownloads.length > 1 ? (
         <DownloadGroup downloads={runningDownloads} />
@@ -41,6 +45,7 @@ export function ActivityCenter() {
 }
 
 function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
+  const { t } = useTranslation()
   const hasKnownTotal = downloads.every((download) => download.total > 0)
   const percent = hasKnownTotal
     ? progress(
@@ -53,7 +58,9 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
     <div className='border-b p-3 last:border-b-0'>
       <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
         <Download className='mt-0.5 size-3.5 justify-self-center text-primary' />
-        <span className='truncate text-[11px]'>Downloading {downloads.length} files</span>
+        <span className='truncate text-[11px]'>
+          {t('activity.downloadingFiles', { count: downloads.length })}
+        </span>
         <span className='text-right text-[10px] tabular-nums'>
           {percent !== null ? `${percent}%` : null}
         </span>
@@ -67,9 +74,15 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
 }
 
 function JobItem({ job }: { job: Job }) {
+  const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissJob)
   if (job.state === 'failed') {
-    return <Failure message={job.error || 'Processing failed'} onDismiss={() => dismiss(job.id)} />
+    return (
+      <Failure
+        message={job.error || t('activity.processingFailed')}
+        onDismiss={() => dismiss(job.id)}
+      />
+    )
   }
   const percent = progress(job.completed, job.total)
   return (
@@ -78,7 +91,9 @@ function JobItem({ job }: { job: Job }) {
         <span className='mt-1.5 size-1.5 justify-self-center rounded-full bg-primary' />
         <div className='min-w-0'>
           <span className='block truncate text-[12px] font-medium capitalize'>
-            {job.stage || 'Processing'}
+            {job.stage
+              ? t(`phase.${job.stage}`, { defaultValue: job.stage })
+              : t('activity.processing')}
           </span>
           <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>{job.model}</p>
         </div>
@@ -89,7 +104,7 @@ function JobItem({ job }: { job: Job }) {
           size='icon-xs'
           variant='ghost'
           className='-mt-1'
-          aria-label='Stop'
+          aria-label={t('activity.stop')}
           onClick={() => void call(commands.stopJob, job.id).catch(() => undefined)}
         >
           <Square className='size-2.5 fill-current' />
@@ -103,11 +118,12 @@ function JobItem({ job }: { job: Job }) {
 }
 
 function DownloadItem({ download }: { download: DownloadState }) {
+  const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissDownload)
   if (download.state === 'failed') {
     return (
       <Failure
-        message={download.error || 'Download failed'}
+        message={download.error || t('activity.downloadFailed')}
         onDismiss={() => dismiss(download.id)}
       />
     )
@@ -117,7 +133,7 @@ function DownloadItem({ download }: { download: DownloadState }) {
     <div className='border-b p-3 last:border-b-0'>
       <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
         <Download className='mt-0.5 size-3.5 justify-self-center text-primary' />
-        <span className='truncate text-[11px]'>{download.name || 'Model download'}</span>
+        <span className='truncate text-[11px]'>{download.name || t('activity.modelDownload')}</span>
         <span className='text-right text-[10px] tabular-nums'>
           {percent !== null ? `${percent}%` : null}
         </span>
@@ -131,6 +147,7 @@ function DownloadItem({ download }: { download: DownloadState }) {
 }
 
 function Failure({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5 border-b p-3 text-[11px] last:border-b-0'>
       <CircleAlert className='mt-0.5 size-3.5 justify-self-center text-destructive' />
@@ -139,7 +156,7 @@ function Failure({ message, onDismiss }: { message: string; onDismiss: () => voi
         size='icon-xs'
         variant='ghost'
         className='-mt-1'
-        aria-label='Dismiss'
+        aria-label={t('activity.dismiss')}
         onClick={onDismiss}
       >
         <X />

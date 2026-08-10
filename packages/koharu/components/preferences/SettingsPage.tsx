@@ -46,16 +46,17 @@ import {
 } from '@koharu/ui/components/select'
 
 const tabs = [
-  ['appearance', Palette, 'Appearance'],
-  ['pipeline', Cpu, 'Pipeline'],
-  ['providers', KeyRound, 'Providers'],
-  ['translation', Languages, 'Translation'],
-  ['typesetting', Type, 'Typesetting'],
-  ['shortcuts', Keyboard, 'Shortcuts'],
+  ['appearance', Palette],
+  ['pipeline', Cpu],
+  ['providers', KeyRound],
+  ['translation', Languages],
+  ['typesetting', Type],
+  ['shortcuts', Keyboard],
 ] as const
 type Tab = (typeof tabs)[number][0]
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const open = useKoharuStore((state) => state.settingsOpen)
   const setOpen = useKoharuStore((state) => state.setSettingsOpen)
   const preferences = useKoharuStore((state) => state.preferences)
@@ -125,13 +126,13 @@ export function SettingsPage() {
           className='mb-5 h-9 justify-start gap-2 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
           onClick={() => setOpen(false)}
         >
-          <ArrowLeft className='size-4' /> Back to editor
+          <ArrowLeft className='size-4' /> {t('settings.backToEditor')}
         </Button>
         <p className='mb-2 px-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase'>
-          Settings
+          {t('settings.title')}
         </p>
         <div className='grid gap-1'>
-          {tabs.map(([id, Icon, label]) => (
+          {tabs.map(([id, Icon]) => (
             <Button
               key={id}
               type='button'
@@ -141,14 +142,14 @@ export function SettingsPage() {
               className='h-10 w-full justify-start gap-3 rounded-lg px-3 text-left text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground'
               onClick={() => setTab(id)}
             >
-              <Icon className='size-4' /> {label}
+              <Icon className='size-4' /> {t(`settings.tabs.${id}`)}
             </Button>
           ))}
         </div>
       </nav>
       <main className='relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden rounded-tl-2xl bg-[var(--surface-canvas)] shadow-[var(--shadow-content)]'>
         <header className='flex h-14 shrink-0 items-center border-b border-border/80 px-8'>
-          <h1 className='text-[13px] font-semibold tracking-[-0.02em]'>Settings</h1>
+          <h1 className='text-[13px] font-semibold tracking-[-0.02em]'>{t('settings.title')}</h1>
         </header>
         <ScrollArea className='min-h-0 flex-1'>
           <div className='mx-auto w-full max-w-4xl px-10 py-10'>
@@ -197,20 +198,23 @@ function AppearancePreferences() {
   const { theme, setTheme } = useTheme()
   const { t, i18n } = useTranslation()
   const themes = [
-    ['light', Sun, 'Light'],
-    ['dark', Moon, 'Dark'],
-    ['system', Monitor, 'System'],
+    ['light', Sun],
+    ['dark', Moon],
+    ['system', Monitor],
   ] as const
 
   return (
     <PreferencePage
-      title='Appearance'
-      description='Match your workspace to the room without changing how artwork is rendered.'
+      title={t('settings.appearance.title')}
+      description={t('settings.appearance.description')}
     >
-      <PreferenceSection title='Interface'>
-        <PreferenceRow title='Theme' description='System follows the operating-system setting.'>
+      <PreferenceSection title={t('settings.appearance.interface')}>
+        <PreferenceRow
+          title={t('settings.appearance.theme')}
+          description={t('settings.appearance.themeDescription')}
+        >
           <div className='grid grid-cols-3 rounded-xl border border-input bg-background p-0.5'>
-            {themes.map(([value, Icon, label]) => (
+            {themes.map(([value, Icon]) => (
               <Button
                 key={value}
                 type='button'
@@ -220,19 +224,16 @@ function AppearancePreferences() {
                 className='h-9 gap-1.5 text-[10px] text-muted-foreground hover:text-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90 data-[active=true]:hover:text-primary-foreground'
                 onClick={() => setTheme(value)}
               >
-                <Icon className='size-3.5' /> {label}
+                <Icon className='size-3.5' /> {t(`settings.appearance.themes.${value}`)}
               </Button>
             ))}
           </div>
         </PreferenceRow>
-        <PreferenceRow title='Language'>
+        <PreferenceRow title={t('settings.appearance.language')}>
           <Select
             value={i18n.language}
             items={Object.fromEntries(
-              supportedLanguages.map((language) => [
-                language,
-                t(`menu.languages.${language}`, { defaultValue: language }),
-              ]),
+              supportedLanguages.map((language) => [language, t(`languages.${language}`)]),
             )}
             onValueChange={(language) => language && i18n.changeLanguage(language)}
           >
@@ -242,7 +243,7 @@ function AppearancePreferences() {
             <SelectContent>
               {supportedLanguages.map((language) => (
                 <SelectItem key={language} value={language}>
-                  {t(`menu.languages.${language}`, { defaultValue: language })}
+                  {t(`languages.${language}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -254,6 +255,7 @@ function AppearancePreferences() {
 }
 
 function ShortcutPreferences() {
+  const { t } = useTranslation()
   const shortcuts = useKoharuStore((state) => state.shortcuts)
   const setShortcut = useKoharuStore((state) => state.setShortcut)
   const actions: ShortcutAction[] = [
@@ -268,14 +270,14 @@ function ShortcutPreferences() {
   ]
   return (
     <PreferencePage
-      title='Shortcuts'
-      description='Single-key shortcuts are available whenever a text field is not focused.'
+      title={t('settings.shortcuts.title')}
+      description={t('settings.shortcuts.description')}
     >
-      <PreferenceSection title='Tools'>
+      <PreferenceSection title={t('settings.shortcuts.tools')}>
         {actions.map((action) => (
-          <PreferenceRow key={action} title={shortcutName(action)}>
+          <PreferenceRow key={action} title={t(shortcutKeys[action])}>
             <Input
-              aria-label={`${shortcutName(action)} shortcut`}
+              aria-label={t('settings.shortcuts.inputLabel', { action: t(shortcutKeys[action]) })}
               maxLength={1}
               value={shortcuts[action]}
               className='ml-auto h-8 w-14 text-center text-[12px] uppercase'
@@ -289,19 +291,17 @@ function ShortcutPreferences() {
 }
 
 function LoadingPreferences() {
-  return <p className='py-10 text-[12px] text-muted-foreground'>Loading preferences...</p>
+  const { t } = useTranslation()
+  return <p className='py-10 text-[12px] text-muted-foreground'>{t('settings.loading')}</p>
 }
 
-function shortcutName(action: ShortcutAction): string {
-  const names: Record<ShortcutAction, string> = {
-    select: 'Select',
-    text: 'Text',
-    draw: 'Brush',
-    eraser: 'Eraser',
-    color_picker: 'Sample color',
-    remove: 'Remove',
-    pan: 'Pan',
-    fit: 'Fit canvas',
-  }
-  return names[action]
+const shortcutKeys: Record<ShortcutAction, string> = {
+  select: 'tools.select',
+  text: 'tools.text',
+  draw: 'tools.draw',
+  eraser: 'tools.eraser',
+  color_picker: 'tools.color_picker',
+  remove: 'tools.remove',
+  pan: 'tools.pan',
+  fit: 'canvas.fit',
 }

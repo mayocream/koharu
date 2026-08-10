@@ -74,7 +74,7 @@ export function TitleBar() {
         </div>
         <Menubar className='h-full shrink-0 gap-0 border-0 bg-transparent p-0 shadow-none'>
           <MenubarMenu>
-            <MenubarTrigger>{t('native.menu.file', { defaultValue: 'File' })}</MenubarTrigger>
+            <MenubarTrigger>{t('menu.file')}</MenubarTrigger>
             <MenubarContent>
               <MenubarSub>
                 <MenubarSubTrigger
@@ -83,18 +83,16 @@ export function TitleBar() {
                   className='min-h-8 gap-1.5 px-2 py-1 text-xs'
                 >
                   {importing && <LoaderCircle className='animate-spin' aria-hidden='true' />}
-                  {importing
-                    ? t('native.navigator.importing', { defaultValue: 'Importing pages…' })
-                    : t('native.menu.importPages', { defaultValue: 'Import Pages…' })}
+                  {importing ? t('navigator.importing') : t('menu.importPages')}
                 </MenubarSubTrigger>
                 <MenubarSubContent className='min-w-40 p-1'>
                   <MenubarItem disabled={importing} onClick={() => importPages('files')}>
                     <ImagePlus />
-                    {t('native.navigator.importFiles', { defaultValue: 'Files...' })}
+                    {t('navigator.importFiles')}
                   </MenubarItem>
                   <MenubarItem disabled={importing} onClick={() => importPages('folder')}>
                     <FolderOpen />
-                    {t('native.navigator.importFolder', { defaultValue: 'Folder...' })}
+                    {t('navigator.importFolder')}
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
@@ -104,7 +102,7 @@ export function TitleBar() {
                   void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'png')
                 }
               >
-                {t('native.menu.exportPng', { defaultValue: 'Export PNG…' })}
+                {t('menu.exportPng')}
               </MenubarItem>
               <MenubarItem
                 disabled={!project || pages.length === 0}
@@ -112,22 +110,22 @@ export function TitleBar() {
                   void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'psd')
                 }
               >
-                {t('native.menu.exportPsd', { defaultValue: 'Export PSD…' })}
+                {t('menu.exportPsd')}
               </MenubarItem>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={closeProject}>
-                {t('native.menu.closeProject', { defaultValue: 'Close Project' })}
+                {t('menu.closeProject')}
               </MenubarItem>
               <MenubarSeparator />
               <MenubarItem onClick={() => setSettingsOpen(true)}>
                 <Settings />
-                {t('native.menu.settings', { defaultValue: 'Settings' })}
+                {t('menu.settings')}
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('native.menu.edit', { defaultValue: 'Edit' })}</MenubarTrigger>
+            <MenubarTrigger>{t('menu.edit')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
                 disabled={!project?.can_undo}
@@ -137,7 +135,7 @@ export function TitleBar() {
                     .catch(() => undefined)
                 }
               >
-                {t('native.menu.undo', { defaultValue: 'Undo' })}
+                {t('menu.undo')}
                 <MenubarShortcut>Ctrl+Z</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
@@ -148,7 +146,7 @@ export function TitleBar() {
                     .catch(() => undefined)
                 }
               >
-                {t('native.menu.redo', { defaultValue: 'Redo' })}
+                {t('menu.redo')}
                 <MenubarShortcut>Ctrl+Shift+Z</MenubarShortcut>
               </MenubarItem>
               <MenubarSeparator />
@@ -158,7 +156,7 @@ export function TitleBar() {
                   selectLayers(page?.layers.filter(selectableLayer).map((layer) => layer.id) ?? [])
                 }
               >
-                {t('native.menu.selectAllLayers', { defaultValue: 'Select All Layers' })}
+                {t('menu.selectAllLayers')}
                 <MenubarShortcut>Ctrl+A</MenubarShortcut>
               </MenubarItem>
               <MenubarItem
@@ -170,26 +168,26 @@ export function TitleBar() {
                     .catch(() => undefined)
                 }
               >
-                {t('native.menu.delete', { defaultValue: 'Delete Selected' })}
+                {t('menu.delete')}
                 <MenubarShortcut>Del</MenubarShortcut>
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('native.menu.process', { defaultValue: 'Process' })}</MenubarTrigger>
+            <MenubarTrigger>{t('menu.process')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
                 disabled={!project || pages.length === 0}
                 onClick={() => run({ scope: 'project' })}
               >
-                {t('native.menu.processProject', { defaultValue: 'Process Project' })}
+                {t('menu.processProject')}
               </MenubarItem>
               <MenubarItem
                 disabled={selectedPages.length === 0}
                 onClick={() => run({ scope: 'pages', value: selectedPages })}
               >
-                {t('native.menu.processPages', { defaultValue: 'Process Selected Pages' })}
+                {t('menu.processPages')}
               </MenubarItem>
               <MenubarItem
                 disabled={selectedLayers.length === 0}
@@ -200,7 +198,7 @@ export function TitleBar() {
                   )
                 }
               >
-                {t('native.menu.processLayers', { defaultValue: 'Process Selection' })}
+                {t('menu.processLayers')}
               </MenubarItem>
               <MenubarSeparator />
               {(['detection', 'ocr', 'translation', 'inpainting'] as Stage[]).map((stage) => (
@@ -209,9 +207,8 @@ export function TitleBar() {
                   disabled={!project || pages.length === 0}
                   onClick={() => run({ scope: 'project' }, { operation: 'through', stage })}
                 >
-                  {t('native.menu.runPhase', {
-                    phase: t(`native.phase.${stage}`, { defaultValue: stage }),
-                    defaultValue: 'Run {{phase}}',
+                  {t('menu.runPhase', {
+                    phase: t(`phase.${stage}`),
                   })}
                 </MenubarItem>
               ))}
@@ -219,31 +216,31 @@ export function TitleBar() {
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('native.menu.view', { defaultValue: 'View' })}</MenubarTrigger>
+            <MenubarTrigger>{t('menu.view')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem disabled={!page} onClick={() => dispatch(commands.fitCanvas)}>
-                {t('native.menu.fit', { defaultValue: 'Fit Window' })}
+                {t('menu.fit')}
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
 
           <MenubarMenu>
-            <MenubarTrigger>{t('menu.help', { defaultValue: 'Help' })}</MenubarTrigger>
+            <MenubarTrigger>{t('menu.help')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
                 onClick={() => void openUrl('https://discord.gg/mHvHkxGnUY').catch(() => undefined)}
               >
-                {t('menu.discord', { defaultValue: 'Discord' })}
+                {t('menu.discord')}
               </MenubarItem>
               <MenubarItem
                 onClick={() =>
                   void openUrl('https://github.com/mayocream/koharu').catch(() => undefined)
                 }
               >
-                {t('menu.github', { defaultValue: 'GitHub' })}
+                {t('menu.github')}
               </MenubarItem>
               <MenubarSeparator />
-            <MenubarItem onClick={() => setAboutOpen(true)}>About</MenubarItem>
+              <MenubarItem onClick={() => setAboutOpen(true)}>{t('menu.about')}</MenubarItem>
             </MenubarContent>
           </MenubarMenu>
         </Menubar>

@@ -98,18 +98,15 @@ export function CanvasWorkspace() {
       () => undefined,
     )
   })
-  const strokeUpdates = useFrameCommand(
-    ({ kind, points }: StrokeUpdate) => {
-      if (kind === 'paint') {
-        return enqueue(() => call(commands.extendPaint, points)).then(() => undefined)
-      }
-      if (kind === 'erase') {
-        return enqueue(() => call(commands.extendErase, points)).then(() => undefined)
-      }
-      return enqueue(() => call(commands.extendInpaint, points)).then(() => undefined)
-    },
-    mergeStrokeUpdates,
-  )
+  const strokeUpdates = useFrameCommand(({ kind, points }: StrokeUpdate) => {
+    if (kind === 'paint') {
+      return enqueue(() => call(commands.extendPaint, points)).then(() => undefined)
+    }
+    if (kind === 'erase') {
+      return enqueue(() => call(commands.extendErase, points)).then(() => undefined)
+    }
+    return enqueue(() => call(commands.extendInpaint, points)).then(() => undefined)
+  }, mergeStrokeUpdates)
 
   const report = useCallback(() => {
     if (surface.current) viewportUpdates.schedule(surface.current)
@@ -149,11 +146,7 @@ export function CanvasWorkspace() {
   const cancelGesture = useCallback(() => {
     const current = gesture.current
     gesture.current = null
-    if (
-      current?.kind === 'paint' ||
-      current?.kind === 'erase' ||
-      current?.kind === 'inpaint'
-    ) {
+    if (current?.kind === 'paint' || current?.kind === 'erase' || current?.kind === 'inpaint') {
       strokeUpdates.clear()
     }
     if (current?.kind === 'paint') {
@@ -381,7 +374,7 @@ export function CanvasWorkspace() {
         <div
           ref={surface}
           tabIndex={0}
-          aria-label={t('native.canvas.surface', { defaultValue: 'Koharu canvas' })}
+          aria-label={t('canvas.surface')}
           className='relative min-h-0 min-w-0 flex-1 touch-none overflow-hidden bg-transparent outline-none'
           style={{ cursor: page ? canvasCursors[tool] : undefined }}
           onContextMenu={(event) => event.preventDefault()}
@@ -522,7 +515,7 @@ export function CanvasWorkspace() {
           )}
           {!page && (
             <div className='pointer-events-none absolute inset-0 grid place-items-center'>
-              <p className='text-[12px] text-muted-foreground'>Select or import a page</p>
+              <p className='text-[12px] text-muted-foreground'>{t('canvas.empty')}</p>
             </div>
           )}
         </div>

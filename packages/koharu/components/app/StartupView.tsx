@@ -26,9 +26,7 @@ export function StartupView() {
             priority
           />
         </div>
-        <div
-          className='grid h-full place-items-center text-[11px] text-muted-foreground select-none'
-        >
+        <div className='grid h-full place-items-center text-[11px] text-muted-foreground select-none'>
           Koharu
         </div>
         <WindowControls />
@@ -49,18 +47,15 @@ export function StartupView() {
             id='startup-title'
             className='mt-5 text-[24px] font-semibold tracking-[-0.025em] text-balance'
           >
-            {t('native.startup.title', { defaultValue: 'Preparing Koharu' })}
+            {t('startup.title')}
           </h1>
           <p className='mx-auto mt-2 max-w-[48ch] text-[13px] leading-5 text-muted-foreground'>
-            {t('native.startup.description', {
-              defaultValue:
-                'Loading local AI runtimes and preparing the workspace. First launch can take a moment.',
-            })}
+            {t('startup.description')}
           </p>
 
           <div className='mx-auto mt-7 flex max-w-[480px] items-center justify-center gap-2.5 border-t border-border/80 pt-4 text-[12px] font-medium text-muted-foreground'>
             <span className='size-2 rounded-full bg-primary' aria-hidden='true' />
-            {t('native.startup.status', { defaultValue: 'Initializing local runtimes' })}
+            {t('startup.status')}
           </div>
         </section>
       </main>

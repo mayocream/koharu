@@ -1,5 +1,7 @@
 'use client'
 
+import { useTranslation } from 'react-i18next'
+
 import { dispatch } from '@/lib/backend'
 import { commands } from '@/lib/protocol'
 import { usePage } from '@/lib/queries'
@@ -7,6 +9,7 @@ import { useKoharuStore } from '@/lib/store'
 import { Slider } from '@koharu/ui/components/slider'
 
 export function StatusBar() {
+  const { t } = useTranslation()
   const page = usePage().data
   const camera = useKoharuStore((state) => state.camera)
   const zoom = Math.round(camera.zoom * 100)
@@ -15,7 +18,7 @@ export function StatusBar() {
     <footer className='flex h-7 shrink-0 items-center gap-3 border-t border-border/80 bg-[var(--surface-toolbar)] px-2.5 text-[10px] text-muted-foreground'>
       <div className='flex w-36 shrink-0 items-center gap-2'>
         <Slider
-          aria-label='Zoom'
+          aria-label={t('status.zoom')}
           min={10}
           max={800}
           step={5}

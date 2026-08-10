@@ -10,11 +10,45 @@ function keys(value: object, prefix = ''): string[] {
   })
 }
 
-describe('native editor localization', () => {
-  it('defines every new visible label in every preserved locale', () => {
-    const expected = keys(resources['en-US'].translation.native).sort()
+function strings(value: object, prefix = ''): Array<[string, string]> {
+  return Object.entries(value).flatMap(([key, item]) => {
+    const path = prefix ? `${prefix}.${key}` : key
+    return typeof item === 'string' ? [[path, item]] : strings(item, path)
+  })
+}
+
+function placeholders(value: string): string[] {
+  return Array.from(value.matchAll(/{{\s*([^},\s]+).*?}}/g), ([, name]) => name).sort()
+}
+
+describe('editor localization', () => {
+  it('defines the same flattened translation schema in every locale', () => {
+    const expected = keys(resources['en-US'].translation).sort()
     for (const [locale, resource] of Object.entries(resources)) {
-      expect(keys(resource.translation.native).sort(), locale).toEqual(expected)
+      expect('native' in resource.translation, locale).toBe(false)
+      expect(keys(resource.translation).sort(), locale).toEqual(expected)
+    }
+  })
+
+  it('preserves interpolation variables and valid text in every locale', () => {
+    const english = new Map(strings(resources['en-US'].translation))
+
+    for (const [locale, resource] of Object.entries(resources)) {
+      for (const [key, value] of strings(resource.translation)) {
+        expect(value.trim(), `${locale}: ${key}`).not.toBe('')
+        expect(placeholders(value), `${locale}: ${key}`).toEqual(
+          placeholders(english.get(key) ?? ''),
+        )
+        expect(value, `${locale}: ${key}`).not.toMatch(/[ÃƒÃ‚]|Ã¢(?:â‚¬|â„¢|Å“)|Ã¯Â¿Â½|ï¿½/)
+      }
+    }
+  })
+
+  it('distinguishes a font origin from source text', () => {
+    for (const [locale, resource] of Object.entries(resources)) {
+      expect(resource.translation.fontPicker.source, locale).not.toBe(
+        resource.translation.inspector.source,
+      )
     }
   })
 

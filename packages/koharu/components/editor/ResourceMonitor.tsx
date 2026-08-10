@@ -1,6 +1,7 @@
 'use client'
 
 import { Cpu, Gauge, HardDrive, MemoryStick } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { useKoharuStore } from '@/lib/store'
 import {
@@ -14,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/t
 
 /** Native telemetry for the Koharu process and the accelerator used by models. */
 export function ResourceMonitor() {
+  const { t } = useTranslation()
   const resources = useKoharuStore((state) => state.resources)
   if (!resources) return null
 
@@ -39,7 +41,7 @@ export function ResourceMonitor() {
                 render={
                   <button
                     type='button'
-                    aria-label={`Model resources: RAM ${ram}, CPU ${cpu}`}
+                    aria-label={t('resources.summary', { ram, cpu })}
                     className='flex items-center gap-1 text-[10px] text-muted-foreground tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring/25'
                   />
                 }
@@ -56,7 +58,7 @@ export function ResourceMonitor() {
             }
           />
           <TooltipContent side='top'>
-            RAM: {ramUsed} of {ramTotal} · CPU: {cpu}
+            {t('resources.tooltip', { ramUsed, ramTotal, cpu })}
           </TooltipContent>
         </Tooltip>
         <PopoverContent
@@ -67,23 +69,30 @@ export function ResourceMonitor() {
           <PopoverHeader className='border-b border-border/50 px-3 py-2'>
             <PopoverTitle className='flex items-center gap-2 text-[11px]'>
               <Gauge className='size-3.5 text-primary' />
-              Model resources
+              {t('resources.title')}
             </PopoverTitle>
           </PopoverHeader>
           <div className='divide-y divide-border/50 px-1.5 py-1 text-[11px]'>
-            <ResourceRow icon={Cpu} label='CPU' value={cpu} detail='Process utilization' />
+            <ResourceRow
+              icon={Cpu}
+              label={t('resources.cpu')}
+              value={cpu}
+              detail={t('resources.processUtilization')}
+            />
             <ResourceRow
               icon={MemoryStick}
-              label='RAM'
+              label={t('resources.ram')}
               value={ram}
-              detail={`${ramUsed} of ${ramTotal}`}
+              detail={t('resources.usedOfTotal', { used: ramUsed, total: ramTotal })}
             />
             {device && (
               <ResourceRow
                 icon={HardDrive}
                 label={device.name}
                 value={gpu ?? '—'}
-                detail={vram ? `VRAM ${vram}` : 'VRAM unavailable'}
+                detail={
+                  vram ? t('resources.vramValue', { value: vram }) : t('resources.vramUnavailable')
+                }
               />
             )}
           </div>

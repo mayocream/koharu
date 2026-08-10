@@ -1,6 +1,7 @@
 'use client'
 
 import { useId } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Input } from '@koharu/ui/components/input'
 import { Switch } from '@koharu/ui/components/switch'
@@ -114,6 +115,7 @@ export function NumberField({
   step?: number
   onChange: (value: number | null) => void
 }) {
+  const { t } = useTranslation()
   const id = useId()
   return (
     <label className='grid gap-1 text-[10px] text-muted-foreground'>
@@ -125,7 +127,7 @@ export function NumberField({
         min={min}
         max={max}
         step={step}
-        placeholder='Default'
+        placeholder={t('model.default')}
         className='h-8 text-[12px] text-foreground'
         onChange={(event) =>
           onChange(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))

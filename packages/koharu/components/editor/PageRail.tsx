@@ -150,9 +150,7 @@ export function PageRail() {
       <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-sidebar)]'>
         <header className='flex h-10 shrink-0 items-center px-2.5'>
           <div className='flex min-w-0 items-center gap-2'>
-            <h2 className='text-[11px] font-semibold'>
-              {t('native.navigator.pages', { defaultValue: 'Pages' })}
-            </h2>
+            <h2 className='text-[11px] font-semibold'>{t('navigator.pages')}</h2>
             <span className='rounded-full bg-primary/[0.07] px-1.5 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
               {pages.length}
             </span>
@@ -166,9 +164,7 @@ export function PageRail() {
             className='flex h-7 shrink-0 items-center gap-1.5 px-2.5 text-[9px] text-muted-foreground'
           >
             <LoaderCircle className='size-3 animate-spin' aria-hidden='true' />
-            {t('native.navigator.importing', {
-              defaultValue: 'Importing pages…',
-            })}
+            {t('navigator.importing')}
           </div>
         )}
 
@@ -178,8 +174,8 @@ export function PageRail() {
               <Search className='size-3 text-muted-foreground' />
               <Input
                 value={query}
-                aria-label='Filter pages'
-                placeholder='Filter pages'
+                aria-label={t('navigator.filter')}
+                placeholder={t('navigator.filter')}
                 className='h-5 min-w-0 border-0 bg-transparent p-0 text-[11px] shadow-none focus-visible:ring-0 md:text-[11px]'
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
@@ -189,9 +185,9 @@ export function PageRail() {
 
         {pages.length === 0 ? (
           <div className='flex min-h-0 flex-1 flex-col items-center justify-center px-4 text-center'>
-            <p className='text-[11px] font-medium'>No pages yet</p>
+            <p className='text-[11px] font-medium'>{t('navigator.emptyTitle')}</p>
             <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
-              Import images to begin.
+              {t('navigator.emptyDescription')}
             </p>
             <div className='mt-3'>
               <PageImportMenu importing={importing} onImport={importPages} />
@@ -199,7 +195,7 @@ export function PageRail() {
           </div>
         ) : visiblePages.length === 0 ? (
           <div className='grid flex-1 place-items-center px-4 text-center text-[10px] text-muted-foreground'>
-            No matching pages
+            {t('navigator.noResults')}
           </div>
         ) : (
           <ScrollArea
@@ -254,14 +250,14 @@ export function PageRail() {
                   variant='ghost'
                   size='icon'
                   className='size-8 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
-                  aria-label='Settings'
+                  aria-label={t('menu.settings')}
                   onClick={() => setSettingsOpen(true)}
                 />
               }
             >
               <Settings className='size-4' />
             </TooltipTrigger>
-            <TooltipContent side='right'>Settings</TooltipContent>
+            <TooltipContent side='right'>{t('menu.settings')}</TooltipContent>
           </Tooltip>
           <ResourceMonitor />
         </div>
@@ -281,22 +277,22 @@ export function PageRail() {
             }}
           >
             <DialogHeader>
-              <DialogTitle>Rename page</DialogTitle>
-              <DialogDescription>Choose a short name for this page.</DialogDescription>
+              <DialogTitle>{t('navigator.renameTitle')}</DialogTitle>
+              <DialogDescription>{t('navigator.renameDescription')}</DialogDescription>
             </DialogHeader>
             <Input
               autoFocus
               value={renameValue}
-              aria-label='Page name'
+              aria-label={t('navigator.pageName')}
               className='mt-4'
               onChange={(event) => setRenameValue(event.currentTarget.value)}
             />
             <DialogFooter className='mt-4'>
               <Button type='button' variant='ghost' onClick={closeRename}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button type='submit' disabled={!renameValue.trim()}>
-                Rename
+                {t('navigator.rename')}
               </Button>
             </DialogFooter>
           </form>
@@ -334,11 +330,7 @@ function PageImportMenu({
         }
       >
         {icon}
-        {importing
-          ? t('native.navigator.importingAction', {
-              defaultValue: 'Importing…',
-            })
-          : t('native.navigator.importAction', { defaultValue: 'Import' })}
+        {importing ? t('navigator.importingAction') : t('navigator.importAction')}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align='start'
@@ -350,7 +342,7 @@ function PageImportMenu({
           onClick={() => onImport('files')}
         >
           <ImagePlus />
-          {t('native.navigator.importFiles', { defaultValue: 'Files...' })}
+          {t('navigator.importFiles')}
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={importing}
@@ -358,7 +350,7 @@ function PageImportMenu({
           onClick={() => onImport('folder')}
         >
           <FolderOpen />
-          {t('native.navigator.importFolder', { defaultValue: 'Folder...' })}
+          {t('navigator.importFolder')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -421,7 +413,7 @@ function PageItem({
         {page.source_asset ? (
           <PageThumbnail page={page.id} asset={page.source_asset} label={page.label} />
         ) : (
-          <span className='text-[9px] text-muted-foreground'>No image</span>
+          <span className='text-[9px] text-muted-foreground'>{t('navigator.noImage')}</span>
         )}
       </div>
       <div className='min-w-0 py-0.5'>
@@ -433,7 +425,7 @@ function PageItem({
                 <Button
                   variant='ghost'
                   size='icon-xs'
-                  aria-label={`Actions for ${page.label}`}
+                  aria-label={t('navigator.actionsFor', { page: page.label })}
                   className='-mt-1 shrink-0 opacity-0 shadow-none group-hover:opacity-100 aria-expanded:opacity-100'
                 />
               }
@@ -441,16 +433,16 @@ function PageItem({
               <MoreHorizontal />
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
-              <DropdownMenuItem onClick={onRename}>Rename</DropdownMenuItem>
+              <DropdownMenuItem onClick={onRename}>{t('navigator.rename')}</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant='destructive' onClick={onDelete}>
-                <Trash2 /> {t('native.navigator.delete', { defaultValue: 'Delete page' })}
+                <Trash2 /> {t('navigator.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
         <p className='mt-1 text-[9px] leading-3.5 text-muted-foreground'>
-          {page.layer_count > 0 ? `${page.layer_count} layers` : 'No layers'}
+          {t('navigator.layerCount', { count: page.layer_count })}
         </p>
         <p className='mt-1 text-[9px] text-muted-foreground tabular-nums'>
           {page.size.width} × {page.size.height}
@@ -461,6 +453,7 @@ function PageItem({
 }
 
 function PageThumbnail({ page, asset, label }: { page: string; asset: string; label: string }) {
+  const { t } = useTranslation()
   const [source, setSource] = useState<string | null>(null)
   const [settled, setSettled] = useState(false)
 
@@ -493,7 +486,7 @@ function PageThumbnail({ page, asset, label }: { page: string; asset: string; la
         // eslint-disable-next-line @next/next/no-img-element
         <img src={source} alt={label} draggable={false} className='size-full object-contain' />
       ) : (
-        <span className='text-[9px] text-muted-foreground'>Loading…</span>
+        <span className='text-[9px] text-muted-foreground'>{t('common.loading')}</span>
       )}
     </div>
   )

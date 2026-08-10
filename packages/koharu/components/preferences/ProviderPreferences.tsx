@@ -39,18 +39,18 @@ export function ProviderPreferences({
   const { t } = useTranslation()
   return (
     <PreferencePage
-      title='Providers'
-      description='Configure credentials and connection details once, independently of the model used for translation.'
+      title={t('settings.providers.title')}
+      description={t('settings.providers.description')}
     >
       <PreferenceSection
-        title='Connections'
-        description='Credentials are stored in the operating system credential store.'
+        title={t('settings.providers.connections')}
+        description={t('settings.providers.connectionsDescription')}
       >
         {value.entries.filter(isConfigurable).map((entry) => (
           <PreferenceRow
             key={entry.config.provider}
             title={entry.name}
-            description={t(`native.providerDescriptions.${entry.config.provider}`)}
+            description={t(`providerDescriptions.${entry.config.provider}`)}
             align='start'
           >
             <div className='grid gap-2'>
@@ -63,7 +63,7 @@ export function ProviderPreferences({
               )}
               {hasBaseUrl(entry.config) && (
                 <TextField
-                  label='Base URL'
+                  label={t('model.baseUrl')}
                   type='url'
                   value={entry.config.settings.base_url ?? ''}
                   onChange={(base_url) =>
@@ -93,16 +93,19 @@ function CredentialField({
   value: CredentialInput
   onChange: (value: CredentialInput) => void
 }) {
+  const { t } = useTranslation()
   const [revealed, setRevealed] = useState(false)
   const configured = !value.clear && (value.configured || Boolean(value.value))
   return (
     <div className='flex gap-2'>
       <Input
-        aria-label={`${label} credential`}
+        aria-label={t('settings.providers.credentialLabel', { provider: label })}
         type={revealed ? 'text' : 'password'}
         autoComplete='new-password'
         value={value.value ?? ''}
-        placeholder={configured ? 'Configured' : 'Not configured'}
+        placeholder={
+          configured ? t('settings.providers.configured') : t('settings.providers.notConfigured')
+        }
         className='h-8 min-w-0 flex-1 text-[12px] [&::-ms-reveal]:hidden'
         onChange={(event) =>
           onChange({ ...value, value: event.currentTarget.value || null, clear: false })
@@ -113,7 +116,11 @@ function CredentialField({
         variant='outline'
         size='icon'
         disabled={!value.value}
-        aria-label={revealed ? `Hide ${label} credential` : `Reveal ${label} credential`}
+        aria-label={
+          revealed
+            ? t('settings.providers.hideCredential', { provider: label })
+            : t('settings.providers.revealCredential', { provider: label })
+        }
         onClick={() => setRevealed((shown) => !shown)}
       >
         {revealed ? <EyeOff /> : <Eye />}
@@ -123,7 +130,7 @@ function CredentialField({
           type='button'
           variant='destructive'
           size='icon'
-          aria-label={`Clear ${label} credential`}
+          aria-label={t('settings.providers.clearCredential', { provider: label })}
           onClick={() => onChange({ configured: false, value: null, clear: true })}
         >
           <Trash2 />

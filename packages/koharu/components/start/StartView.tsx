@@ -93,158 +93,156 @@ export function StartView() {
             className='mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-10 sm:px-10 sm:py-14'
             aria-labelledby='start-title'
           >
-          <header className='flex items-start justify-between gap-6'>
-            <div>
-              <h1 id='start-title' className='text-[24px] font-semibold tracking-[-0.03em]'>
-                Projects
-              </h1>
-              <p className='mt-1 text-[12px] leading-5 text-muted-foreground'>
-                Open a workspace or start a new translation.
-              </p>
-            </div>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type='button'
-                    variant='ghost'
-                    size='icon-sm'
-                    className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
-                    aria-label={t('native.menu.settings', {
-                      defaultValue: 'Settings',
-                    })}
-                    onClick={() => setSettingsOpen(true)}
-                  />
-                }
-              >
-                <Settings className='size-4' />
-              </TooltipTrigger>
-              <TooltipContent side='bottom'>
-                {t('native.menu.settings', { defaultValue: 'Settings' })}
-              </TooltipContent>
-            </Tooltip>
-          </header>
-
-          <div className='mt-7 grid min-h-[390px] overflow-hidden rounded-2xl border border-border/80 bg-[var(--surface-panel)] md:grid-cols-[300px_minmax(0,1fr)]'>
-            <aside className='flex flex-col border-b border-border/80 bg-[var(--surface-titlebar)]/55 p-6 md:border-r md:border-b-0'>
-              <span className='grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground'>
-                <FolderPlus className='size-[18px]' />
-              </span>
-              <h2 className='mt-5 text-[15px] font-semibold tracking-[-0.02em]'>New project</h2>
-              <p className='mt-1 max-w-[30ch] text-[11px] leading-[1.6] text-muted-foreground'>
-                Create a clean workspace for your pages, translations, and exports.
-              </p>
-
-              <form className='mt-6 grid gap-2.5' onSubmit={createProject}>
-                <label htmlFor='project-name' className='text-[10px] font-medium text-foreground'>
-                  Project name
-                </label>
-                <Input
-                  id='project-name'
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder='My new project'
-                  aria-label='Project name'
-                  autoComplete='off'
-                  disabled={busy !== null}
-                  className='h-9 bg-background text-[11px]'
-                />
-                <Button
-                  type='submit'
-                  size='sm'
-                  className='h-9 justify-center gap-1.5 text-[11px]'
-                  disabled={!name.trim() || busy !== null}
+            <header className='flex items-start justify-between gap-6'>
+              <div>
+                <h1 id='start-title' className='text-[24px] font-semibold tracking-[-0.03em]'>
+                  {t('start.title')}
+                </h1>
+                <p className='mt-1 text-[12px] leading-5 text-muted-foreground'>
+                  {t('start.description')}
+                </p>
+              </div>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='icon-sm'
+                      className='size-8 shrink-0 text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground'
+                      aria-label={t('menu.settings')}
+                      onClick={() => setSettingsOpen(true)}
+                    />
+                  }
                 >
-                  <Plus className='size-3.5' />
-                  Create
-                </Button>
-              </form>
+                  <Settings className='size-4' />
+                </TooltipTrigger>
+                <TooltipContent side='bottom'>{t('menu.settings')}</TooltipContent>
+              </Tooltip>
+            </header>
 
-              <p className='mt-auto pt-8 text-[10px] leading-4 text-muted-foreground'>
-                Projects are stored locally in your Documents folder.
-              </p>
-            </aside>
-
-            <section
-              className='flex min-h-[320px] min-w-0 flex-col'
-              aria-labelledby='project-list-title'
-            >
-              <header className='flex h-14 shrink-0 items-center border-b border-border/70 px-5'>
-                <h2 id='project-list-title' className='text-[12px] font-semibold'>
-                  Your projects
-                </h2>
-                <span className='ml-2 rounded-full bg-muted px-2 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
-                  {projects.length}
+            <div className='mt-7 grid min-h-[390px] overflow-hidden rounded-2xl border border-border/80 bg-[var(--surface-panel)] md:grid-cols-[300px_minmax(0,1fr)]'>
+              <aside className='flex flex-col border-b border-border/80 bg-[var(--surface-titlebar)]/55 p-6 md:border-r md:border-b-0'>
+                <span className='grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground'>
+                  <FolderPlus className='size-[18px]' />
                 </span>
-              </header>
+                <h2 className='mt-5 text-[15px] font-semibold tracking-[-0.02em]'>
+                  {t('start.newProject')}
+                </h2>
+                <p className='mt-1 max-w-[30ch] text-[11px] leading-[1.6] text-muted-foreground'>
+                  {t('start.newDescription')}
+                </p>
 
-              <ScrollArea
-                className='min-h-0 flex-1'
-                viewportClassName='p-2'
-                aria-busy={busy === 'list'}
-              >
-                {busy === 'list' && projects.length === 0 ? (
-                  <p className='grid min-h-full place-items-center text-[11px] text-muted-foreground'>
-                    Loading projects…
-                  </p>
-                ) : projects.length === 0 ? (
-                  <div
-                    className='grid min-h-full place-items-center px-6 text-center'
-                    role='status'
+                <form className='mt-6 grid gap-2.5' onSubmit={createProject}>
+                  <label htmlFor='project-name' className='text-[10px] font-medium text-foreground'>
+                    {t('start.projectName')}
+                  </label>
+                  <Input
+                    id='project-name'
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder={t('start.projectNamePlaceholder')}
+                    aria-label={t('start.projectName')}
+                    autoComplete='off'
+                    disabled={busy !== null}
+                    className='h-9 bg-background text-[11px]'
+                  />
+                  <Button
+                    type='submit'
+                    size='sm'
+                    className='h-9 justify-center gap-1.5 text-[11px]'
+                    disabled={!name.trim() || busy !== null}
                   >
-                    <div>
-                      <span className='mx-auto grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground'>
-                        <Folder className='size-[18px]' />
-                      </span>
-                      <p className='mt-3 text-[12px] font-medium'>No projects yet</p>
-                      <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
-                        Create your first project to start importing pages.
-                      </p>
+                    <Plus className='size-3.5' />
+                    {t('start.create')}
+                  </Button>
+                </form>
+
+                <p className='mt-auto pt-8 text-[10px] leading-4 text-muted-foreground'>
+                  {t('start.storageHint')}
+                </p>
+              </aside>
+
+              <section
+                className='flex min-h-[320px] min-w-0 flex-col'
+                aria-labelledby='project-list-title'
+              >
+                <header className='flex h-14 shrink-0 items-center border-b border-border/70 px-5'>
+                  <h2 id='project-list-title' className='text-[12px] font-semibold'>
+                    {t('start.yourProjects')}
+                  </h2>
+                  <span className='ml-2 rounded-full bg-muted px-2 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
+                    {projects.length}
+                  </span>
+                </header>
+
+                <ScrollArea
+                  className='min-h-0 flex-1'
+                  viewportClassName='p-2'
+                  aria-busy={busy === 'list'}
+                >
+                  {busy === 'list' && projects.length === 0 ? (
+                    <p className='grid min-h-full place-items-center text-[11px] text-muted-foreground'>
+                      {t('start.loadingProjects')}
+                    </p>
+                  ) : projects.length === 0 ? (
+                    <div
+                      className='grid min-h-full place-items-center px-6 text-center'
+                      role='status'
+                    >
+                      <div>
+                        <span className='mx-auto grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground'>
+                          <Folder className='size-[18px]' />
+                        </span>
+                        <p className='mt-3 text-[12px] font-medium'>{t('start.emptyTitle')}</p>
+                        <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
+                          {t('start.emptyDescription')}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <ul className='grid gap-0.5' aria-label='Projects'>
-                    {projects.map((project) => (
-                      <li
-                        key={project.name}
-                        className='group flex items-center rounded-lg hover:bg-foreground/[0.045]'
-                      >
-                        <button
-                          type='button'
-                          className='flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
-                          onClick={() => void openProject(project.name).catch(() => undefined)}
-                          disabled={busy !== null}
+                  ) : (
+                    <ul className='grid gap-0.5' aria-label={t('start.projectList')}>
+                      {projects.map((project) => (
+                        <li
+                          key={project.name}
+                          className='group flex items-center rounded-lg hover:bg-foreground/[0.045]'
                         >
-                          <span className='grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground'>
-                            <Folder className='size-4' />
-                          </span>
-                          <span className='min-w-0'>
-                            <span className='block truncate text-[11px] font-medium'>
-                              {project.name}
+                          <button
+                            type='button'
+                            className='flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset'
+                            onClick={() => void openProject(project.name).catch(() => undefined)}
+                            disabled={busy !== null}
+                          >
+                            <span className='grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground'>
+                              <Folder className='size-4' />
                             </span>
-                            <span className='mt-0.5 block text-[9px] text-muted-foreground'>
-                              Koharu project
+                            <span className='min-w-0'>
+                              <span className='block truncate text-[11px] font-medium'>
+                                {project.name}
+                              </span>
+                              <span className='mt-0.5 block text-[9px] text-muted-foreground'>
+                                {t('start.projectKind')}
+                              </span>
                             </span>
-                          </span>
-                        </button>
-                        <Button
-                          type='button'
-                          size='icon-sm'
-                          variant='ghost'
-                          className='mr-2 size-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100'
-                          aria-label={`Delete ${project.name}`}
-                          onClick={() => setProjectToDelete(project.name)}
-                          disabled={busy !== null}
-                        >
-                          <Trash2 className='size-3.5' />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </ScrollArea>
-            </section>
-          </div>
+                          </button>
+                          <Button
+                            type='button'
+                            size='icon-sm'
+                            variant='ghost'
+                            className='mr-2 size-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100'
+                            aria-label={t('start.deleteLabel', { name: project.name })}
+                            onClick={() => setProjectToDelete(project.name)}
+                            disabled={busy !== null}
+                          >
+                            <Trash2 className='size-3.5' />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </ScrollArea>
+              </section>
+            </div>
           </section>
         </ScrollArea>
       </main>
@@ -254,21 +252,20 @@ export function StartView() {
           <AlertDialogMedia className='bg-destructive/10 text-destructive'>
             <Trash2 className='size-5' />
           </AlertDialogMedia>
-          <AlertDialogTitle>Delete project?</AlertDialogTitle>
+          <AlertDialogTitle>{t('start.deleteTitle')}</AlertDialogTitle>
           <AlertDialogDescription>
-            This permanently deletes “{projectToDelete}” and all of its pages. This action cannot be
-            undone.
+            {t('start.deleteDescription', { name: projectToDelete })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy !== null}>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant='destructive'
             disabled={busy !== null}
             aria-busy={busy !== null}
             onClick={() => void deleteProject().catch(() => undefined)}
           >
-            {busy !== null ? 'Deleting…' : 'Delete project'}
+            {busy !== null ? t('start.deleting') : t('start.deleteAction')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

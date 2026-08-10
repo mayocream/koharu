@@ -1,6 +1,7 @@
 'use client'
 
 import { Eraser, FileText, Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import {
   defaultModel,
@@ -29,10 +30,10 @@ import {
 } from '@koharu/ui/components/select'
 
 const stages = [
-  ['detection', Search, 'Detection', 'Find panels, bubbles, and text regions.'],
-  ['ocr', FileText, 'Text recognition', 'Read source text from detected regions.'],
-  ['inpainting', Eraser, 'Artwork cleanup', 'Reconstruct artwork beneath the original text.'],
-] as const satisfies ReadonlyArray<readonly [ModelStage, typeof Search, string, string]>
+  ['detection', Search],
+  ['ocr', FileText],
+  ['inpainting', Eraser],
+] as const satisfies ReadonlyArray<readonly [ModelStage, typeof Search]>
 
 export function PipelinePreferences({
   value,
@@ -41,16 +42,23 @@ export function PipelinePreferences({
   value: PipelineConfig
   onChange: (value: PipelineConfig) => void
 }) {
+  const { t } = useTranslation()
   return (
     <PreferencePage
-      title='Pipeline'
-      description='Choose the models used for page analysis and cleanup. Koharu downloads them when they are first needed.'
+      title={t('settings.pipeline.title')}
+      description={t('settings.pipeline.description')}
     >
-      <PreferenceSection title='Page processing'>
-        {stages.map(([stage, Icon, title, description]) => {
+      <PreferenceSection title={t('settings.pipeline.processing')}>
+        {stages.map(([stage, Icon]) => {
           const model = stageModel(value, stage)
+          const title = t(`settings.pipeline.stages.${stage}.title`)
           return (
-            <PreferenceRow key={stage} title={title} description={description} align='start'>
+            <PreferenceRow
+              key={stage}
+              title={title}
+              description={t(`settings.pipeline.stages.${stage}.description`)}
+              align='start'
+            >
               <div className='grid gap-3'>
                 <div className='flex items-center gap-2'>
                   <Icon className='size-3.5 shrink-0 text-muted-foreground' />
@@ -66,7 +74,7 @@ export function PipelinePreferences({
                     }}
                   >
                     <SelectTrigger
-                      aria-label={`${title} model`}
+                      aria-label={t('settings.pipeline.modelLabel', { stage: title })}
                       className='h-8 min-w-0 flex-1 text-[11px]'
                     >
                       <SelectValue />
@@ -100,12 +108,13 @@ function ModelOptions({
   model: PipelineModel
   onChange: (model: PipelineModel) => void
 }) {
+  const { t } = useTranslation()
   switch (model.model) {
     case 'koharu-layout-rfdetr-seg-2xl':
       return (
         <div className='grid grid-cols-3 gap-2'>
           <NumberField
-            label='Text threshold'
+            label={t('settings.pipeline.options.textThreshold')}
             value={model.text_threshold ?? null}
             min={0}
             max={1}
@@ -113,7 +122,7 @@ function ModelOptions({
             onChange={(text_threshold) => onChange({ ...model, text_threshold })}
           />
           <NumberField
-            label='Bubble threshold'
+            label={t('settings.pipeline.options.bubbleThreshold')}
             value={model.bubble_threshold ?? null}
             min={0}
             max={1}
@@ -121,7 +130,7 @@ function ModelOptions({
             onChange={(bubble_threshold) => onChange({ ...model, bubble_threshold })}
           />
           <NumberField
-            label='Panel threshold'
+            label={t('settings.pipeline.options.panelThreshold')}
             value={model.panel_threshold ?? null}
             min={0}
             max={1}
@@ -133,7 +142,7 @@ function ModelOptions({
     case 'flux2-klein':
       return (
         <TextField
-          label='Prompt'
+          label={t('settings.pipeline.options.prompt')}
           value={model.prompt ?? 'Remove the text and reconstruct the background.'}
           onChange={(prompt) => onChange({ ...model, prompt })}
         />
@@ -142,12 +151,12 @@ function ModelOptions({
       return (
         <div className='grid grid-cols-2 gap-2'>
           <TextField
-            label='Prompt'
+            label={t('settings.pipeline.options.prompt')}
             value={model.prompt ?? ''}
             onChange={(prompt) => onChange({ ...model, prompt })}
           />
           <TextField
-            label='Negative prompt'
+            label={t('settings.pipeline.options.negativePrompt')}
             value={model.negative_prompt ?? ''}
             onChange={(negative_prompt) => onChange({ ...model, negative_prompt })}
           />

@@ -37,22 +37,17 @@ export function WindowControls() {
 
   return (
     <div className='flex h-full shrink-0'>
-      <WindowButton
-        label={t('native.window.minimize', { defaultValue: 'Minimize' })}
-        onClick={() => void getCurrentWindow().minimize()}
-      >
+      <WindowButton label={t('window.minimize')} onClick={() => void getCurrentWindow().minimize()}>
         <Minus />
       </WindowButton>
       <WindowButton
-        label={t(maximized ? 'native.window.restore' : 'native.window.maximize', {
-          defaultValue: maximized ? 'Restore' : 'Maximize',
-        })}
+        label={t(maximized ? 'window.restore' : 'window.maximize')}
         onClick={() => void toggleMaximize()}
       >
         {maximized ? <Copy /> : <Square />}
       </WindowButton>
       <WindowButton
-        label={t('native.window.close', { defaultValue: 'Close' })}
+        label={t('window.close')}
         className='hover:text-destructive-foreground hover:bg-destructive'
         onClick={() => void getCurrentWindow().close()}
       >

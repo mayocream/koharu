@@ -3,6 +3,7 @@
 import { Pipette, SquareSlash } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
+import { useTranslation } from 'react-i18next'
 
 import { useColorSampling } from '@/components/controls/ColorSampling'
 import { Button } from '@koharu/ui/components/button'
@@ -27,17 +28,13 @@ type ColorWellProps = {
 )
 
 export function ColorWell(props: ColorWellProps) {
-  const {
-    value,
-    label = 'Brush color',
-    size = 'default',
-    disabled = false,
-    allowTransparent = false,
-  } = props
+  const { t } = useTranslation()
+  const { value, label, size = 'default', disabled = false, allowTransparent = false } = props
   const [draft, setDraft] = useState(value ?? '#000000')
   const [transparent, setTransparent] = useState(value === null)
   const [open, setOpen] = useState(false)
   const sampling = useColorSampling()
+  const accessibleLabel = label ?? t('colorPicker.brushColor')
 
   useEffect(() => {
     if (value === null) {
@@ -65,7 +62,7 @@ export function ColorWell(props: ColorWellProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        aria-label={label}
+        aria-label={accessibleLabel}
         disabled={disabled}
         className={cn(
           'grid place-items-center border border-input bg-background disabled:cursor-not-allowed disabled:opacity-40',
@@ -99,7 +96,7 @@ export function ColorWell(props: ColorWellProps) {
           <HexColorInput
             prefixed
             color={draft}
-            aria-label='Hex color code'
+            aria-label={t('colorPicker.hexCode')}
             className='h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 font-mono text-[11px] uppercase outline-none focus:border-ring'
             onChange={set}
           />
@@ -107,7 +104,7 @@ export function ColorWell(props: ColorWellProps) {
             <Button
               size='icon'
               variant='outline'
-              aria-label='Pick color from canvas'
+              aria-label={t('colorPicker.sampleCanvas')}
               onClick={() => {
                 setOpen(false)
                 sampling.request(set)
@@ -126,7 +123,7 @@ export function ColorWell(props: ColorWellProps) {
             onClick={clear}
           >
             <SquareSlash aria-hidden='true' className='size-3.5 text-muted-foreground' />
-            Transparent
+            {t('colorPicker.transparent')}
           </Button>
         )}
       </PopoverContent>

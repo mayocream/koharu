@@ -1,5 +1,6 @@
 'use client'
 
+import type { TFunction } from 'i18next'
 import {
   AlignCenter,
   AlignLeft,
@@ -21,6 +22,7 @@ import {
   Type,
 } from 'lucide-react'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ColorWell } from '@/components/controls/ColorWell'
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
@@ -32,7 +34,6 @@ import {
   isLockedLayer,
   isTextLayer,
   layerChildren,
-  layerName,
 } from '@/lib/document'
 import {
   commands,
@@ -107,11 +108,12 @@ const defaultTypography: Typography = {
 }
 
 export function Inspector() {
+  const { t } = useTranslation()
   return (
     <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-panel)]'>
       <div className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
         <Type className='size-3 text-primary' />
-        <h2 className='text-[10px] font-semibold'>Type</h2>
+        <h2 className='text-[10px] font-semibold'>{t('inspector.type')}</h2>
       </div>
 
       <section className='h-48 min-w-0 shrink-0 overflow-hidden border-b'>
@@ -126,6 +128,7 @@ export function Inspector() {
 }
 
 function TypeInspector() {
+  const { t } = useTranslation()
   const borderWidthId = useId()
   const page = usePage().data
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
@@ -192,7 +195,7 @@ function TypeInspector() {
     <div className='min-w-0 p-2' data-testid='type-inspector' aria-disabled={disabled}>
       <div className='grid min-w-0 gap-1.5'>
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5'>
-          <InspectorField label='Font'>
+          <InspectorField label={t('inspector.font')}>
             <FontPicker
               value={typography.preferred_font ?? defaultFont.name}
               families={families}
@@ -213,9 +216,9 @@ function TypeInspector() {
               }}
             />
           </InspectorField>
-          <InspectorField label='Color'>
+          <InspectorField label={t('inspector.color')}>
             <ColorWell
-              label='Text color'
+              label={t('inspector.textColor')}
               size='sm'
               disabled={disabled}
               value={rgbaToHex(typography.color ?? defaultTypography.color!)}
@@ -225,7 +228,7 @@ function TypeInspector() {
         </div>
 
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_4.25rem_4.75rem] gap-1.5'>
-          <InspectorField label='Size'>
+          <InspectorField label={t('inspector.size')}>
             <FontSizeField
               disabled={disabled}
               value={size}
@@ -240,7 +243,7 @@ function TypeInspector() {
               }
             />
           </InspectorField>
-          <InspectorField label='Weight'>
+          <InspectorField label={t('inspector.weight')}>
             <Select
               disabled={disabled}
               value={String(weight)}
@@ -251,7 +254,11 @@ function TypeInspector() {
                 }))
               }
             >
-              <SelectTrigger size='sm' aria-label='Font weight' className='w-full min-w-0'>
+              <SelectTrigger
+                size='sm'
+                aria-label={t('inspector.fontWeight')}
+                className='w-full min-w-0'
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -263,7 +270,7 @@ function TypeInspector() {
               </SelectContent>
             </Select>
           </InspectorField>
-          <InspectorField label='Style'>
+          <InspectorField label={t('inspector.style')}>
             <Select
               disabled={disabled}
               value={style}
@@ -277,13 +284,17 @@ function TypeInspector() {
                 }))
               }}
             >
-              <SelectTrigger size='sm' aria-label='Font style' className='w-full min-w-0'>
-                <SelectValue>{fontStyleLabel(style)}</SelectValue>
+              <SelectTrigger
+                size='sm'
+                aria-label={t('inspector.fontStyle')}
+                className='w-full min-w-0'
+              >
+                <SelectValue>{t(`inspector.fontStyles.${style}`)}</SelectValue>
               </SelectTrigger>
               <SelectContent align='end'>
                 {styles.map((value) => (
                   <SelectItem key={value} value={value}>
-                    {fontStyleLabel(value)}
+                    {t(`inspector.fontStyles.${value}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -292,17 +303,29 @@ function TypeInspector() {
         </div>
 
         <div className='grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(6.5rem,1fr)] gap-1.5'>
-          <InspectorField label='Alignment'>
+          <InspectorField label={t('inspector.alignment')}>
             <div className='grid h-6 grid-cols-3 rounded-md border border-input bg-background p-px'>
               {(
                 [
-                  ['Start', AlignLeft, writingMode === 'Vertical' ? 'Align top' : 'Align left'],
+                  [
+                    'Start',
+                    AlignLeft,
+                    writingMode === 'Vertical' ? t('inspector.alignTop') : t('inspector.alignLeft'),
+                  ],
                   [
                     'Center',
                     AlignCenter,
-                    writingMode === 'Vertical' ? 'Align middle' : 'Align center',
+                    writingMode === 'Vertical'
+                      ? t('inspector.alignMiddle')
+                      : t('inspector.alignCenter'),
                   ],
-                  ['End', AlignRight, writingMode === 'Vertical' ? 'Align bottom' : 'Align right'],
+                  [
+                    'End',
+                    AlignRight,
+                    writingMode === 'Vertical'
+                      ? t('inspector.alignBottom')
+                      : t('inspector.alignRight'),
+                  ],
                 ] as const
               ).map(([alignment, Icon, label]) => (
                 <button
@@ -325,7 +348,7 @@ function TypeInspector() {
               ))}
             </div>
           </InspectorField>
-          <InspectorField label='Direction'>
+          <InspectorField label={t('inspector.direction')}>
             <Select
               disabled={disabled}
               value={writingMode}
@@ -336,21 +359,21 @@ function TypeInspector() {
                 }))
               }
             >
-              <SelectTrigger size='sm' aria-label='Text direction' className='w-full'>
+              <SelectTrigger size='sm' aria-label={t('inspector.textDirection')} className='w-full'>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='Horizontal'>Horizontal</SelectItem>
-                <SelectItem value='Vertical'>Vertical</SelectItem>
+                <SelectItem value='Horizontal'>{t('inspector.horizontal')}</SelectItem>
+                <SelectItem value='Vertical'>{t('inspector.vertical')}</SelectItem>
               </SelectContent>
             </Select>
           </InspectorField>
         </div>
 
         <div className='grid min-w-0 grid-cols-[2.75rem_minmax(5.5rem,1fr)] items-end gap-1.5'>
-          <InspectorField label='Border'>
+          <InspectorField label={t('inspector.border')}>
             <ColorWell
-              label='Border color'
+              label={t('inspector.borderColor')}
               size='sm'
               disabled={disabled}
               allowTransparent
@@ -375,7 +398,7 @@ function TypeInspector() {
               }}
             />
           </InspectorField>
-          <InspectorField label='Width'>
+          <InspectorField label={t('inspector.width')}>
             <NumberField
               id={borderWidthId}
               name='border-width'
@@ -392,11 +415,11 @@ function TypeInspector() {
               }}
             >
               <NumberFieldGroup>
-                <NumberFieldDecrement aria-label='Decrease border width'>
+                <NumberFieldDecrement aria-label={t('inspector.decreaseBorderWidth')}>
                   <Minus />
                 </NumberFieldDecrement>
-                <NumberFieldInput aria-label='Border width' />
-                <NumberFieldIncrement aria-label='Increase border width'>
+                <NumberFieldInput aria-label={t('inspector.borderWidth')} />
+                <NumberFieldIncrement aria-label={t('inspector.increaseBorderWidth')}>
                   <Plus />
                 </NumberFieldIncrement>
               </NumberFieldGroup>
@@ -439,17 +462,6 @@ function usableFontWeights(family: FontFamily | undefined, style: FontStyle): nu
   return [...weights].sort((left, right) => left - right)
 }
 
-function fontStyleLabel(style: FontStyle): string {
-  switch (style) {
-    case 'normal':
-      return 'Regular'
-    case 'italic':
-      return 'Italic'
-    case 'oblique':
-      return 'Oblique'
-  }
-}
-
 function nearestFontWeight(weights: number[], target: number): number {
   return weights.reduce((nearest, weight) =>
     Math.abs(weight - target) < Math.abs(nearest - target) ? weight : nearest,
@@ -476,6 +488,7 @@ function displayedLayers(layers: Layer[], page: EntityId) {
 }
 
 function LayersInspector() {
+  const { t } = useTranslation()
   const page = usePage().data
   const selected = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
@@ -490,7 +503,7 @@ function LayersInspector() {
 
   const layers = useMemo(() => (page ? displayedLayers(page.layers, page.id) : []), [page])
 
-  if (!page) return <EmptyInspector>Select a page to inspect its layers.</EmptyInspector>
+  if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
   const move = (layer: Layer, displayDelta: number) => {
     if (movingLayer !== null || isLockedLayer(layer)) return
@@ -544,7 +557,7 @@ function LayersInspector() {
     <div className='flex min-h-0 flex-1 flex-col'>
       <header className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
         <Layers3 className='size-3 text-primary' />
-        <h2 className='text-[10px] font-semibold'>Layers</h2>
+        <h2 className='text-[10px] font-semibold'>{t('layers.title')}</h2>
         <span className='text-[9px] text-muted-foreground tabular-nums'>
           {page.layers.filter((layer) => !isGroupLayer(layer)).length}
         </span>
@@ -588,7 +601,7 @@ function LayersInspector() {
               />
             )
           })}
-          {layers.length === 0 && <EmptyInspector>No layers yet.</EmptyInspector>}
+          {layers.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
         </div>
       </ScrollArea>
     </div>
@@ -624,8 +637,9 @@ function LayerRow({
   reordering: boolean
   onDelete?: () => void
 }) {
-  const name = layerName(layer, index)
-  const detail = layerKind(layer)
+  const { t } = useTranslation()
+  const name = localizedLayerName(layer, index, t)
+  const detail = localizedLayerKind(layer, t)
   const Icon = layerIcon(layer)
   return (
     <div className='group min-w-0 px-1 py-px' style={{ paddingLeft: `${depth * 10 + 4}px` }}>
@@ -637,7 +651,7 @@ function LayerRow({
         <div className='relative flex min-w-0 items-center gap-0.5'>
           <button
             type='button'
-            aria-label={`Edit ${name}`}
+            aria-label={t('layers.edit', { name })}
             aria-expanded={locked ? undefined : expanded}
             disabled={locked}
             className='flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left hover:bg-foreground/[0.05] focus-visible:ring-2 focus-visible:ring-ring/25'
@@ -657,7 +671,7 @@ function LayerRow({
             >
               <button
                 type='button'
-                aria-label={`Move ${name} up`}
+                aria-label={t('layers.moveUp', { name })}
                 disabled={reordering || !canMoveUp}
                 className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
                 onClick={() => onMove(-1)}
@@ -666,7 +680,7 @@ function LayerRow({
               </button>
               <button
                 type='button'
-                aria-label={`Move ${name} down`}
+                aria-label={t('layers.moveDown', { name })}
                 disabled={reordering || !canMoveDown}
                 className='grid size-5 place-items-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-30'
                 onClick={() => onMove(1)}
@@ -687,18 +701,20 @@ function LayerRow({
                   <span
                     role='img'
                     className='grid size-6 shrink-0 place-items-center text-muted-foreground'
-                    aria-label={`${name} is locked`}
+                    aria-label={t('layers.lockedLabel', { name })}
                   />
                 }
               >
                 <Lock className='size-3.5' />
               </TooltipTrigger>
-              <TooltipContent side='left'>Locked</TooltipContent>
+              <TooltipContent side='left'>{t('layers.locked')}</TooltipContent>
             </Tooltip>
           ) : (
             <button
               type='button'
-              aria-label={layer.visibility.visible ? `Hide ${name}` : `Show ${name}`}
+              aria-label={
+                layer.visibility.visible ? t('layers.hide', { name }) : t('layers.show', { name })
+              }
               className='grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25'
               onClick={onToggle}
             >
@@ -721,7 +737,8 @@ function LayerRow({
 }
 
 function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void }) {
-  const name = layerName(layer, 0)
+  const { t } = useTranslation()
+  const name = localizedLayerName(layer, 0, t)
   const [opacity, setOpacity] = useState(layer.visibility.opacity * 100)
 
   useEffect(() => {
@@ -753,11 +770,11 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
     <div className='grid min-w-0 gap-1.5 px-1.5 pt-0.5 pb-1.5'>
       <div className='flex min-w-0 items-center gap-1.5'>
         <span className='shrink-0 text-[8px] font-medium text-muted-foreground uppercase'>
-          Opacity
+          {t('inspector.opacity')}
         </span>
         <div className='flex min-w-0 flex-1 items-center gap-1.5'>
           <Slider
-            aria-label={`${name} opacity`}
+            aria-label={t('layers.opacityLabel', { name })}
             min={0}
             max={100}
             step={1}
@@ -778,7 +795,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
                   type='button'
                   variant='ghost'
                   size='icon-xs'
-                  aria-label={`Delete ${name}`}
+                  aria-label={t('layers.delete', { name })}
                   className='size-5 rounded-md text-muted-foreground hover:text-foreground'
                   onClick={onDelete}
                 />
@@ -786,7 +803,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
             >
               <Trash2 className='size-3' />
             </TooltipTrigger>
-            <TooltipContent side='left'>Delete {name}</TooltipContent>
+            <TooltipContent side='left'>{t('layers.delete', { name })}</TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -794,10 +811,14 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
         <>
           <div className='flex h-5 min-w-0 items-center gap-1.5'>
             <span className='text-[8px] font-medium text-muted-foreground uppercase'>
-              Placement
+              {t('inspector.placement')}
             </span>
             <span className='rounded-md bg-foreground/[0.055] px-1.5 py-0.5 text-[9px] leading-none text-foreground/75'>
-              {layer.geometry ? 'Custom frame' : layer.fit_region ? 'Auto fit' : 'Unplaced'}
+              {layer.geometry
+                ? t('inspector.customFrame')
+                : layer.fit_region
+                  ? t('inspector.autoFit')
+                  : t('inspector.unplaced')}
             </span>
             {layer.geometry && layer.fit_region && (
               <Tooltip>
@@ -807,23 +828,23 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
                       type='button'
                       variant='ghost'
                       size='xs'
-                      aria-label='Reset to auto fit'
+                      aria-label={t('inspector.resetAutoFit')}
                       className='ml-auto h-5 gap-1 rounded-md px-1.5 text-[9px] font-normal text-muted-foreground hover:text-foreground'
                       onClick={resetTextFrame}
                     />
                   }
                 >
                   <RotateCcw className='size-3' />
-                  Reset
+                  {t('common.reset')}
                 </TooltipTrigger>
-                <TooltipContent side='left'>Reset to auto fit</TooltipContent>
+                <TooltipContent side='left'>{t('inspector.resetAutoFit')}</TooltipContent>
               </Tooltip>
             )}
           </div>
-          <InspectorField label='Source'>
+          <InspectorField label={t('inspector.source')}>
             <CommitTextarea
               data-testid={`edit-source-${layer.id}`}
-              aria-label={`${name} source text`}
+              aria-label={t('layers.sourceLabel', { name })}
               wrap='soft'
               className='max-h-14 min-h-8 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
               value={layer.content.source?.text ?? ''}
@@ -834,10 +855,10 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
               }
             />
           </InspectorField>
-          <InspectorField label='Translation'>
+          <InspectorField label={t('inspector.translation')}>
             <CommitTextarea
               data-testid={`edit-translation-${layer.id}`}
-              aria-label={`${name} translation`}
+              aria-label={t('layers.translationLabel', { name })}
               wrap='soft'
               className='max-h-16 min-h-9 w-full max-w-full min-w-0 resize-y overflow-y-auto rounded-md border-primary/25 bg-background px-1.5 py-1 text-[12px] leading-4 md:text-[12px]'
               value={layer.content.translation?.text ?? ''}
@@ -880,6 +901,7 @@ function FontSizeField({
   onChange: (value: number) => void
   onAutoFit: () => void
 }) {
+  const { t } = useTranslation()
   const id = useId()
   const [draft, setDraft] = useState<number | null>(value)
 
@@ -924,14 +946,14 @@ function FontSizeField({
       <NumberFieldGroup>
         <NumberFieldInput
           data-testid='type-size'
-          aria-label='Font size'
-          placeholder='auto'
+          aria-label={t('inspector.fontSize')}
+          placeholder={t('inspector.auto')}
           className='px-2 text-left'
         />
         <DropdownMenu>
           <DropdownMenuTrigger
             disabled={disabled}
-            aria-label='Choose a font size'
+            aria-label={t('inspector.chooseFontSize')}
             className='grid size-6 shrink-0 place-items-center border-l border-input text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground disabled:pointer-events-none disabled:opacity-40'
           >
             <ChevronDown className='size-3' />
@@ -942,7 +964,7 @@ function FontSizeField({
           >
             <DropdownMenuRadioGroup value={autoFit ? 'auto' : String(value)} onValueChange={select}>
               <DropdownMenuRadioItem value='auto' className='min-h-6 py-0.5 text-[10px]'>
-                Auto
+                {t('inspector.auto')}
               </DropdownMenuRadioItem>
               {fontSizePresets.map((size) => (
                 <DropdownMenuRadioItem
@@ -992,12 +1014,28 @@ function layerIcon(layer: Layer): typeof Type {
   return ImageIcon
 }
 
-function layerKind(layer: Layer): string {
-  if (layer.type === 'group') return layer.role === 'text' ? 'text group' : 'group'
-  if (layer.type === 'raster') return layer.kind
+function localizedLayerName(layer: Layer, index: number, t: TFunction): string {
+  if (layer.type === 'group' || layer.type === 'raster') return layer.name
+  if (layer.type === 'text') {
+    const text = layer.content.translation?.text || layer.content.source?.text
+    return text?.trim() || t('layers.textName', { index: index + 1 })
+  }
+  if (layer.type === 'artwork') return t('layers.originalArtwork')
+  return t('layers.imageName', { index: index + 1 })
+}
+
+function localizedLayerKind(layer: Layer, t: TFunction): string {
+  if (layer.type === 'group') {
+    return t(layer.role === 'text' ? 'layers.kinds.textGroup' : 'layers.kinds.group')
+  }
+  if (layer.type === 'raster') {
+    return t(`layers.kinds.${layer.kind}`, { defaultValue: layer.kind })
+  }
   if (layer.type === 'text') {
     const role = layer.content.role?.split('.').at(-1)
-    return role === 'dialogue' || role === 'free-text' ? role : 'text'
+    if (role === 'dialogue') return t('layers.kinds.dialogue')
+    if (role === 'free-text') return t('layers.kinds.freeText')
+    return t('layers.kinds.text')
   }
-  return 'image'
+  return t('layers.kinds.image')
 }

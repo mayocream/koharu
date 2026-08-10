@@ -12,6 +12,7 @@ import {
   Square,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
@@ -41,6 +42,7 @@ export function InferenceControl({
   onRun: (scope: PipelineScope, stages: Stage[]) => void
   disabled: boolean
 }) {
+  const { t } = useTranslation()
   const [scope, setScope] = useState<PipelineScope>('page')
   const [stages, setStages] = useState<Stage[]>(() => [...pipelineStages])
   const jobs = useKoharuStore((state) => state.jobs)
@@ -72,11 +74,11 @@ export function InferenceControl({
           !running && 'bg-primary/80 hover:bg-primary/90',
         )}
         disabled={(disabled || unavailable) && !running}
-        aria-label={running ? 'Stop AI processing' : 'Run AI processing'}
+        aria-label={running ? t('inference.stopProcessing') : t('inference.runProcessing')}
         onClick={running ? stop : () => onRun(scope, stages)}
       >
         {running ? <Square className='size-3 fill-current' /> : <Play className='size-3' />}
-        <span>{running ? 'Stop' : 'Run'}</span>
+        <span>{running ? t('inference.stop') : t('inference.run')}</span>
       </Button>
     </div>
   )
@@ -97,6 +99,7 @@ function RuntimeSelector({
   onScopeChange: (scope: PipelineScope) => void
   onStagesChange: (stages: Stage[]) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<SelectorView>('root')
   const [loadingModels, setLoadingModels] = useState(false)
@@ -112,11 +115,11 @@ function RuntimeSelector({
   const choices = availableModels(model, translationModels, providers)
   const modelLabel =
     choices.find((choice) => model && modelKey(choice) === modelKey(model))?.name ??
-    shortModelName(model)
+    (model ? (model.model ?? t('inference.providerDefault')) : t('inference.noModel'))
   const outputLabel =
     languages.find((language) => language.tag === translation?.target_language)?.name ??
     translation?.target_language ??
-    'Not set'
+    t('inference.notSet')
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
@@ -195,7 +198,7 @@ function RuntimeSelector({
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
         type='button'
-        aria-label='AI runtime selector'
+        aria-label={t('inference.selector')}
         className={cn(
           'flex h-7 max-w-52 items-center gap-1.5 rounded-lg bg-foreground/[0.05] px-2 text-[10px] text-muted-foreground transition-colors outline-none hover:bg-primary/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 data-open:bg-primary/10 data-open:text-foreground',
           running && 'text-foreground',
@@ -216,15 +219,31 @@ function RuntimeSelector({
         className='w-64 min-w-0 gap-0 overflow-hidden rounded-xl border border-border/50 p-1 shadow-sm ring-0'
       >
         {view === 'root' && (
-          <div className='grid gap-0.5' aria-label='AI runtime shortcuts'>
-            <SelectorRow label='Model' value={modelLabel} onClick={() => setView('model')} />
-            <SelectorRow label='Scope' value={scopeLabel(scope)} onClick={() => setView('scope')} />
+          <div className='grid gap-0.5' aria-label={t('inference.shortcuts')}>
             <SelectorRow
-              label='Stages'
-              value={stageSelectionLabel(stages)}
+              label={t('inference.model')}
+              value={modelLabel}
+              onClick={() => setView('model')}
+            />
+            <SelectorRow
+              label={t('inference.scope')}
+              value={t(`inference.scopeShort.${scope}`)}
+              onClick={() => setView('scope')}
+            />
+            <SelectorRow
+              label={t('inference.stages')}
+              value={
+                stages.length === 1
+                  ? t(`phase.${stages[0]}`)
+                  : t('inference.stageCount', { count: stages.length })
+              }
               onClick={() => setView('stages')}
             />
-            <SelectorRow label='Output' value={outputLabel} onClick={() => setView('output')} />
+            <SelectorRow
+              label={t('inference.output')}
+              value={outputLabel}
+              onClick={() => setView('output')}
+            />
             <div className='my-1 border-t border-border/70' />
             <Button
               type='button'
@@ -236,7 +255,7 @@ function RuntimeSelector({
                 setSettingsOpen(true)
               }}
             >
-              <Settings className='size-3.5' /> Settings
+              <Settings className='size-3.5' /> {t('menu.settings')}
             </Button>
           </div>
         )}
@@ -255,26 +274,30 @@ function RuntimeSelector({
         )}
 
         {view === 'scope' && (
-          <SelectorPanel title='Scope' onBack={() => setView('root')}>
+          <SelectorPanel title={t('inference.scope')} onBack={() => setView('root')}>
             <SelectorOption
               value='page'
-              label='Current page'
-              detail='Run the open page'
+              label={t('inference.currentPage')}
+              detail={t('inference.currentPageDescription')}
               selected={scope === 'page'}
               onSelect={chooseScope}
             />
             <SelectorOption
               value='selected-pages'
-              label='Selected pages'
-              detail={selectionCount ? `${selectionCount} selected` : 'Select pages first'}
+              label={t('inference.selectedPages')}
+              detail={
+                selectionCount
+                  ? t('inference.selectedCount', { count: selectionCount })
+                  : t('inference.selectPagesFirst')
+              }
               selected={scope === 'selected-pages'}
               disabled={selectionCount === 0}
               onSelect={chooseScope}
             />
             <SelectorOption
               value='project'
-              label='Entire project'
-              detail='Run every page'
+              label={t('inference.entireProject')}
+              detail={t('inference.entireProjectDescription')}
               selected={scope === 'project'}
               onSelect={chooseScope}
             />
@@ -282,32 +305,32 @@ function RuntimeSelector({
         )}
 
         {view === 'stages' && (
-          <SelectorPanel title='Pipeline stages' onBack={() => setView('root')}>
+          <SelectorPanel title={t('inference.pipelineStages')} onBack={() => setView('root')}>
             <SelectorOption
               value='detection'
-              label='Detection'
-              detail='Find panels and text regions'
+              label={t('phase.detection')}
+              detail={t('phaseDescription.detection')}
               selected={stages.includes('detection')}
               onSelect={toggleStage}
             />
             <SelectorOption
               value='ocr'
-              label='OCR'
-              detail='Read source text'
+              label={t('phase.ocr')}
+              detail={t('phaseDescription.ocr')}
               selected={stages.includes('ocr')}
               onSelect={toggleStage}
             />
             <SelectorOption
               value='translation'
-              label='Translation'
-              detail='Translate recognized text'
+              label={t('phase.translation')}
+              detail={t('phaseDescription.translation')}
               selected={stages.includes('translation')}
               onSelect={toggleStage}
             />
             <SelectorOption
               value='inpainting'
-              label='Inpainting'
-              detail='Clean text from artwork'
+              label={t('phase.inpainting')}
+              detail={t('phaseDescription.inpainting')}
               selected={stages.includes('inpainting')}
               onSelect={toggleStage}
             />
@@ -366,6 +389,7 @@ function SelectorPanel({
   onBack: () => void
   children: ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <div className='min-w-0 overflow-hidden'>
       <div className='mb-1 flex h-7 items-center border-b border-border/60 px-0.5 pb-1'>
@@ -373,7 +397,7 @@ function SelectorPanel({
           type='button'
           variant='ghost'
           size='icon-xs'
-          aria-label='Back'
+          aria-label={t('common.back')}
           className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
           onClick={onBack}
         >
@@ -434,33 +458,4 @@ function availableModels(
     },
     ...models,
   ]
-}
-
-function shortModelName(model: ModelSelection | null): string {
-  if (!model) return 'No model'
-  return model.model ?? 'Provider default'
-}
-
-function scopeLabel(scope: PipelineScope): string {
-  if (scope === 'project') return 'Project'
-  if (scope === 'selected-pages') return 'Selection'
-  return 'Page'
-}
-
-function stageLabel(stage: Stage): string {
-  switch (stage) {
-    case 'detection':
-      return 'Detection'
-    case 'ocr':
-      return 'OCR'
-    case 'translation':
-      return 'Translation'
-    case 'inpainting':
-      return 'Inpainting'
-  }
-}
-
-function stageSelectionLabel(stages: Stage[]): string {
-  if (stages.length === 1) return stageLabel(stages[0]!)
-  return `${stages.length} stages`
 }

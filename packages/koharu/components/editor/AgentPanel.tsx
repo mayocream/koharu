@@ -60,7 +60,7 @@ export function AgentPanel() {
   if (!status) {
     return (
       <div className='grid min-h-0 flex-1 place-items-center p-6 text-[11px] text-muted-foreground'>
-        {t('native.agent.loading')}
+        {t('agent.loading')}
       </div>
     )
   }
@@ -72,23 +72,23 @@ export function AgentPanel() {
         <div className='grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary'>
           <Sparkles className='size-5' />
         </div>
-        <h3 className='mt-4 text-sm font-semibold'>{t('native.agent.signInTitle')}</h3>
+        <h3 className='mt-4 text-sm font-semibold'>{t('agent.signInTitle')}</h3>
         <p className='mt-1 max-w-64 text-[11px] leading-5 text-muted-foreground'>
-          {t('native.agent.signInDescription')}
+          {t('agent.signInDescription')}
         </p>
         {code ? (
           <div className='mt-4 w-full max-w-64 rounded-xl border bg-muted/40 p-3'>
-            <p className='text-[10px] text-muted-foreground'>{t('native.agent.deviceCode')}</p>
+            <p className='text-[10px] text-muted-foreground'>{t('agent.deviceCode')}</p>
             <p className='mt-1 font-mono text-lg font-semibold tracking-[0.18em] select-text'>
               {code}
             </p>
             <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
-              {t('native.agent.deviceCodeHint')}
+              {t('agent.deviceCodeHint')}
             </p>
           </div>
         ) : null}
         <Button className='mt-4 w-full max-w-64' disabled={loggingIn} onClick={() => void login()}>
-          {loggingIn ? t('native.agent.signingIn') : t('native.agent.signIn')}
+          {loggingIn ? t('agent.signingIn') : t('agent.signIn')}
         </Button>
       </div>
     )
@@ -101,13 +101,13 @@ export function AgentPanel() {
           <div className='min-w-0 flex-1'>
             <p className='truncate text-[11px] font-medium'>{status.account.email ?? 'Codex'}</p>
             <p className='truncate text-[9px] text-muted-foreground'>
-              {status.account.plan ?? t('native.agent.account')}
+              {status.account.plan ?? t('agent.account')}
             </p>
           </div>
           <Button
             variant='ghost'
             size='icon-sm'
-            aria-label={t('native.agent.signOut')}
+            aria-label={t('agent.signOut')}
             disabled={running !== null}
             onClick={() => void logout()}
           >
@@ -132,15 +132,11 @@ export function AgentPanel() {
               })
             }}
           >
-            <SelectTrigger
-              size='sm'
-              className='w-full min-w-0'
-              aria-label={t('native.agent.model')}
-            >
+            <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.model')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent align='start'>
-              <SelectItem value='automatic'>{t('native.agent.automatic')}</SelectItem>
+              <SelectItem value='automatic'>{t('agent.automatic')}</SelectItem>
               {status.models.map((model) => (
                 <SelectItem key={model.id} value={model.id}>
                   {model.name}
@@ -154,17 +150,13 @@ export function AgentPanel() {
               void saveConfig({ ...status.config, reasoning: reasoning as Reasoning })
             }
           >
-            <SelectTrigger
-              size='sm'
-              className='w-full min-w-0'
-              aria-label={t('native.agent.reasoning')}
-            >
+            <SelectTrigger size='sm' className='w-full min-w-0' aria-label={t('agent.reasoning')}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent align='end'>
               {(selectedModel?.reasoning ?? [status.config.reasoning]).map((reasoning) => (
                 <SelectItem key={reasoning} value={reasoning}>
-                  {t(`native.agent.reasoningLevels.${reasoning}`)}
+                  {t(`agent.reasoningLevels.${reasoning}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -186,7 +178,7 @@ export function AgentPanel() {
                   data-error={message.error || undefined}
                   className='max-w-[90%] rounded-xl bg-muted px-3 py-2 text-[11px] leading-5 whitespace-pre-wrap select-text data-[error=true]:bg-destructive/10 data-[error=true]:text-destructive data-[role=user]:bg-primary data-[role=user]:text-primary-foreground'
                 >
-                  {message.text || (message.role === 'assistant' ? t('native.agent.working') : '')}
+                  {message.text || (message.role === 'assistant' ? t('agent.working') : '')}
                 </div>
               </div>
             ))}
@@ -201,9 +193,9 @@ export function AgentPanel() {
           <div className='grid min-h-64 place-items-center p-6 text-center'>
             <div>
               <Bot className='mx-auto size-6 text-primary' />
-              <h3 className='mt-3 text-xs font-semibold'>{t('native.agent.emptyTitle')}</h3>
+              <h3 className='mt-3 text-xs font-semibold'>{t('agent.emptyTitle')}</h3>
               <p className='mt-1 max-w-56 text-[10px] leading-4 text-muted-foreground'>
-                {t('native.agent.emptyDescription')}
+                {t('agent.emptyDescription')}
               </p>
             </div>
           </div>
@@ -216,8 +208,8 @@ export function AgentPanel() {
             id='agent-message'
             value={prompt}
             disabled={running !== null}
-            aria-label={t('native.agent.message')}
-            placeholder={t('native.agent.placeholder')}
+            aria-label={t('agent.message')}
+            placeholder={t('agent.placeholder')}
             className='max-h-36 min-h-16 resize-none border-0 bg-transparent px-1.5 py-1 text-[11px] leading-5 shadow-none focus-visible:ring-0'
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
@@ -232,13 +224,13 @@ export function AgentPanel() {
               variant='outline'
               className='h-5 max-w-44 truncate px-1.5 text-[9px] font-normal'
             >
-              {selectedModel?.name ?? t('native.agent.automatic')}
+              {selectedModel?.name ?? t('agent.automatic')}
             </Badge>
             {running ? (
               <Button
                 variant='outline'
                 size='icon-sm'
-                aria-label={t('native.agent.cancel')}
+                aria-label={t('agent.cancel')}
                 onClick={() => void call(commands.cancelAgent, running).catch(() => undefined)}
               >
                 <CircleStop />
@@ -246,7 +238,7 @@ export function AgentPanel() {
             ) : (
               <Button
                 size='icon-sm'
-                aria-label={t('native.agent.send')}
+                aria-label={t('agent.send')}
                 disabled={!prompt.trim()}
                 onClick={() => void send()}
               >
@@ -261,7 +253,7 @@ export function AgentPanel() {
 
   async function login() {
     setLoggingIn(true)
-    setLoginEvent({ type: 'progress', message: t('native.agent.signingIn') })
+    setLoginEvent({ type: 'progress', message: t('agent.signingIn') })
     const channel = new Channel<LoginEvent>()
     channel.onmessage = setLoginEvent
     try {
@@ -295,7 +287,7 @@ export function AgentPanel() {
       { id, role: 'user', text: message },
       { id: assistant, role: 'assistant', text: '' },
     ])
-    setActivity(t('native.agent.working'))
+    setActivity(t('agent.working'))
 
     const channel = new Channel<Event>()
     channel.onmessage = (event) => {
@@ -307,14 +299,14 @@ export function AgentPanel() {
           updateAssistant((text) => text + event.delta)
           break
         case 'reasoning_delta':
-          setActivity(t('native.agent.thinking'))
+          setActivity(t('agent.thinking'))
           break
         case 'tool_started':
-          setActivity(t('native.agent.applying'))
+          setActivity(t('agent.applying'))
           break
         case 'tool_finished':
           if (event.changed) void refresh(projectKey, pagesKey, pageKey)
-          setActivity(t('native.agent.working'))
+          setActivity(t('agent.working'))
           break
         case 'completed':
           settled = true
@@ -331,7 +323,7 @@ export function AgentPanel() {
           break
         case 'cancelled':
           settled = true
-          updateAssistant((text) => text || t('native.agent.cancelled'))
+          updateAssistant((text) => text || t('agent.cancelled'))
           setRunning(null)
           setActivity(null)
           break
@@ -342,10 +334,7 @@ export function AgentPanel() {
       if (!settled) setRunning(run)
     } catch (error) {
       settled = true
-      updateAssistant(
-        () => (error instanceof Error ? error.message : t('native.agent.failed')),
-        true,
-      )
+      updateAssistant(() => (error instanceof Error ? error.message : t('agent.failed')), true)
       setRunning(null)
       setActivity(null)
     }

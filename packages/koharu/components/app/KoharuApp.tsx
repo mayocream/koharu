@@ -42,7 +42,7 @@ export function KoharuApp() {
         <main className='grid min-h-0 flex-1 place-items-center bg-[var(--surface-canvas)]'>
           <div className='flex items-center gap-3 text-[12px] text-muted-foreground'>
             <span className='size-2 rounded-full bg-primary' />
-            {t('common.initializing', { defaultValue: 'Opening Koharu…' })}
+            {t('startup.opening')}
           </div>
         </main>
       ) : project === null ? (
