@@ -4390,8 +4390,11 @@ name = "koharu-translator"
 version = "0.62.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "clap",
+ "fast_image_resize",
  "futures",
+ "image 0.25.10",
  "koharu-config",
  "koharu-ml",
  "koharu-runtime",

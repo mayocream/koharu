@@ -68,7 +68,7 @@ In practice:
 
 - local models are better when privacy and offline use matter most
 - remote models are easier when your machine is memory-constrained
-- when you use a remote provider, Koharu sends OCR text for translation rather than the whole page image
+- when the selected local model or remote provider supports vision, Koharu sends the OCR text together with a resized copy of the original page; text-only backends receive only OCR text
 
 ## 5. Translate and review
 

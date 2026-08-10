@@ -410,7 +410,8 @@
       "hideCredential": "Hide {{provider}} credential",
       "notConfigured": "Not configured",
       "revealCredential": "Reveal {{provider}} credential",
-      "title": "Providers"
+      "title": "Providers",
+      "vision": "Vision input"
     },
     "shortcuts": {
       "description": "Single-key shortcuts are available whenever a text field is not focused.",

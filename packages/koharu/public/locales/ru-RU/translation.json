@@ -410,7 +410,8 @@
       "hideCredential": "Скрыть учётные данные {{provider}}",
       "notConfigured": "Не настроено",
       "revealCredential": "Показать учётные данные {{provider}}",
-      "title": "Провайдеры"
+      "title": "Провайдеры",
+      "vision": "Ввод изображений"
     },
     "shortcuts": {
       "description": "Одноклавишные сочетания доступны, когда поле ввода текста не в фокусе.",

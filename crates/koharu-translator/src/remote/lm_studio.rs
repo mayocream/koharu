@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::send_json;
-use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, display_name, prompt};
+use crate::{
+    GenerationConfig, Model, Provider, Result, TranslationRequest, backend::encode_image,
+    display_name, prompt,
+};
 
 const DEFAULT_BASE_URL: &str = "http://localhost:1234";
 
@@ -37,7 +40,7 @@ pub(super) async fn translate(
     let (system, input) = prompt::prompts(request)?;
     let body = ChatRequest {
         model,
-        input: &input,
+        input: ChatInput::new(&input, request.image.as_deref())?,
         system_prompt: &system,
         temperature: generation.temperature,
         max_output_tokens: generation.max_tokens,
@@ -72,12 +75,13 @@ pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<V
     Ok(response
         .models
         .into_iter()
-        .filter(|model| model.kind == "llm")
+        .filter(|model| matches!(model.kind.as_str(), "llm" | "vlm"))
         .map(|model| Model {
             provider: Provider::LmStudio,
             name: display_name(&model.key),
             model: Some(model.key),
             quantizations: Vec::new(),
+            vision: model.kind == "vlm",
         })
         .collect())
 }
@@ -94,7 +98,7 @@ fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
 #[derive(Serialize)]
 struct ChatRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: ChatInput<'a>,
     system_prompt: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -102,6 +106,34 @@ struct ChatRequest<'a> {
     max_output_tokens: Option<u32>,
     reasoning: &'static str,
     store: bool,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ChatInput<'a> {
+    Text(&'a str),
+    Items(Vec<InputItem<'a>>),
+}
+
+impl<'a> ChatInput<'a> {
+    fn new(text: &'a str, image: Option<&image::DynamicImage>) -> anyhow::Result<Self> {
+        let Some(image) = image else {
+            return Ok(Self::Text(text));
+        };
+        Ok(Self::Items(vec![
+            InputItem::Message { content: text },
+            InputItem::Image {
+                data_url: encode_image(image)?.data_url(),
+            },
+        ]))
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum InputItem<'a> {
+    Message { content: &'a str },
+    Image { data_url: String },
 }
 
 #[derive(Deserialize)]
@@ -149,7 +181,7 @@ mod tests {
     fn serializes_native_chat_options() {
         let value = serde_json::to_value(ChatRequest {
             model: "publisher/model",
-            input: "input",
+            input: ChatInput::Text("input"),
             system_prompt: "system",
             temperature: Some(0.2),
             max_output_tokens: Some(1024),
@@ -164,10 +196,11 @@ mod tests {
     }
 
     #[test]
-    fn model_discovery_can_filter_non_llms() {
+    fn model_discovery_keeps_language_and_vision_models() {
         let response: ModelsResponse = serde_json::from_value(serde_json::json!({
             "models": [
                 { "type": "llm", "key": "publisher/chat-model" },
+                { "type": "vlm", "key": "publisher/vision-model" },
                 { "type": "embedding", "key": "publisher/embed-model" }
             ]
         }))
@@ -175,8 +208,26 @@ mod tests {
         let models = response
             .models
             .into_iter()
-            .filter_map(|model| (model.kind == "llm").then_some(model.key))
+            .filter_map(|model| matches!(model.kind.as_str(), "llm" | "vlm").then_some(model.key))
             .collect::<Vec<_>>();
-        assert_eq!(models, ["publisher/chat-model"]);
+        assert_eq!(models, ["publisher/chat-model", "publisher/vision-model"]);
+    }
+
+    #[test]
+    fn serializes_native_image_input() {
+        let input =
+            ChatInput::new("translate", Some(&image::DynamicImage::new_rgb8(1, 1))).unwrap();
+        let value = serde_json::to_value(input).unwrap();
+        assert_eq!(
+            value[0],
+            serde_json::json!({ "type": "message", "content": "translate" })
+        );
+        assert_eq!(value[1]["type"], "image");
+        assert!(
+            value[1]["data_url"]
+                .as_str()
+                .unwrap()
+                .starts_with("data:image/jpeg;base64,")
+        );
     }
 }

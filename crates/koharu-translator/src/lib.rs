@@ -32,8 +32,15 @@ pub struct Translator {
 }
 
 struct LoadedLocal {
-    selection: ModelSelection,
+    model: Option<String>,
+    quantization: Option<String>,
     translator: Arc<LocalTranslator>,
+}
+
+impl LoadedLocal {
+    fn matches(&self, selection: &ModelSelection) -> bool {
+        self.model == selection.model && self.quantization == selection.quantization
+    }
 }
 
 impl Translator {
@@ -55,6 +62,14 @@ impl Translator {
     }
 
     #[must_use]
+    pub fn supports_vision(selection: &ModelSelection) -> bool {
+        if selection.provider == Provider::Local {
+            return local::supports_vision(selection);
+        }
+        selection.vision
+    }
+
+    #[must_use]
     pub fn loaded(&self, selection: &ModelSelection) -> bool {
         if selection.provider != Provider::Local {
             return true;
@@ -64,7 +79,7 @@ impl Translator {
             .map(|loaded| {
                 loaded
                     .as_ref()
-                    .is_some_and(|loaded| loaded.selection == *selection)
+                    .is_some_and(|loaded| loaded.matches(selection))
             })
             .unwrap_or(true)
     }
@@ -89,12 +104,18 @@ impl Translator {
         &self,
         selection: &ModelSelection,
         generation: GenerationConfig,
-        request: TranslationRequest,
+        mut request: TranslationRequest,
     ) -> anyhow::Result<(&'static str, Vec<String>)> {
         let provider = selection.provider;
         let provider_id: &'static str = provider.into();
         if request.segments.is_empty() {
             return Ok((provider_id, request.segments));
+        }
+
+        if Self::supports_vision(selection) {
+            request.prepare_image()?;
+        } else {
+            request.remove_image();
         }
 
         let expected = request.segments.len();
@@ -132,10 +153,11 @@ impl Translator {
         let mut loaded = self.local.lock().await;
         if loaded
             .as_ref()
-            .is_none_or(|loaded| loaded.selection != *selection)
+            .is_none_or(|loaded| !loaded.matches(selection))
         {
             *loaded = Some(LoadedLocal {
-                selection: selection.clone(),
+                model: selection.model.clone(),
+                quantization: selection.quantization.clone(),
                 translator: Arc::new(LocalTranslator::load(self.device.clone(), selection).await?),
             });
         }

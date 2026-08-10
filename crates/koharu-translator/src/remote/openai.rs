@@ -33,7 +33,7 @@ pub(super) static MODELS: &[(&str, &str)] = &[
 
 pub(super) async fn models() -> Result<Vec<Model>> {
     Ok(if koharu_secrets::get("openai")?.is_some() {
-        Model::catalog(Provider::OpenAi, MODELS)
+        Model::catalog(Provider::OpenAi, MODELS, true)
     } else {
         Vec::new()
     })

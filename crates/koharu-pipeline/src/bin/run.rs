@@ -106,6 +106,7 @@ impl Arguments {
                     provider: Provider::Local,
                     model: Some(self.llm.clone()),
                     quantization: None,
+                    vision: true,
                 },
                 generation: GenerationConfig::default(),
                 target_language: self.target_language,

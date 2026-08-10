@@ -15,6 +15,12 @@ const DEFAULT_GPU_LAYERS: u32 = 1000;
 const DEFAULT_MAX_TOKENS: usize = 512;
 const DEFAULT_SEED: u32 = 299_792_458;
 
+/// Marker consumed by llama.cpp's multimodal tokenizer for one attached media input.
+#[must_use]
+pub fn media_marker() -> &'static str {
+    koharu_llama::mtmd::mtmd_default_marker()
+}
+
 /// A loaded GGUF language model with optional multimodal support.
 #[derive(Debug)]
 pub struct Llm {

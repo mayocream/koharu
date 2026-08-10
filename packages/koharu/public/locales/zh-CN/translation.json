@@ -410,7 +410,8 @@
       "hideCredential": "隐藏 {{provider}} 凭据",
       "notConfigured": "未配置",
       "revealCredential": "显示 {{provider}} 凭据",
-      "title": "提供商"
+      "title": "提供商",
+      "vision": "视觉输入"
     },
     "shortcuts": {
       "description": "当文本字段未获得焦点时，可以使用单键快捷键。",

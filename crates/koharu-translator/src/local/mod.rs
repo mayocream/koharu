@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use koharu_ml::llm::{ChatMessage, ChatTemplateOptions, Input, Llm, LoadOptions};
+use koharu_ml::llm::{
+    ChatMessage, ChatTemplateOptions, Input, Llm, LoadOptions, MtmdOptions, media_marker,
+};
 
 mod catalog;
 
@@ -31,10 +33,20 @@ impl LocalTranslator {
             .copied()
             .find(|descriptor| descriptor.id == model)
             .with_context(|| format!("unknown local translator '{model}'"))?;
-        let model_path = descriptor.resolve(selection).await?;
-        let llm = Llm::load_with_options(device, model_path, LoadOptions::default())
+        let resolved = descriptor.resolve(selection).await?;
+        let options = LoadOptions {
+            mtmd: resolved.projector.map(MtmdOptions::new),
+            ..LoadOptions::default()
+        };
+        let llm = Llm::load_with_options(device, resolved.model, options)
             .await
             .context("failed to load local translation model")?;
+        if llm.capabilities().vision != descriptor.projector.is_some() {
+            return Err(anyhow::anyhow!(
+                "local translator vision capability does not match its catalog"
+            )
+            .into());
+        }
         Ok(Self {
             descriptor,
             llm: Arc::new(llm),
@@ -61,12 +73,17 @@ impl LocalTranslator {
             });
         }
 
+        let image = request.image.clone();
         let prompt = self.render_prompt(&request)?;
         let schema = prompt::output_schema(expected);
         let llm = Arc::clone(&self.llm);
         let generation = self.descriptor.generation.options(generation);
         let output = tokio::task::spawn_blocking(move || {
-            llm.inference_with_json_schema(&Input::new(&prompt), &generation, &schema)
+            let input = image.as_deref().map_or_else(
+                || Input::new(&prompt),
+                |image| Input::new(&prompt).with_image(image),
+            );
+            llm.inference_with_json_schema(&input, &generation, &schema)
         })
         .await
         .context("local translation task panicked")??;
@@ -76,6 +93,11 @@ impl LocalTranslator {
 
     fn render_prompt(&self, request: &TranslationRequest) -> Result<String> {
         let (system, payload) = prompt::prompts(request)?;
+        let payload = if request.image.is_some() {
+            format!("{}\n{payload}", media_marker())
+        } else {
+            payload
+        };
         Ok(self
             .llm
             .render_chat_prompt_with_options(
@@ -103,6 +125,16 @@ pub(crate) fn models() -> Vec<Model> {
                     name: quantization.name.to_owned(),
                 })
                 .collect(),
+            vision: descriptor.projector.is_some(),
         })
         .collect()
+}
+
+pub(crate) fn supports_vision(selection: &ModelSelection) -> bool {
+    selection.model.as_deref().is_some_and(|model| {
+        catalog::MODELS
+            .iter()
+            .find(|descriptor| descriptor.id == model)
+            .is_some_and(|descriptor| descriptor.projector.is_some())
+    })
 }

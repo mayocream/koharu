@@ -98,6 +98,12 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         );
     }
 
+    if request.image.is_some() {
+        prompt.push_str(
+            " Use the attached original page image as visual context for speaker identity, tone, layout, and ambiguous OCR. Translate only the supplied segments; do not add text seen in the image that is absent from the input segments.",
+        );
+    }
+
     if let Some(instructions) = request
         .instructions
         .as_deref()
@@ -265,5 +271,14 @@ mod tests {
         let prompt = translation_system_prompt(&request);
         assert!(prompt.contains("dialogue continuity"));
         assert!(prompt.contains("Do not translate or return the context"));
+    }
+
+    #[test]
+    fn image_context_does_not_expand_the_translation_scope() {
+        let request = TranslationRequest::new(["text"], Language::English)
+            .with_image(std::sync::Arc::new(image::DynamicImage::new_rgb8(1, 1)));
+        let prompt = translation_system_prompt(&request);
+        assert!(prompt.contains("attached original page image"));
+        assert!(prompt.contains("Translate only the supplied segments"));
     }
 }

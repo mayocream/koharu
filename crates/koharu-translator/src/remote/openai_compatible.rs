@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use super::send_json;
-use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, display_name, prompt};
+use crate::{
+    GenerationConfig, Model, Provider, Result, TranslationRequest, backend::encode_image,
+    display_name, prompt,
+};
 
 const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 
@@ -16,6 +19,7 @@ const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 #[serde(default)]
 pub struct OpenAiCompatibleConfig {
     pub base_url: Option<Url>,
+    pub vision: bool,
 }
 
 impl Default for OpenAiCompatibleConfig {
@@ -24,6 +28,7 @@ impl Default for OpenAiCompatibleConfig {
             base_url: Some(
                 Url::parse(DEFAULT_BASE_URL).expect("default OpenAI-compatible URL is valid"),
             ),
+            vision: false,
         }
     }
 }
@@ -58,16 +63,27 @@ pub(super) async fn translate(
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
     let (system, user) = prompt::prompts(request)?;
+    let user_content = match request.image.as_deref() {
+        Some(image) => MessageContent::Parts(vec![
+            ContentPart::Text { text: user },
+            ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: encode_image(image)?.data_url(),
+                },
+            },
+        ]),
+        None => MessageContent::Text(user),
+    };
     let body = ChatRequest {
         model: backend.model,
         messages: [
             Message {
                 role: "system",
-                content: &system,
+                content: MessageContent::Text(system),
             },
             Message {
                 role: "user",
-                content: &user,
+                content: user_content,
             },
         ],
         temperature: backend.temperature,
@@ -161,6 +177,7 @@ pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> 
             name: display_name(&model),
             model: Some(model),
             quantizations: Vec::new(),
+            vision: config.vision,
         })
         .collect())
 }
@@ -185,7 +202,7 @@ fn endpoint(base_url: Option<&Url>, suffix: &str) -> String {
 #[derive(Serialize)]
 struct ChatRequest<'a> {
     model: &'a str,
-    messages: [Message<'a>; 2],
+    messages: [Message; 2],
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -262,9 +279,28 @@ struct JsonSchema {
 }
 
 #[derive(Serialize)]
-struct Message<'a> {
+struct Message {
     role: &'static str,
-    content: &'a str,
+    content: MessageContent,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum MessageContent {
+    Text(String),
+    Parts(Vec<ContentPart>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Serialize)]
+struct ImageUrl {
+    url: String,
 }
 
 #[derive(Deserialize)]
@@ -332,11 +368,11 @@ mod tests {
             messages: [
                 Message {
                     role: "system",
-                    content: "system",
+                    content: MessageContent::Text("system".to_owned()),
                 },
                 Message {
                     role: "user",
-                    content: "user",
+                    content: MessageContent::Text("user".to_owned()),
                 },
             ],
             temperature: None,
@@ -363,5 +399,26 @@ mod tests {
             serde_json::to_value(ReasoningConfig { enabled: false }).unwrap(),
             serde_json::json!({ "enabled": false })
         );
+    }
+
+    #[test]
+    fn serializes_text_before_an_attached_image() {
+        let content = MessageContent::Parts(vec![
+            ContentPart::Text {
+                text: "translate".to_owned(),
+            },
+            ContentPart::ImageUrl {
+                image_url: ImageUrl {
+                    url: "data:image/jpeg;base64,image".to_owned(),
+                },
+            },
+        ]);
+        let value = serde_json::to_value(content).unwrap();
+        assert_eq!(
+            value[0],
+            serde_json::json!({ "type": "text", "text": "translate" })
+        );
+        assert_eq!(value[1]["type"], "image_url");
+        assert_eq!(value[1]["image_url"]["url"], "data:image/jpeg;base64,image");
     }
 }

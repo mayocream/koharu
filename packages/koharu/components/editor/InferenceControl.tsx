@@ -148,6 +148,7 @@ function RuntimeSelector({
           provider: next.provider,
           model: next.model,
           quantization: next.quantizations[0]?.id ?? null,
+          vision: next.vision,
         },
       },
     }

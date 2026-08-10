@@ -7,7 +7,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use super::send_json;
-use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, prompt};
+use crate::{
+    GenerationConfig, Model, Provider, Result, TranslationRequest, backend::encode_image, prompt,
+};
 
 const URL: &str = "https://api.anthropic.com/v1/messages";
 
@@ -29,7 +31,7 @@ pub(super) static MODELS: &[(&str, &str)] = &[
 
 pub(super) async fn models() -> Result<Vec<Model>> {
     Ok(if koharu_secrets::get("claude")?.is_some() {
-        Model::catalog(Provider::Claude, MODELS)
+        Model::catalog(Provider::Claude, MODELS, true)
     } else {
         Vec::new()
     })
@@ -48,10 +50,7 @@ pub(super) async fn translate(
         model,
         max_tokens: generation.max_tokens.unwrap_or(8192),
         system: &system,
-        messages: [Message {
-            role: "user",
-            content: &user,
-        }],
+        messages: [Message::user(&user, request.image.as_deref())?],
         temperature: generation.temperature,
         thinking: model
             .starts_with("claude-sonnet-5")
@@ -101,7 +100,41 @@ struct ThinkingConfig {
 #[derive(Serialize)]
 struct Message<'a> {
     role: &'static str,
-    content: &'a str,
+    content: Vec<ContentBlock<'a>>,
+}
+
+impl<'a> Message<'a> {
+    fn user(text: &'a str, image: Option<&image::DynamicImage>) -> anyhow::Result<Self> {
+        let mut content = vec![ContentBlock::Text { text }];
+        if let Some(image) = image {
+            content.push(ContentBlock::Image {
+                source: ImageSource {
+                    kind: "base64",
+                    media_type: "image/jpeg",
+                    data: encode_image(image)?.data,
+                },
+            });
+        }
+        Ok(Self {
+            role: "user",
+            content,
+        })
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ContentBlock<'a> {
+    Text { text: &'a str },
+    Image { source: ImageSource },
+}
+
+#[derive(Serialize)]
+struct ImageSource {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    media_type: &'static str,
+    data: String,
 }
 
 #[derive(Deserialize)]
@@ -114,4 +147,20 @@ struct Content {
     #[serde(rename = "type")]
     kind: String,
     text: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serializes_text_and_base64_image_blocks() {
+        let message =
+            Message::user("translate", Some(&image::DynamicImage::new_rgb8(1, 1))).unwrap();
+        let value = serde_json::to_value(message).unwrap();
+        assert_eq!(value["content"][0]["type"], "text");
+        assert_eq!(value["content"][1]["type"], "image");
+        assert_eq!(value["content"][1]["source"]["type"], "base64");
+        assert_eq!(value["content"][1]["source"]["media_type"], "image/jpeg");
+    }
 }

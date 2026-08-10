@@ -410,7 +410,8 @@
       "hideCredential": "隱藏 {{provider}} 認證資訊",
       "notConfigured": "未設定",
       "revealCredential": "顯示 {{provider}} 認證資訊",
-      "title": "提供者"
+      "title": "提供者",
+      "vision": "視覺輸入"
     },
     "shortcuts": {
       "description": "當文字欄位未取得焦點時，可以使用單鍵快捷鍵。",

@@ -25,6 +25,7 @@ pub struct ModelSelection {
     pub model: Option<String>,
     #[serde(default)]
     pub quantization: Option<String>,
+    pub vision: bool,
 }
 
 impl Default for ModelSelection {
@@ -33,6 +34,7 @@ impl Default for ModelSelection {
             provider: Provider::Local,
             model: Some(crate::local::DEFAULT_MODEL.to_owned()),
             quantization: Some(crate::local::DEFAULT_QUANTIZATION.to_owned()),
+            vision: true,
         }
     }
 }
@@ -49,10 +51,11 @@ pub struct Model {
     pub model: Option<String>,
     pub name: String,
     pub quantizations: Vec<Quantization>,
+    pub vision: bool,
 }
 
 impl Model {
-    pub(crate) fn catalog(provider: Provider, entries: &[(&str, &str)]) -> Vec<Self> {
+    pub(crate) fn catalog(provider: Provider, entries: &[(&str, &str)], vision: bool) -> Vec<Self> {
         entries
             .iter()
             .map(|&(model, name)| Self {
@@ -60,6 +63,7 @@ impl Model {
                 model: Some(model.to_owned()),
                 name: name.to_owned(),
                 quantizations: Vec::new(),
+                vision,
             })
             .collect()
     }
@@ -70,6 +74,7 @@ impl Model {
             model: None,
             name: name.to_owned(),
             quantizations: Vec::new(),
+            vision: false,
         }
     }
 }

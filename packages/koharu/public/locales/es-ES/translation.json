@@ -410,7 +410,8 @@
       "hideCredential": "Ocultar credencial de {{provider}}",
       "notConfigured": "Sin configurar",
       "revealCredential": "Mostrar credencial de {{provider}}",
-      "title": "Proveedores"
+      "title": "Proveedores",
+      "vision": "Entrada visual"
     },
     "shortcuts": {
       "description": "Los atajos de una tecla están disponibles cuando ningún campo de texto tiene el foco.",

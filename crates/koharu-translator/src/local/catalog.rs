@@ -28,6 +28,7 @@ pub(crate) struct LocalModelDescriptor {
     pub(crate) quantizations: &'static [QuantizationDefinition],
     pub(crate) generation: ModelGeneration,
     pub(crate) repository: &'static str,
+    pub(crate) projector: Option<&'static str>,
     pub(crate) target_languages: SupportedLanguages,
 }
 
@@ -59,6 +60,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+        projector: None,
         target_languages: SupportedLanguages::Limited(&[
             crate::Language::English,
             crate::Language::Arabic,
@@ -99,6 +101,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+        projector: None,
         target_languages: SupportedLanguages::Limited(&[
             crate::Language::English,
             crate::Language::Arabic,
@@ -131,6 +134,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-E2B-it-qat-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -151,6 +155,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-E4B-it-qat-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -172,6 +177,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-12B-it-qat-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -193,6 +199,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -214,6 +221,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "unsloth/gemma-4-31B-it-qat-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -267,6 +275,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma-4-E2B-Uncensored-HauhauCS-Aggressive",
+        projector: Some("mmproj-Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -325,6 +334,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+        projector: Some("mmproj-Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -346,6 +356,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced",
+        projector: Some("mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -367,6 +378,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        projector: Some("mmproj-Gemma4-26B-A4B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -388,6 +400,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: None,
         },
         repository: "HauhauCS/Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-MTP",
+        projector: Some("mmproj-Gemma4-31B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -415,6 +428,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "unsloth/Qwen3.5-0.8B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -442,6 +456,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "unsloth/Qwen3.5-2B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -469,6 +484,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "unsloth/Qwen3.5-4B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -496,6 +512,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "unsloth/Qwen3.5-9B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -523,6 +540,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "unsloth/Qwen3.5-27B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -550,6 +568,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "unsloth/Qwen3.5-35B-A3B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -577,6 +596,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(1.5),
         },
         repository: "unsloth/Qwen3.6-27B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -615,6 +635,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(1.5),
         },
         repository: "unsloth/Qwen3.6-35B-A3B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -653,6 +674,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
+        projector: Some("mmproj-Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -691,6 +713,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+        projector: Some("mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -729,6 +752,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(2.0),
         },
         repository: "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+        projector: Some("mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -797,6 +821,7 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(1.5),
         },
         repository: "HauhauCS/Qwen3.6-27B-Uncensored-HauhauCS-Balanced",
+        projector: Some("mmproj-Qwen3.6-27B-Uncensored-HauhauCS-Balanced-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
@@ -860,16 +885,35 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
             presence_penalty: Some(1.5),
         },
         repository: "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+        projector: Some("mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
 ];
 
+pub(crate) struct ResolvedLocalModel {
+    pub(crate) model: PathBuf,
+    pub(crate) projector: Option<PathBuf>,
+}
+
 impl LocalModelDescriptor {
-    pub(crate) async fn resolve(self, selection: &ModelSelection) -> anyhow::Result<PathBuf> {
+    pub(crate) async fn resolve(
+        self,
+        selection: &ModelSelection,
+    ) -> anyhow::Result<ResolvedLocalModel> {
         let filename = self.filename(selection.quantization.as_deref())?;
-        koharu_runtime::HuggingFaceFile::latest(self.repository, filename)
-            .resolve()
-            .await
+        let model = koharu_runtime::HuggingFaceFile::latest(self.repository, filename).resolve();
+        let projector = async {
+            match self.projector {
+                Some(filename) => Ok(Some(
+                    koharu_runtime::HuggingFaceFile::latest(self.repository, filename)
+                        .resolve()
+                        .await?,
+                )),
+                None => Ok(None),
+            }
+        };
+        let (model, projector) = tokio::try_join!(model, projector)?;
+        Ok(ResolvedLocalModel { model, projector })
     }
 
     fn filename(self, quantization: Option<&str>) -> anyhow::Result<&'static str> {
@@ -902,6 +946,9 @@ mod tests {
             let id = model.id;
             assert!(!model.repository.is_empty());
             assert!(!model.quantizations.is_empty());
+            if let Some(projector) = model.projector {
+                assert!(!projector.is_empty());
+            }
             for (quantization_index, quantization) in model.quantizations.iter().enumerate() {
                 assert!(!quantization.filename.is_empty());
                 assert!(

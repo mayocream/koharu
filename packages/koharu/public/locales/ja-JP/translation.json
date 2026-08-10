@@ -410,7 +410,8 @@
       "hideCredential": "{{provider}}の認証情報を隠す",
       "notConfigured": "未設定",
       "revealCredential": "{{provider}}の認証情報を表示",
-      "title": "プロバイダー"
+      "title": "プロバイダー",
+      "vision": "ビジョン入力"
     },
     "shortcuts": {
       "description": "テキスト入力欄にフォーカスがないとき、単一キーのショートカットを使用できます。",

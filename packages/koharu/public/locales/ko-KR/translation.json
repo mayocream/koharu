@@ -410,7 +410,8 @@
       "hideCredential": "{{provider}} 자격 증명 숨기기",
       "notConfigured": "설정 안 됨",
       "revealCredential": "{{provider}} 자격 증명 표시",
-      "title": "제공자"
+      "title": "제공자",
+      "vision": "비전 입력"
     },
     "shortcuts": {
       "description": "텍스트 필드에 포커스가 없을 때 단일 키 단축키를 사용할 수 있습니다.",

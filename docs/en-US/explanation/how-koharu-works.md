@@ -66,7 +66,7 @@ Some implementation details matter:
 - regions retain their model confidence and links to their containing panel and bubble
 - OCR runs on cropped text regions, not on the full page
 - inpainting consumes the union of the ordinary-text, COO, and brush masks
-- when you choose a remote LLM provider, Koharu sends OCR text for translation, not the full page image
+- when the selected local model or remote provider supports vision, Koharu sends the OCR text together with a resized copy of the original page; text-only backends receive only OCR text
 - OCR and inpainting processors can be swapped in **Settings > Pipeline** without changing the graph
 
 ## Why the stack matters

@@ -9,6 +9,7 @@ import {
   PreferenceRow,
   PreferenceSection,
   TextField,
+  ToggleField,
 } from '@/components/preferences/PreferenceFields'
 import type {
   CredentialInput,
@@ -28,6 +29,7 @@ type ConfigWithSetting<T, Key extends PropertyKey> = T extends { settings: infer
   : never
 
 type BaseUrlConfig = ConfigWithSetting<ProviderConfig, 'base_url'>
+type VisionConfig = ConfigWithSetting<ProviderConfig, 'vision'>
 
 export function ProviderPreferences({
   value,
@@ -71,6 +73,20 @@ export function ProviderPreferences({
                       replaceEntry(value, {
                         ...entry,
                         config: withBaseUrl(entry.config, base_url),
+                      }),
+                    )
+                  }
+                />
+              )}
+              {hasVision(entry.config) && (
+                <ToggleField
+                  label={t('settings.providers.vision')}
+                  value={entry.config.settings.vision}
+                  onChange={(vision) =>
+                    onChange(
+                      replaceEntry(value, {
+                        ...entry,
+                        config: withVision(entry.config, vision),
                       }),
                     )
                   }
@@ -141,11 +157,15 @@ function CredentialField({
 }
 
 function isConfigurable(entry: ProviderPreference): boolean {
-  return entry.credential !== null || hasBaseUrl(entry.config)
+  return entry.credential !== null || hasBaseUrl(entry.config) || hasVision(entry.config)
 }
 
 function hasBaseUrl(config: ProviderConfig): config is BaseUrlConfig {
   return 'base_url' in config.settings
+}
+
+function hasVision(config: ProviderConfig): config is VisionConfig {
+  return 'vision' in config.settings
 }
 
 function withBaseUrl(config: ProviderConfig, base_url: string): ProviderConfig {
@@ -153,6 +173,14 @@ function withBaseUrl(config: ProviderConfig, base_url: string): ProviderConfig {
   return {
     ...config,
     settings: { ...config.settings, base_url: base_url || null },
+  } as ProviderConfig
+}
+
+function withVision(config: ProviderConfig, vision: boolean): ProviderConfig {
+  if (!hasVision(config)) return config
+  return {
+    ...config,
+    settings: { ...config.settings, vision },
   } as ProviderConfig
 }
 

@@ -4,6 +4,7 @@
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
+use serde::Deserialize;
 
 use super::openai_compatible::{ChatBackend, ResponseMode};
 use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest};
@@ -42,20 +43,44 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
     let Some(api_key) = koharu_secrets::get("openrouter")? else {
         return Ok(Vec::new());
     };
-    let mut models = Model::catalog(Provider::OpenRouter, MODELS);
-    let discovered = super::openai_compatible::discover_models(
+    let mut models = Model::catalog(Provider::OpenRouter, MODELS, true);
+    let discovered: Result<ModelsResponse> = super::send_json(
         "openrouter",
         client.get(MODELS_URL).bearer_auth(api_key.expose_secret()),
     )
     .await;
     match discovered {
-        Ok(discovered) => models.extend(discovered.into_iter().map(|model| Model {
-            provider: Provider::OpenRouter,
-            name: crate::display_name(&model),
-            model: Some(model),
-            quantizations: Vec::new(),
+        Ok(discovered) => models.extend(discovered.data.into_iter().map(|model| {
+            Model {
+                provider: Provider::OpenRouter,
+                name: model.name,
+                model: Some(model.id),
+                quantizations: Vec::new(),
+                vision: model
+                    .architecture
+                    .input_modalities
+                    .iter()
+                    .any(|modality| modality == "image"),
+            }
         })),
         Err(error) => tracing::warn!(%error, "failed to list OpenRouter models"),
     }
     Ok(models)
+}
+
+#[derive(Deserialize)]
+struct ModelsResponse {
+    data: Vec<ListedModel>,
+}
+
+#[derive(Deserialize)]
+struct ListedModel {
+    id: String,
+    name: String,
+    architecture: Architecture,
+}
+
+#[derive(Deserialize)]
+struct Architecture {
+    input_modalities: Vec<String>,
 }

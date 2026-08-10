@@ -9,7 +9,8 @@ use url::Url;
 
 use super::send_json;
 use crate::{
-    GenerationConfig as TranslationGeneration, Model, Provider, Result, TranslationRequest, prompt,
+    GenerationConfig as TranslationGeneration, Model, Provider, Result, TranslationRequest,
+    backend::encode_image, prompt,
 };
 
 const ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -37,7 +38,7 @@ pub(super) static MODELS: &[(&str, &str)] = &[
 
 pub(super) async fn models() -> Result<Vec<Model>> {
     Ok(if koharu_secrets::get("gemini")?.is_some() {
-        Model::catalog(Provider::Gemini, MODELS)
+        Model::catalog(Provider::Gemini, MODELS, true)
     } else {
         Vec::new()
     })
@@ -58,8 +59,8 @@ pub(super) async fn translate(
     url.query_pairs_mut()
         .append_pair("key", api_key.expose_secret());
     let body = Request {
-        system_instruction: Content::new(&system),
-        contents: [Content::new(&user)],
+        system_instruction: Content::text(&system),
+        contents: [Content::user(&user, request.image.as_deref())?],
         generation_config: GenerationConfig {
             temperature: generation.temperature,
             max_output_tokens: generation.max_tokens,
@@ -92,20 +93,47 @@ struct Request<'a> {
 
 #[derive(Serialize)]
 struct Content<'a> {
-    parts: [Part<'a>; 1],
+    parts: Vec<Part<'a>>,
 }
 
 impl<'a> Content<'a> {
-    fn new(text: &'a str) -> Self {
+    fn text(text: &'a str) -> Self {
         Self {
-            parts: [Part { text }],
+            parts: vec![Part::Text { text }],
         }
+    }
+
+    fn user(text: &'a str, image: Option<&image::DynamicImage>) -> anyhow::Result<Self> {
+        let mut parts = vec![Part::Text { text }];
+        if let Some(image) = image {
+            parts.push(Part::InlineData {
+                inline_data: InlineData {
+                    mime_type: "image/jpeg",
+                    data: encode_image(image)?.data,
+                },
+            });
+        }
+        Ok(Self { parts })
     }
 }
 
 #[derive(Serialize)]
-struct Part<'a> {
-    text: &'a str,
+#[serde(untagged)]
+enum Part<'a> {
+    Text {
+        text: &'a str,
+    },
+    InlineData {
+        #[serde(rename = "inlineData")]
+        inline_data: InlineData,
+    },
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InlineData {
+    mime_type: &'static str,
+    data: String,
 }
 
 #[derive(Serialize)]
@@ -168,5 +196,15 @@ mod tests {
                 ["maximum"],
             1
         );
+    }
+
+    #[test]
+    fn serializes_text_and_inline_image_parts() {
+        let content =
+            Content::user("translate", Some(&image::DynamicImage::new_rgb8(1, 1))).unwrap();
+        let value = serde_json::to_value(content).unwrap();
+        assert_eq!(value["parts"][0]["text"], "translate");
+        assert_eq!(value["parts"][1]["inlineData"]["mimeType"], "image/jpeg");
+        assert!(value["parts"][1]["inlineData"]["data"].is_string());
     }
 }

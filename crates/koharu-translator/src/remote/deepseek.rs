@@ -18,7 +18,7 @@ pub(super) static MODELS: &[(&str, &str)] = &[
 
 pub(super) async fn models() -> Result<Vec<Model>> {
     Ok(if koharu_secrets::get("deepseek")?.is_some() {
-        Model::catalog(Provider::DeepSeek, MODELS)
+        Model::catalog(Provider::DeepSeek, MODELS, false)
     } else {
         Vec::new()
     })
