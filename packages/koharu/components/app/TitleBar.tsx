@@ -252,7 +252,12 @@ export function TitleBar() {
           {project ? (
             <span className='pointer-events-none max-w-[40vw] truncate'>
               <span className='font-medium text-foreground'>{project.name}</span>
-              {page && <span className='ml-2'>/ {page.label}</span>}
+              {page && (
+                <>
+                  <span className='mx-2'>/</span>
+                  <span>{page.label}</span>
+                </>
+              )}
             </span>
           ) : (
             <span className='pointer-events-none'>Koharu</span>

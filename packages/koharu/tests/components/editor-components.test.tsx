@@ -189,6 +189,7 @@ describe('greenfield editor', () => {
       </>,
     )
 
+    expect(screen.getByText('/')).toHaveClass('mx-2')
     expect(screen.queryByRole('button', { name: 'Import pages' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('menuitem', { name: 'File' }))
     await user.hover(await screen.findByRole('menuitem', { name: 'Import Pages…' }))
