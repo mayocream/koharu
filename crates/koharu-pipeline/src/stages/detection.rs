@@ -175,6 +175,11 @@ struct PreviousText {
     layer: EntityId,
 }
 
+struct TextReuse {
+    previous: Vec<PreviousText>,
+    contents: BTreeSet<EntityId>,
+}
+
 #[derive(Default)]
 struct PageRegions<'a> {
     bubbles: Vec<DetectedRegion<'a>>,
@@ -194,8 +199,10 @@ async fn build_patch(
     generation: &Generation,
 ) -> Result<koharu_scene::Patch> {
     let page = input.page;
-    let mut previous_texts = previous_texts(input, generation)?;
-    let mut reused_contents = BTreeSet::new();
+    let mut text_reuse = TextReuse {
+        previous: previous_texts(input, generation)?,
+        contents: BTreeSet::new(),
+    };
     let mut edit = input.scene.edit_as(generation.clone());
     edit.observe_subtree(page)?;
     remove_previous_regions(input, &mut edit, generation)
@@ -207,19 +214,13 @@ async fn build_patch(
         image,
         output,
         generation,
-        &mut previous_texts,
-        &mut reused_contents,
+        &mut text_reuse,
     )
     .await
     .context("failed to write detection output")?;
-    remove_unmatched_texts(
-        input,
-        &mut edit,
-        generation,
-        previous_texts,
-        &reused_contents,
-    )
-    .context("failed to remove unmatched detected text")?;
+    let TextReuse { previous, contents } = text_reuse;
+    remove_unmatched_texts(input, &mut edit, generation, previous, &contents)
+        .context("failed to remove unmatched detected text")?;
     finish(edit)
 }
 
@@ -339,8 +340,7 @@ async fn write_page(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
-    previous_texts: &mut Vec<PreviousText>,
-    reused_contents: &mut BTreeSet<EntityId>,
+    text_reuse: &mut TextReuse,
 ) -> Result<()> {
     let KoharuLayoutDetections {
         mut detections,
@@ -365,8 +365,7 @@ async fn write_page(
         &image,
         &detections,
         generation,
-        previous_texts,
-        reused_contents,
+        text_reuse,
     )
     .context("failed to write detected regions")?;
     link_dialogue_regions(edit, &regions, generation)
@@ -383,8 +382,7 @@ fn write_regions<'a>(
     image: &RgbImage,
     detections: &'a [KoharuLayoutDetection],
     generation: &Generation,
-    previous_texts: &mut Vec<PreviousText>,
-    reused_contents: &mut BTreeSet<EntityId>,
+    text_reuse: &mut TextReuse,
 ) -> Result<PageRegions<'a>> {
     let mut regions = PageRegions::default();
     let text_group = snapshot.page(page)?.text_group()?;
@@ -397,18 +395,8 @@ fn write_regions<'a>(
         None
     };
     for (index, detection) in detections.iter().enumerate() {
-        let previous = (detection.label == "text")
-            .then(|| take_previous_text(previous_texts, detection.bbox))
-            .flatten();
         match write_region(
-            snapshot,
-            edit,
-            page,
-            image,
-            detection,
-            generation,
-            previous,
-            reused_contents,
+            snapshot, edit, page, image, detection, generation, text_reuse,
         )
         .with_context(|| format!("failed to write {} detection {index}", detection.label))?
         {
@@ -433,9 +421,11 @@ fn write_region<'a>(
     image: &RgbImage,
     detection: &'a KoharuLayoutDetection,
     generation: &Generation,
-    previous: Option<PreviousText>,
-    reused_contents: &mut BTreeSet<EntityId>,
+    text_reuse: &mut TextReuse,
 ) -> Result<RegionOutput<'a>> {
+    let previous = (detection.label == "text")
+        .then(|| take_previous_text(&mut text_reuse.previous, detection.bbox))
+        .flatten();
     let entity = edit
         .add_entity(page, At::End)
         .context("failed to create a detected region")?;
@@ -506,7 +496,7 @@ fn write_region<'a>(
         )
         .context("failed to create or reuse detected text entities")?;
     if !created {
-        reused_contents.insert(content);
+        text_reuse.contents.insert(content);
     }
     if created
         || snapshot

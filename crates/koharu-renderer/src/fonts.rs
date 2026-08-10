@@ -607,7 +607,7 @@ pub(crate) struct FontRequest {
 
 pub(crate) enum FontPreview {
     Webp(Vec<u8>),
-    System(Font),
+    System(Box<Font>),
 }
 
 impl Fonts {
@@ -777,6 +777,7 @@ impl Fonts {
                 system
                     .lock()
                     .query_family(&family_name)
+                    .map(Box::new)
                     .map(FontPreview::System)
             }
         })

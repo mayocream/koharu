@@ -978,8 +978,7 @@ impl<'a> TextLayout<'a> {
                 self.writing_mode,
                 line_height,
                 line_ink,
-                balloon_air_x,
-                balloon_air_y,
+                (balloon_air_x, balloon_air_y),
                 self.hyphenation_policy,
             )
         } else if max_extent.is_finite() && max_extent > 0.0 {
@@ -1523,10 +1522,10 @@ fn comic_line_breaks(
     writing_mode: WritingMode,
     line_height: f32,
     line_ink: InkBand,
-    air_x: f32,
-    air_y: f32,
+    air: (f32, f32),
     policy: HyphenationPolicy,
 ) -> LineBreakResult {
+    let (air_x, air_y) = air;
     let block_extent = if writing_mode.is_vertical() {
         balloon.width
     } else {
@@ -2703,8 +2702,7 @@ mod tests {
                 before: 10.0,
                 after: 10.0,
             },
-            0.0,
-            0.0,
+            (0.0, 0.0),
             HyphenationPolicy::Disabled,
         );
         let vertical_balloon = comic_balloon(
@@ -2723,8 +2721,7 @@ mod tests {
                 before: 10.0,
                 after: 10.0,
             },
-            0.0,
-            0.0,
+            (0.0, 0.0),
             HyphenationPolicy::Disabled,
         );
 

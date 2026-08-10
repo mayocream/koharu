@@ -93,7 +93,7 @@ describe('Tauri runtime', () => {
     vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
     const view = render(createElement(Providers, null, createElement(ProjectProbe)))
 
-    expect(screen.getByText('Loading')).toBeInTheDocument()
+    expect(await screen.findByText('Loading')).toBeInTheDocument()
     projectPending.resolve(null)
     expect(await screen.findByText('Closed')).toBeInTheDocument()
     view.unmount()

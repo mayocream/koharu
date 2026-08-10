@@ -196,7 +196,7 @@ describe('greenfield editor', () => {
     expect(screen.queryByRole('button', { name: 'Import pages' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('menuitem', { name: 'File' }))
     await user.hover(await screen.findByRole('menuitem', { name: 'Import Pages…' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Files...' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Files…' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Importing pages…')
     expect(importPages).toHaveBeenCalledTimes(1)
@@ -267,7 +267,7 @@ describe('greenfield editor', () => {
     expect(screen.getByTestId('type-inspector')).toBeInTheDocument()
     expect(screen.getByTestId('type-font-picker')).toHaveTextContent('Noto Sans')
     expect(screen.getByTestId('type-size')).toHaveValue('')
-    expect(screen.getByTestId('type-size')).toHaveAttribute('placeholder', 'auto')
+    expect(screen.getByTestId('type-size')).toHaveAttribute('placeholder', 'Auto')
     await user.clear(screen.getByTestId('type-size'))
     await user.type(screen.getByTestId('type-size'), '18')
     await user.tab()
@@ -325,8 +325,8 @@ describe('greenfield editor', () => {
       </TooltipProvider>,
     )
 
-    await user.click(screen.getByRole('button', { name: 'Brush size' }))
-    expect(screen.getByRole('textbox', { name: 'Brush size in pixels' })).toHaveValue('48')
+    await user.click(screen.getByRole('button', { name: 'Brush size: 48 pixels' }))
+    expect(screen.getByRole('textbox', { name: 'Brush size' })).toHaveValue('48')
 
     await user.click(screen.getByRole('button', { name: 'Increase brush size' }))
     expect(useKoharuStore.getState().brush.diameter).toBe(49)
@@ -408,7 +408,7 @@ describe('greenfield editor', () => {
         ],
       },
     ])
-    render(<Inspector />)
+    const { unmount } = render(<Inspector />)
 
     fireEvent.click(screen.getByRole('combobox', { name: 'Font weight' }))
 
@@ -416,8 +416,9 @@ describe('greenfield editor', () => {
     expect(screen.getByRole('option', { name: '700' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '100' })).not.toBeInTheDocument()
 
-    await user.keyboard('{Escape}')
-    await user.click(screen.getByRole('combobox', { name: 'Font style' }))
+    unmount()
+    render(<Inspector />)
+    fireEvent.click(screen.getByRole('combobox', { name: 'Font style' }))
     expect(screen.getByRole('option', { name: 'Regular' })).toBeInTheDocument()
     await user.click(screen.getByRole('option', { name: 'Italic' }))
     await waitFor(() =>
@@ -480,9 +481,9 @@ describe('greenfield editor', () => {
     render(<Inspector />)
 
     expect(screen.queryByRole('button', { name: /Filter layers by type/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit Hello' })).toHaveTextContent('text')
-    expect(screen.getByRole('button', { name: 'Edit Dialogue line' })).toHaveTextContent('dialogue')
-    expect(screen.getByRole('button', { name: 'Edit Caption' })).toHaveTextContent('free-text')
+    expect(screen.getByRole('button', { name: 'Edit Hello' })).toHaveTextContent('Text')
+    expect(screen.getByRole('button', { name: 'Edit Dialogue line' })).toHaveTextContent('Dialogue')
+    expect(screen.getByRole('button', { name: 'Edit Caption' })).toHaveTextContent('Free text')
     expect(screen.queryByText('Onomatopoeia')).not.toBeInTheDocument()
   })
 
@@ -519,13 +520,13 @@ describe('greenfield editor', () => {
     const run = vi.spyOn(commands, 'process').mockResolvedValue('job')
     render(<CanvasCommandBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
     fireEvent.click(screen.getByRole('button', { name: /Scope Page/ }))
     fireEvent.click(screen.getByRole('button', { name: /Entire project/ }))
     fireEvent.click(screen.getByRole('button', { name: /Stages 4 stages/ }))
     fireEvent.click(screen.getByRole('button', { name: /Translation/ }))
     fireEvent.click(screen.getByRole('button', { name: /Inpainting/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Run AI processing' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run processing' }))
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(
         { scope: 'project' },
@@ -533,13 +534,13 @@ describe('greenfield editor', () => {
       ),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
     fireEvent.click(screen.getByRole('button', { name: /Scope Project/ }))
     fireEvent.click(screen.getByRole('button', { name: /Selected pages/ }))
     fireEvent.click(screen.getByRole('button', { name: /Stages 2 stages/ }))
     fireEvent.click(screen.getByRole('button', { name: /Translation/ }))
     fireEvent.click(screen.getByRole('button', { name: /Inpainting/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Run AI processing' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run processing' }))
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(
         { scope: 'pages', value: ['page'] },
@@ -553,7 +554,7 @@ describe('greenfield editor', () => {
     const run = vi.spyOn(commands, 'process').mockResolvedValue('job')
     render(<CanvasCommandBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Run AI processing' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run processing' }))
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith(
         { scope: 'pages', value: ['page'] },
@@ -561,8 +562,8 @@ describe('greenfield editor', () => {
       ),
     )
 
-    const selector = screen.getByRole('button', { name: 'AI runtime selector' })
-    const runButton = screen.getByRole('button', { name: 'Run AI processing' })
+    const selector = screen.getByRole('button', { name: 'Processing settings' })
+    const runButton = screen.getByRole('button', { name: 'Run processing' })
     expect(selector).toHaveClass('h-7')
     expect(runButton).toHaveClass('h-7', 'bg-primary/80', 'hover:bg-primary/90')
     fireEvent.click(selector)
@@ -592,15 +593,15 @@ describe('greenfield editor', () => {
     const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(nextPreferences)
     render(<CanvasCommandBar />)
 
-    await user.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    await user.click(screen.getByRole('button', { name: 'Processing settings' }))
     await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
     await user.click(screen.getByRole('button', { name: /Output English/ }))
-    const language = screen.getByRole('combobox', { name: 'Output target language' })
+    const language = screen.getByRole('combobox', { name: 'Target language' })
     expect(language).toHaveTextContent('English')
     expect(language).not.toHaveTextContent('en-US')
     await user.click(language)
     await user.click(await screen.findByRole('option', { name: 'Japanese' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Output instructions' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Translation instructions' }), {
       target: { value: 'Keep character names unchanged.' },
     })
     expect(screen.queryByRole('button', { name: 'Apply output' })).not.toBeInTheDocument()
@@ -644,7 +645,7 @@ describe('greenfield editor', () => {
     })
     render(<CanvasCommandBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
     fireEvent.click(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ }))
     const search = screen.getByRole('textbox', { name: 'Search models' })
     expect(search).toHaveFocus()
@@ -682,7 +683,7 @@ describe('greenfield editor', () => {
     })
     render(<CanvasCommandBar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI runtime selector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
     fireEvent.click(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ }))
 
     const label = await screen.findByText(longName)
@@ -736,13 +737,13 @@ describe('greenfield editor', () => {
     const modelSearch = screen.getByRole('textbox', { name: 'Search models' })
     expect(modelSearch).toHaveFocus()
     await user.type(modelSearch, 'missing model')
-    expect(screen.getByText('No matching models')).toBeInTheDocument()
+    expect(screen.getByText('No models match this search.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(
       screen.getByRole('button', { name: 'Use LFM 2.5 1.2B Instruct from Local' }),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByLabelText('Target language')).toHaveTextContent('American English')
+    expect(screen.getByLabelText('Target language')).toHaveTextContent('English')
   })
 
   it('adds and removes default font families from typesetting settings', async () => {
@@ -807,7 +808,7 @@ describe('greenfield editor', () => {
 
     await user.click(screen.getByRole('button', { name: 'Typesetting' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Typesetting' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Add default font family' }))
+    await user.click(screen.getByRole('button', { name: 'Add font family' }))
     await user.click(await screen.findByRole('option', { name: 'Arial, System' }))
 
     await waitFor(() =>

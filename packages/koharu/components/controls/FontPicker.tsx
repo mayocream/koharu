@@ -390,7 +390,9 @@ function FontList({
           if (!family) return null
           const selected = normalizeFontName(family.name) === normalizeFontName(value)
           const source = t(
-            family.sources.includes('bundled') ? 'fontPicker.library' : 'fontPicker.system',
+            family.sources.includes('bundled')
+              ? 'fontPicker.sources.bundled'
+              : 'fontPicker.sources.system',
           )
           return (
             <button

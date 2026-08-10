@@ -73,7 +73,7 @@ pub enum Layer {
         parent: Option<EntityId>,
         geometry: Option<Geometry>,
         visibility: LayerVisibility,
-        content: TextContent,
+        content: Box<TextContent>,
         typography: Option<Typography>,
         layout: TextLayoutKind,
         fit_region: Option<EntityId>,
@@ -973,13 +973,13 @@ impl Project {
                     .component::<SceneGeometry>(layer)?
                     .map(Self::geometry_view),
                 visibility,
-                content: TextContent {
+                content: Box::new(TextContent {
                     id: content.id(),
                     source,
                     translation,
                     role,
                     source_region,
-                },
+                }),
                 typography,
                 layout: layout.kind,
                 fit_region,

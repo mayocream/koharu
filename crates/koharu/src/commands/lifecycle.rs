@@ -367,7 +367,7 @@ pub(crate) async fn import_pages(
                 .collect::<Vec<_>>()
         }),
         PageImportSource::Folder => dialog.pick_folder().await.map(|folder| {
-            let files = WalkDir::new(folder.path())
+            WalkDir::new(folder.path())
                 .follow_links(false)
                 .into_iter()
                 .filter_map(|entry| match entry {
@@ -388,8 +388,7 @@ pub(crate) async fn import_pages(
                             )
                         })
                 })
-                .collect::<Vec<_>>();
-            files
+                .collect::<Vec<_>>()
         }),
     };
     let Some(mut files) = files else {

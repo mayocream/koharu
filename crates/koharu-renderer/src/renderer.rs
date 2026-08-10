@@ -184,7 +184,7 @@ impl Renderer {
             .map_err(Error::FontResource)?
         {
             FontPreview::Webp(bytes) => return Ok(bytes),
-            FontPreview::System(font) => font,
+            FontPreview::System(font) => *font,
         };
         let label = family_name.to_owned();
         self.inner
@@ -567,7 +567,7 @@ impl Renderer {
             traversal.layers.push(image_draft(
                 page,
                 geometry,
-                asset,
+                ImageNodeDescriptor::from_asset(asset, Some((width, height))),
                 ImageMetadata {
                     name: None,
                     kind: ImageKind::Source,
@@ -578,7 +578,6 @@ impl Renderer {
                 },
                 Arc::from([]),
                 &mut dependencies,
-                Some((width, height)),
             )?);
         } else {
             traversal.diagnostics.push(RenderDiagnostic::MissingAsset {
@@ -677,7 +676,7 @@ impl Traversal<'_> {
                     self.layers.push(image_draft(
                         entity,
                         geometry,
-                        asset,
+                        ImageNodeDescriptor::from_asset(asset, None),
                         ImageMetadata {
                             name: Some(raster.name),
                             kind,
@@ -685,7 +684,6 @@ impl Traversal<'_> {
                         presentation,
                         Arc::from(ancestry),
                         &mut common,
-                        None,
                     )?);
                 } else {
                     self.diagnostics.push(RenderDiagnostic::MissingAsset {
@@ -735,7 +733,7 @@ impl Traversal<'_> {
                 self.layers.push(image_draft(
                     entity,
                     geometry,
-                    asset,
+                    ImageNodeDescriptor::from_asset(asset, None),
                     ImageMetadata {
                         name: None,
                         kind: ImageKind::Embedded,
@@ -743,7 +741,6 @@ impl Traversal<'_> {
                     presentation,
                     Arc::from(ancestry),
                     &mut common,
-                    None,
                 )?);
             }
             self.dependencies.extend(common);
@@ -910,15 +907,24 @@ struct ResolvedFit {
     balloon_contour: Option<Vec<(f32, f32)>>,
 }
 
+impl ImageNodeDescriptor {
+    fn from_asset(asset: Asset, require_size: Option<(u32, u32)>) -> Self {
+        Self {
+            blob: asset.blob,
+            expected_size: asset.metadata.width.zip(asset.metadata.height),
+            require_size,
+        }
+    }
+}
+
 fn image_draft(
     entity: EntityId,
     geometry: Geometry,
-    asset: Asset,
+    descriptor: ImageNodeDescriptor,
     metadata: ImageMetadata,
     presentation: Presentation,
     ancestry: Arc<[EntityId]>,
     dependencies: &mut BTreeSet<RenderDependency>,
-    require_size: Option<(u32, u32)>,
 ) -> Result<LayerDraft> {
     let frame = geometry_bounds(&geometry)
         .map(|bounds| GeometryFrame {
@@ -926,19 +932,14 @@ fn image_draft(
             angle_degrees: 0.0,
         })
         .ok_or_else(|| Error::invalid(format!("invalid image geometry for entity {entity}")))?;
-    let expected_size = asset.metadata.width.zip(asset.metadata.height);
-    dependencies.insert(RenderDependency::Blob(asset.blob));
+    dependencies.insert(RenderDependency::Blob(descriptor.blob));
     Ok(LayerDraft {
         entity,
         geometry,
         frame,
         presentation,
         ancestry,
-        descriptor: NodeDescriptor::Image(ImageNodeDescriptor {
-            blob: asset.blob,
-            expected_size,
-            require_size,
-        }),
+        descriptor: NodeDescriptor::Image(descriptor),
         metadata: DraftMetadata::Image(metadata),
         dependencies: dependencies.iter().cloned().collect(),
     })
@@ -1451,7 +1452,7 @@ fn draw_font_preview(scene: &mut Scene, layout: &crate::LayoutRun<'_>) -> anyhow
                     f64::from(baseline_x + pen_x + glyph.x_offset),
                     f64::from(baseline_y + pen_y - glyph.y_offset),
                 )) * Affine::scale_non_uniform(1.0, -1.0);
-                scene.fill(Fill::NonZero, transform, &brush, None, &path);
+                scene.fill(Fill::NonZero, transform, brush, None, &path);
             }
             pen_x += glyph.x_advance;
             pen_y -= glyph.y_advance;

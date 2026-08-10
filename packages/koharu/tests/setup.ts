@@ -4,18 +4,36 @@ import { afterEach, beforeEach, vi } from 'vitest'
 import { queryClient } from '@/lib/queries'
 import { defaultShortcuts, useKoharuStore } from '@/lib/store'
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
-    i18n: {
-      language: 'en-US',
-      resolvedLanguage: 'en-US',
-      changeLanguage: async () => undefined,
-    },
-  }),
-  initReactI18next: { type: '3rdParty', init: () => undefined },
-  I18nextProvider: ({ children }: { children: React.ReactNode }) => children,
-}))
+vi.mock('react-i18next', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-i18next')>()
+  const { createInstance } = await import('i18next')
+  const { default: translations } = await import('@/public/locales/en-US/translation.json')
+  const i18n = createInstance()
+  await i18n.init({
+    resources: { 'en-US': { translation: translations } },
+    lng: 'en-US',
+    fallbackLng: 'en-US',
+    interpolation: { escapeValue: false },
+  })
+
+  return {
+    ...actual,
+    useTranslation: () => ({ t: i18n.t.bind(i18n), i18n }),
+    initReactI18next: { type: '3rdParty', init: () => undefined },
+    I18nextProvider: ({ children }: { children: React.ReactNode }) => children,
+  }
+})
+
+vi.mock('@tauri-apps/api/window', () => {
+  const window = {
+    close: vi.fn(async () => undefined),
+    isMaximized: vi.fn(async () => false),
+    minimize: vi.fn(async () => undefined),
+    onResized: vi.fn(async () => () => undefined),
+    toggleMaximize: vi.fn(async () => undefined),
+  }
+  return { getCurrentWindow: () => window }
+})
 
 class Observer {
   observe() {}

@@ -184,14 +184,10 @@ impl Desktop {
         };
         let frame = if commit.revision == snapshot.revision()
             && revision == Some(commit.changes.from)
-            && previous.is_some()
+            && let Some(previous) = previous.as_ref()
         {
             self.renderer
-                .update(
-                    previous.as_ref().expect("checked above"),
-                    snapshot,
-                    &commit.changes,
-                )
+                .update(previous, snapshot, &commit.changes)
                 .await?
         } else {
             self.renderer.render(snapshot, page).await?

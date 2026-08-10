@@ -137,7 +137,7 @@ impl Model {
             .collect::<Vec<Option<(Tensor, Tensor)>>>();
         let hidden_states =
             self.language_model
-                .forward(inputs_embeds, &position_ids, true, &mut cache);
+                .forward(inputs_embeds, position_ids, true, &mut cache);
         let last_index = hidden_states.size()[1] - 1;
         let mut next_token = self
             .lm_head
