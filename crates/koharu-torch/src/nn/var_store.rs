@@ -342,7 +342,7 @@ impl VarStore {
     /// Migrates a var store and all its tensor to a target device.
     pub fn set_device(&mut self, device: Device) {
         let mut variables = self.variables_.lock().unwrap();
-        for (_, variable) in variables.named_variables.iter_mut() {
+        for variable in variables.named_variables.values_mut() {
             variable.set_data(&variable.to_device(device));
         }
         self.device = device

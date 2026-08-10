@@ -78,7 +78,6 @@ async fn build_shim() -> Result<()> {
     let target_dir = output_dir()?;
     fs::create_dir_all(&target_dir)?;
 
-    let target_shim = target_dir.join(shim_file_name());
     let libtorch_dir = Torch::CPU.install().await?.join("libtorch");
     let mut config = cmake::Config::new("libtch");
     config.define("CMAKE_PREFIX_PATH", libtorch_dir);
@@ -94,7 +93,14 @@ async fn build_shim() -> Result<()> {
     }
     let cmake_dir = config.build();
 
-    fs::copy(cmake_dir.join(shim_file_name()), target_shim)?;
+    for profile in ["debug", "release"] {
+        let profile_dir = target_dir.with_file_name(profile);
+        fs::create_dir_all(&profile_dir)?;
+        fs::copy(
+            cmake_dir.join(shim_file_name()),
+            profile_dir.join(shim_file_name()),
+        )?;
+    }
 
     Ok(())
 }
