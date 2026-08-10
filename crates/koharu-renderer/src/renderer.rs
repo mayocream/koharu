@@ -812,6 +812,7 @@ impl Traversal<'_> {
         let (direction, _) = shaping_direction_for_text(&text, writing_mode);
         let alignment = resolve_alignment(
             typography.as_ref().and_then(|value| value.alignment),
+            writing_mode,
             direction == harfrust::Direction::RightToLeft,
         );
         let preferred_font = typography
@@ -1248,8 +1249,19 @@ fn resolve_writing_mode(
     }
 }
 
-fn resolve_alignment(alignment: Option<TextAlignment>, rtl: bool) -> TextAlign {
-    match alignment.unwrap_or(TextAlignment::Center) {
+fn resolve_alignment(
+    alignment: Option<TextAlignment>,
+    writing_mode: WritingMode,
+    rtl: bool,
+) -> TextAlign {
+    let alignment = alignment.unwrap_or(if writing_mode.is_vertical() {
+        TextAlignment::Start
+    } else {
+        TextAlignment::Center
+    });
+    match alignment {
+        TextAlignment::Start if writing_mode.is_vertical() => TextAlign::Left,
+        TextAlignment::End if writing_mode.is_vertical() => TextAlign::Right,
         TextAlignment::Start if rtl => TextAlign::Right,
         TextAlignment::Start => TextAlign::Left,
         TextAlignment::Center => TextAlign::Center,
@@ -1489,6 +1501,26 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn vertical_alignment_defaults_to_start_and_uses_the_inline_axis() {
+        assert_eq!(
+            resolve_alignment(None, WritingMode::VerticalRl, false),
+            TextAlign::Left
+        );
+        assert_eq!(
+            resolve_alignment(Some(TextAlignment::Start), WritingMode::VerticalRl, true,),
+            TextAlign::Left
+        );
+        assert_eq!(
+            resolve_alignment(Some(TextAlignment::End), WritingMode::VerticalRl, false,),
+            TextAlign::Right
+        );
+        assert_eq!(
+            resolve_alignment(None, WritingMode::Horizontal, false),
+            TextAlign::Center
+        );
+    }
 
     fn png(width: u32, height: u32, color: [u8; 4]) -> Arc<[u8]> {
         let image = image::RgbaImage::from_pixel(width, height, image::Rgba(color));

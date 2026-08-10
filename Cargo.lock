@@ -4250,6 +4250,7 @@ dependencies = [
  "fontique",
  "harfrust",
  "hypher",
+ "icu_normalizer",
  "icu_properties",
  "icu_segmenter",
  "image 0.25.10",

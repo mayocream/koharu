@@ -283,6 +283,38 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('defaults vertical text alignment to top and maps end to bottom', async () => {
+    const user = userEvent.setup()
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: page.layers.map((layer) =>
+        layer.type === 'text'
+          ? {
+              ...layer,
+              typography: { ...layer.typography, alignment: null, writing_mode: 'Vertical' },
+            }
+          : layer,
+      ),
+    }))
+    const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+    render(<Inspector />)
+
+    expect(screen.getByRole('button', { name: 'Align top' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await user.click(screen.getByRole('button', { name: 'Align bottom' }))
+    await waitFor(() =>
+      expect(setTypography).toHaveBeenCalledWith([
+        expect.objectContaining({
+          layer: 'element',
+          typography: expect.objectContaining({ alignment: 'End', writing_mode: 'Vertical' }),
+        }),
+      ]),
+    )
+  })
+
   it('adjusts brush size from the toolbar popover', async () => {
     const user = userEvent.setup()
     installProject()

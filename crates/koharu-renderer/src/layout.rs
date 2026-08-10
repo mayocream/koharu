@@ -6,6 +6,11 @@ use unicode_bidi::BidiInfo;
 use anyhow::Result;
 use harfrust::{Feature, Tag};
 use hypher::Lang;
+use icu_normalizer::ComposingNormalizerBorrowed;
+use icu_properties::{
+    CodePointMapData,
+    props::{GeneralCategory, GeneralCategoryGroup},
+};
 use skrifa::{MetadataProvider, instance::Size};
 
 use crate::{
@@ -184,7 +189,7 @@ pub struct TextLayout<'a> {
     line_height: Option<f32>,
     letter_spacing: f32,
     word_spacing: f32,
-    compact_emphasis_punctuation: bool,
+    cjk_punctuation_layout: bool,
 }
 
 fn largest_fitting_font_size<T>(
@@ -253,7 +258,7 @@ impl<'a> TextLayout<'a> {
             line_height: None,
             letter_spacing: 0.0,
             word_spacing: 0.0,
-            compact_emphasis_punctuation: false,
+            cjk_punctuation_layout: false,
         }
     }
 
@@ -354,8 +359,8 @@ impl<'a> TextLayout<'a> {
         self
     }
 
-    pub(crate) fn with_compact_emphasis_punctuation(mut self, enabled: bool) -> Self {
-        self.compact_emphasis_punctuation = enabled;
+    pub(crate) fn with_cjk_punctuation_layout(mut self, enabled: bool) -> Self {
+        self.cjk_punctuation_layout = enabled;
         self
     }
 
@@ -480,7 +485,6 @@ impl<'a> TextLayout<'a> {
             self.max_width
         }
         .unwrap_or(f32::INFINITY);
-        let max_extent_finite = max_extent.is_finite() && max_extent > 0.0;
 
         let mut fonts: Vec<&Font> = Vec::with_capacity(1 + self.fallback_fonts.len());
         fonts.push(self.font);
@@ -548,15 +552,35 @@ impl<'a> TextLayout<'a> {
                         harfrust::Direction::LeftToRight
                     };
 
-                    let script_runs = shape_script_runs(&shaper, run_text, &fonts, &run_options)?;
+                    let normalized_punctuation = self
+                        .cjk_punctuation_layout
+                        .then(|| normalize_cjk_emphasis_punctuation(run_text))
+                        .flatten();
+                    let shaping_text = normalized_punctuation
+                        .as_ref()
+                        .map_or(run_text, |(text, _)| text.as_str());
+                    let script_runs =
+                        shape_script_runs(&shaper, shaping_text, &fonts, &run_options)?;
                     for mut shaped in script_runs {
-                        self.apply_spacing(run_text, &mut shaped);
+                        self.apply_spacing(shaping_text, &mut shaped);
                         if self.writing_mode.is_vertical() && self.center_vertical_punctuation {
-                            self.center_vertical_fullwidth_punctuation(
+                            self.center_vertical_punctuation(
                                 font_size,
-                                run_text,
+                                shaping_text,
                                 &mut shaped.glyphs,
                             );
+                        }
+                        if self.cjk_punctuation_layout {
+                            self.layout_cjk_emphasis_runs(font_size, shaping_text, &mut shaped);
+                        }
+                        if let Some((_, cluster_map)) = &normalized_punctuation {
+                            for glyph in &mut shaped.glyphs {
+                                if let Some(&source_cluster) =
+                                    cluster_map.get(glyph.cluster as usize)
+                                {
+                                    glyph.cluster = source_cluster;
+                                }
+                            }
                         }
 
                         for glyph in &mut shaped.glyphs {
@@ -693,18 +717,6 @@ impl<'a> TextLayout<'a> {
         let effective_alignment = self.alignment.unwrap_or(TextAlign::Left);
 
         for (i, line) in lines.iter_mut().enumerate() {
-            let vertical_y = || {
-                let Some(balloon) = &self.comic_balloon else {
-                    return ascent;
-                };
-                let profile = line_profiles.get(i).copied().unwrap_or(LineProfile {
-                    width: line.advance,
-                    center_offset: 0.0,
-                    block_baseline: 0.0,
-                });
-                profile.center_offset - profile.width * 0.5
-                    + (profile.width - line.advance).max(0.0) * balloon.vertical_alignment
-            };
             line.baseline = match self.writing_mode {
                 WritingMode::VerticalRl => (
                     self.comic_balloon
@@ -715,27 +727,9 @@ impl<'a> TextLayout<'a> {
                                 + line_height * 0.5,
                             |profile| profile.block_baseline,
                         ),
-                    vertical_y(),
+                    ascent,
                 ),
                 WritingMode::Horizontal => {
-                    let x = if self.comic_balloon.is_some() {
-                        let profile = line_profiles.get(i).copied().unwrap_or(LineProfile {
-                            width: line.advance,
-                            center_offset: 0.0,
-                            block_baseline: 0.0,
-                        });
-                        match effective_alignment {
-                            TextAlign::Left | TextAlign::Justify => {
-                                profile.center_offset - profile.width * 0.5
-                            }
-                            TextAlign::Center => profile.center_offset - line.advance * 0.5,
-                            TextAlign::Right => {
-                                profile.center_offset + profile.width * 0.5 - line.advance
-                            }
-                        }
-                    } else {
-                        0.0
-                    };
                     let y = self
                         .comic_balloon
                         .as_ref()
@@ -743,7 +737,7 @@ impl<'a> TextLayout<'a> {
                         .map_or(ascent + i as f32 * line_height, |profile| {
                             profile.block_baseline
                         });
-                    (x, y)
+                    (0.0, y)
                 }
             };
         }
@@ -752,9 +746,50 @@ impl<'a> TextLayout<'a> {
             justify_lines(text, &mut lines, max_extent, &line_profiles);
         }
 
+        // Alignment is an inline-axis operation inside one intrinsic text block. The renderer
+        // places that block independently, so changing alignment never stretches it to the frame.
+        const PAD: f32 = 1.0;
+        let inline_extent = lines
+            .iter()
+            .filter_map(|line| self.ink_bounds(font_size, std::slice::from_ref(line)))
+            .map(|(min_x, min_y, max_x, max_y)| {
+                if self.writing_mode.is_vertical() {
+                    max_y - min_y
+                } else {
+                    max_x - min_x
+                }
+            })
+            .fold(0.0_f32, f32::max);
+        let inline_box = (inline_extent > 0.0).then(|| {
+            let extent = inline_extent + PAD * 2.0;
+            (extent, PAD, extent * 0.5, extent - PAD)
+        });
+        if let Some((_, inline_start, inline_center, inline_end)) = inline_box {
+            for line in &mut lines {
+                if let Some((min_x, min_y, max_x, max_y)) =
+                    self.ink_bounds(font_size, std::slice::from_ref(line))
+                {
+                    let (minimum, center, maximum) = if self.writing_mode.is_vertical() {
+                        (min_y, (min_y + max_y) * 0.5, max_y)
+                    } else {
+                        (min_x, (min_x + max_x) * 0.5, max_x)
+                    };
+                    let offset = match effective_alignment {
+                        TextAlign::Left | TextAlign::Justify => inline_start - minimum,
+                        TextAlign::Center => inline_center - center,
+                        TextAlign::Right => inline_end - maximum,
+                    };
+                    if self.writing_mode.is_vertical() {
+                        line.baseline.1 += offset;
+                    } else {
+                        line.baseline.0 += offset;
+                    }
+                }
+            }
+        }
+
         // Compute a tight ink bounding box using per-glyph bounds from the font tables (via skrifa),
-        // then translate baselines so the top-left ink origin is (0, 0). This avoids clipping without
-        // having to measure glyph outlines in the renderer.
+        // then normalize only the block axis. The inline axis remains in the fixed layout box.
         let (mut width, mut height) = (0.0, 0.0);
         let mut placement_offset_x = 0.0;
         let mut placement_offset_y = 0.0;
@@ -762,93 +797,48 @@ impl<'a> TextLayout<'a> {
             self.ink_bounds(font_size, &lines)
         {
             // Keep a tiny safety pad for hinting/AA differences.
-            const PAD: f32 = 1.0;
             min_x -= PAD;
             min_y -= PAD;
             max_x += PAD;
             max_y += PAD;
 
             for line in &mut lines {
-                line.baseline.0 -= min_x;
-                line.baseline.1 -= min_y;
+                if inline_box.is_none() || self.writing_mode.is_vertical() {
+                    line.baseline.0 -= min_x;
+                }
+                if inline_box.is_none() || !self.writing_mode.is_vertical() {
+                    line.baseline.1 -= min_y;
+                }
             }
-            let max_width_finite = self.max_width.is_some_and(|w| w.is_finite() && w > 0.0);
+            let actual_width = (max_x - min_x).max(0.0);
+            let actual_height = (max_y - min_y).max(0.0);
             if self.writing_mode.is_vertical() {
-                let actual_width = (max_x - min_x).max(0.0);
-                if max_width_finite {
-                    // Use tight bounds for Center alignment to ensure visual balance.
-                    width = if effective_alignment == TextAlign::Center {
-                        actual_width
-                    } else {
-                        actual_width.max(self.max_width.unwrap())
-                    };
-
-                    if effective_alignment != TextAlign::Left {
-                        let anchor = if effective_alignment == TextAlign::Center {
-                            actual_width
-                        } else {
-                            width
-                        };
-                        let remaining = (anchor - actual_width).max(0.0);
-                        let offset = match effective_alignment {
-                            TextAlign::Center => remaining * 0.5,
-                            TextAlign::Right => remaining,
-                            TextAlign::Left | TextAlign::Justify => 0.0,
-                        };
-                        if offset > 0.0 {
-                            for line in &mut lines {
-                                line.baseline.0 += offset;
-                            }
-                        }
-                    }
+                width = actual_width;
+                if let Some((inline_extent, _, _, _)) = inline_box {
+                    height = inline_extent;
                 } else {
-                    width = actual_width;
+                    height = actual_height;
                 }
             } else {
-                let actual_width = (max_x - min_x).max(0.0);
-                width = if effective_alignment == TextAlign::Center && max_extent_finite {
-                    actual_width
+                height = actual_height;
+                if let Some((inline_extent, _, _, _)) = inline_box {
+                    width = inline_extent;
                 } else {
-                    actual_width.max(if max_extent.is_finite() {
-                        max_extent
-                    } else {
-                        0.0
-                    })
-                };
-            }
-            height = (max_y - min_y).max(0.0);
-
-            // Apply horizontal alignment for horizontal writing mode (per-line alignment).
-            if !self.writing_mode.is_vertical()
-                && max_extent_finite
-                && !matches!(effective_alignment, TextAlign::Left | TextAlign::Justify)
-                && self.comic_balloon.is_none()
-            {
-                // Anchor to the run width. If Center, this is a tight width.
-                // If Right, this is the container width.
-                let anchor = width;
-                for line in &mut lines {
-                    let remaining = (anchor - line.advance).max(0.0);
-                    let offset = match effective_alignment {
-                        TextAlign::Left => 0.0,
-                        TextAlign::Center => remaining * 0.5,
-                        TextAlign::Right => remaining,
-                        TextAlign::Justify => 0.0,
-                    };
-                    if offset > 0.0 {
-                        line.baseline.0 += offset;
-                    }
+                    width = actual_width;
                 }
             }
 
             if let Some(balloon) = &self.comic_balloon {
-                let default_left = (balloon.width - width) * 0.5;
-                let default_top = (balloon.height - height) * balloon.vertical_alignment;
+                let inline_offset = line_profiles
+                    .first()
+                    .map_or(0.0, |profile| profile.center_offset);
                 if self.writing_mode.is_vertical() {
+                    let default_left = (balloon.width - width) * 0.5;
                     placement_offset_x = min_x - default_left;
-                    placement_offset_y = balloon.height * 0.5 + min_y - default_top;
+                    placement_offset_y = inline_offset;
                 } else {
-                    placement_offset_x = balloon.width * 0.5 + min_x - default_left;
+                    let default_top = (balloon.height - height) * balloon.vertical_alignment;
+                    placement_offset_x = inline_offset;
                     placement_offset_y = min_y - default_top;
                 }
             }
@@ -1176,7 +1166,7 @@ impl<'a> TextLayout<'a> {
         }
     }
 
-    fn center_vertical_fullwidth_punctuation(
+    fn center_vertical_punctuation(
         &self,
         font_size: f32,
         segment: &str,
@@ -1187,12 +1177,13 @@ impl<'a> TextLayout<'a> {
         }
 
         let mut metrics_cache = HashMap::new();
+        let categories = CodePointMapData::<GeneralCategory>::new();
         for glyph in glyphs {
             let cluster = glyph.cluster as usize;
             let Some(ch) = segment.get(cluster..).and_then(|tail| tail.chars().next()) else {
                 continue;
             };
-            if !is_fullwidth_punctuation(ch) {
+            if !GeneralCategoryGroup::Punctuation.contains(categories.get(ch)) {
                 continue;
             }
 
@@ -1213,37 +1204,113 @@ impl<'a> TextLayout<'a> {
                 continue;
             };
             glyph.x_offset = centered_x_offset(bounds.x_min, bounds.x_max);
+            glyph.y_offset = glyph.y_advance * 0.5 - (bounds.y_min + bounds.y_max) * 0.5;
         }
     }
 
+    fn layout_cjk_emphasis_runs(&self, font_size: f32, text: &str, shaped: &mut ShapedRun<'a>) {
+        const GAP_EM: f32 = 0.04;
+
+        let mut metrics_cache = HashMap::new();
+        let mut start = 0;
+        while start < shaped.glyphs.len() {
+            let is_emphasis = |glyph: &PositionedGlyph<'_>| {
+                text.get(glyph.cluster as usize..)
+                    .and_then(|tail| tail.chars().next())
+                    .and_then(cjk_emphasis_mark)
+                    .is_some()
+            };
+            if !is_emphasis(&shaped.glyphs[start]) {
+                start += 1;
+                continue;
+            }
+
+            let mut end = start + 1;
+            while end < shaped.glyphs.len() && end - start < 3 && is_emphasis(&shaped.glyphs[end]) {
+                end += 1;
+            }
+            if end - start < 2 {
+                start = end;
+                continue;
+            }
+
+            let bounds = shaped.glyphs[start..end]
+                .iter()
+                .map(|glyph| {
+                    let key = font_key(glyph.font);
+                    let glyph_metrics = match metrics_cache.entry(key) {
+                        std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            let font_ref = glyph.font.skrifa_ref().ok()?;
+                            entry.insert(
+                                font_ref.glyph_metrics(Size::new(font_size), glyph.font.location()),
+                            )
+                        }
+                    };
+                    let bounds = glyph_metrics.bounds(skrifa::GlyphId::new(glyph.glyph_id))?;
+                    Some((bounds.x_min, bounds.y_min, bounds.x_max, bounds.y_max))
+                })
+                .collect::<Option<Vec<_>>>();
+            let Some(bounds) = bounds else {
+                start = end;
+                continue;
+            };
+
+            let gap = font_size * GAP_EM;
+            if self.writing_mode.is_vertical() {
+                let cell_advance = -shaped.glyphs[start..end]
+                    .iter()
+                    .map(|glyph| glyph.y_advance.abs())
+                    .fold(font_size, f32::max);
+                let group_width = bounds
+                    .iter()
+                    .map(|(x_min, _, x_max, _)| x_max - x_min)
+                    .sum::<f32>()
+                    + gap * (bounds.len() - 1) as f32;
+                let mut cursor = -group_width * 0.5;
+                let last = end - start - 1;
+                for (index, (glyph, (x_min, y_min, x_max, y_max))) in
+                    shaped.glyphs[start..end].iter_mut().zip(bounds).enumerate()
+                {
+                    glyph.x_offset = cursor - x_min;
+                    glyph.y_offset = cell_advance * 0.5 - (y_min + y_max) * 0.5;
+                    glyph.x_advance = 0.0;
+                    glyph.y_advance = if index == last { cell_advance } else { 0.0 };
+                    cursor += x_max - x_min + gap;
+                }
+            } else {
+                let last = end - start - 1;
+                for (index, (glyph, (x_min, _, x_max, _))) in
+                    shaped.glyphs[start..end].iter_mut().zip(bounds).enumerate()
+                {
+                    glyph.x_offset = -x_min;
+                    glyph.x_advance = if index == last {
+                        extend_advance(x_max - x_min, self.letter_spacing)
+                    } else {
+                        x_max - x_min + gap
+                    };
+                }
+            }
+
+            start = end;
+        }
+
+        shaped.x_advance = shaped.glyphs.iter().map(|glyph| glyph.x_advance).sum();
+        shaped.y_advance = shaped.glyphs.iter().map(|glyph| glyph.y_advance).sum();
+    }
+
     fn apply_spacing(&self, text: &str, shaped: &mut ShapedRun<'a>) {
-        if self.letter_spacing == 0.0
-            && self.word_spacing == 0.0
-            && !self.compact_emphasis_punctuation
-        {
+        if self.letter_spacing == 0.0 && self.word_spacing == 0.0 {
             return;
         }
         for glyph in &mut shaped.glyphs {
             let character = text
                 .get(glyph.cluster as usize..)
                 .and_then(|tail| tail.chars().next());
-            let advance = if self.writing_mode.is_vertical() {
-                glyph.y_advance
-            } else {
-                glyph.x_advance
-            };
-            let compact_spacing = self
-                .compact_emphasis_punctuation
-                .then(|| emphasis_run_length(text, glyph.cluster as usize))
-                .flatten()
-                .map_or(0.0, |run_length| {
-                    -advance.abs() * (1.0 - 1.0 / run_length as f32)
-                });
             let extra = self.letter_spacing
                 + character
                     .filter(|character| character.is_whitespace())
-                    .map_or(0.0, |_| self.word_spacing)
-                + compact_spacing;
+                    .map_or(0.0, |_| self.word_spacing);
             if self.writing_mode.is_vertical() {
                 glyph.y_advance = extend_advance(glyph.y_advance, extra);
             } else {
@@ -1953,46 +2020,37 @@ fn centered_x_offset(x_min: f32, x_max: f32) -> f32 {
     -((x_min + x_max) * 0.5)
 }
 
-fn is_emphasis_mark(character: char) -> bool {
-    matches!(character, '!' | '?' | '！' | '？')
-}
-
-fn emphasis_run_length(text: &str, offset: usize) -> Option<usize> {
-    let character = text.get(offset..)?.chars().next()?;
-    if !is_emphasis_mark(character) {
+fn cjk_emphasis_mark(character: char) -> Option<char> {
+    let mut normalized =
+        ComposingNormalizerBorrowed::new_nfkc().normalize_iter(std::iter::once(character));
+    let character = normalized.next()?;
+    if normalized.next().is_some() {
         return None;
     }
-    let before = text
-        .get(..offset)?
-        .chars()
-        .rev()
-        .take_while(|character| is_emphasis_mark(*character))
-        .count();
-    let after = text
-        .get(offset..)?
-        .chars()
-        .take_while(|character| is_emphasis_mark(*character))
-        .count();
-    let length = before + after;
-    (length > 1).then_some(length)
+    match character {
+        '!' => Some('！'),
+        '?' => Some('？'),
+        _ => None,
+    }
 }
 
-fn is_fullwidth_punctuation(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{203C}' // Double exclamation mark
-            | '\u{2047}'..='\u{2049}' // Double/mixed question and exclamation marks
-            | '\u{3001}' // Ideographic comma
-            | '\u{3002}' // Ideographic full stop
-            | '\u{3008}'..='\u{3011}' // Angle/corner brackets
-            | '\u{3014}'..='\u{301F}' // Tortoise shell/white brackets and marks
-            | '\u{3030}' // Wavy dash
-            | '\u{30FB}' // Katakana middle dot
-            | '\u{FF01}'..='\u{FF0F}' // Fullwidth punctuation block 1
-            | '\u{FF1A}'..='\u{FF20}' // Fullwidth punctuation block 2
-            | '\u{FF3B}'..='\u{FF40}' // Fullwidth punctuation block 3
-            | '\u{FF5B}'..='\u{FF65}' // Fullwidth punctuation block 4
-    )
+fn normalize_cjk_emphasis_punctuation(text: &str) -> Option<(String, Vec<u32>)> {
+    if !text
+        .chars()
+        .any(|character| cjk_emphasis_mark(character).is_some_and(|mark| mark != character))
+    {
+        return None;
+    }
+
+    let mut output = String::with_capacity(text.len());
+    let mut cluster_map = Vec::with_capacity(text.len());
+    for (source_offset, character) in text.char_indices() {
+        let output_character = cjk_emphasis_mark(character).unwrap_or(character);
+        output.push(output_character);
+        cluster_map.resize(output.len(), source_offset as u32);
+    }
+
+    Some((output, cluster_map))
 }
 
 fn reorder_visual(levels: &[unicode_bidi::Level]) -> Vec<usize> {
@@ -2514,9 +2572,9 @@ mod tests {
     }
 
     #[test]
-    fn comic_layout_preserves_the_contour_center_during_final_placement() -> anyhow::Result<()> {
+    fn comic_layout_preserves_the_contour_center_for_both_writing_modes() -> anyhow::Result<()> {
         let font = any_system_font();
-        let layout = TextLayout::new(&font)
+        let horizontal = TextLayout::new(&font)
             .with_font_size(16.0)
             .with_alignment(TextAlign::Center)
             .with_max_width(200.0)
@@ -2529,8 +2587,23 @@ mod tests {
                 0.0,
             )
             .run("Hello")?;
+        let vertical = TextLayout::new(&font)
+            .with_font_size(16.0)
+            .with_writing_mode(WritingMode::VerticalRl)
+            .with_alignment(TextAlign::Left)
+            .with_max_width(120.0)
+            .with_max_height(200.0)
+            .with_comic_balloon(
+                120.0,
+                200.0,
+                vec![(0.0, 0.0), (120.0, 0.0), (120.0, 140.0), (0.0, 140.0)],
+                0.5,
+                0.0,
+            )
+            .run("Hello")?;
 
-        assert!(layout.placement_offset_x() < -10.0);
+        assert!(horizontal.placement_offset_x() < -10.0);
+        assert!(vertical.placement_offset_y() < -10.0);
         Ok(())
     }
 
@@ -2973,38 +3046,114 @@ mod tests {
     }
 
     #[test]
-    fn vertical_layout_horizontal_alignment_works() -> anyhow::Result<()> {
+    fn vertical_alignment_keeps_one_layout_box() -> anyhow::Result<()> {
         let font = any_system_font();
-        let max_width = 100.0;
-        let layout = TextLayout::new(&font)
-            .with_font_size(16.0)
-            .with_writing_mode(WritingMode::VerticalRl)
-            .with_max_width(max_width)
-            .with_alignment(TextAlign::Center)
-            .run("A")?;
+        let max_height = 100.0;
+        let layout = |alignment| {
+            TextLayout::new(&font)
+                .with_font_size(16.0)
+                .with_writing_mode(WritingMode::VerticalRl)
+                .with_max_width(60.0)
+                .with_max_height(max_height)
+                .with_alignment(alignment)
+                .run("AAAA\ng")
+        };
+        let start = layout(TextAlign::Left)?;
+        let center = layout(TextAlign::Center)?;
+        let end = layout(TextAlign::Right)?;
 
-        // Under the new tight-bounds strategy, the run width is now the actual content width (tightly cropped).
-        // The visual centering on the page is handled by the renderer centering this tight sprite.
-        assert!(layout.width < max_width);
-        assert!(layout.width > 10.0); // Should be around one line height (16px+)
+        assert!(start.height < max_height);
+        assert_approx_eq(start.height, center.height);
+        assert_approx_eq(center.height, end.height);
+        assert_approx_eq(start.width, end.width);
+        assert_approx_eq(start.placement_offset_y(), center.placement_offset_y());
+        assert_approx_eq(center.placement_offset_y(), end.placement_offset_y());
+        let metrics = TextLayout::new(&font);
+        let line_top = |layout: &LayoutRun<'_>| {
+            metrics
+                .ink_bounds(16.0, std::slice::from_ref(&layout.lines[1]))
+                .unwrap()
+                .1
+        };
+        let start_top = line_top(&start);
+        let center_top = line_top(&center);
+        let end_top = line_top(&end);
+        assert!(start_top < center_top);
+        assert!(center_top < end_top);
 
         Ok(())
     }
 
     #[test]
-    fn vertical_layout_left_alignment_expands_width() -> anyhow::Result<()> {
+    fn vertical_start_alignment_shares_one_visual_top() -> anyhow::Result<()> {
         let font = any_system_font();
-        let max_width = 100.0;
         let layout = TextLayout::new(&font)
             .with_font_size(16.0)
             .with_writing_mode(WritingMode::VerticalRl)
-            .with_max_width(max_width)
             .with_alignment(TextAlign::Left)
-            .run("A")?;
+            .with_max_width(80.0)
+            .with_max_height(160.0)
+            .with_comic_balloon(
+                80.0,
+                160.0,
+                vec![(0.0, 0.0), (80.0, 0.0), (80.0, 160.0), (0.0, 160.0)],
+                0.5,
+                0.0,
+            )
+            .run("A\ng\nE")?;
+        let metrics = TextLayout::new(&font);
+        let tops = layout
+            .lines
+            .iter()
+            .map(|line| {
+                metrics
+                    .ink_bounds(16.0, std::slice::from_ref(line))
+                    .unwrap()
+                    .1
+            })
+            .collect::<Vec<_>>();
 
-        assert_eq!(layout.width, max_width);
-        // The block should NOT be shifted horizontally.
-        assert!(layout.lines[0].baseline.0 < 20.0);
+        assert_eq!(tops.len(), 3);
+        for top in &tops[1..] {
+            assert_approx_eq(*top, tops[0]);
+        }
+        let (_, ink_top, _, ink_bottom) = metrics.ink_bounds(16.0, &layout.lines).unwrap();
+        assert_approx_eq(ink_top, layout.height - ink_bottom);
+        assert!(layout.height < 160.0);
+        assert_approx_eq(layout.placement_offset_y(), 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn horizontal_alignment_keeps_one_layout_box() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let max_width = 100.0;
+        let layout = |alignment| {
+            TextLayout::new(&font)
+                .with_font_size(16.0)
+                .with_max_width(max_width)
+                .with_alignment(alignment)
+                .run("AAAA\ng")
+        };
+        let start = layout(TextAlign::Left)?;
+        let center = layout(TextAlign::Center)?;
+        let end = layout(TextAlign::Right)?;
+        let metrics = TextLayout::new(&font);
+        let ink_left = |layout: &LayoutRun<'_>| {
+            metrics
+                .ink_bounds(16.0, std::slice::from_ref(&layout.lines[1]))
+                .unwrap()
+                .0
+        };
+
+        assert!(start.width < max_width);
+        assert_approx_eq(start.width, center.width);
+        assert_approx_eq(center.width, end.width);
+        assert_approx_eq(start.placement_offset_x(), center.placement_offset_x());
+        assert_approx_eq(center.placement_offset_x(), end.placement_offset_x());
+        assert!(ink_left(&start) < ink_left(&center));
+        assert!(ink_left(&center) < ink_left(&end));
 
         Ok(())
     }
@@ -3099,50 +3248,95 @@ mod tests {
     }
 
     #[test]
-    fn fullwidth_punctuation_detection_works() {
-        assert!(is_fullwidth_punctuation('。'));
-        assert!(is_fullwidth_punctuation('（'));
-        assert!(is_fullwidth_punctuation('！'));
-        assert!(is_fullwidth_punctuation('‼'));
-        assert!(is_fullwidth_punctuation('⁇'));
-        assert!(is_fullwidth_punctuation('⁈'));
-        assert!(is_fullwidth_punctuation('⁉'));
-        assert!(!is_fullwidth_punctuation('A'));
-        assert!(!is_fullwidth_punctuation('中'));
+    fn cjk_emphasis_normalization_only_expands_ascii_marks() {
+        let source = "A!?！？⁉⁈‼⁇";
+        let (normalized, cluster_map) = normalize_cjk_emphasis_punctuation(source).unwrap();
+
+        assert_eq!(normalized, "A！？！？⁉⁈‼⁇");
+        assert_eq!(
+            normalized
+                .char_indices()
+                .map(|(offset, _)| cluster_map[offset])
+                .collect::<Vec<_>>(),
+            [0, 1, 2, 3, 6, 9, 12, 15, 18]
+        );
+        assert!(normalize_cjk_emphasis_punctuation("！？⁉⁈‼⁇").is_none());
     }
 
     #[test]
-    fn cjk_emphasis_punctuation_keeps_every_symbol_and_uses_tighter_spacing() -> anyhow::Result<()>
-    {
+    fn cjk_emphasis_layout_keeps_glyphs_and_groups_at_most_three_per_vertical_row()
+    -> anyhow::Result<()> {
         let font = any_system_font();
-        let text = "後??!";
-        let regular = TextLayout::new(&font).with_font_size(16.0).run(text)?;
-        let compact = TextLayout::new(&font)
-            .with_font_size(16.0)
-            .with_compact_emphasis_punctuation(true)
+        let text = "中!?A!!!B????C⁉⁈‼⁇";
+        let layout = TextLayout::new(&font)
+            .with_font_size(32.0)
+            .with_writing_mode(WritingMode::VerticalRl)
+            .with_cjk_punctuation_layout(true)
             .run(text)?;
-        let clusters = compact.lines[0]
-            .glyphs
+        let glyphs = layout
+            .lines
             .iter()
-            .map(|glyph| glyph.cluster)
+            .flat_map(|line| &line.glyphs)
             .collect::<Vec<_>>();
 
-        assert_eq!(compact.lines[0].range, 0..text.len());
-        assert!(clusters.contains(&3));
-        assert!(clusters.contains(&4));
-        assert!(clusters.contains(&5));
-        assert!(compact.lines[0].advance < regular.lines[0].advance);
+        for (offset, _) in text.char_indices() {
+            assert!(
+                glyphs.iter().any(|glyph| glyph.cluster == offset as u32),
+                "missing source glyph at byte offset {offset}"
+            );
+        }
+        let y_advance = |cluster| {
+            glyphs
+                .iter()
+                .find(|glyph| glyph.cluster == cluster)
+                .unwrap()
+                .y_advance
+        };
+        assert_approx_eq(y_advance(3), 0.0);
+        assert!(y_advance(4) < 0.0);
+        assert_approx_eq(y_advance(6), 0.0);
+        assert_approx_eq(y_advance(7), 0.0);
+        assert!(y_advance(8) < 0.0);
+        assert_approx_eq(y_advance(10), 0.0);
+        assert_approx_eq(y_advance(11), 0.0);
+        assert!(y_advance(12) < 0.0);
+        assert!(y_advance(13) < 0.0);
         Ok(())
     }
 
     #[test]
-    fn emphasis_run_length_includes_marks_on_both_sides() {
-        let text = "後？？!続";
+    fn cjk_emphasis_layout_applies_to_horizontal_text() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let font_size = 32.0;
+        let text = "中!?A!!!";
+        let layout = TextLayout::new(&font)
+            .with_font_size(font_size)
+            .with_cjk_punctuation_layout(true)
+            .run(text)?;
+        let glyphs = &layout.lines[0].glyphs;
+        let punctuation = [3, 4, 6, 7, 8].map(|cluster| {
+            glyphs
+                .iter()
+                .find(|glyph| glyph.cluster == cluster)
+                .unwrap()
+        });
 
-        assert_eq!(emphasis_run_length(text, 3), Some(3));
-        assert_eq!(emphasis_run_length(text, 6), Some(3));
-        assert_eq!(emphasis_run_length(text, 9), Some(3));
-        assert_eq!(emphasis_run_length(text, 0), None);
+        for glyph in punctuation {
+            assert!(glyph.x_advance > 0.0);
+        }
+        let first = glyphs.iter().find(|glyph| glyph.cluster == 3).unwrap();
+        let metrics = first
+            .font
+            .skrifa_ref()?
+            .glyph_metrics(Size::new(font_size), first.font.location());
+        let bounds = metrics
+            .bounds(skrifa::GlyphId::new(first.glyph_id))
+            .unwrap();
+        assert_approx_eq(
+            first.x_advance - (bounds.x_max - bounds.x_min),
+            font_size * 0.04,
+        );
+        Ok(())
     }
 
     #[test]
@@ -3156,6 +3350,46 @@ mod tests {
     fn centered_x_offset_uses_absolute_center() {
         assert_approx_eq(centered_x_offset(2.0, 6.0), -4.0);
         assert_approx_eq(centered_x_offset(-3.0, 1.0), 1.0);
+    }
+
+    #[test]
+    fn all_vertical_punctuation_is_centered_in_its_advance_cell() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let font_size = 32.0;
+        let text = "A,A.A;A:A!A?A-A_A(A)A[A]A{A}A，A。A！A？A—A“A”A";
+        let layout = TextLayout::new(&font)
+            .with_font_size(font_size)
+            .with_writing_mode(WritingMode::VerticalRl)
+            .run(text)?;
+        let categories = CodePointMapData::<GeneralCategory>::new();
+        let punctuation_offsets = text
+            .char_indices()
+            .filter_map(|(offset, character)| {
+                GeneralCategoryGroup::Punctuation
+                    .contains(categories.get(character))
+                    .then_some(offset as u32)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(punctuation_offsets.len(), 21);
+
+        for cluster in punctuation_offsets {
+            let punctuation = layout.lines[0]
+                .glyphs
+                .iter()
+                .find(|glyph| glyph.cluster == cluster)
+                .unwrap_or_else(|| panic!("missing punctuation glyph at byte offset {cluster}"));
+            let font_ref = punctuation.font.skrifa_ref()?;
+            let metrics = font_ref.glyph_metrics(Size::new(font_size), punctuation.font.location());
+            let bounds = metrics
+                .bounds(skrifa::GlyphId::new(punctuation.glyph_id))
+                .expect("punctuation glyph has no bounds");
+
+            let ink_center_x = punctuation.x_offset + (bounds.x_min + bounds.x_max) * 0.5;
+            let ink_center_y = -punctuation.y_offset - (bounds.y_min + bounds.y_max) * 0.5;
+            assert_approx_eq(ink_center_x, 0.0);
+            assert_approx_eq(ink_center_y, -punctuation.y_advance * 0.5);
+        }
+        Ok(())
     }
 
     #[test]

@@ -184,6 +184,9 @@ function TypeInspector() {
   const strokeColor = typography.stroke_color ?? defaultTypography.stroke_color!
   const strokeEnabled = strokeWidth > 0 && strokeColor[3] > 0
   const displayedStrokeWidth = strokeWidth > 0 ? strokeWidth : 1.5
+  const writingMode = typography.writing_mode ?? 'Horizontal'
+  const effectiveAlignment =
+    typography.alignment ?? (writingMode === 'Vertical' ? 'Start' : 'Center')
 
   return (
     <div className='min-w-0 p-2' data-testid='type-inspector' aria-disabled={disabled}>
@@ -293,17 +296,22 @@ function TypeInspector() {
             <div className='grid h-6 grid-cols-3 rounded-md border border-input bg-background p-px'>
               {(
                 [
-                  ['Start', AlignLeft, 'Align left'],
-                  ['Center', AlignCenter, 'Align center'],
-                  ['End', AlignRight, 'Align right'],
+                  ['Start', AlignLeft, writingMode === 'Vertical' ? 'Align top' : 'Align left'],
+                  [
+                    'Center',
+                    AlignCenter,
+                    writingMode === 'Vertical' ? 'Align middle' : 'Align center',
+                  ],
+                  ['End', AlignRight, writingMode === 'Vertical' ? 'Align bottom' : 'Align right'],
                 ] as const
               ).map(([alignment, Icon, label]) => (
                 <button
                   key={alignment}
                   type='button'
                   aria-label={label}
+                  aria-pressed={effectiveAlignment === alignment}
                   disabled={disabled}
-                  data-active={(typography.alignment ?? 'Center') === alignment}
+                  data-active={effectiveAlignment === alignment}
                   className='grid place-items-center rounded-[4px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary/90'
                   onClick={() =>
                     apply((value) => ({
@@ -320,7 +328,7 @@ function TypeInspector() {
           <InspectorField label='Direction'>
             <Select
               disabled={disabled}
-              value={typography.writing_mode ?? 'Horizontal'}
+              value={writingMode}
               onValueChange={(writing_mode) =>
                 apply((value) => ({
                   ...value,

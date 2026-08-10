@@ -435,10 +435,10 @@ impl Project {
                     color: None,
                     stroke_color: None,
                     stroke_width: None,
-                    alignment: Some(match kind {
-                        TextLayoutKind::Point => koharu_scene::TextAlignment::Start,
-                        TextLayoutKind::Paragraph => koharu_scene::TextAlignment::Center,
-                    }),
+                    alignment: match kind {
+                        TextLayoutKind::Point => Some(koharu_scene::TextAlignment::Start),
+                        TextLayoutKind::Paragraph => None,
+                    },
                     writing_mode: None,
                     extensions: Default::default(),
                 },

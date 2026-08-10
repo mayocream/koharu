@@ -63,7 +63,7 @@ pub struct FontFace {
     pub style: FontStyle,
 }
 
-/// Horizontal alignment within a text layout box.
+/// Inline-axis alignment within a text layout box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextAlign {
     #[default]

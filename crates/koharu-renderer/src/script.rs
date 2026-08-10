@@ -89,20 +89,6 @@ fn script_tag(script: IcuScript) -> Option<[u8; 4]> {
     (bytes.len() == 4).then(|| [bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
-pub(crate) fn is_cjk_text(text: &str) -> bool {
-    let script_map = CodePointMapData::<IcuScript>::new();
-    text.chars().any(|character| {
-        matches!(
-            script_map.get(character),
-            IcuScript::Han
-                | IcuScript::Hiragana
-                | IcuScript::Katakana
-                | IcuScript::Bopomofo
-                | IcuScript::Hangul
-        )
-    })
-}
-
 pub(crate) fn is_chinese_or_japanese_text(text: &str) -> bool {
     let script_map = CodePointMapData::<IcuScript>::new();
     text.chars().any(|character| {
@@ -138,12 +124,6 @@ mod tests {
         let (direction, script) = shaping_direction_for_text("مرحبا", WritingMode::Horizontal);
         assert_eq!(direction, Direction::RightToLeft);
         assert_eq!(script.unwrap().tag(), Tag::new(b"Arab"));
-    }
-
-    #[test]
-    fn cjk_detection_includes_korean() {
-        assert!(is_cjk_text("한국어"));
-        assert!(!is_cjk_text("English"));
     }
 
     #[test]

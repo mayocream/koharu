@@ -15,7 +15,7 @@ use crate::{
     bubble::LayoutBox,
     fonts::{Fonts, font_key},
     raster::rgba,
-    script::is_cjk_text,
+    script::is_chinese_or_japanese_text,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -184,12 +184,12 @@ impl TextRenderer {
             .with_alignment(descriptor.alignment)
             .with_line_height(descriptor.line_height)
             .with_spacing(descriptor.letter_spacing, descriptor.word_spacing)
-            .with_compact_emphasis_punctuation(
-                is_cjk_text(&descriptor.text)
+            .with_cjk_punctuation_layout(
+                is_chinese_or_japanese_text(&descriptor.text)
                     || descriptor
                         .language
                         .as_ref()
-                        .is_some_and(|language| is_cjk_language(language.as_str())),
+                        .is_some_and(|language| is_chinese_or_japanese_language(language.as_str())),
             );
         if !descriptor.point_text {
             layout = layout
@@ -319,11 +319,11 @@ fn automatic_maximum(
     }
 }
 
-fn is_cjk_language(language: &str) -> bool {
+fn is_chinese_or_japanese_language(language: &str) -> bool {
     language
         .split(['-', '_'])
         .next()
-        .is_some_and(|primary| matches!(primary.to_ascii_lowercase().as_str(), "ja" | "ko" | "zh"))
+        .is_some_and(|primary| matches!(primary.to_ascii_lowercase().as_str(), "ja" | "zh"))
 }
 
 fn inset(rect: LayoutBox, [top, right, bottom, left]: [f32; 4]) -> LayoutBox {

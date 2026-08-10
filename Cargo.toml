@@ -135,6 +135,7 @@ winreg = "0.56"
 skrifa = "0.42"
 harfrust = "0.10"
 hypher = "0.1.7"
+icu_normalizer = { version = "2.2", default-features = false, features = ["compiled_data"] }
 icu_properties = "2.2"
 icu_segmenter = "2.2"
 jieba-rs = "0.10"
