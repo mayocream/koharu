@@ -11,6 +11,7 @@ repository.workspace = true
 keywords = ["pytorch", "libtorch", "ffi", "deep-learning", "machine-learning"]
 publish = true
 build = "build.rs"
+links = "koharu_torch"
 
 categories = ["external-ffi-bindings", "science"]
 

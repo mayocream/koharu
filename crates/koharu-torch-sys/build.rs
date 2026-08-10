@@ -101,6 +101,10 @@ async fn build_shim() -> Result<()> {
             profile_dir.join(shim_file_name()),
         )?;
     }
+    println!(
+        "cargo::metadata=shim={}",
+        target_dir.join(shim_file_name()).display()
+    );
 
     Ok(())
 }

@@ -4030,6 +4030,7 @@ dependencies = [
  "koharu-runtime",
  "koharu-scene",
  "koharu-secrets",
+ "koharu-torch-sys",
  "koharu-translator",
  "open",
  "parking_lot",

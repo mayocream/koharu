@@ -264,6 +264,7 @@ async fn fetch_part(
         .await?;
     file.seek(std::io::SeekFrom::Start(start)).await?;
     file.write_all(&bytes).await?;
+    file.flush().await?;
     let completed = completed.fetch_add(expected, Ordering::Relaxed) + expected;
     publish(Event::Progress {
         id,
