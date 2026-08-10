@@ -95,13 +95,12 @@ bun cargo test -p koharu-ml --features=metal
 
 ## 文档
 
-文档分布在 `docs/en-US/`、`docs/ja-JP/`、`docs/zh-CN/`、`docs/pt-BR/` 下。改过哪个语种就构建哪个：
+文档分布在 `docs/en-US/`、`docs/ja-JP/`、`docs/zh-CN/` 下。改过哪个语种就构建哪个：
 
 ```bash
 zensical build -f docs/zensical.toml -c
 zensical build -f docs/zensical.ja-JP.toml
 zensical build -f docs/zensical.zh-CN.toml
-zensical build -f docs/zensical.pt-BR.toml
 ```
 
 新增页面时别忘了在对应的 `zensical*.toml` 里登记导航。

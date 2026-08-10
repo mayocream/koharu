@@ -95,13 +95,12 @@ bun cargo test -p koharu-ml --features=metal
 
 ## ドキュメント
 
-ドキュメントは `docs/en-US/`、`docs/ja-JP/`、`docs/zh-CN/`、`docs/pt-BR/` 以下にあります。触ったロケールをビルドしてください。
+ドキュメントは `docs/en-US/`、`docs/ja-JP/`、`docs/zh-CN/` 以下にあります。触ったロケールをビルドしてください。
 
 ```bash
 zensical build -f docs/zensical.toml -c
 zensical build -f docs/zensical.ja-JP.toml
 zensical build -f docs/zensical.zh-CN.toml
-zensical build -f docs/zensical.pt-BR.toml
 ```
 
 ページを追加したら、対応する `zensical*.toml` のナビゲーションにも登録します。

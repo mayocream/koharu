@@ -95,13 +95,12 @@ See [Acceleration and Runtime](../explanation/acceleration-and-runtime.md) for d
 
 ## Docs
 
-Docs live under `docs/en-US/`, `docs/ja-JP/`, `docs/zh-CN/`, and `docs/pt-BR/`. Build each locale you touched:
+Docs live under `docs/en-US/`, `docs/ja-JP/`, and `docs/zh-CN/`. Build each locale you touched:
 
 ```bash
 zensical build -f docs/zensical.toml -c
 zensical build -f docs/zensical.ja-JP.toml
 zensical build -f docs/zensical.zh-CN.toml
-zensical build -f docs/zensical.pt-BR.toml
 ```
 
 If you add a new page, register it in the matching `zensical*.toml` nav.
