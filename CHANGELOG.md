@@ -1,3 +1,68 @@
+## [0.63.0](https://github.com/mayocream/koharu/compare/0.61.2..0.63.0) - 2026-08-11
+
+### ⛰️  Features
+
+- *(llm)* Add Atlas Cloud provider ([#881](https://github.com/mayocream/koharu/issues/881)) - ([0fdacd4](https://github.com/mayocream/koharu/commit/0fdacd4f1446e2092e11c199951a11b7dc5e0114))
+- *(translator)* Add Atlas Cloud provider - ([69d87bf](https://github.com/mayocream/koharu/commit/69d87bf4552fb366f382e91ad46291c3f6723115))
+- Canvas Scrolling Tweaks ([#897](https://github.com/mayocream/koharu/issues/897)) - ([71d0416](https://github.com/mayocream/koharu/commit/71d041655be60550ead29012ced683824dfc38a4))
+- Delete Page Confirmation ([#809](https://github.com/mayocream/koharu/issues/809)) - ([2107843](https://github.com/mayocream/koharu/commit/2107843f0c7e2458de5a329980c78575401babb5))
+- Added a "delete selected textblocks" button and keyboard shortcut ([#808](https://github.com/mayocream/koharu/issues/808)) - ([d62bec2](https://github.com/mayocream/koharu/commit/d62bec2a0ea5585f650bccf84bde3971d3b44715))
+
+### 🐛 Bug Fixes
+
+- *(ci)* Update sponsors through pull requests [skip ci] - ([bf78ff0](https://github.com/mayocream/koharu/commit/bf78ff0a3b112ab52671810feaee43fb5fc4439b))
+- *(sponsors)* Handle anonymous Patreon members [skip ci] - ([d9ef27e](https://github.com/mayocream/koharu/commit/d9ef27ed07dab8cbdb8ff6f3cf82972c8b4fee0a))
+- Various Delete Function Fixes ([#801](https://github.com/mayocream/koharu/issues/801)) - ([e1fced9](https://github.com/mayocream/koharu/commit/e1fced9151b9af358025c10f5729b33bdc2d9ba9))
+- Allow deleting font size value completely. ([#851](https://github.com/mayocream/koharu/issues/851)) - ([f4ce039](https://github.com/mayocream/koharu/commit/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9))
+- Fix bug where progress indicator doesn't progress ([#845](https://github.com/mayocream/koharu/issues/845)) - ([ea1e9f9](https://github.com/mayocream/koharu/commit/ea1e9f9fe6fd5de2c1fa814b81fdc7ab4a7aecd5))
+- Frontend dist path - ([2dd9a65](https://github.com/mayocream/koharu/commit/2dd9a6540d75d0541f630719c893e386a8d80a77))
+
+### 🚜 Refactor
+
+- *(renderer)* Remove google fonts & bundle new fonts - ([90f6793](https://github.com/mayocream/koharu/commit/90f6793758df7180d196a499e910b6b77cb54dbd))
+- Rebuild scene graph - ([76c7bd0](https://github.com/mayocream/koharu/commit/76c7bd0a256864f11a97f92f06663d78810a9240))
+- Integrate canvas, storage, renderer, and desktop - ([fddfa9c](https://github.com/mayocream/koharu/commit/fddfa9c747d793dba2b3b7a0bbd8b1b45d9eacba))
+- Rebuild Koharu application and ML architecture - ([d53d3d7](https://github.com/mayocream/koharu/commit/d53d3d702805ba523be74c9daef2fd1fdb317112))
+- Split secrets into koharu-secrets - ([430ff6f](https://github.com/mayocream/koharu/commit/430ff6f6274ce6c1648c1204721a592dc2b816f1))
+- Move crates to crates/ - ([81a3cd1](https://github.com/mayocream/koharu/commit/81a3cd135c69c7202325e9c79875a1d28bc44ea4))
+
+### 📚 Documentation
+
+- Small edit to README - ([876dfe9](https://github.com/mayocream/koharu/commit/876dfe981948397f9434ed0fb5953c0a60283786))
+- Add homebrew - ([4bf2d3e](https://github.com/mayocream/koharu/commit/4bf2d3eb0efb77e9bc01001757dc1b2f933d1dc8))
+
+### ⚡ Performance
+
+- Optimize pipeline, rendering, and inpainting - ([eb05f4d](https://github.com/mayocream/koharu/commit/eb05f4d275d75296f985ad0a1bdaa3c054d8f9db))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(ci)* Enable GHA - ([a278086](https://github.com/mayocream/koharu/commit/a278086acc0de7f95dd0fb3b5f8c07cddf9e70cc))
+- *(ci)* Remove docker - ([b224395](https://github.com/mayocream/koharu/commit/b224395ff9c1d8bda91c82c6ba54c2a154f002b6))
+- *(dev)* Switched to Microsoft recommended way of finding MSVC ([#849](https://github.com/mayocream/koharu/issues/849)) - ([00966be](https://github.com/mayocream/koharu/commit/00966beef1ba0f069d16b2d62a0a45c388bb922b))
+- *(docs)* Update README.md [skip ci] - ([f61c65b](https://github.com/mayocream/koharu/commit/f61c65b7104ab4bce9bdf5ff2f692b8667b72988))
+- *(ui)* Cleaned up the styling of the text style buttons ([#854](https://github.com/mayocream/koharu/issues/854)) - ([6291d50](https://github.com/mayocream/koharu/commit/6291d507f4d2c527898368517342d66466eb26b5))
+- Update sponsors ([#898](https://github.com/mayocream/koharu/issues/898)) - ([d016e46](https://github.com/mayocream/koharu/commit/d016e46ba1b69579e065c69e7cbc71a8d6d66f8c))
+- Update sponsors ([#896](https://github.com/mayocream/koharu/issues/896)) - ([fb31702](https://github.com/mayocream/koharu/commit/fb3170202599dcff40ec30bea1e402bcefccc634))
+- Update sponsors ([#889](https://github.com/mayocream/koharu/issues/889)) - ([9a162fc](https://github.com/mayocream/koharu/commit/9a162fcdf067cdd57f8672a841c1463e1d1bc616))
+- Update sponsors ([#888](https://github.com/mayocream/koharu/issues/888)) - ([7940e03](https://github.com/mayocream/koharu/commit/7940e035fcfb349f6c2ce007c8a3ce80189df693))
+- Remove mockup - ([59aa81e](https://github.com/mayocream/koharu/commit/59aa81ecec73e58fba65f2fef836ac26b5b196e7))
+- Update sponsors ([#882](https://github.com/mayocream/koharu/issues/882)) - ([dbe3843](https://github.com/mayocream/koharu/commit/dbe3843843e5951eca7f04ae679fde03209ece21))
+- Add SponsorKit graph automation - ([bb52e2f](https://github.com/mayocream/koharu/commit/bb52e2f3ae1d6de9f8cefa1798bd6eaaebe97a95))
+- Use wildcard - ([3462e51](https://github.com/mayocream/koharu/commit/3462e51e5eb287129fae9b5cd9d97f166c7b860b))
+- Stop publishing bare exe on windows - ([a8d3bdc](https://github.com/mayocream/koharu/commit/a8d3bdc905a3f2132fac35ea48667ab67c91d669))
+- Configure dependabot - ([f54ad1f](https://github.com/mayocream/koharu/commit/f54ad1f4b061be2ab322bccc539ac5d49f7f1cf7))
+
+### Build
+
+- Package native runtimes across supported platforms - ([7b79680](https://github.com/mayocream/koharu/commit/7b796801fbecdf934f887b1230982ea1179c82f8))
+
+## New Contributors ❤️
+
+* @github-actions[bot] made their first contribution in [#898](https://github.com/mayocream/koharu/pull/898)
+* @binyangzhu000-sudo made their first contribution in [#881](https://github.com/mayocream/koharu/pull/881)
+* @obsgolem made their first contribution in [#851](https://github.com/mayocream/koharu/pull/851)
+
 ## [0.61.2](https://github.com/mayocream/koharu/compare/0.61.1..0.61.2) - 2026-06-16
 
 ### 🐛 Bug Fixes
