@@ -68,7 +68,7 @@ const textLayer: Layer = {
     writing_mode: 'Horizontal',
   },
   layout: 'paragraph',
-  fit_region: null,
+  automatic_region: null,
 }
 
 const preferences: Preferences = {
@@ -489,12 +489,12 @@ describe('greenfield editor', () => {
     expect(screen.queryByText('Onomatopoeia')).not.toBeInTheDocument()
   })
 
-  it('resets a custom text frame to its automatic fit region', async () => {
+  it('resets a custom text frame to its automatic region', async () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
       ...page,
       layers: page.layers.map((layer) =>
-        layer.type === 'text' ? { ...layer, fit_region: 'bubble' } : layer,
+        layer.type === 'text' ? { ...layer, automatic_region: 'bubble' } : layer,
       ),
     }))
     const reset = vi.spyOn(commands, 'setGeometry').mockResolvedValue(null)

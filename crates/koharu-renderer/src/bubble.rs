@@ -40,6 +40,483 @@ pub(crate) fn contour(geometry: &Geometry, frame: GeometryFrame) -> Vec<(f32, f3
         .collect()
 }
 
+pub(crate) fn point_in_frame(frame: GeometryFrame, x: f32, y: f32) -> (f32, f32) {
+    let bounds = frame.bounds;
+    let center_x = bounds.x + bounds.width * 0.5;
+    let center_y = bounds.y + bounds.height * 0.5;
+    let (sin, cos) = (-frame.angle_degrees.to_radians()).sin_cos();
+    let x = x - center_x;
+    let y = y - center_y;
+    (
+        x * cos - y * sin + center_x - bounds.x,
+        x * sin + y * cos + center_y - bounds.y,
+    )
+}
+
+/// Divides a joined balloon into one non-overlapping polygon per text flow.
+///
+/// Reflex-vertex diagonals recover the physical necks between lobes first. Source
+/// anchors assign those lobes to flows and only become the partition itself when
+/// the contour has no complete, non-crossing neck decomposition.
+pub(crate) fn flow_cells(
+    frame: GeometryFrame,
+    contour: &[(f32, f32)],
+    anchors: &[(f32, f32)],
+) -> Vec<Vec<(f32, f32)>> {
+    if anchors.is_empty() {
+        return Vec::new();
+    }
+    let width = frame.bounds.width;
+    let height = frame.bounds.height;
+    let anchors = anchors
+        .iter()
+        .map(|&(x, y)| point_in_frame(frame, x, y))
+        .map(|(x, y)| (x.clamp(0.0, width), y.clamp(0.0, height)))
+        .collect::<Vec<_>>();
+    topological_flow_cells(contour, &anchors)
+        .unwrap_or_else(|| anchor_flow_cells(width, height, &anchors))
+}
+
+fn topological_flow_cells(
+    contour: &[(f32, f32)],
+    anchors: &[(f32, f32)],
+) -> Option<Vec<Vec<(f32, f32)>>> {
+    if contour.len() < 4
+        || contour.len() > MAX_CONTOUR_POINTS
+        || contour
+            .iter()
+            .chain(anchors)
+            .any(|(x, y)| !x.is_finite() || !y.is_finite())
+    {
+        return None;
+    }
+    let (min_x, max_x, min_y, max_y) = polygon_bounds(contour)?;
+    let scale = (max_x - min_x).min(max_y - min_y).max(1.0);
+    let tolerance = scale * 0.0075;
+    let indexed_anchors = anchors.iter().copied().enumerate().collect::<Vec<_>>();
+    let mut cells = decompose_lobes(contour.to_vec(), indexed_anchors, tolerance)?;
+    cells.sort_by_key(|(index, _)| *index);
+    (cells.len() == anchors.len()).then(|| cells.into_iter().map(|(_, cell)| cell).collect())
+}
+
+#[derive(Clone)]
+struct LobeSplit {
+    length_squared: f32,
+    first: Vec<(f32, f32)>,
+    second: Vec<(f32, f32)>,
+    first_anchors: Vec<(usize, (f32, f32))>,
+    second_anchors: Vec<(usize, (f32, f32))>,
+}
+
+fn decompose_lobes(
+    polygon: Vec<(f32, f32)>,
+    anchors: Vec<(usize, (f32, f32))>,
+    tolerance: f32,
+) -> Option<Vec<(usize, Vec<(f32, f32)>)>> {
+    if anchors.len() == 1 {
+        return Some(vec![(anchors[0].0, polygon)]);
+    }
+    let simplified = simplify_closed_indices(&polygon, tolerance);
+    if simplified.len() < 4 {
+        return None;
+    }
+    let orientation = polygon_area_from_indices(&polygon, &simplified).signum();
+    if orientation == 0.0 {
+        return None;
+    }
+    let minimum_reflex_cross = tolerance * tolerance * 0.05;
+    let reflex = (0..simplified.len())
+        .filter(|&index| {
+            let previous = polygon[simplified[(index + simplified.len() - 1) % simplified.len()]];
+            let current = polygon[simplified[index]];
+            let next = polygon[simplified[(index + 1) % simplified.len()]];
+            turn(previous, current, next) * orientation < -minimum_reflex_cross
+        })
+        .map(|index| simplified[index])
+        .collect::<Vec<_>>();
+
+    let mut candidates = Vec::new();
+    for first_index in 0..reflex.len() {
+        for second_index in first_index + 1..reflex.len() {
+            let first_vertex = reflex[first_index];
+            let second_vertex = reflex[second_index];
+            if !valid_diagonal(&polygon, first_vertex, second_vertex, tolerance) {
+                continue;
+            }
+            let (first, second) = split_polygon(&polygon, first_vertex, second_vertex);
+            if first.len() < 3
+                || second.len() < 3
+                || polygon_area(&first).abs() <= tolerance * tolerance
+                || polygon_area(&second).abs() <= tolerance * tolerance
+            {
+                continue;
+            }
+            let mut first_anchors = Vec::new();
+            let mut second_anchors = Vec::new();
+            let mut assigns_cleanly = true;
+            let cross_epsilon = (tolerance * tolerance * 0.001).max(f32::EPSILON);
+            for &(index, anchor) in &anchors {
+                match (
+                    point_in_polygon(&first, anchor, cross_epsilon),
+                    point_in_polygon(&second, anchor, cross_epsilon),
+                ) {
+                    (true, false) => first_anchors.push((index, anchor)),
+                    (false, true) => second_anchors.push((index, anchor)),
+                    _ => {
+                        assigns_cleanly = false;
+                        break;
+                    }
+                }
+            }
+            if !assigns_cleanly || first_anchors.is_empty() || second_anchors.is_empty() {
+                continue;
+            }
+            candidates.push(LobeSplit {
+                length_squared: distance_squared(polygon[first_vertex], polygon[second_vertex]),
+                first,
+                second,
+                first_anchors,
+                second_anchors,
+            });
+        }
+    }
+    candidates.sort_by(|left, right| left.length_squared.total_cmp(&right.length_squared));
+    for candidate in candidates {
+        let Some(mut first) = decompose_lobes(candidate.first, candidate.first_anchors, tolerance)
+        else {
+            continue;
+        };
+        let Some(second) = decompose_lobes(candidate.second, candidate.second_anchors, tolerance)
+        else {
+            continue;
+        };
+        first.extend(second);
+        return Some(first);
+    }
+    None
+}
+
+fn simplify_closed_indices(polygon: &[(f32, f32)], tolerance: f32) -> Vec<usize> {
+    let split = (1..polygon.len())
+        .max_by(|&left, &right| {
+            distance_squared(polygon[0], polygon[left])
+                .total_cmp(&distance_squared(polygon[0], polygon[right]))
+        })
+        .unwrap_or(0);
+    if split == 0 {
+        return (0..polygon.len()).collect();
+    }
+    let first_chain = (0..=split).collect::<Vec<_>>();
+    let second_chain = (split..polygon.len())
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut first = simplify_chain_indices(polygon, &first_chain, tolerance);
+    let mut second = simplify_chain_indices(polygon, &second_chain, tolerance);
+    first.pop();
+    second.pop();
+    first.extend(second);
+    if first.len() >= 3 {
+        first
+    } else {
+        (0..polygon.len()).collect()
+    }
+}
+
+fn simplify_chain_indices(polygon: &[(f32, f32)], chain: &[usize], tolerance: f32) -> Vec<usize> {
+    if chain.len() <= 2 {
+        return chain.to_vec();
+    }
+    let start = polygon[chain[0]];
+    let end = polygon[*chain.last().unwrap()];
+    let mut farthest = None;
+    for (position, &index) in chain.iter().enumerate().skip(1).take(chain.len() - 2) {
+        let distance = point_segment_distance(polygon[index], start, end);
+        if farthest.is_none_or(|(_, best)| distance > best) {
+            farthest = Some((position, distance));
+        }
+    }
+    let Some((position, distance)) = farthest else {
+        return vec![chain[0], *chain.last().unwrap()];
+    };
+    if distance <= tolerance {
+        return vec![chain[0], *chain.last().unwrap()];
+    }
+    let mut first = simplify_chain_indices(polygon, &chain[..=position], tolerance);
+    let second = simplify_chain_indices(polygon, &chain[position..], tolerance);
+    first.pop();
+    first.extend(second);
+    first
+}
+
+fn valid_diagonal(polygon: &[(f32, f32)], first: usize, second: usize, tolerance: f32) -> bool {
+    let len = polygon.len();
+    if first == second || (first + 1) % len == second || (second + 1) % len == first {
+        return false;
+    }
+    let start = polygon[first];
+    let end = polygon[second];
+    let epsilon = (tolerance * tolerance * 0.001).max(f32::EPSILON);
+    for edge in 0..len {
+        let next = (edge + 1) % len;
+        if edge == first || edge == second || next == first || next == second {
+            continue;
+        }
+        if segments_intersect(start, end, polygon[edge], polygon[next], epsilon) {
+            return false;
+        }
+    }
+    [0.2, 0.5, 0.8].into_iter().all(|fraction| {
+        point_in_polygon(
+            polygon,
+            (
+                start.0 + (end.0 - start.0) * fraction,
+                start.1 + (end.1 - start.1) * fraction,
+            ),
+            epsilon,
+        )
+    })
+}
+
+fn split_polygon(
+    polygon: &[(f32, f32)],
+    first: usize,
+    second: usize,
+) -> (Vec<(f32, f32)>, Vec<(f32, f32)>) {
+    let (first, second) = if first <= second {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    let first_part = polygon[first..=second].to_vec();
+    let second_part = polygon[second..]
+        .iter()
+        .chain(&polygon[..=first])
+        .copied()
+        .collect();
+    (first_part, second_part)
+}
+
+fn anchor_flow_cells(width: f32, height: f32, anchors: &[(f32, f32)]) -> Vec<Vec<(f32, f32)>> {
+    let scale = width.min(height).max(1.0);
+    let coincidence_distance_squared = (scale * 0.0025).powi(2);
+    let mut clusters = Vec::<((f32, f32), Vec<usize>)>::new();
+    for (index, &anchor) in anchors.iter().enumerate() {
+        if let Some((site, indices)) = clusters.iter_mut().find(|(site, _)| {
+            let dx = anchor.0 - site.0;
+            let dy = anchor.1 - site.1;
+            dx * dx + dy * dy <= coincidence_distance_squared
+        }) {
+            let count = indices.len() as f32;
+            site.0 = (site.0 * count + anchor.0) / (count + 1.0);
+            site.1 = (site.1 * count + anchor.1) / (count + 1.0);
+            indices.push(index);
+        } else {
+            clusters.push((anchor, vec![index]));
+        }
+    }
+
+    let mut cells = vec![Vec::new(); anchors.len()];
+    for (cluster_index, &((x, y), ref indices)) in clusters.iter().enumerate() {
+        let mut cell = vec![(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)];
+        for (other_index, &((other_x, other_y), _)) in clusters.iter().enumerate() {
+            if cluster_index == other_index {
+                continue;
+            }
+            let normal = (other_x - x, other_y - y);
+            let offset = (other_x * other_x + other_y * other_y - x * x - y * y) * 0.5;
+            cell = clip_half_plane(&cell, normal, offset);
+            if cell.len() < 3 {
+                break;
+            }
+        }
+        if indices.len() == 1 {
+            cells[indices[0]] = cell;
+            continue;
+        }
+        let (min_x, max_x, min_y, max_y) = cell.iter().fold(
+            (
+                f32::INFINITY,
+                f32::NEG_INFINITY,
+                f32::INFINITY,
+                f32::NEG_INFINITY,
+            ),
+            |(min_x, max_x, min_y, max_y), &(x, y)| {
+                (min_x.min(x), max_x.max(x), min_y.min(y), max_y.max(y))
+            },
+        );
+        let horizontal = max_x - min_x >= max_y - min_y;
+        let (minimum, maximum) = if horizontal {
+            (min_x, max_x)
+        } else {
+            (min_y, max_y)
+        };
+        let step = (maximum - minimum) / indices.len() as f32;
+        for (order, &index) in indices.iter().enumerate() {
+            let lower = minimum + step * order as f32;
+            let upper = if order + 1 == indices.len() {
+                maximum
+            } else {
+                lower + step
+            };
+            let (lower_normal, upper_normal) = if horizontal {
+                ((-1.0, 0.0), (1.0, 0.0))
+            } else {
+                ((0.0, -1.0), (0.0, 1.0))
+            };
+            let strip = clip_half_plane(&cell, lower_normal, -lower);
+            cells[index] = clip_half_plane(&strip, upper_normal, upper);
+        }
+    }
+    cells
+}
+
+fn polygon_bounds(polygon: &[(f32, f32)]) -> Option<(f32, f32, f32, f32)> {
+    let &(first_x, first_y) = polygon.first()?;
+    Some(polygon[1..].iter().fold(
+        (first_x, first_x, first_y, first_y),
+        |(min_x, max_x, min_y, max_y), &(x, y)| {
+            (min_x.min(x), max_x.max(x), min_y.min(y), max_y.max(y))
+        },
+    ))
+}
+
+fn polygon_area(polygon: &[(f32, f32)]) -> f32 {
+    if polygon.len() < 3 {
+        return 0.0;
+    }
+    (0..polygon.len())
+        .map(|index| {
+            let first = polygon[index];
+            let second = polygon[(index + 1) % polygon.len()];
+            first.0 * second.1 - second.0 * first.1
+        })
+        .sum::<f32>()
+        * 0.5
+}
+
+fn polygon_area_from_indices(polygon: &[(f32, f32)], indices: &[usize]) -> f32 {
+    (0..indices.len())
+        .map(|index| {
+            let first = polygon[indices[index]];
+            let second = polygon[indices[(index + 1) % indices.len()]];
+            first.0 * second.1 - second.0 * first.1
+        })
+        .sum::<f32>()
+        * 0.5
+}
+
+fn point_in_polygon(polygon: &[(f32, f32)], point: (f32, f32), epsilon: f32) -> bool {
+    let mut inside = false;
+    for index in 0..polygon.len() {
+        let first = polygon[index];
+        let second = polygon[(index + 1) % polygon.len()];
+        if point_on_segment(first, second, point, epsilon) {
+            return true;
+        }
+        if (first.1 > point.1) != (second.1 > point.1) {
+            let crossing =
+                (second.0 - first.0) * (point.1 - first.1) / (second.1 - first.1) + first.0;
+            if point.0 < crossing {
+                inside = !inside;
+            }
+        }
+    }
+    inside
+}
+
+fn segments_intersect(
+    first_start: (f32, f32),
+    first_end: (f32, f32),
+    second_start: (f32, f32),
+    second_end: (f32, f32),
+    epsilon: f32,
+) -> bool {
+    let first_side_start = orientation(first_start, first_end, second_start);
+    let first_side_end = orientation(first_start, first_end, second_end);
+    let second_side_start = orientation(second_start, second_end, first_start);
+    let second_side_end = orientation(second_start, second_end, first_end);
+    let crosses = ((first_side_start > epsilon && first_side_end < -epsilon)
+        || (first_side_start < -epsilon && first_side_end > epsilon))
+        && ((second_side_start > epsilon && second_side_end < -epsilon)
+            || (second_side_start < -epsilon && second_side_end > epsilon));
+    crosses
+        || point_on_segment(first_start, first_end, second_start, epsilon)
+        || point_on_segment(first_start, first_end, second_end, epsilon)
+        || point_on_segment(second_start, second_end, first_start, epsilon)
+        || point_on_segment(second_start, second_end, first_end, epsilon)
+}
+
+fn point_on_segment(start: (f32, f32), end: (f32, f32), point: (f32, f32), epsilon: f32) -> bool {
+    orientation(start, end, point).abs() <= epsilon
+        && point.0 >= start.0.min(end.0) - epsilon
+        && point.0 <= start.0.max(end.0) + epsilon
+        && point.1 >= start.1.min(end.1) - epsilon
+        && point.1 <= start.1.max(end.1) + epsilon
+}
+
+fn orientation(first: (f32, f32), second: (f32, f32), third: (f32, f32)) -> f32 {
+    (second.0 - first.0) * (third.1 - first.1) - (second.1 - first.1) * (third.0 - first.0)
+}
+
+fn turn(previous: (f32, f32), current: (f32, f32), next: (f32, f32)) -> f32 {
+    (current.0 - previous.0) * (next.1 - current.1)
+        - (current.1 - previous.1) * (next.0 - current.0)
+}
+
+fn point_segment_distance(point: (f32, f32), start: (f32, f32), end: (f32, f32)) -> f32 {
+    let segment = (end.0 - start.0, end.1 - start.1);
+    let length_squared = segment.0 * segment.0 + segment.1 * segment.1;
+    if length_squared <= f32::EPSILON {
+        return distance_squared(point, start).sqrt();
+    }
+    let fraction = (((point.0 - start.0) * segment.0 + (point.1 - start.1) * segment.1)
+        / length_squared)
+        .clamp(0.0, 1.0);
+    distance_squared(
+        point,
+        (
+            start.0 + segment.0 * fraction,
+            start.1 + segment.1 * fraction,
+        ),
+    )
+    .sqrt()
+}
+
+fn distance_squared(first: (f32, f32), second: (f32, f32)) -> f32 {
+    (first.0 - second.0).powi(2) + (first.1 - second.1).powi(2)
+}
+
+fn clip_half_plane(polygon: &[(f32, f32)], normal: (f32, f32), offset: f32) -> Vec<(f32, f32)> {
+    let Some(&last) = polygon.last() else {
+        return Vec::new();
+    };
+    let signed = |point: (f32, f32)| point.0 * normal.0 + point.1 * normal.1 - offset;
+    let mut output = Vec::new();
+    let mut previous = last;
+    let mut previous_distance = signed(previous);
+    for &current in polygon {
+        let current_distance = signed(current);
+        let previous_inside = previous_distance <= f32::EPSILON;
+        let current_inside = current_distance <= f32::EPSILON;
+        if previous_inside != current_inside {
+            let denominator = previous_distance - current_distance;
+            if denominator.abs() > f32::EPSILON {
+                let fraction = previous_distance / denominator;
+                output.push((
+                    previous.0 + (current.0 - previous.0) * fraction,
+                    previous.1 + (current.1 - previous.1) * fraction,
+                ));
+            }
+        }
+        if current_inside {
+            output.push(current);
+        }
+        previous = current;
+        previous_distance = current_distance;
+    }
+    output
+}
+
 pub(crate) fn geometry_bounds(geometry: &Geometry) -> Option<LayoutBox> {
     if geometry
         .points
@@ -176,5 +653,160 @@ mod tests {
         assert!((frame.bounds.width - 80.0).abs() < 1e-4);
         assert!((frame.bounds.height - 30.0).abs() < 1e-4);
         assert!((frame.angle_degrees - 27.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn flow_cells_split_the_frame_between_source_anchors() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 80.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![(0.0, 0.0), (100.0, 0.0), (100.0, 80.0), (0.0, 80.0)];
+        let cells = flow_cells(frame, &contour, &[(25.0, 40.0), (75.0, 40.0)]);
+        assert_eq!(cells.len(), 2);
+        let first_right = cells[0]
+            .iter()
+            .map(|(x, _)| *x)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let second_left = cells[1]
+            .iter()
+            .map(|(x, _)| *x)
+            .fold(f32::INFINITY, f32::min);
+        assert!((first_right - 50.0).abs() < 2.0);
+        assert!((first_right - second_left).abs() < 1e-4);
+    }
+
+    #[test]
+    fn flow_cells_cut_the_contour_neck_before_using_anchor_bisectors() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![
+            (0.0, 20.0),
+            (40.0, 20.0),
+            (50.0, 30.0),
+            (60.0, 20.0),
+            (100.0, 20.0),
+            (100.0, 80.0),
+            (60.0, 80.0),
+            (50.0, 70.0),
+            (40.0, 80.0),
+            (0.0, 80.0),
+        ];
+
+        let cells = flow_cells(frame, &contour, &[(15.0, 50.0), (65.0, 50.0)]);
+
+        assert!(contains_edge(&cells[0], (50.0, 30.0), (50.0, 70.0)));
+        assert!(contains_edge(&cells[1], (50.0, 30.0), (50.0, 70.0)));
+        assert!(point_in_polygon(&cells[0], (15.0, 50.0), 0.001));
+        assert!(point_in_polygon(&cells[1], (65.0, 50.0), 0.001));
+        // The anchor bisector is x=40; x=50 proves that the physical neck won.
+        assert!(!contains_edge(&cells[0], (40.0, 0.0), (40.0, 100.0)));
+    }
+
+    #[test]
+    fn flow_cells_recursively_decompose_a_three_lobe_contour() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 140.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![
+            (0.0, 0.0),
+            (40.0, 0.0),
+            (40.0, 20.0),
+            (60.0, 20.0),
+            (60.0, 0.0),
+            (100.0, 0.0),
+            (100.0, 60.0),
+            (75.0, 60.0),
+            (75.0, 80.0),
+            (90.0, 80.0),
+            (90.0, 140.0),
+            (50.0, 140.0),
+            (50.0, 80.0),
+            (65.0, 80.0),
+            (65.0, 60.0),
+            (60.0, 60.0),
+            (60.0, 40.0),
+            (40.0, 40.0),
+            (40.0, 60.0),
+            (0.0, 60.0),
+        ];
+        let anchors = [(20.0, 30.0), (80.0, 30.0), (70.0, 110.0)];
+
+        let cells = flow_cells(frame, &contour, &anchors);
+
+        assert_eq!(cells.len(), 3);
+        for (index, &anchor) in anchors.iter().enumerate() {
+            assert!(point_in_polygon(&cells[index], anchor, 0.001));
+            assert!(
+                anchors
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != index)
+                    .all(|(_, &other)| !point_in_polygon(&cells[index], other, 0.001))
+            );
+        }
+        assert!(
+            (cells
+                .iter()
+                .map(|cell| polygon_area(cell).abs())
+                .sum::<f32>()
+                - polygon_area(&contour).abs())
+            .abs()
+                < 0.01
+        );
+    }
+
+    #[test]
+    fn flow_cells_disambiguate_coincident_source_anchors() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 80.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![(0.0, 0.0), (100.0, 0.0), (100.0, 80.0), (0.0, 80.0)];
+        let cells = flow_cells(frame, &contour, &[(50.0, 40.0), (50.0, 40.0), (50.0, 40.0)]);
+        assert_eq!(cells.len(), 3);
+        assert!(cells.iter().all(|cell| cell.len() >= 3));
+        let bounds = cells
+            .iter()
+            .map(|cell| {
+                cell.iter().fold(
+                    (f32::INFINITY, f32::NEG_INFINITY),
+                    |(minimum, maximum), &(x, _)| (minimum.min(x), maximum.max(x)),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(bounds[0].1 <= bounds[1].0 + 1e-4);
+        assert!(bounds[1].1 <= bounds[2].0 + 1e-4);
+    }
+
+    fn contains_edge(polygon: &[(f32, f32)], first: (f32, f32), second: (f32, f32)) -> bool {
+        (0..polygon.len()).any(|index| {
+            let start = polygon[index];
+            let end = polygon[(index + 1) % polygon.len()];
+            (start == first && end == second) || (start == second && end == first)
+        })
     }
 }

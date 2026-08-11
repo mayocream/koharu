@@ -91,12 +91,26 @@ impl<'a> TextLayerRef<'a> {
             .transpose()
     }
 
-    /// Returns the authored presentation frame, or the current automatic fit target.
+    pub fn balloon_target(self) -> Result<Option<AnalysisRegionRef<'a>>> {
+        self.snapshot
+            .relation_from::<crate::FlowsIn>(self.id)?
+            .map(|relation| self.snapshot.analysis_region(relation.value().target))
+            .transpose()
+    }
+
+    pub fn automatic_target(self) -> Result<Option<AnalysisRegionRef<'a>>> {
+        if let Some(target) = self.balloon_target()? {
+            return Ok(Some(target));
+        }
+        self.fit_target()
+    }
+
+    /// Returns the authored presentation frame, or the current automatic placement target.
     pub fn frame(self) -> Result<Option<Geometry>> {
         if let Some(frame) = self.snapshot.component(self.id)? {
             return Ok(Some(frame));
         }
-        self.fit_target()?
+        self.automatic_target()?
             .map(AnalysisRegionRef::geometry)
             .transpose()
     }

@@ -60,8 +60,8 @@ export function CanvasOverlay({
       ? page.layers.find((layer) => layer.id === expandedSelection[0])
       : undefined
   const selectedTextLayer = selectedLayer && isTextLayer(selectedLayer) ? selectedLayer : undefined
-  const fitRegion = selectedTextLayer?.fit_region
-    ? page.regions.find((region) => region.id === selectedTextLayer.fit_region)
+  const automaticRegion = selectedTextLayer?.automatic_region
+    ? page.regions.find((region) => region.id === selectedTextLayer.automatic_region)
     : undefined
   const selectionControl = multipleSelected
     ? undefined
@@ -75,7 +75,9 @@ export function CanvasOverlay({
       className='pointer-events-none absolute inset-0 overflow-hidden'
       aria-hidden
     >
-      {fitRegion && <FitRegionOverlay geometry={fitRegion.geometry} camera={camera} />}
+      {automaticRegion && (
+        <AutomaticRegionOverlay geometry={automaticRegion.geometry} camera={camera} />
+      )}
       {layers.map(({ layer, frame, opacity }) => {
         const position = cssFrame(frame, camera)
         const selected = selectedIds.has(layer.id) && selectableLayer(layer)
@@ -132,7 +134,7 @@ export function CanvasOverlay({
   )
 }
 
-function FitRegionOverlay({ geometry, camera }: { geometry: Geometry; camera: Camera }) {
+function AutomaticRegionOverlay({ geometry, camera }: { geometry: Geometry; camera: Camera }) {
   const dpr = window.devicePixelRatio
   const points = geometry.points
     .map(

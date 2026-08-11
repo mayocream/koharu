@@ -760,7 +760,7 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
   }
 
   const resetTextFrame = () => {
-    if (!isTextLayer(layer) || !layer.fit_region || !layer.geometry) return
+    if (!isTextLayer(layer) || !layer.automatic_region || !layer.geometry) return
     void call(commands.setGeometry, [{ layer: layer.id, points: null }])
       .then(() => refresh(projectKey, pageKey))
       .catch(() => undefined)
@@ -816,11 +816,11 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
             <span className='rounded-md bg-foreground/[0.055] px-1.5 py-0.5 text-[9px] leading-none text-foreground/75'>
               {layer.geometry
                 ? t('inspector.customFrame')
-                : layer.fit_region
+                : layer.automatic_region
                   ? t('inspector.autoFit')
                   : t('inspector.unplaced')}
             </span>
-            {layer.geometry && layer.fit_region && (
+            {layer.geometry && layer.automatic_region && (
               <Tooltip>
                 <TooltipTrigger
                   render={

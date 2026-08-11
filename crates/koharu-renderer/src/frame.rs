@@ -376,6 +376,7 @@ pub enum RenderDependency {
     Component { entity: EntityId, kind: String },
     Relation(RelationId),
     RelationQuery { source: EntityId, kind: String },
+    RelationTargetQuery { target: EntityId, kind: String },
     Blob(BlobId),
     Font(String),
 }

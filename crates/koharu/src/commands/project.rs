@@ -76,7 +76,7 @@ pub enum Layer {
         content: Box<TextContent>,
         typography: Option<Typography>,
         layout: TextLayoutKind,
-        fit_region: Option<EntityId>,
+        automatic_region: Option<EntityId>,
     },
     Raster {
         id: EntityId,
@@ -554,9 +554,12 @@ impl Project {
                 }
                 let content = Self::text_content(&snapshot, update.layer)?;
                 if update.points.is_none()
-                    && snapshot.text_layer(update.layer)?.fit_target()?.is_none()
+                    && snapshot
+                        .text_layer(update.layer)?
+                        .automatic_target()?
+                        .is_none()
                 {
-                    bail!("only text fitted to an analysis region can reset its geometry");
+                    bail!("only automatically placed text can reset its geometry");
                 }
                 Ok((update, content))
             })
@@ -964,7 +967,7 @@ impl Project {
             });
             let role = content.role()?.map(|role| role.role);
             let source_region = content.source_region()?.map(|region| region.id());
-            let fit_region = text_layer.fit_target()?.map(|region| region.id());
+            let automatic_region = text_layer.automatic_target()?.map(|region| region.id());
             let typography = text_layer.typography()?.map(Self::typography_view);
             return Ok(Layer::Text {
                 id: layer,
@@ -982,7 +985,7 @@ impl Project {
                 }),
                 typography,
                 layout: layout.kind,
-                fit_region,
+                automatic_region,
             });
         }
         if let Some(raster) = snapshot.component::<SceneRasterLayer>(layer)? {

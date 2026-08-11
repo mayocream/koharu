@@ -50,12 +50,19 @@ impl RelationSpec for RecognizedFrom {
 }
 impl FunctionalRelation for RecognizedFrom {}
 
-/// A presentation layer automatically derives its frame from a region.
+/// A text presentation layer automatically derives its frame from its detected text region.
 pub struct FitsTo;
 impl RelationSpec for FitsTo {
     const KIND: &'static str = "dev.koharu.relation.fits-to";
 }
 impl FunctionalRelation for FitsTo {}
+
+/// A text presentation layer participates in the joint layout of a dialogue balloon.
+pub struct FlowsIn;
+impl RelationSpec for FlowsIn {
+    const KIND: &'static str = "dev.koharu.relation.flows-in";
+}
+impl FunctionalRelation for FlowsIn {}
 
 /// A source-analysis region is spatially contained by another region.
 pub struct Inside;

@@ -1,18 +1,18 @@
 //! Renderer ownership, scene interpretation, resources, and retained updates.
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::{Arc, OnceLock, Weak},
 };
 
 use anyhow::{Context, anyhow};
 use arc_swap::ArcSwap;
 use koharu_scene::{
-    Asset, AssetRole, BlobId, BubbleRegion, Change, Component, ComponentOwner, EntityChange,
-    EntityId, FitsTo, Geometry, Group, OcrAnalysis, Origin, Page, Presents, RasterLayer,
-    RasterLayerKind, RecognizedFrom, Region, RegionSpec, RelationChange, RelationId, RelationSpec,
-    Revision, Snapshot, TextAlignment, TextDirection, TextLayout as SceneTextLayout,
-    TextLayoutKind, Translation, Typography, Visibility,
+    Asset, AssetRole, BlobId, Change, Component, ComponentOwner, EntityChange, EntityId, FitsTo,
+    FlowsIn, Geometry, Group, OcrAnalysis, Origin, Page, Presents, RasterLayer, RasterLayerKind,
+    RecognizedFrom, Region, RelationChange, RelationId, RelationSpec, Revision, Snapshot,
+    TextAlignment, TextDirection, TextLayout as SceneTextLayout, TextLayoutKind, Translation,
+    Typography, Visibility,
 };
 use parking_lot::Mutex;
 use rayon::prelude::*;
@@ -32,7 +32,7 @@ use crate::{
     Error, FontFamily, FontStyle, Frame, ImageKind, ImageMetadata, Layer, LayerKind, Presentation,
     Raster, RasterOptions, RenderBounds, RenderDependency, RenderDiagnostic, Result,
     RetentionStats, TextAlign, TextMetadata, TypesettingConfig, WritingMode,
-    bubble::{GeometryFrame, LayoutBox, contour, geometry_bounds, geometry_frame},
+    bubble::{GeometryFrame, LayoutBox, contour, flow_cells, geometry_bounds, geometry_frame},
     fonts::{FontPreview, FontRequest, Fonts},
     frame::{
         FrameData, ImageNodeDescriptor, LayerData, LocalTextMetadata, NodeDescriptor, RetainedNode,
@@ -533,6 +533,7 @@ impl Renderer {
         let page_value = snapshot.page(page)?.page()?;
         let (width, height) = surface_size(&page_value)?;
         let source_role = AssetRole::new("source")?;
+        let flow_plan = resolve_balloon_flows(snapshot, page)?;
         let mut traversal = Traversal {
             snapshot,
             page,
@@ -540,6 +541,7 @@ impl Renderer {
             height,
             source_role: &source_role,
             font_families: &typesetting.font_families,
+            balloon_flows: flow_plan.placements,
             layers: Vec::new(),
             dependencies: BTreeSet::from([
                 RenderDependency::Entity(page),
@@ -552,6 +554,7 @@ impl Renderer {
             ]),
             diagnostics: Vec::new(),
         };
+        traversal.dependencies.extend(flow_plan.dependencies);
         if let Some(asset) = snapshot.asset(page, &source_role)? {
             let geometry = Geometry::rectangle(0.0, 0.0, f64::from(width), f64::from(height));
             let mut dependencies = BTreeSet::from([
@@ -612,6 +615,7 @@ struct Traversal<'a> {
     height: u32,
     source_role: &'a AssetRole,
     font_families: &'a [String],
+    balloon_flows: HashMap<EntityId, ResolvedPlacement>,
     layers: Vec<LayerDraft>,
     dependencies: BTreeSet<RenderDependency>,
     diagnostics: Vec<RenderDiagnostic>,
@@ -698,7 +702,7 @@ impl Traversal<'_> {
                 common.insert(component_dependency::<SceneTextLayout>(entity));
                 common.insert(component_dependency::<Typography>(entity));
                 common.insert(component_dependency::<Geometry>(entity));
-                for kind in [Presents::KIND, FitsTo::KIND] {
+                for kind in [Presents::KIND, FitsTo::KIND, FlowsIn::KIND] {
                     common.insert(RenderDependency::RelationQuery {
                         source: entity,
                         kind: kind.to_owned(),
@@ -775,21 +779,39 @@ impl Traversal<'_> {
             return Ok(None);
         }
         let authored = self.snapshot.component::<Geometry>(entity)?;
-        let fit = self.fit(entity, dependencies)?;
+        let placement = if let Some(placement) = self.balloon_flows.get(&entity) {
+            dependencies.extend(placement.dependencies.iter().cloned());
+            Some(placement.clone())
+        } else if let Some(placement) = self.balloon_flow(entity, dependencies)? {
+            Some(placement)
+        } else {
+            self.fit(entity, dependencies)?
+        };
+        let flow_contour = if authored.is_none() {
+            placement
+                .as_ref()
+                .and_then(|placement| placement.flow_contour.clone())
+        } else {
+            None
+        };
         let (geometry, frame, balloon_contour) = if let Some(geometry) = authored {
             let Some(frame) = geometry_frame(&geometry) else {
                 return Ok(None);
             };
-            let balloon = fit
+            let balloon = placement
                 .as_ref()
-                .and_then(|fit| fit.balloon_contour.as_ref())
+                .and_then(|placement| placement.balloon_contour.as_ref())
                 .map(|_| contour(&geometry, frame));
             (geometry, frame, balloon)
         } else {
-            let Some(fit) = fit else {
+            let Some(placement) = placement else {
                 return Ok(None);
             };
-            (fit.geometry, fit.frame, fit.balloon_contour)
+            (
+                placement.geometry,
+                placement.frame,
+                placement.balloon_contour,
+            )
         };
         let typography = self.snapshot.component::<Typography>(entity)?;
         let analysis =
@@ -827,6 +849,7 @@ impl Traversal<'_> {
             width: frame.bounds.width,
             height: frame.bounds.height,
             balloon_contour,
+            flow_contour,
             preferred_font,
             font_families,
             font_weight: typography.as_ref().and_then(|value| value.font_weight),
@@ -872,7 +895,7 @@ impl Traversal<'_> {
         &self,
         entity: EntityId,
         dependencies: &mut BTreeSet<RenderDependency>,
-    ) -> Result<Option<ResolvedFit>> {
+    ) -> Result<Option<ResolvedPlacement>> {
         let Some(relation) = self.snapshot.relation_from::<FitsTo>(entity)? else {
             return Ok(None);
         };
@@ -883,28 +906,189 @@ impl Traversal<'_> {
         dependencies.insert(RenderDependency::Relation(relation.id()));
         dependencies.insert(RenderDependency::Entity(target));
         dependencies.insert(component_dependency::<Geometry>(target));
-        let region = self.snapshot.analysis_region(target)?;
-        let geometry = region.geometry()?;
+        let geometry = self.snapshot.analysis_region(target)?.geometry()?;
         let Some(frame) = geometry_frame(&geometry) else {
             return Ok(None);
         };
-        let balloon_contour = if region.region()?.kind == BubbleRegion::kind() {
-            Some(contour(&geometry, frame))
-        } else {
-            None
-        };
-        Ok(Some(ResolvedFit {
+        Ok(Some(ResolvedPlacement {
             geometry,
             frame,
-            balloon_contour,
+            balloon_contour: None,
+            flow_contour: None,
+            dependencies: Arc::from([]),
+        }))
+    }
+
+    fn balloon_flow(
+        &self,
+        entity: EntityId,
+        dependencies: &mut BTreeSet<RenderDependency>,
+    ) -> Result<Option<ResolvedPlacement>> {
+        let Some(relation) = self.snapshot.relation_from::<FlowsIn>(entity)? else {
+            return Ok(None);
+        };
+        let target = relation.value().target;
+        if !belongs_to_page(self.snapshot, target, self.page)? {
+            return Ok(None);
+        }
+        dependencies.insert(RenderDependency::Relation(relation.id()));
+        dependencies.insert(RenderDependency::Entity(target));
+        dependencies.insert(component_dependency::<Geometry>(target));
+        let geometry = self.snapshot.analysis_region(target)?.geometry()?;
+        let Some(frame) = geometry_frame(&geometry) else {
+            return Ok(None);
+        };
+        Ok(Some(ResolvedPlacement {
+            balloon_contour: Some(contour(&geometry, frame)),
+            geometry,
+            frame,
+            flow_contour: None,
+            dependencies: Arc::from([]),
         }))
     }
 }
 
-struct ResolvedFit {
+#[derive(Clone)]
+struct ResolvedPlacement {
     geometry: Geometry,
     frame: GeometryFrame,
     balloon_contour: Option<Vec<(f32, f32)>>,
+    flow_contour: Option<Vec<(f32, f32)>>,
+    dependencies: Arc<[RenderDependency]>,
+}
+
+struct BalloonFlowPlan {
+    placements: HashMap<EntityId, ResolvedPlacement>,
+    dependencies: BTreeSet<RenderDependency>,
+}
+
+struct FlowSeed {
+    layer: EntityId,
+    anchor: Option<(f32, f32)>,
+    dependencies: BTreeSet<RenderDependency>,
+}
+
+fn resolve_balloon_flows(snapshot: &Snapshot, page: EntityId) -> Result<BalloonFlowPlan> {
+    let mut groups = BTreeMap::<EntityId, Vec<FlowSeed>>::new();
+    if let Some(group) = snapshot.page(page)?.text_group()? {
+        for layer in group.text_layers()? {
+            let entity = layer.id();
+            if snapshot.component::<Geometry>(entity)?.is_some() {
+                continue;
+            }
+            let Some(relation) = snapshot.relation_from::<FlowsIn>(entity)? else {
+                continue;
+            };
+            let balloon = relation.value().target;
+            if !belongs_to_page(snapshot, balloon, page)? {
+                continue;
+            }
+            let mut dependencies = BTreeSet::from([
+                RenderDependency::Entity(entity),
+                RenderDependency::Relation(relation.id()),
+                RenderDependency::RelationQuery {
+                    source: entity,
+                    kind: FlowsIn::KIND.to_owned(),
+                },
+            ]);
+            let Some(presents) = snapshot.relation_from::<Presents>(entity)? else {
+                continue;
+            };
+            dependencies.insert(RenderDependency::Relation(presents.id()));
+            let content = presents.value().target;
+            dependencies.insert(RenderDependency::Entity(content));
+            dependencies.insert(component_dependency::<Translation>(content));
+            dependencies.insert(RenderDependency::RelationQuery {
+                source: content,
+                kind: RecognizedFrom::KIND.to_owned(),
+            });
+            let Some(translation) = snapshot.component::<Translation>(content)? else {
+                continue;
+            };
+            if translation.text.value.trim().is_empty() {
+                continue;
+            }
+            let anchor = flow_anchor(snapshot, content, &mut dependencies)?;
+            groups.entry(balloon).or_default().push(FlowSeed {
+                layer: entity,
+                anchor,
+                dependencies,
+            });
+        }
+    }
+
+    let mut placements = HashMap::new();
+    let mut all_dependencies = BTreeSet::new();
+    for (balloon, seeds) in groups {
+        let region = snapshot.analysis_region(balloon)?;
+        let geometry = region.geometry()?;
+        let Some(frame) = geometry_frame(&geometry) else {
+            continue;
+        };
+        let balloon_contour = contour(&geometry, frame);
+        let mut dependencies = BTreeSet::from([
+            RenderDependency::Entity(balloon),
+            component_dependency::<Geometry>(balloon),
+            component_dependency::<Region>(balloon),
+            RenderDependency::RelationTargetQuery {
+                target: balloon,
+                kind: FlowsIn::KIND.to_owned(),
+            },
+        ]);
+        for seed in &seeds {
+            dependencies.extend(seed.dependencies.iter().cloned());
+        }
+        let center = (
+            frame.bounds.x + frame.bounds.width * 0.5,
+            frame.bounds.y + frame.bounds.height * 0.5,
+        );
+        let anchors = seeds
+            .iter()
+            .map(|seed| seed.anchor.unwrap_or(center))
+            .collect::<Vec<_>>();
+        let cells = (seeds.len() > 1).then(|| flow_cells(frame, &balloon_contour, &anchors));
+        let dependencies: Arc<[RenderDependency]> = dependencies.iter().cloned().collect();
+        for (index, seed) in seeds.into_iter().enumerate() {
+            placements.insert(
+                seed.layer,
+                ResolvedPlacement {
+                    geometry: geometry.clone(),
+                    frame,
+                    balloon_contour: Some(balloon_contour.clone()),
+                    flow_contour: cells.as_ref().and_then(|cells| cells.get(index).cloned()),
+                    dependencies: dependencies.clone(),
+                },
+            );
+        }
+        all_dependencies.extend(dependencies.iter().cloned());
+    }
+    Ok(BalloonFlowPlan {
+        placements,
+        dependencies: all_dependencies,
+    })
+}
+
+fn flow_anchor(
+    snapshot: &Snapshot,
+    content: EntityId,
+    dependencies: &mut BTreeSet<RenderDependency>,
+) -> Result<Option<(f32, f32)>> {
+    let Some(recognized) = snapshot.relation_from::<RecognizedFrom>(content)? else {
+        return Ok(None);
+    };
+    dependencies.insert(RenderDependency::Relation(recognized.id()));
+    let region = recognized.value().target;
+    dependencies.insert(RenderDependency::Entity(region));
+    dependencies.insert(component_dependency::<Geometry>(region));
+    let Some(geometry) = snapshot.component::<Geometry>(region)? else {
+        return Ok(None);
+    };
+    Ok(geometry_bounds(&geometry).map(|bounds| {
+        (
+            bounds.x + bounds.width * 0.5,
+            bounds.y + bounds.height * 0.5,
+        )
+    }))
 }
 
 impl ImageNodeDescriptor {
@@ -1351,6 +1535,7 @@ struct AffectedDependencies {
     components: HashMap<EntityId, HashSet<String>>,
     relations: HashSet<RelationId>,
     relation_queries: HashMap<EntityId, HashSet<String>>,
+    relation_target_queries: HashMap<EntityId, HashSet<String>>,
     project_component_changed: bool,
 }
 
@@ -1382,6 +1567,7 @@ impl AffectedDependencies {
             }
         }
         let mut relation_queries = HashMap::<EntityId, HashSet<String>>::new();
+        let mut relation_target_queries = HashMap::<EntityId, HashSet<String>>::new();
         for change in &change.relations {
             let id = match *change {
                 RelationChange::Inserted(id)
@@ -1395,6 +1581,10 @@ impl AffectedDependencies {
                     .entry(relation.source)
                     .or_default()
                     .insert(relation.kind.as_str().to_owned());
+                relation_target_queries
+                    .entry(relation.target)
+                    .or_default()
+                    .insert(relation.kind.as_str().to_owned());
             }
         }
         Ok(Self {
@@ -1403,6 +1593,7 @@ impl AffectedDependencies {
             components,
             relations,
             relation_queries,
+            relation_target_queries,
             project_component_changed,
         })
     }
@@ -1420,6 +1611,10 @@ impl AffectedDependencies {
                 RenderDependency::RelationQuery { source, kind } => self
                     .relation_queries
                     .get(source)
+                    .is_some_and(|kinds| kinds.contains(kind)),
+                RenderDependency::RelationTargetQuery { target, kind } => self
+                    .relation_target_queries
+                    .get(target)
                     .is_some_and(|kinds| kinds.contains(kind)),
                 RenderDependency::Blob(_) | RenderDependency::Font(_) => false,
             })
@@ -1497,7 +1692,7 @@ mod tests {
     use std::{collections::BTreeMap, io::Cursor};
 
     use koharu_scene::{
-        AssetInput, AssetMetadata, At, Authored, PageDraft, Session, SourceText,
+        AssetInput, AssetMetadata, At, Authored, BubbleRegion, PageDraft, Session, SourceText,
         TextLayout as SceneTextLayout, TextLayoutKind,
     };
 
@@ -1641,7 +1836,7 @@ mod tests {
             .snapshot()
             .patch(|edit| {
                 let page = edit.add_page(PageDraft::new("page", 200.0, 120.0), At::End)?;
-                let bubble = edit.add_analysis_region::<BubbleRegion>(
+                let target = edit.add_analysis_region::<koharu_scene::TextRegion>(
                     page,
                     At::End,
                     &Geometry::rectangle(20.0, 20.0, 100.0, 60.0),
@@ -1697,12 +1892,12 @@ mod tests {
                     },
                 )?;
                 edit.set(second, &Geometry::rectangle(100.0, 10.0, 80.0, 40.0))?;
-                ids = Some((page, bubble, first, second));
+                ids = Some((page, target, first, second));
                 Ok(())
             })
             .unwrap();
         let base = session.commit(create).await.unwrap().snapshot;
-        let (page, bubble, first, second) = ids.unwrap();
+        let (page, target, first, second) = ids.unwrap();
         let renderer = Renderer::default();
         let base_compiled = renderer.compile(&base, page).unwrap();
         let first_dependencies = &base_compiled
@@ -1719,7 +1914,7 @@ mod tests {
             .dependencies;
 
         let add_fit = base
-            .patch(|edit| edit.relate::<FitsTo>(first, bubble).map(|_| ()))
+            .patch(|edit| edit.relate::<FitsTo>(first, target).map(|_| ()))
             .unwrap();
         let fitted = session.commit(add_fit).await.unwrap();
         let affected = AffectedDependencies::new(&fitted.snapshot, &fitted.changes).unwrap();
@@ -1747,6 +1942,116 @@ mod tests {
         let affected = AffectedDependencies::new(&removed.snapshot, &removed.changes).unwrap();
         assert!(affected.intersects(first_dependencies));
         assert!(!affected.intersects(second_dependencies));
+    }
+
+    #[tokio::test]
+    async fn joined_balloon_flows_receive_disjoint_layout_cells() {
+        let mut session = Session::memory().await.unwrap();
+        let mut ids = None;
+        let create = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(PageDraft::new("page", 160.0, 100.0), At::End)?;
+                let bubble = edit.add_analysis_region::<BubbleRegion>(
+                    page,
+                    At::End,
+                    &Geometry::rectangle(20.0, 20.0, 120.0, 60.0),
+                    None,
+                )?;
+                let mut layers = Vec::new();
+                for (index, (x, source, translation)) in [
+                    (35.0, "source one", "The first translated flow"),
+                    (95.0, "source two", "The second translated flow"),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let region = edit.add_analysis_region::<koharu_scene::TextRegion>(
+                        page,
+                        At::End,
+                        &Geometry::rectangle(x, 35.0, 20.0, 30.0),
+                        None,
+                    )?;
+                    let content = edit.add_text_content(page, At::End)?;
+                    edit.set(
+                        content,
+                        &SourceText {
+                            text: Authored::user(source.to_owned()),
+                            language: None,
+                        },
+                    )?;
+                    edit.set(
+                        content,
+                        &Translation {
+                            text: Authored::user(translation.to_owned()),
+                            language: None,
+                        },
+                    )?;
+                    let layer = edit.add_text_layer(
+                        page,
+                        At::End,
+                        content,
+                        &SceneTextLayout {
+                            origin: Origin::User,
+                            kind: TextLayoutKind::Paragraph,
+                        },
+                    )?;
+                    edit.relate::<RecognizedFrom>(content, region)?;
+                    if index == 0 {
+                        edit.relate::<FlowsIn>(layer, bubble)?;
+                    }
+                    layers.push(layer);
+                }
+                ids = Some((page, bubble, layers));
+                Ok(())
+            })
+            .unwrap();
+        let base = session.commit(create).await.unwrap().snapshot;
+        let (page, bubble, layers) = ids.unwrap();
+        let renderer = Renderer::default();
+        let base_compiled = renderer.compile(&base, page).unwrap();
+        let first = base_compiled
+            .layers
+            .iter()
+            .find(|layer| layer.entity == layers[0])
+            .unwrap();
+        let NodeDescriptor::Text(descriptor) = &first.descriptor else {
+            panic!("expected a text descriptor");
+        };
+        assert!(descriptor.flow_contour.is_none());
+
+        let add_sibling = base
+            .patch(|edit| edit.relate::<FlowsIn>(layers[1], bubble).map(|_| ()))
+            .unwrap();
+        let joined = session.commit(add_sibling).await.unwrap();
+        let affected = AffectedDependencies::new(&joined.snapshot, &joined.changes).unwrap();
+        assert!(affected.intersects(&first.dependencies));
+
+        let compiled = renderer.compile(&joined.snapshot, page).unwrap();
+        let contours = layers
+            .iter()
+            .map(|entity| {
+                let layer = compiled
+                    .layers
+                    .iter()
+                    .find(|layer| layer.entity == *entity)
+                    .unwrap();
+                let NodeDescriptor::Text(descriptor) = &layer.descriptor else {
+                    panic!("expected a text descriptor");
+                };
+                descriptor.flow_contour.clone().unwrap()
+            })
+            .collect::<Vec<_>>();
+        let first_right = contours[0]
+            .iter()
+            .map(|(x, _)| *x)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let second_left = contours[1]
+            .iter()
+            .map(|(x, _)| *x)
+            .fold(f32::INFINITY, f32::min);
+        assert!((first_right - second_left).abs() < 1e-4);
+        assert!(first_right > 25.0 && first_right < 85.0);
     }
 
     #[tokio::test]

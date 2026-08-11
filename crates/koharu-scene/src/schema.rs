@@ -5,9 +5,9 @@
 //! relation endpoints.
 
 use crate::{
-    DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis, Page, Project,
-    RasterLayer, Region, Relation, Result, SourceText, TextContent, TextGroup, TextLayout,
-    TextRole, Translation, Typography, Visibility,
+    BubbleRegion, DetectionAnalysis, EntityId, EntityOrigin, Error, Geometry, Group, OcrAnalysis,
+    Page, Project, RasterLayer, Region, RegionSpec, Relation, Result, SourceText, TextContent,
+    TextGroup, TextLayout, TextRegion, TextRole, Translation, Typography, Visibility,
     component::{Component, ComponentRecord, ValidationContext, decode, key},
     components::Assets,
     state::{Components, State},
@@ -190,6 +190,7 @@ pub(crate) fn validate_relation(
     context: &ValidationContext<'_>,
 ) -> Result<()> {
     validate_relation_endpoints(state, relation, context)?;
+    validate_automatic_placement(state, relation)?;
     if is_functional(&relation.kind)
         && state
             .outgoing
@@ -215,6 +216,7 @@ pub(crate) fn validate_new_relation(
     context: &ValidationContext<'_>,
 ) -> Result<()> {
     validate_relation_endpoints(state, relation, context)?;
+    validate_automatic_placement(state, relation)?;
     if is_functional(&relation.kind)
         && state
             .outgoing
@@ -243,6 +245,15 @@ fn validate_relation_endpoints(
             .entity(entity)
             .is_ok_and(|entity| entity.components.iter().any(|(key, _)| key.kind == kind))
     };
+    let region_kind = |entity| -> Result<Option<_>> {
+        let raw = state
+            .entity(entity)?
+            .components
+            .iter()
+            .find_map(|(key, raw)| (key.kind == Region::KIND).then_some(raw));
+        raw.map(|raw| decode::<Region>(raw, context).map(|region| region.kind))
+            .transpose()
+    };
     let valid = match relation.kind.as_str() {
         <crate::Presents as crate::RelationSpec>::KIND => {
             has(relation.source, TextLayout::KIND) && has(relation.target, TextContent::KIND)
@@ -254,6 +265,13 @@ fn validate_relation_endpoints(
             has(relation.source, TextLayout::KIND)
                 && has(relation.target, Region::KIND)
                 && has(relation.target, Geometry::KIND)
+                && region_kind(relation.target)?.is_some_and(|kind| kind == TextRegion::kind())
+        }
+        <crate::FlowsIn as crate::RelationSpec>::KIND => {
+            has(relation.source, TextLayout::KIND)
+                && has(relation.target, Region::KIND)
+                && has(relation.target, Geometry::KIND)
+                && region_kind(relation.target)?.is_some_and(|kind| kind == BubbleRegion::kind())
         }
         <crate::Inside as crate::RelationSpec>::KIND => {
             has(relation.source, Region::KIND)
@@ -279,5 +297,35 @@ fn is_functional(kind: &crate::RelationKind) -> bool {
         <crate::Presents as crate::RelationSpec>::KIND
             | <crate::RecognizedFrom as crate::RelationSpec>::KIND
             | <crate::FitsTo as crate::RelationSpec>::KIND
+            | <crate::FlowsIn as crate::RelationSpec>::KIND
     )
+}
+
+fn validate_automatic_placement(state: &State, relation: &Relation) -> Result<()> {
+    let other = match relation.kind.as_str() {
+        <crate::FitsTo as crate::RelationSpec>::KIND => {
+            Some(<crate::FlowsIn as crate::RelationSpec>::KIND)
+        }
+        <crate::FlowsIn as crate::RelationSpec>::KIND => {
+            Some(<crate::FitsTo as crate::RelationSpec>::KIND)
+        }
+        _ => None,
+    };
+    let Some(other) = other else {
+        return Ok(());
+    };
+    let conflicts = state
+        .outgoing
+        .get(&relation.source)
+        .into_iter()
+        .flat_map(|relations| relations.iter())
+        .any(|id| state.relations[id].value.kind.as_str() == other);
+    if conflicts {
+        Err(Error::invalid(format!(
+            "text layer {} has conflicting automatic placement relations",
+            relation.source
+        )))
+    } else {
+        Ok(())
+    }
 }

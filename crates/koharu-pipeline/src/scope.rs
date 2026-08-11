@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{Result, bail};
 use koharu_scene::{
-    EntityId, FitsTo, Geometry, Inside, Presents, RecognizedFrom, RelationSpec, Snapshot,
+    EntityId, FitsTo, FlowsIn, Geometry, Inside, Presents, RecognizedFrom, RelationSpec, Snapshot,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -166,6 +166,7 @@ fn semantic_closure(snapshot: &Snapshot, mut entities: BTreeSet<EntityId>) -> BT
                 Presents::KIND,
                 RecognizedFrom::KIND,
                 FitsTo::KIND,
+                FlowsIn::KIND,
                 Inside::KIND,
             ]
             .contains(&value.kind.as_str())

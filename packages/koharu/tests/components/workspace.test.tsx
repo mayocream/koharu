@@ -151,7 +151,7 @@ describe('canvas interaction adapter', () => {
           },
           typography: null,
           layout: 'paragraph',
-          fit_region: null,
+          automatic_region: null,
         },
       ],
     }))
@@ -219,7 +219,7 @@ describe('canvas interaction adapter', () => {
     )
   })
 
-  it('shows the fit region behind the selected text controls', () => {
+  it('shows the automatic region behind the selected text controls', () => {
     installProject()
     queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
       ...page,
@@ -239,7 +239,7 @@ describe('canvas interaction adapter', () => {
           },
           typography: null,
           layout: 'paragraph',
-          fit_region: 'bubble',
+          automatic_region: 'bubble',
         },
       ],
       regions: [

@@ -681,6 +681,82 @@ async fn typed_relations_enforce_endpoints_and_functional_cardinality() {
         Ok(())
     });
     assert!(matches!(result, Err(Error::Invalid(_))));
+
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let bubble = edit.add_analysis_region::<BubbleRegion>(
+            page,
+            At::End,
+            &Geometry::rectangle(0.0, 0.0, 20.0, 20.0),
+            None,
+        )?;
+        let content = edit.add_text_content(page, At::End)?;
+        let layer = edit.add_text_layer(
+            page,
+            At::End,
+            content,
+            &TextLayout {
+                origin: Origin::User,
+                kind: TextLayoutKind::Paragraph,
+            },
+        )?;
+        edit.relate::<FitsTo>(layer, bubble)?;
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::Invalid(_))));
+
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let text_region = edit.add_analysis_region::<TextRegion>(
+            page,
+            At::End,
+            &Geometry::rectangle(0.0, 0.0, 10.0, 10.0),
+            None,
+        )?;
+        let bubble = edit.add_analysis_region::<BubbleRegion>(
+            page,
+            At::End,
+            &Geometry::rectangle(0.0, 0.0, 20.0, 20.0),
+            None,
+        )?;
+        let content = edit.add_text_content(page, At::End)?;
+        let layer = edit.add_text_layer(
+            page,
+            At::End,
+            content,
+            &TextLayout {
+                origin: Origin::User,
+                kind: TextLayoutKind::Paragraph,
+            },
+        )?;
+        edit.relate::<FitsTo>(layer, text_region)?;
+        edit.relate::<FlowsIn>(layer, bubble)?;
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::Invalid(_))));
+
+    let result = session.snapshot().patch(|edit| {
+        let page = edit.add_page(page(), At::End)?;
+        let text_region = edit.add_analysis_region::<TextRegion>(
+            page,
+            At::End,
+            &Geometry::rectangle(0.0, 0.0, 10.0, 10.0),
+            None,
+        )?;
+        let content = edit.add_text_content(page, At::End)?;
+        let layer = edit.add_text_layer(
+            page,
+            At::End,
+            content,
+            &TextLayout {
+                origin: Origin::User,
+                kind: TextLayoutKind::Paragraph,
+            },
+        )?;
+        edit.relate::<FlowsIn>(layer, text_region)?;
+        Ok(())
+    });
+    assert!(matches!(result, Err(Error::Invalid(_))));
 }
 
 #[tokio::test]

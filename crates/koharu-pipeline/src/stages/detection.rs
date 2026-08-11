@@ -20,8 +20,8 @@ use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
 };
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, BubbleRegion, DetectionAnalysis, DetectionLabel,
-    EntityId, EntityOrigin, FitsTo, Generation, Geometry, Inside, Origin, PanelRegion, Point,
-    Presents, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy, TextLayout,
+    EntityId, EntityOrigin, FitsTo, FlowsIn, Generation, Geometry, Inside, Origin, PanelRegion,
+    Point, Presents, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy, TextLayout,
     TextLayoutKind, TextRegion, TextRole, Typography, WritingMode,
 };
 use serde::{Deserialize, Serialize};
@@ -562,7 +562,7 @@ fn link_dialogue_regions(
         let bubble = containing_bubble(&regions.bubbles, text);
         if let Some(bubble) = bubble {
             edit.relate::<Inside>(text.entity, bubble.entity)?;
-            edit.relate::<FitsTo>(text.layer, bubble.entity)?;
+            edit.relate::<FlowsIn>(text.layer, bubble.entity)?;
             write_text_role(edit, text.content, "dev.koharu.text.dialogue", generation)?;
         } else {
             edit.relate::<FitsTo>(text.layer, text.entity)?;
@@ -1226,12 +1226,100 @@ fn area(bounds: [f32; 4]) -> f32 {
 mod tests {
     use image::{Rgb, RgbImage};
     use koharu_ml::koharu_layout_rfdetr_seg_2xl::{KoharuLayoutDetection, KoharuLayoutMask};
-    use koharu_scene::WritingMode;
+    use koharu_scene::{
+        At, BubbleRegion, FitsTo, FlowsIn, Geometry, Inside, Origin, PageDraft, Session,
+        TextLayout, TextLayoutKind, TextRegion, WritingMode,
+    };
 
     use super::{
-        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, ImageSize, infer_typography, layout_order,
-        mask_containment, mask_for, mask_geometry, non_maximum_suppression, normalize_text_color,
+        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, ImageSize, PageRegions,
+        generation, infer_typography, layout_order, link_dialogue_regions, mask_containment,
+        mask_for, mask_geometry, non_maximum_suppression, normalize_text_color,
     };
+
+    #[tokio::test]
+    async fn joined_text_uses_balloon_flow_semantics() {
+        let mut session = Session::memory().await.unwrap();
+        let bubble_mask = KoharuLayoutMask {
+            width: 1,
+            height: 1,
+            pixels: vec![u8::MAX],
+        };
+        let text_mask = bubble_mask.clone();
+        let generation = generation(super::PRODUCER, super::MODEL_ID).unwrap();
+        let mut ids = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let page = edit.add_page(PageDraft::new("page", 100.0, 100.0), At::End)?;
+                let bubble = edit.add_analysis_region::<BubbleRegion>(
+                    page,
+                    At::End,
+                    &Geometry::rectangle(10.0, 10.0, 80.0, 80.0),
+                    None,
+                )?;
+                let region = edit.add_analysis_region::<TextRegion>(
+                    page,
+                    At::End,
+                    &Geometry::rectangle(30.0, 30.0, 20.0, 20.0),
+                    None,
+                )?;
+                let content = edit.add_text_content(page, At::End)?;
+                let layer = edit.add_text_layer(
+                    page,
+                    At::End,
+                    content,
+                    &TextLayout {
+                        origin: Origin::User,
+                        kind: TextLayoutKind::Paragraph,
+                    },
+                )?;
+                link_dialogue_regions(
+                    edit,
+                    &PageRegions {
+                        bubbles: vec![DetectedRegion {
+                            entity: bubble,
+                            mask: &bubble_mask,
+                            area: 1,
+                        }],
+                        texts: vec![DetectedText {
+                            entity: region,
+                            mask: &text_mask,
+                            bounds: [0.0, 0.0, 1.0, 1.0],
+                            content,
+                            layer,
+                        }],
+                    },
+                    &generation,
+                )
+                .unwrap();
+                ids = Some((bubble, region, layer));
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).await.unwrap().snapshot;
+        let (bubble, region, layer) = ids.unwrap();
+
+        assert_eq!(
+            snapshot
+                .relation_from::<FlowsIn>(layer)
+                .unwrap()
+                .unwrap()
+                .value()
+                .target,
+            bubble
+        );
+        assert!(snapshot.relation_from::<FitsTo>(layer).unwrap().is_none());
+        assert_eq!(
+            snapshot
+                .relations_from_as::<Inside>(region)
+                .next()
+                .unwrap()
+                .value()
+                .target,
+            bubble
+        );
+    }
 
     fn detection(label: &str, score: f32, bbox: [f32; 4]) -> KoharuLayoutDetection {
         KoharuLayoutDetection {

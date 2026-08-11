@@ -166,9 +166,14 @@ struct LineBreakResult {
 struct ComicBalloon {
     width: f32,
     height: f32,
-    contour: Vec<(f32, f32)>,
-    vertical_alignment: f32,
+    contours: Vec<ContourConstraint>,
     minimum_air: f32,
+}
+
+#[derive(Clone, Debug)]
+struct ContourConstraint {
+    points: Vec<(f32, f32)>,
+    air_scale: f32,
 }
 
 #[derive(Clone)]
@@ -309,14 +314,40 @@ impl<'a> TextLayout<'a> {
         width: f32,
         height: f32,
         contour: Vec<(f32, f32)>,
-        vertical_alignment: f32,
         minimum_air: f32,
     ) -> Self {
         self.comic_balloon = Some(ComicBalloon {
             width,
             height,
-            contour,
-            vertical_alignment: vertical_alignment.clamp(0.0, 1.0),
+            contours: vec![ContourConstraint {
+                points: contour,
+                air_scale: 1.0,
+            }],
+            minimum_air: minimum_air.max(0.0),
+        });
+        self
+    }
+
+    pub(crate) fn with_comic_balloon_constraints(
+        mut self,
+        width: f32,
+        height: f32,
+        contours: Vec<Vec<(f32, f32)>>,
+        minimum_air: f32,
+    ) -> Self {
+        self.comic_balloon = Some(ComicBalloon {
+            width,
+            height,
+            contours: contours
+                .into_iter()
+                .enumerate()
+                .map(|(index, points)| ContourConstraint {
+                    points,
+                    // The physical wall owns one em of air. A partition is shared by
+                    // two flows, so each side contributes half for one em total.
+                    air_scale: if index == 0 { 1.0 } else { 0.5 },
+                })
+                .collect(),
             minimum_air: minimum_air.max(0.0),
         });
         self
@@ -391,6 +422,21 @@ impl<'a> TextLayout<'a> {
             // A balloon's usable width changes when the text reflows to a different
             // number of lines, so a smaller font can fail even though a larger one
             // fits. Search from largest to smallest instead of assuming monotonicity.
+            // Last-resort hyphenation applies to the whole fitting attempt, not each
+            // individual size. Otherwise a larger, fragmented setting wins over a
+            // slightly smaller unhyphenated one.
+            if self.hyphenation_policy == HyphenationPolicy::LastResort {
+                let mut unhyphenated = self.clone();
+                unhyphenated.hyphenation_policy = HyphenationPolicy::Disabled;
+                if let Some(best) = largest_fitting_font_size(
+                    minimum,
+                    maximum,
+                    |size| unhyphenated.run_with_size(text, size),
+                    fits,
+                )? {
+                    return Ok(best);
+                }
+            }
             if let Some(best) = largest_fitting_font_size(
                 minimum,
                 maximum,
@@ -474,11 +520,6 @@ impl<'a> TextLayout<'a> {
                 &[]
             },
         };
-        let balloon_air = self
-            .comic_balloon
-            .as_ref()
-            .map_or(0.0, |balloon| balloon.air(font_size));
-
         let max_extent = if self.writing_mode.is_vertical() {
             self.max_height
         } else {
@@ -651,6 +692,10 @@ impl<'a> TextLayout<'a> {
         } else {
             fallback_ink
         };
+        let balloon_air = self
+            .comic_balloon
+            .as_ref()
+            .map_or(0.0, |balloon| balloon.air(line_ink.thickness()));
 
         let mut lines: Vec<LayoutLine<'a>> = Vec::new();
         let mut line_profiles = Vec::new();
@@ -746,8 +791,8 @@ impl<'a> TextLayout<'a> {
             justify_lines(text, &mut lines, max_extent, &line_profiles);
         }
 
-        // Alignment is an inline-axis operation inside one intrinsic text block. The renderer
-        // places that block independently, so changing alignment never stretches it to the frame.
+        // Alignment is an inline-axis operation inside one intrinsic text block. Balloon
+        // contours constrain line breaking and block placement, but do not bend the text axis.
         const PAD: f32 = 1.0;
         let inline_extent = lines
             .iter()
@@ -837,7 +882,7 @@ impl<'a> TextLayout<'a> {
                     placement_offset_x = min_x - default_left;
                     placement_offset_y = inline_offset;
                 } else {
-                    let default_top = (balloon.height - height) * balloon.vertical_alignment;
+                    let default_top = (balloon.height - height) * 0.5;
                     placement_offset_x = inline_offset;
                     placement_offset_y = min_y - default_top;
                 }
@@ -1554,18 +1599,24 @@ fn comic_line_breaks(
         return fallback;
     }
 
-    let select = |allow_hyphenation| {
+    let select = |allow_hyphenation: bool| {
         (1..=maximum_lines)
-            .filter_map(|line_count| {
-                let profiles = balloon.line_profiles(
-                    writing_mode,
-                    line_count,
-                    line_height,
-                    line_ink,
-                    air_x,
-                    air_y,
-                )?;
-                exact_profiled_line_breaks(segments, profiles, allow_hyphenation)
+            .flat_map(|line_count| {
+                balloon
+                    .line_profile_candidates(
+                        writing_mode,
+                        line_count,
+                        line_height,
+                        line_ink,
+                        air_x,
+                        air_y,
+                    )
+                    .into_iter()
+                    .filter_map(move |profiles| {
+                        let result =
+                            exact_profiled_line_breaks(segments, profiles, allow_hyphenation)?;
+                        Some(result)
+                    })
             })
             .min_by(|left, right| {
                 left.overflowed
@@ -1705,8 +1756,8 @@ fn breaks_overflow(segments: &[LineBreakMeasure], breaks: &[usize], widths: &[f3
 }
 
 impl ComicBalloon {
-    fn air(&self, font_size: f32) -> f32 {
-        self.minimum_air.max(font_size)
+    fn air(&self, ink_height: f32) -> f32 {
+        self.minimum_air.max(ink_height)
     }
 
     fn inline_extent(&self, writing_mode: WritingMode, air_x: f32, air_y: f32) -> f32 {
@@ -1717,6 +1768,7 @@ impl ComicBalloon {
         }
     }
 
+    #[cfg(test)]
     fn line_profiles(
         &self,
         writing_mode: WritingMode,
@@ -1726,36 +1778,71 @@ impl ComicBalloon {
         air_x: f32,
         air_y: f32,
     ) -> Option<Vec<LineProfile>> {
+        self.line_profile_candidates(
+            writing_mode,
+            line_count,
+            line_height,
+            line_ink,
+            air_x,
+            air_y,
+        )
+        .into_iter()
+        .next()
+    }
+
+    fn line_profile_candidates(
+        &self,
+        writing_mode: WritingMode,
+        line_count: usize,
+        line_height: f32,
+        line_ink: InkBand,
+        air_x: f32,
+        air_y: f32,
+    ) -> Vec<Vec<LineProfile>> {
         let vertical = writing_mode.is_vertical();
-        let (block_extent, inline_extent, block_air, inline_air, block_alignment) = if vertical {
-            (self.width, self.height, air_x, air_y, 0.5)
+        let (block_extent, inline_extent, block_air, inline_air) = if vertical {
+            (self.width, self.height, air_x, air_y)
         } else {
-            (
-                self.height,
-                self.width,
-                air_y,
-                air_x,
-                self.vertical_alignment,
-            )
+            (self.height, self.width, air_y, air_x)
         };
-        let block_radius = block_extent * 0.5 - block_air;
         let inline_radius = inline_extent * 0.5 - inline_air;
         let block_size = line_ink.thickness() + line_count.saturating_sub(1) as f32 * line_height;
-        if block_radius <= 0.0
-            || inline_radius <= 0.0
-            || block_size > block_radius * 2.0 + f32::EPSILON
-        {
-            return None;
+        if inline_radius <= 0.0 {
+            return Vec::new();
         }
-        let block_origin = self.block_origin(
+        let Some(block_origin) =
+            self.centered_block_origin(writing_mode, block_extent, block_air, block_size)
+        else {
+            return Vec::new();
+        };
+        self.line_profiles_at_origin(
             writing_mode,
+            line_count,
+            line_height,
+            line_ink,
             block_extent,
             inline_extent,
             block_air,
             inline_air,
-            block_size,
-            block_alignment,
-        );
+            block_origin,
+        )
+        .into_iter()
+        .collect()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn line_profiles_at_origin(
+        &self,
+        writing_mode: WritingMode,
+        line_count: usize,
+        line_height: f32,
+        line_ink: InkBand,
+        block_extent: f32,
+        inline_extent: f32,
+        block_air: f32,
+        inline_air: f32,
+        block_origin: f32,
+    ) -> Option<Vec<LineProfile>> {
         let inline_center = inline_extent * 0.5;
         let mut spans = Vec::with_capacity(line_count);
         for line in 0..line_count {
@@ -1789,9 +1876,9 @@ impl ComicBalloon {
             spans.push((left, right, baseline));
         }
 
-        // The contour remains a hard per-line bound, but every line shares one
-        // visual axis. Centering each line on its own slice makes irregular balloons
-        // produce a visibly zig-zagged paragraph.
+        // A phrase has one visual axis. The contour controls the usable width of
+        // each line, while the common center keeps the setting typographically
+        // coherent instead of producing a zig-zag paragraph.
         let common_left = spans
             .iter()
             .map(|(left, _, _)| *left)
@@ -1822,101 +1909,33 @@ impl ComicBalloon {
             .collect()
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn block_origin(
+    fn centered_block_origin(
         &self,
         writing_mode: WritingMode,
         block_extent: f32,
-        inline_extent: f32,
         block_air: f32,
-        inline_air: f32,
         block_size: f32,
-        alignment: f32,
-    ) -> f32 {
-        let first = block_air;
-        let last = (block_extent - block_air - block_size).max(first);
-        let preferred = first + (last - first) * alignment;
-        if last <= first {
-            return first;
-        }
-
-        let mut candidates = vec![first, preferred, last];
-        for &(x, y) in &self.contour {
-            let block = if writing_mode.is_vertical() { x } else { y };
-            candidates.push(block.clamp(first, last));
-            candidates.push((block - block_size).clamp(first, last));
-        }
-        candidates.sort_by(f32::total_cmp);
-        candidates.dedup_by(|left, right| (*left - *right).abs() < 0.01);
-        let intervals = candidates
-            .windows(2)
-            .map(|pair| (pair[0] + pair[1]) * 0.5)
-            .collect::<Vec<_>>();
-        candidates.extend(intervals);
-
-        let mut samples = candidates
+    ) -> Option<f32> {
+        let mut first = block_air;
+        let mut last = block_extent - block_air;
+        for contour in self
+            .contours
             .iter()
-            .flat_map(|origin| [*origin, *origin + block_size])
-            .chain(self.contour.iter().map(
-                |&(x, y)| {
-                    if writing_mode.is_vertical() { x } else { y }
+            .filter(|contour| contour.points.len() >= 3)
+        {
+            let air = block_air * contour.air_scale;
+            let (minimum, maximum) = contour.points.iter().fold(
+                (f32::INFINITY, f32::NEG_INFINITY),
+                |(minimum, maximum), &(x, y)| {
+                    let block = if writing_mode.is_vertical() { x } else { y };
+                    (minimum.min(block), maximum.max(block))
                 },
-            ))
-            .filter(|block| *block >= first && *block <= last + block_size)
-            .collect::<Vec<_>>();
-        samples.sort_by(f32::total_cmp);
-        samples.dedup_by(|left, right| (*left - *right).abs() < 0.01);
-        let sample_intervals = samples
-            .windows(2)
-            .map(|pair| (pair[0] + pair[1]) * 0.5)
-            .collect::<Vec<_>>();
-        samples.extend(sample_intervals);
-        let capacities = samples
-            .into_iter()
-            .map(|block| {
-                let width = self
-                    .inline_span(
-                        writing_mode,
-                        block,
-                        block_extent,
-                        inline_extent,
-                        block_air,
-                        inline_air,
-                    )
-                    .map_or(0.0, |(left, right)| right - left);
-                (block, width)
-            })
-            .collect::<Vec<_>>();
-
-        let mut regions = candidates
-            .into_iter()
-            .map(|origin| {
-                let capacity = capacities
-                    .iter()
-                    .filter(|(block, _)| *block >= origin && *block <= origin + block_size)
-                    .map(|(_, width)| *width)
-                    .fold(f32::INFINITY, f32::min);
-                (origin, capacity)
-            })
-            .collect::<Vec<_>>();
-        let widest = regions
-            .iter()
-            .map(|(_, capacity)| *capacity)
-            .fold(0.0, f32::max);
-
-        // Capacity is a feasibility gate, not a competing placement objective. Once a
-        // region retains most of the available inline space, visual centering wins.
-        // Strongly concave balloons still select a wider lobe when the center is too narrow.
-        const CENTERED_CAPACITY_RATIO: f32 = 0.85;
-        regions.retain(|(_, capacity)| *capacity >= widest * CENTERED_CAPACITY_RATIO);
-        regions
-            .into_iter()
-            .min_by(|(left, _), (right, _)| {
-                (left - preferred)
-                    .abs()
-                    .total_cmp(&(right - preferred).abs())
-            })
-            .map_or(preferred, |(origin, _)| origin)
+            );
+            first = first.max(minimum + air);
+            last = last.min(maximum - air);
+        }
+        ((last - first) + f32::EPSILON >= block_size)
+            .then_some(first + (last - first - block_size) * 0.5)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1929,10 +1948,12 @@ impl ComicBalloon {
         block_air: f32,
         inline_air: f32,
     ) -> Option<(f32, f32)> {
-        if self.contour.len() >= 3 {
-            let (left, right) = self.contour_inline_span(writing_mode, block)?;
-            let span = (left + inline_air, right - inline_air);
-            return (span.1 > span.0).then_some(span);
+        if self
+            .contours
+            .iter()
+            .any(|contour| contour.points.len() >= 3)
+        {
+            return self.contour_inline_span(writing_mode, block, inline_air);
         }
 
         let block_radius = block_extent * 0.5 - block_air;
@@ -1945,33 +1966,79 @@ impl ComicBalloon {
         ))
     }
 
-    fn contour_inline_span(&self, writing_mode: WritingMode, block: f32) -> Option<(f32, f32)> {
-        if self.contour.len() < 3 {
-            return None;
-        }
-        let mut intersections = Vec::new();
-        for index in 0..self.contour.len() {
-            let first = self.contour[index];
-            let second = self.contour[(index + 1) % self.contour.len()];
-            let (first_block, first_inline, second_block, second_inline) =
-                if writing_mode.is_vertical() {
-                    (first.0, first.1, second.0, second.1)
-                } else {
-                    (first.1, first.0, second.1, second.0)
-                };
-            if (first_block <= block && second_block > block)
-                || (second_block <= block && first_block > block)
-            {
-                let fraction = (block - first_block) / (second_block - first_block);
-                intersections.push(first_inline + (second_inline - first_inline) * fraction);
+    fn contour_inline_span(
+        &self,
+        writing_mode: WritingMode,
+        block: f32,
+        inline_air: f32,
+    ) -> Option<(f32, f32)> {
+        let mut constraints = self
+            .contours
+            .iter()
+            .filter(|contour| contour.points.len() >= 3)
+            .map(|contour| {
+                let air = inline_air * contour.air_scale;
+                polygon_inline_spans(&contour.points, writing_mode, block)
+                    .into_iter()
+                    .filter_map(|(left, right)| {
+                        let span = (left + air, right - air);
+                        (span.1 > span.0).then_some(span)
+                    })
+                    .collect::<Vec<_>>()
+            });
+        let mut spans = constraints.next()?;
+        for constraint in constraints {
+            spans = spans
+                .iter()
+                .flat_map(|&(left, right)| {
+                    constraint
+                        .iter()
+                        .filter_map(move |&(other_left, other_right)| {
+                            let intersection = (left.max(other_left), right.min(other_right));
+                            (intersection.1 > intersection.0).then_some(intersection)
+                        })
+                })
+                .collect();
+            if spans.is_empty() {
+                return None;
             }
         }
-        intersections.sort_by(f32::total_cmp);
-        intersections
-            .chunks_exact(2)
-            .map(|pair| (pair[0], pair[1]))
+        spans
+            .into_iter()
             .max_by(|left, right| (left.1 - left.0).total_cmp(&(right.1 - right.0)))
     }
+}
+
+fn polygon_inline_spans(
+    contour: &[(f32, f32)],
+    writing_mode: WritingMode,
+    block: f32,
+) -> Vec<(f32, f32)> {
+    if contour.len() < 3 {
+        return Vec::new();
+    }
+    let mut intersections = Vec::new();
+    for index in 0..contour.len() {
+        let first = contour[index];
+        let second = contour[(index + 1) % contour.len()];
+        let (first_block, first_inline, second_block, second_inline) = if writing_mode.is_vertical()
+        {
+            (first.0, first.1, second.0, second.1)
+        } else {
+            (first.1, first.0, second.1, second.0)
+        };
+        if (first_block <= block && second_block > block)
+            || (second_block <= block && first_block > block)
+        {
+            let fraction = (block - first_block) / (second_block - first_block);
+            intersections.push(first_inline + (second_inline - first_inline) * fraction);
+        }
+    }
+    intersections.sort_by(f32::total_cmp);
+    intersections
+        .chunks_exact(2)
+        .map(|pair| (pair[0], pair[1]))
+        .collect()
 }
 
 fn comic_break_penalty(text: &str, boundary: usize) -> f32 {
@@ -2139,14 +2206,15 @@ mod tests {
         width: f32,
         height: f32,
         contour: Vec<(f32, f32)>,
-        vertical_alignment: f32,
         minimum_air: f32,
     ) -> ComicBalloon {
         ComicBalloon {
             width,
             height,
-            contour,
-            vertical_alignment,
+            contours: vec![ContourConstraint {
+                points: contour,
+                air_scale: 1.0,
+            }],
             minimum_air,
         }
     }
@@ -2264,7 +2332,6 @@ mod tests {
                 width,
                 height,
                 vec![(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)],
-                0.5,
                 4.0,
             )
             .run(
@@ -2330,7 +2397,7 @@ mod tests {
 
     #[test]
     fn comic_profiles_are_widest_in_the_middle() {
-        let balloon = comic_balloon(200.0, 120.0, Vec::new(), 0.5, 0.0);
+        let balloon = comic_balloon(200.0, 120.0, Vec::new(), 0.0);
         let profiles = balloon
             .line_profiles(
                 WritingMode::Horizontal,
@@ -2353,7 +2420,7 @@ mod tests {
 
     #[test]
     fn vertical_comic_profiles_are_tallest_in_the_middle() {
-        let balloon = comic_balloon(120.0, 200.0, Vec::new(), 0.5, 0.0);
+        let balloon = comic_balloon(120.0, 200.0, Vec::new(), 0.0);
         let profiles = balloon
             .line_profiles(
                 WritingMode::VerticalRl,
@@ -2380,7 +2447,6 @@ mod tests {
             200.0,
             120.0,
             vec![(0.0, 0.0), (200.0, 0.0), (200.0, 120.0), (0.0, 120.0)],
-            0.5,
             0.0,
         );
         let profiles = balloon
@@ -2408,7 +2474,6 @@ mod tests {
             200.0,
             120.0,
             vec![(100.0, 0.0), (200.0, 60.0), (100.0, 120.0), (0.0, 60.0)],
-            0.5,
             0.0,
         );
         let profile = balloon
@@ -2434,7 +2499,6 @@ mod tests {
             200.0,
             120.0,
             vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
-            0.5,
             0.0,
         );
         let profile = balloon
@@ -2461,7 +2525,6 @@ mod tests {
             200.0,
             160.0,
             vec![(30.0, 0.0), (200.0, 0.0), (165.0, 160.0), (0.0, 160.0)],
-            0.5,
             0.0,
         );
         let horizontal = balloon
@@ -2502,7 +2565,7 @@ mod tests {
     }
 
     #[test]
-    fn comic_profiles_use_the_widest_block_axis_region() {
+    fn comic_profiles_stay_centered_when_wider_space_is_elsewhere() {
         let balloon = comic_balloon(
             100.0,
             200.0,
@@ -2514,42 +2577,6 @@ mod tests {
                 (50.0, 80.0),
                 (0.0, 80.0),
             ],
-            0.5,
-            0.0,
-        );
-
-        let profiles = balloon
-            .line_profiles(
-                WritingMode::Horizontal,
-                3,
-                20.0,
-                InkBand {
-                    before: 10.0,
-                    after: 10.0,
-                },
-                0.0,
-                0.0,
-            )
-            .unwrap();
-
-        assert!(profiles.last().unwrap().block_baseline + 10.0 <= 80.0);
-        assert!(profiles.iter().all(|profile| profile.width > 90.0));
-    }
-
-    #[test]
-    fn comic_profiles_prefer_center_when_capacity_is_comparable() {
-        let balloon = comic_balloon(
-            100.0,
-            200.0,
-            vec![
-                (0.0, 0.0),
-                (100.0, 0.0),
-                (100.0, 200.0),
-                (10.0, 200.0),
-                (10.0, 80.0),
-                (0.0, 80.0),
-            ],
-            0.5,
             0.0,
         );
 
@@ -2568,6 +2595,129 @@ mod tests {
             .unwrap();
 
         assert!((profiles[0].block_baseline - 80.0).abs() < 0.01);
+        assert!((profiles[2].block_baseline - 120.0).abs() < 0.01);
+        assert!(profiles.iter().all(|profile| profile.width <= 50.01));
+    }
+
+    #[test]
+    fn comic_profiles_center_on_the_divided_lobe_bounds() {
+        let balloon = ComicBalloon {
+            width: 100.0,
+            height: 200.0,
+            contours: vec![
+                ContourConstraint {
+                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 200.0), (0.0, 200.0)],
+                    air_scale: 1.0,
+                },
+                ContourConstraint {
+                    points: vec![(0.0, 40.0), (100.0, 40.0), (100.0, 160.0), (0.0, 160.0)],
+                    air_scale: 0.5,
+                },
+            ],
+            minimum_air: 0.0,
+        };
+
+        let profiles = balloon
+            .line_profiles(
+                WritingMode::Horizontal,
+                3,
+                20.0,
+                InkBand {
+                    before: 10.0,
+                    after: 10.0,
+                },
+                0.0,
+                0.0,
+            )
+            .unwrap();
+
+        assert!((profiles[0].block_baseline - 80.0).abs() < 0.01);
+        assert!((profiles[2].block_baseline - 120.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn comic_profiles_never_offer_an_off_center_origin() {
+        let balloon = ComicBalloon {
+            width: 100.0,
+            height: 160.0,
+            contours: vec![
+                ContourConstraint {
+                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 160.0), (0.0, 160.0)],
+                    air_scale: 1.0,
+                },
+                ContourConstraint {
+                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 160.0), (48.0, 160.0)],
+                    air_scale: 0.5,
+                },
+            ],
+            minimum_air: 0.0,
+        };
+        let line_ink = InkBand {
+            before: 5.0,
+            after: 5.0,
+        };
+        let candidates =
+            balloon.line_profile_candidates(WritingMode::Horizontal, 5, 20.0, line_ink, 0.0, 0.0);
+
+        assert_eq!(candidates.len(), 1);
+        assert!((candidates[0][0].block_baseline - 40.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn comic_constraints_intersect_before_selecting_a_concave_lobe() {
+        let balloon = ComicBalloon {
+            width: 100.0,
+            height: 100.0,
+            contours: vec![
+                ContourConstraint {
+                    points: vec![
+                        (0.0, 0.0),
+                        (100.0, 0.0),
+                        (100.0, 100.0),
+                        (70.0, 100.0),
+                        (70.0, 20.0),
+                        (40.0, 20.0),
+                        (40.0, 100.0),
+                        (0.0, 100.0),
+                    ],
+                    air_scale: 1.0,
+                },
+                ContourConstraint {
+                    points: vec![(60.0, 0.0), (100.0, 0.0), (100.0, 100.0), (60.0, 100.0)],
+                    air_scale: 0.5,
+                },
+            ],
+            minimum_air: 0.0,
+        };
+
+        assert_eq!(
+            balloon.contour_inline_span(WritingMode::Horizontal, 50.0, 0.0),
+            Some((70.0, 100.0))
+        );
+    }
+
+    #[test]
+    fn comic_flow_boundaries_share_the_inter_phrase_air() {
+        let balloon = ComicBalloon {
+            width: 100.0,
+            height: 100.0,
+            contours: vec![
+                ContourConstraint {
+                    points: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)],
+                    air_scale: 1.0,
+                },
+                ContourConstraint {
+                    points: vec![(50.0, 0.0), (100.0, 0.0), (100.0, 100.0), (50.0, 100.0)],
+                    air_scale: 0.5,
+                },
+            ],
+            minimum_air: 0.0,
+        };
+
+        assert_eq!(
+            balloon.contour_inline_span(WritingMode::Horizontal, 50.0, 10.0),
+            Some((55.0, 90.0))
+        );
     }
 
     #[test]
@@ -2582,7 +2732,6 @@ mod tests {
                 200.0,
                 120.0,
                 vec![(0.0, 0.0), (140.0, 0.0), (140.0, 120.0), (0.0, 120.0)],
-                0.5,
                 0.0,
             )
             .run("Hello")?;
@@ -2596,13 +2745,35 @@ mod tests {
                 120.0,
                 200.0,
                 vec![(0.0, 0.0), (120.0, 0.0), (120.0, 140.0), (0.0, 140.0)],
-                0.5,
                 0.0,
             )
             .run("Hello")?;
 
         assert!(horizontal.placement_offset_x() < -10.0);
         assert!(vertical.placement_offset_y() < -10.0);
+        Ok(())
+    }
+
+    #[test]
+    fn comic_auto_fit_uses_a_smaller_clean_setting_before_hyphenating() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let layout = TextLayout::new(&font)
+            .with_min_font_size(9.0)
+            .with_max_font_size(24.0)
+            .with_hyphenation_policy(HyphenationPolicy::LastResort)
+            .with_alignment(TextAlign::Center)
+            .with_max_width(80.0)
+            .with_max_height(100.0)
+            .with_comic_balloon(
+                80.0,
+                100.0,
+                vec![(0.0, 0.0), (80.0, 0.0), (80.0, 100.0), (0.0, 100.0)],
+                0.0,
+            )
+            .run("prosperity")?;
+
+        assert_eq!(layout.lines.len(), 1);
+        assert!(layout.font_size < 24.0);
         Ok(())
     }
 
@@ -2621,7 +2792,6 @@ mod tests {
                 200.0,
                 150.0,
                 vec![(0.0, 0.0), (200.0, 0.0), (200.0, 150.0), (0.0, 150.0)],
-                0.5,
                 10.0,
             )
             .run("First\nSecond\nThird")?;
@@ -2646,7 +2816,6 @@ mod tests {
                 200.0,
                 150.0,
                 vec![(0.0, 0.0), (200.0, 0.0), (200.0, 150.0), (0.0, 150.0)],
-                0.5,
                 10.0,
             )
             .run("First\nSecond\nThird\nFourth\nFifth\nSixth")?;
@@ -2689,7 +2858,6 @@ mod tests {
             100.0,
             200.0,
             vec![(0.0, 0.0), (100.0, 0.0), (100.0, 200.0), (0.0, 200.0)],
-            0.5,
             0.0,
         );
 
@@ -2709,7 +2877,6 @@ mod tests {
             200.0,
             100.0,
             vec![(0.0, 0.0), (200.0, 0.0), (200.0, 100.0), (0.0, 100.0)],
-            0.5,
             0.0,
         );
         let vertical = comic_line_breaks(
@@ -2792,7 +2959,6 @@ mod tests {
                     125.0,
                     220.0,
                     vec![(0.0, 0.0), (125.0, 0.0), (125.0, 220.0), (0.0, 220.0)],
-                    0.5,
                     4.0,
                 )
                 .run(text)
@@ -2811,7 +2977,8 @@ mod tests {
     }
 
     #[test]
-    fn short_comic_text_uses_valid_hyphenation_to_fill_a_tall_balloon() -> anyhow::Result<()> {
+    fn short_comic_text_keeps_clean_words_when_an_unhyphenated_setting_fits() -> anyhow::Result<()>
+    {
         let font = any_system_font();
         let text = "A cat tower?";
         let layout = |policy| {
@@ -2827,7 +2994,6 @@ mod tests {
                     80.0,
                     160.0,
                     vec![(0.0, 0.0), (80.0, 0.0), (80.0, 160.0), (0.0, 160.0)],
-                    0.5,
                     4.0,
                 )
                 .run(text)
@@ -2836,10 +3002,14 @@ mod tests {
         let hyphenated = layout(HyphenationPolicy::LastResort)?;
 
         assert!(!hyphenated.overflowed());
-        assert!(hyphenated.font_size > unhyphenated.font_size * 1.1);
-        assert!(hyphenated.lines.iter().any(|line| {
-            text[..line.range.end].ends_with("tow") && line.range.end < text.len()
-        }));
+        assert!((hyphenated.font_size - unhyphenated.font_size).abs() < 0.01);
+        let tower = text.find("tower").unwrap();
+        assert!(
+            !hyphenated
+                .lines
+                .iter()
+                .any(|line| (tower + 1..tower + "tower".len()).contains(&line.range.end))
+        );
         Ok(())
     }
 
@@ -2929,7 +3099,6 @@ mod tests {
                 100.0,
                 10.0,
                 vec![(0.0, 0.0), (100.0, 0.0), (100.0, 10.0), (0.0, 10.0)],
-                0.5,
                 4.0,
             )
             .run("Hi")?;
@@ -2939,8 +3108,8 @@ mod tests {
     }
 
     #[test]
-    fn comic_balloon_air_scales_with_the_candidate_font_size() {
-        let balloon = comic_balloon(100.0, 100.0, Vec::new(), 0.5, 4.0);
+    fn comic_balloon_air_uses_the_visible_ink_height_and_explicit_floor() {
+        let balloon = comic_balloon(100.0, 100.0, Vec::new(), 4.0);
 
         assert_approx_eq(balloon.air(12.0), 12.0);
         assert_approx_eq(balloon.air(24.0), 24.0);
@@ -3096,7 +3265,6 @@ mod tests {
                 80.0,
                 160.0,
                 vec![(0.0, 0.0), (80.0, 0.0), (80.0, 160.0), (0.0, 160.0)],
-                0.5,
                 0.0,
             )
             .run("A\ng\nE")?;

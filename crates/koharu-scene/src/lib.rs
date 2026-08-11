@@ -36,8 +36,8 @@ pub use error::{Error, Result};
 pub use id::{EntityId, ProducerId, ProjectId, RelationId};
 pub use patch::Patch;
 pub use semantics::{
-    BubbleRegion, FitsTo, FunctionalRelation, Inside, PanelRegion, Presents, RecognizedFrom,
-    RegionSpec, RelationSpec, TextRegion,
+    BubbleRegion, FitsTo, FlowsIn, FunctionalRelation, Inside, PanelRegion, Presents,
+    RecognizedFrom, RegionSpec, RelationSpec, TextRegion,
 };
 pub use session::{Commit, Session};
 pub use snapshot::{EntityRef, PageRef, RelationRef, Snapshot};
