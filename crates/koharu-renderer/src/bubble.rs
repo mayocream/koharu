@@ -4,6 +4,10 @@ use koharu_scene::Geometry;
 
 const MAX_CONTOUR_POINTS: usize = 1_024;
 
+type Point = (f32, f32);
+type Polygon = Vec<Point>;
+type IndexedPolygon = (usize, Polygon);
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LayoutBox {
     pub x: f32,
@@ -113,7 +117,7 @@ fn decompose_lobes(
     polygon: Vec<(f32, f32)>,
     anchors: Vec<(usize, (f32, f32))>,
     tolerance: f32,
-) -> Option<Vec<(usize, Vec<(f32, f32)>)>> {
+) -> Option<Vec<IndexedPolygon>> {
     if anchors.len() == 1 {
         return Some(vec![(anchors[0].0, polygon)]);
     }
@@ -351,11 +355,7 @@ fn valid_diagonal(polygon: &[(f32, f32)], first: usize, second: usize, tolerance
     })
 }
 
-fn split_polygon(
-    polygon: &[(f32, f32)],
-    first: usize,
-    second: usize,
-) -> (Vec<(f32, f32)>, Vec<(f32, f32)>) {
+fn split_polygon(polygon: &[(f32, f32)], first: usize, second: usize) -> (Polygon, Polygon) {
     let (first, second) = if first <= second {
         (first, second)
     } else {
