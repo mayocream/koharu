@@ -318,6 +318,7 @@
     "translation": "Переводит исходный текст на целевой язык."
   },
   "providerDescriptions": {
+    "atlas-cloud": "Языковые модели, размещённые в Atlas.",
     "caiyun": "API перевода Caiyun.",
     "claude": "Модели Anthropic Claude.",
     "deepl": "API перевода DeepL.",

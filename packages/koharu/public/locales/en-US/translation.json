@@ -318,6 +318,7 @@
     "translation": "Convert source text to the target language."
   },
   "providerDescriptions": {
+    "atlas-cloud": "Atlas-hosted language models.",
     "caiyun": "Caiyun translation API.",
     "claude": "Anthropic Claude models.",
     "deepl": "DeepL translation API.",

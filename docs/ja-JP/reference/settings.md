@@ -20,7 +20,7 @@ description: 各設定ページと保存動作のリファレンスです。
 
 ## プロバイダー
 
-Local、OpenAI、Gemini、Claude、DeepSeek、OpenAI-compatible、OpenRouter、LM Studio、DeepL、Google Cloud Translation、Caiyun を設定します。
+Local、Atlas Cloud、OpenAI、Gemini、Claude、DeepSeek、OpenAI-compatible、OpenRouter、LM Studio、DeepL、Google Cloud Translation、Caiyun を設定します。
 
 認証情報は OS の資格情報サービスへ、URL と非秘密設定は共通設定ファイルへ保存されます。変更後はモデルカタログを更新します。
 

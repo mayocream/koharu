@@ -25,7 +25,7 @@ Processor profiles are retained independently when you switch models.
 
 ## Providers
 
-Configure Local, OpenAI, Gemini, Claude, DeepSeek, OpenAI-compatible, OpenRouter, LM Studio, DeepL, Google Cloud Translation, and Caiyun connections.
+Configure Local, Atlas Cloud, OpenAI, Gemini, Claude, DeepSeek, OpenAI-compatible, OpenRouter, LM Studio, DeepL, Google Cloud Translation, and Caiyun connections.
 
 Credentials are stored in the operating system credential service. Provider URLs and non-secret options are stored in the shared configuration file. Changing a provider causes the model picker to refresh its catalog.
 

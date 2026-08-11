@@ -318,6 +318,7 @@
     "translation": "將原文翻譯為目標語言。"
   },
   "providerDescriptions": {
+    "atlas-cloud": "由 Atlas 託管的語言模型。",
     "caiyun": "Caiyun 翻譯 API。",
     "claude": "Anthropic Claude 模型。",
     "deepl": "DeepL 翻譯 API。",

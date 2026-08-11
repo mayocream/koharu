@@ -1,3 +1,4 @@
+mod atlas_cloud;
 mod caiyun;
 mod claude;
 mod deepl;
@@ -14,6 +15,7 @@ use futures::{FutureExt, future::BoxFuture, future::join_all};
 use reqwest::{Client, RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 
+pub use atlas_cloud::AtlasCloudConfig;
 pub use caiyun::CaiyunConfig;
 pub use claude::ClaudeConfig;
 pub use deepl::DeepLConfig;
@@ -44,6 +46,16 @@ pub(crate) async fn translate(
             .with_context(|| format!("{} requires a selected model", selection.provider))
     };
     match selection.provider {
+        Provider::AtlasCloud => {
+            atlas_cloud::translate(
+                client,
+                &providers.atlas_cloud,
+                model()?,
+                generation,
+                request,
+            )
+            .await
+        }
         Provider::OpenAi => {
             openai::translate(client, &providers.openai, model()?, generation, request).await
         }
@@ -85,6 +97,7 @@ pub(crate) async fn translate(
 pub(crate) async fn models(client: &Client, providers: &ProvidersConfig) -> Vec<Model> {
     let mut models = Vec::new();
     let pending: Vec<BoxFuture<'_, Result<Vec<Model>>>> = vec![
+        atlas_cloud::models(client).boxed(),
         openai::models().boxed(),
         gemini::models().boxed(),
         claude::models().boxed(),

@@ -20,7 +20,7 @@ description: 所有设置页面及其持久化行为的参考。
 
 ## 服务商
 
-配置 Local、OpenAI、Gemini、Claude、DeepSeek、OpenAI-compatible、OpenRouter、LM Studio、DeepL、Google Cloud Translation 与 Caiyun。
+配置 Local、Atlas Cloud、OpenAI、Gemini、Claude、DeepSeek、OpenAI-compatible、OpenRouter、LM Studio、DeepL、Google Cloud Translation 与 Caiyun。
 
 凭据保存在操作系统凭据服务，URL 和非秘密选项保存在共享配置文件。服务设置变化后会刷新模型目录。
 

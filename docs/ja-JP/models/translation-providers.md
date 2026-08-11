@@ -12,7 +12,7 @@ Koharu はローカルとホスト型の翻訳バックエンドを一つのモ�
 現在は次を利用できます。
 
 - llama.cpp による **Local** GGUF モデル
-- **OpenAI**、**Gemini**、**Claude**、**DeepSeek**
+- **Atlas Cloud**、**OpenAI**、**Gemini**、**Claude**、**DeepSeek**
 - **OpenRouter**
 - **LM Studio** と汎用 **OpenAI-compatible** 接続先
 - **DeepL**、**Google Cloud Translation**、**Caiyun**
