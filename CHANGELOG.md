@@ -1,3 +1,6 @@
+## [0.63.4](https://github.com/mayocream/koharu/compare/0.63.3..0.63.4) - 2026-08-11
+
+
 ## [0.63.3](https://github.com/mayocream/koharu/compare/0.63.2..0.63.3) - 2026-08-11
 
 ### ⚙️ Miscellaneous Tasks
