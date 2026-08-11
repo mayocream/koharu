@@ -294,10 +294,21 @@ export function CanvasWorkspace() {
     }
 
     if (current.kind === 'pan') {
-      const translation: [number, number] = [
+      const bounds = surface.current!.getBoundingClientRect()
+      const dpr = window.devicePixelRatio
+      let translation: [number, number] = [
         current.translation[0] + physical.x - current.start.x,
         current.translation[1] + physical.y - current.start.y,
       ]
+      translation = clampCameraTranslation(
+        translation,
+        camera.zoom,
+        page.size.width,
+        page.size.height,
+        bounds.width * dpr,
+        bounds.height * dpr,
+        dpr,
+      )
       useKoharuStore.setState({ camera: { zoom: camera.zoom, translation, fitted: false } })
       viewUpdates.schedule({ zoom: camera.zoom, translation })
       return
@@ -487,11 +498,28 @@ export function CanvasWorkspace() {
               translation = [point.x - pageX * zoom, point.y - pageY * zoom]
             } else {
               const dpr = window.devicePixelRatio
+              let deltaX = event.deltaX
+              let deltaY = event.deltaY
+              if (event.shiftKey && deltaX === 0) {
+                deltaX = deltaY
+                deltaY = 0
+              }
               translation = [
-                current.translation[0] - event.deltaX * dpr,
-                current.translation[1] - event.deltaY * dpr,
+                current.translation[0] - deltaX * dpr,
+                current.translation[1] - deltaY * dpr,
               ]
             }
+            const bounds = event.currentTarget.getBoundingClientRect()
+            const dpr = window.devicePixelRatio
+            translation = clampCameraTranslation(
+              translation,
+              zoom,
+              page.size.width,
+              page.size.height,
+              bounds.width * dpr,
+              bounds.height * dpr,
+              dpr,
+            )
             useKoharuStore.setState({ camera: { zoom, translation, fitted: false } })
             viewUpdates.schedule({ zoom, translation })
           }}
@@ -544,6 +572,26 @@ function rgbaToHex(color: [number, number, number, number]): string {
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
+}
+
+function clampCameraTranslation(
+  translation: [number, number],
+  zoom: number,
+  pageWidth: number,
+  pageHeight: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  dpr: number,
+): [number, number] {
+  const minOverlap = 100 * dpr
+  const minX = minOverlap - pageWidth * zoom
+  const minY = minOverlap - pageHeight * zoom
+  const maxX = viewportWidth - minOverlap
+  const maxY = viewportHeight - minOverlap
+
+  const x = minX <= maxX ? clamp(translation[0], minX, maxX) : (viewportWidth - pageWidth * zoom) * 0.5
+  const y = minY <= maxY ? clamp(translation[1], minY, maxY) : (viewportHeight - pageHeight * zoom) * 0.5
+  return [x, y]
 }
 
 function mergeStrokeUpdates(current: StrokeUpdate, next: StrokeUpdate): StrokeUpdate {
