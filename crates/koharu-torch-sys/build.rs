@@ -75,7 +75,7 @@ fn bindgen_generated_header_compat(mut source: String) -> String {
 }
 
 async fn build_shim() -> Result<()> {
-    let target_dir = output_dir()?;
+    let target_dir = target_dir()?;
     fs::create_dir_all(&target_dir)?;
 
     let libtorch_dir = Torch::CPU.install().await?.join("libtorch");
@@ -94,7 +94,7 @@ async fn build_shim() -> Result<()> {
     let cmake_dir = config.build();
 
     for profile in ["debug", "release"] {
-        let profile_dir = target_dir.with_file_name(profile);
+        let profile_dir = target_dir.join(profile);
         fs::create_dir_all(&profile_dir)?;
         fs::copy(
             cmake_dir.join(shim_file_name()),
@@ -103,22 +103,34 @@ async fn build_shim() -> Result<()> {
     }
     println!(
         "cargo::metadata=shim={}",
-        target_dir.join(shim_file_name()).display()
+        target_dir.join("release").join(shim_file_name()).display()
     );
 
     Ok(())
 }
 
-fn output_dir() -> Result<PathBuf> {
+fn target_dir() -> Result<PathBuf> {
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
-    // Cargo's PROFILE is only `debug` or `release`, even for a custom profile.
-    // OUT_DIR retains the actual profile (and optional target triple) directory.
-    out_dir
+    let profile_dir = out_dir
         .parent()
         .and_then(Path::parent)
         .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .context("koharu-torch-sys OUT_DIR has no profile directory")
+        .context("koharu-torch-sys OUT_DIR has no profile directory")?;
+    let target_dir = profile_dir
+        .parent()
+        .context("koharu-torch-sys OUT_DIR has no target directory")?;
+    let target = env::var_os("TARGET").context("Cargo did not provide TARGET")?;
+
+    // An explicit --target inserts its triple between the target and profile directories.
+    // Tauri's platform configs bundle the shim from the shared target/{debug,release} paths.
+    if target_dir.file_name() == Some(target.as_os_str()) {
+        target_dir
+            .parent()
+            .map(Path::to_path_buf)
+            .context("koharu-torch-sys target triple has no target directory")
+    } else {
+        Ok(target_dir.to_path_buf())
+    }
 }
 
 fn shim_file_name() -> &'static str {
