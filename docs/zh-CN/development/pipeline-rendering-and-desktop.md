@@ -9,9 +9,10 @@ description: 从页面阶段调度到保留渲染和原生桌面合成的实现�
 
 `koharu-pipeline` 协调一套小型具名流程，而不是运行时图：
 
-```text
-检测 -> OCR -> 翻译
-    \-> 图像修复
+```mermaid
+flowchart LR
+  detection["检测"] --> ocr["OCR"] --> translation["翻译"]
+  detection --> inpainting["图像修复"]
 ```
 
 执行单位是一页上的一个阶段。页面按项目顺序进入，但检测完成后会立即让该页后续分支就绪，不存在“先检测完所有页面”的全局屏障。

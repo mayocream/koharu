@@ -13,12 +13,14 @@ The scene and storage crates deliberately own different kinds of truth.
 
 Text analysis, semantic content, and presentation are distinct:
 
-```text
-Region + Geometry + OCR analysis
-          ^ recognized-from
-TextContent + SourceText + Translation
-          ^ presents
-TextLayout + Typography + optional authored Geometry
+```mermaid
+flowchart BT
+  presentation["TextLayout + Typography<br/>+ optional authored Geometry"]
+  content["TextContent + SourceText + Translation"]
+  analysis["Region + Geometry + OCR analysis"]
+
+  presentation -->|"presents"| content
+  content -->|"recognized-from"| analysis
 ```
 
 Detection geometry therefore remains source analysis instead of becoming a movable visible layer. Translation can change without losing OCR provenance, and presentation can change without rewriting semantic text.

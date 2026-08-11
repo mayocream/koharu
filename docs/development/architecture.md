@@ -7,18 +7,29 @@ description: Understand the ownership path from React through Tauri into scenes,
 
 Koharu is one desktop application, not a web client attached to a separate server.
 
-```text
-packages/koharu (React + Next.js)
-          |
-          | generated direct Tauri commands and typed channels
-          v
-crates/koharu (application state, commands, startup, desktop integration)
-          |
-          +-> koharu-scene -> koharu-storage
-          +-> koharu-pipeline -> koharu-ml -> native runtimes
-          +-> koharu-translator
-          +-> koharu-renderer -> koharu-canvas / koharu-psd
-          +-> koharu-agent
+```mermaid
+flowchart TB
+  frontend["packages/koharu<br/>(React + Next.js)"]
+  app["crates/koharu<br/>(application state, commands, startup, desktop integration)"]
+  scene["koharu-scene"]
+  storage["koharu-storage"]
+  pipeline["koharu-pipeline"]
+  ml["koharu-ml"]
+  native["native runtimes"]
+  translator["koharu-translator"]
+  renderer["koharu-renderer"]
+  canvas["koharu-canvas"]
+  psd["koharu-psd"]
+  agent["koharu-agent"]
+
+  frontend -->|"generated direct Tauri commands<br/>and typed channels"| app
+  app --> scene --> storage
+  app --> pipeline --> ml --> native
+  app --> translator
+  app --> renderer
+  renderer --> canvas
+  renderer --> psd
+  app --> agent
 ```
 
 ## Frontend

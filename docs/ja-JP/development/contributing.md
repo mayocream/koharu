@@ -10,7 +10,7 @@ Koharu では、焦点を絞ったバグ修正、ドキュメント改善、モ�
 ## コーディング前
 
 1. [Issue](https://github.com/mayocream/koharu/issues) と既存 PR を検索します。
-2. 大きな挙動・設計変更は先に Issue または Discussion で相談します。
+2. 大きな挙動・設計変更は着手前に [Issue](https://github.com/mayocream/koharu/issues) を作成します。
 3. `AGENTS.md` と変更対象クレートの README を読みます。
 4. 生成物、モデル重み、データセット、認証情報、ビルド出力、端末固有ファイルをコミットしません。
 
@@ -31,3 +31,5 @@ Koharu では、焦点を絞ったバグ修正、ドキュメント改善、モ�
 PR には問題、所有境界、重要な挙動・スキーマ変更、実行したコマンドと結果、UI のスクリーンショット、性能変更のデバイス・入力・基準・結果・正しさを含めます。
 
 生成 AI を大きく利用した場合は明示してください。提出内容を理解・レビュー・テストする責任は投稿者にあります。
+
+バグや予定している変更には [GitHub Issues](https://github.com/mayocream/koharu/issues) を使い、設計上の質問やコミュニティサポートには [Discord](https://discord.gg/mHvHkxGnUY) を使ってください。

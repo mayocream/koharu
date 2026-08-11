@@ -7,9 +7,10 @@ description: 現在のページ、選択範囲、プロジェクト全体に処�
 
 Koharu のワークフローは固定かつ明示的です。
 
-```text
-検出 -> OCR -> 翻訳
-    \-> インペイント
+```mermaid
+flowchart LR
+  detection["検出"] --> ocr["OCR"] --> translation["翻訳"]
+  detection --> inpainting["インペイント"]
 ```
 
 検出は解析領域と除去マスクを作り、OCR は検出文字を読み、翻訳は対象言語の内容を書き、インペイントは原文文字下の画像を再構築します。

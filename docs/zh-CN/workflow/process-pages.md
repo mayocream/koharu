@@ -7,9 +7,10 @@ description: 对当前页面、所选页面或整个项目运行指定流水线�
 
 Koharu 使用固定、明确的工作流：
 
-```text
-检测 -> OCR -> 翻译
-    \-> 图像修复
+```mermaid
+flowchart LR
+  detection["检测"] --> ocr["OCR"] --> translation["翻译"]
+  detection --> inpainting["图像修复"]
 ```
 
 检测生成分析区域和移除蒙版；OCR 读取检测文字；翻译写入目标语言内容；图像修复重建原文字样下方的画面。

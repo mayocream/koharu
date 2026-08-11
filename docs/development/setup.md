@@ -12,7 +12,7 @@ description: Build the Tauri desktop application, run focused checks, regenerate
 - LLVM 15 or later;
 - platform C/C++ build tools required by native dependencies.
 
-Linux development also needs WebKitGTK 4.1 and the Tauri desktop libraries used in `.github/workflows/build.yml`. Windows native work uses MSVC build tools. Release builds for Apple platforms target Apple silicon.
+Linux development also needs WebKitGTK 4.1 and the Tauri desktop system libraries for your distribution. Windows native work uses MSVC build tools. Release builds for Apple platforms target Apple silicon.
 
 ## Install and run
 
@@ -24,15 +24,6 @@ bun dev
 ```
 
 `bun dev` starts the Next.js UI and the Tauri application together.
-
-On Windows, enable the default WebView2 debugging endpoint before launch:
-
-```powershell
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=4000'
-bun dev
-```
-
-The endpoint is `http://127.0.0.1:4000`.
 
 ## Build
 
@@ -78,4 +69,4 @@ bun run docs:dev
 bun run docs:build
 ```
 
-Content and the single `docs/zensical.toml` configuration live under `docs`. English is rooted at `/`, with Japanese and Simplified Chinese under `/ja-JP/` and `/zh-CN/`; keep all three page sets and the shared navigation structurally identical.
+Content and the single `docs/zensical.toml` configuration live under `docs`. English is rooted at `/`, with Japanese and Simplified Chinese under `/ja-JP/` and `/zh-CN/`; keep all three page sets and the shared navigation structurally identical. Draw diagrams with fenced `mermaid` blocks instead of text or ASCII art.

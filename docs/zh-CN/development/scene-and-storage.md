@@ -13,12 +13,14 @@ description: Koharu 语义项目、不可变快照、修订、blob 与持久发�
 
 文字分析、语义内容和视觉呈现彼此分离：
 
-```text
-Region + Geometry + OCR analysis
-          ^ recognized-from
-TextContent + SourceText + Translation
-          ^ presents
-TextLayout + Typography + optional authored Geometry
+```mermaid
+flowchart BT
+  presentation["TextLayout + Typography<br/>+ optional authored Geometry"]
+  content["TextContent + SourceText + Translation"]
+  analysis["Region + Geometry + OCR analysis"]
+
+  presentation -->|"presents"| content
+  content -->|"recognized-from"| analysis
 ```
 
 检测几何因此始终是原稿分析，不会变成可移动可见图层。翻译变化不丢失 OCR 来源，排字变化也不必重写语义文本。

@@ -7,18 +7,29 @@ description: React から Tauri、シーン、処理、描画、ネイティブ�
 
 Koharu は別サーバーへ接続する Web クライアントではなく、1 つのデスクトップアプリです。
 
-```text
-packages/koharu (React + Next.js)
-          |
-          | 生成された Tauri コマンドと型付きチャンネル
-          v
-crates/koharu (アプリ状態、コマンド、起動、デスクトップ統合)
-          |
-          +-> koharu-scene -> koharu-storage
-          +-> koharu-pipeline -> koharu-ml -> native runtimes
-          +-> koharu-translator
-          +-> koharu-renderer -> koharu-canvas / koharu-psd
-          +-> koharu-agent
+```mermaid
+flowchart TB
+  frontend["packages/koharu<br/>(React + Next.js)"]
+  app["crates/koharu<br/>(アプリ状態、コマンド、起動、デスクトップ統合)"]
+  scene["koharu-scene"]
+  storage["koharu-storage"]
+  pipeline["koharu-pipeline"]
+  ml["koharu-ml"]
+  native["native runtimes"]
+  translator["koharu-translator"]
+  renderer["koharu-renderer"]
+  canvas["koharu-canvas"]
+  psd["koharu-psd"]
+  agent["koharu-agent"]
+
+  frontend -->|"生成された Tauri コマンド<br/>と型付きチャンネル"| app
+  app --> scene --> storage
+  app --> pipeline --> ml --> native
+  app --> translator
+  app --> renderer
+  renderer --> canvas
+  renderer --> psd
+  app --> agent
 ```
 
 ## フロントエンドとアプリ

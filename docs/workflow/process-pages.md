@@ -7,9 +7,10 @@ description: Run selected pipeline stages over one page, a selection, or the com
 
 Koharu uses a fixed, explicit workflow:
 
-```text
-detection -> OCR -> translation
-         \-> inpainting
+```mermaid
+flowchart LR
+  detection["Detection"] --> ocr["OCR"] --> translation["Translation"]
+  detection --> inpainting["Inpainting"]
 ```
 
 Detection creates analysis regions and removal masks. OCR reads detected text. Translation writes target-language content. Inpainting reconstructs artwork beneath the source lettering.

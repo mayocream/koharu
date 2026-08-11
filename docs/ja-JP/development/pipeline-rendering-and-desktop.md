@@ -9,9 +9,10 @@ description: ページ処理、モデル常駐、保持レンダリング、ネ�
 
 `koharu-pipeline` は実行時グラフではなく、小さな名前付きワークフローを調整します。
 
-```text
-検出 -> OCR -> 翻訳
-    \-> インペイント
+```mermaid
+flowchart LR
+  detection["検出"] --> ocr["OCR"] --> translation["翻訳"]
+  detection --> inpainting["インペイント"]
 ```
 
 実行単位は 1 ページの 1 ステージです。ページはプロジェクト順に入りますが、検出完了直後にそのページの後続分岐を実行可能にし、全ページの検出完了を待ちません。

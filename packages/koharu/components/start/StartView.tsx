@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
 import { commands, type ProjectSummary } from '@/lib/protocol'
+import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import {
   AlertDialog,
@@ -51,6 +52,7 @@ export function StartView() {
     setBusy('create')
     try {
       await call(commands.createProject, projectName)
+      await refresh(projectKey, pagesKey, pageKey)
       setName('')
     } finally {
       setBusy(null)
@@ -62,6 +64,7 @@ export function StartView() {
     setBusy(projectName)
     try {
       await call(commands.openProject, projectName)
+      await refresh(projectKey, pagesKey, pageKey)
     } finally {
       setBusy(null)
     }

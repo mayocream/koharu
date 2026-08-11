@@ -13,12 +13,14 @@ description: 意味プロジェクト、スナップショット、リビジョ�
 
 文字解析、意味内容、表示は分離されています。
 
-```text
-Region + Geometry + OCR analysis
-          ^ recognized-from
-TextContent + SourceText + Translation
-          ^ presents
-TextLayout + Typography + optional authored Geometry
+```mermaid
+flowchart BT
+  presentation["TextLayout + Typography<br/>+ optional authored Geometry"]
+  content["TextContent + SourceText + Translation"]
+  analysis["Region + Geometry + OCR analysis"]
+
+  presentation -->|"presents"| content
+  content -->|"recognized-from"| analysis
 ```
 
 検出ジオメトリは移動可能な表示レイヤーになりません。OCR の由来を残したまま翻訳を変え、意味テキストを書き換えずに組版を変えられます。

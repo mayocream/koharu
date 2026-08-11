@@ -7,18 +7,29 @@ description: 从 React 经 Tauri 到场景、处理、渲染与原生运行时�
 
 Koharu 是单体桌面应用，不是连接独立服务器的 Web 客户端。
 
-```text
-packages/koharu (React + Next.js)
-          |
-          | 生成的 Tauri 命令与类型化通道
-          v
-crates/koharu (应用状态、命令、启动、桌面集成)
-          |
-          +-> koharu-scene -> koharu-storage
-          +-> koharu-pipeline -> koharu-ml -> native runtimes
-          +-> koharu-translator
-          +-> koharu-renderer -> koharu-canvas / koharu-psd
-          +-> koharu-agent
+```mermaid
+flowchart TB
+  frontend["packages/koharu<br/>(React + Next.js)"]
+  app["crates/koharu<br/>(应用状态、命令、启动、桌面集成)"]
+  scene["koharu-scene"]
+  storage["koharu-storage"]
+  pipeline["koharu-pipeline"]
+  ml["koharu-ml"]
+  native["native runtimes"]
+  translator["koharu-translator"]
+  renderer["koharu-renderer"]
+  canvas["koharu-canvas"]
+  psd["koharu-psd"]
+  agent["koharu-agent"]
+
+  frontend -->|"生成的 Tauri 命令<br/>与类型化通道"| app
+  app --> scene --> storage
+  app --> pipeline --> ml --> native
+  app --> translator
+  app --> renderer
+  renderer --> canvas
+  renderer --> psd
+  app --> agent
 ```
 
 ## 前端与应用

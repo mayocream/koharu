@@ -9,9 +9,10 @@ description: Follow page processing from stage scheduling through retained rende
 
 `koharu-pipeline` coordinates a small named workflow rather than a runtime graph:
 
-```text
-detection -> OCR -> translation
-         \-> inpainting
+```mermaid
+flowchart LR
+  detection["Detection"] --> ocr["OCR"] --> translation["Translation"]
+  detection --> inpainting["Inpainting"]
 ```
 
 An execution unit is one stage on one page. Pages enter in project order, but a completed detection immediately makes that page's dependent branches eligible. There is no global “finish detection everywhere first” barrier.
