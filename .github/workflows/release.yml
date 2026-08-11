@@ -12,12 +12,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   release:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - platform: 'macos-latest' # for Arm based macs (M1 and above).
