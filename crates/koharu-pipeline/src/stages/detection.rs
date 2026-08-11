@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io::Cursor,
     sync::{Arc, Mutex},
 };
@@ -37,8 +37,11 @@ const ANGLE_SNAP_DEGREES: f32 = 3.0;
 const ANGLE_SEARCH_HALF_STEPS: i32 = 90;
 const ANGLE_SEARCH_STEP_DEGREES: f64 = 0.5;
 const TYPOGRAPHY_SAMPLE_MARGIN: f32 = 2.0;
-const BINARY_TEXT_LUMINANCE_THRESHOLD: u32 = 128 * 256;
+const COLOR_SNAP_DARK_LUMINANCE: u32 = 64 * 256;
+const COLOR_SNAP_LIGHT_LUMINANCE: u32 = 191 * 256;
 const COLOR_CLUSTER_MIN_DISTANCE_SQUARED: u32 = 32 * 32;
+const COLOR_CLUSTER_COUNT: usize = 4;
+const MIN_EXTREME_COLOR_PIXELS: u32 = 4;
 const MIN_MEASURED_STROKE_WIDTH: u8 = 2;
 const NMS_CONTAINMENT_THRESHOLD: f32 = 0.9;
 const DIALOGUE_MASK_CONTAINMENT_THRESHOLD: f32 = 0.9;
@@ -644,6 +647,7 @@ struct MaskPixel {
     x: u32,
     y: u32,
     color: [u8; 3],
+    inside_mask: bool,
 }
 
 // BallonsTranslator normalizes vertical-line angles relative to upright text:
@@ -672,6 +676,7 @@ fn infer_typography(
     )?;
     let local_width = right - left + 2;
     let local_height = bottom - top + 2;
+    let background_margin = TYPOGRAPHY_SAMPLE_MARGIN.ceil() as u32;
     let mut points = Vec::new();
     let mut pixels = Vec::new();
     let mut background = Vec::new();
@@ -686,13 +691,19 @@ fn infer_typography(
                 x: local_x,
                 y: local_y,
                 color,
+                inside_mask,
             });
             if inside_mask {
                 points.push(MaskPoint {
                     x: f64::from(x) + 0.5,
                     y: f64::from(y) + 0.5,
                 });
-            } else {
+            }
+            if x < left + background_margin
+                || x + background_margin >= right
+                || y < top + background_margin
+                || y + background_margin >= bottom
+            {
                 background.push(color);
             }
         }
@@ -787,20 +798,30 @@ fn projection_score(points: &[MaskPoint], axis_x: f64, axis_y: f64) -> f64 {
     profile.iter().map(|value| value * value).sum::<f64>() / points.len() as f64
 }
 
-fn median_channel(values: &mut [u8]) -> u8 {
-    values.sort_unstable();
-    let middle = values.len() / 2;
-    if values.len().is_multiple_of(2) {
-        ((u16::from(values[middle - 1]) + u16::from(values[middle])) / 2) as u8
-    } else {
-        values[middle]
+fn histogram_value_at(histogram: &[u32; 256], mut rank: usize) -> u8 {
+    for (value, count) in histogram.iter().enumerate() {
+        if rank < *count as usize {
+            return value as u8;
+        }
+        rank -= *count as usize;
     }
+    u8::MAX
 }
 
-// The detector mask may trace glyphs or cover a whole text region, so mask
-// depth cannot identify the paint role. Cluster the local crop into its
-// background and two possible ink colors, then use distance from the actual
-// background-color pixels to decide which ink is the enclosed glyph fill.
+fn histogram_median(histogram: &[u32; 256], count: usize) -> u8 {
+    if count == 0 {
+        return 0;
+    }
+    let lower = histogram_value_at(histogram, (count - 1) / 2);
+    let upper = histogram_value_at(histogram, count / 2);
+    ((u16::from(lower) + u16::from(upper)) / 2) as u8
+}
+
+// The detector mask may trace glyphs or cover a whole text region. Color alone
+// is also insufficient because a black glyph core can be identical to artwork
+// outside its white outline. A real outline is therefore identified by the
+// topology of a color band enclosing another color, then measured across that
+// exact band. Clustering remains the fallback for unoutlined text.
 fn infer_text_paint(
     pixels: &[MaskPixel],
     background_seed: [u8; 3],
@@ -808,6 +829,14 @@ fn infer_text_paint(
     height: u32,
 ) -> ([u8; 3], Option<[u8; 3]>, Option<f32>) {
     let clusters = color_clusters(pixels, background_seed);
+    if let Some(outline) = infer_outline(&clusters, background_seed, width, height) {
+        return (
+            outline.fill_color,
+            Some(outline.stroke_color),
+            Some(outline.stroke_width),
+        );
+    }
+
     let nonempty = clusters
         .iter()
         .enumerate()
@@ -827,59 +856,296 @@ fn infer_text_paint(
         .copied()
         .min_by_key(|index| color_distance_squared(clusters[*index].color, background_seed))
         .unwrap();
-    let ink = nonempty
+    let fill = nonempty
         .iter()
         .copied()
         .filter(|index| *index != background_index)
-        .collect::<Vec<_>>();
-    if ink.is_empty() {
-        return (
-            normalize_text_color(clusters[background_index].color),
-            None,
-            None,
+        .max_by_key(|index| cluster_ink_score(&clusters[*index], background_seed));
+    let color = fill
+        .map(|index| representative_ink_color(&clusters[index]))
+        .unwrap_or(clusters[background_index].color);
+    (normalize_text_color(color), None, None)
+}
+
+#[derive(Clone, Copy)]
+struct OutlinePaint {
+    fill_color: [u8; 3],
+    stroke_color: [u8; 3],
+    stroke_width: f32,
+    score: u64,
+}
+
+fn infer_outline(
+    clusters: &[ColorCluster; COLOR_CLUSTER_COUNT],
+    background: [u8; 3],
+    width: u32,
+    height: u32,
+) -> Option<OutlinePaint> {
+    let mut assignments = vec![usize::MAX; width as usize * height as usize];
+    for (index, cluster) in clusters.iter().enumerate() {
+        for pixel in &cluster.pixels {
+            assignments[pixel.y as usize * width as usize + pixel.x as usize] = index;
+        }
+    }
+
+    let background_index = clusters
+        .iter()
+        .enumerate()
+        .filter(|(_, cluster)| !cluster.pixels.is_empty())
+        .min_by_key(|(_, cluster)| color_distance_squared(cluster.color, background))
+        .map(|(index, _)| index)?;
+    let mut best = None;
+    for (stroke_index, stroke_cluster) in clusters.iter().enumerate() {
+        if stroke_cluster.pixels.len() < 8 || stroke_index == background_index {
+            continue;
+        }
+        let outside = reachable_without_cluster(&assignments, stroke_index, width, height);
+        for (fill_index, fill_cluster) in clusters.iter().enumerate() {
+            if fill_index == stroke_index || fill_cluster.pixels.is_empty() {
+                continue;
+            }
+            let enclosed_fill = fill_cluster
+                .pixels
+                .iter()
+                .copied()
+                .filter(|pixel| !outside[pixel.y as usize * width as usize + pixel.x as usize])
+                .collect::<Vec<_>>();
+            if enclosed_fill.len() < 8 {
+                continue;
+            }
+            let stroke_pixels = enclosing_cluster_pixels(
+                &assignments,
+                stroke_index,
+                &stroke_cluster.pixels,
+                &enclosed_fill,
+                width,
+                height,
+            );
+            if stroke_pixels.len() < 8 {
+                continue;
+            }
+
+            let fill_color = median_pixel_color(&enclosed_fill);
+            let stroke_color = median_pixel_color(&stroke_pixels);
+            let contrast = color_distance_squared(fill_color, stroke_color);
+            if contrast < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
+                || color_distance_squared(fill_color, background)
+                    < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
+                || color_distance_squared(stroke_color, background)
+                    < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
+                || color_lies_between(stroke_color, fill_color, background)
+                || color_lies_between(fill_color, stroke_color, background)
+            {
+                continue;
+            }
+            let normalized_fill = normalize_text_color(fill_color);
+            let normalized_stroke = normalize_text_color(stroke_color);
+            if normalized_fill == normalized_stroke {
+                continue;
+            }
+
+            let Some(stroke_width) =
+                measured_stroke_width(&stroke_pixels, &enclosed_fill, &outside, width, height)
+            else {
+                continue;
+            };
+            let inside_fill = enclosed_fill
+                .iter()
+                .filter(|pixel| pixel.inside_mask)
+                .count();
+            let evidence = enclosed_fill.len() + inside_fill;
+            let candidate = OutlinePaint {
+                fill_color: normalized_fill,
+                stroke_color: normalized_stroke,
+                stroke_width,
+                score: u64::from(contrast) * evidence.min(4096) as u64,
+            };
+            if best.is_none_or(|current: OutlinePaint| candidate.score > current.score) {
+                best = Some(candidate);
+            }
+        }
+    }
+    best
+}
+
+fn reachable_without_cluster(
+    assignments: &[usize],
+    barrier: usize,
+    width: u32,
+    height: u32,
+) -> Vec<bool> {
+    let mut reachable = vec![false; assignments.len()];
+    let mut queue = VecDeque::new();
+    for x in 0..width {
+        push_reachable(
+            &mut reachable,
+            &mut queue,
+            assignments,
+            barrier,
+            x,
+            0,
+            width,
+        );
+        push_reachable(
+            &mut reachable,
+            &mut queue,
+            assignments,
+            barrier,
+            x,
+            height - 1,
+            width,
         );
     }
-    if ink.len() == 1 {
-        return (normalize_text_color(clusters[ink[0]].color), None, None);
+    for y in 0..height {
+        push_reachable(
+            &mut reachable,
+            &mut queue,
+            assignments,
+            barrier,
+            0,
+            y,
+            width,
+        );
+        push_reachable(
+            &mut reachable,
+            &mut queue,
+            assignments,
+            barrier,
+            width - 1,
+            y,
+            width,
+        );
     }
+    while let Some((x, y)) = queue.pop_front() {
+        if x > 0 {
+            push_reachable(
+                &mut reachable,
+                &mut queue,
+                assignments,
+                barrier,
+                x - 1,
+                y,
+                width,
+            );
+        }
+        if x + 1 < width {
+            push_reachable(
+                &mut reachable,
+                &mut queue,
+                assignments,
+                barrier,
+                x + 1,
+                y,
+                width,
+            );
+        }
+        if y > 0 {
+            push_reachable(
+                &mut reachable,
+                &mut queue,
+                assignments,
+                barrier,
+                x,
+                y - 1,
+                width,
+            );
+        }
+        if y + 1 < height {
+            push_reachable(
+                &mut reachable,
+                &mut queue,
+                assignments,
+                barrier,
+                x,
+                y + 1,
+                width,
+            );
+        }
+    }
+    reachable
+}
 
-    let background_color = clusters[background_index].color;
-    let mut background_mask = GrayImage::from_pixel(width, height, Luma([u8::MAX]));
-    for pixel in pixels {
-        background_mask.put_pixel(pixel.x, pixel.y, Luma([0]));
+fn push_reachable(
+    reachable: &mut [bool],
+    queue: &mut VecDeque<(u32, u32)>,
+    assignments: &[usize],
+    barrier: usize,
+    x: u32,
+    y: u32,
+    width: u32,
+) {
+    let index = y as usize * width as usize + x as usize;
+    if !reachable[index] && assignments[index] != barrier {
+        reachable[index] = true;
+        queue.push_back((x, y));
     }
-    for pixel in &clusters[background_index].pixels {
-        background_mask.put_pixel(pixel.x, pixel.y, Luma([u8::MAX]));
+}
+
+fn enclosing_cluster_pixels(
+    assignments: &[usize],
+    cluster: usize,
+    cluster_pixels: &[MaskPixel],
+    enclosed_fill: &[MaskPixel],
+    width: u32,
+    height: u32,
+) -> Vec<MaskPixel> {
+    let mut selected = vec![false; assignments.len()];
+    let mut queue = VecDeque::new();
+    for fill in enclosed_fill {
+        for y in fill.y.saturating_sub(1)..=(fill.y + 1).min(height - 1) {
+            for x in fill.x.saturating_sub(1)..=(fill.x + 1).min(width - 1) {
+                let index = y as usize * width as usize + x as usize;
+                if assignments[index] == cluster && !selected[index] {
+                    selected[index] = true;
+                    queue.push_back((x, y));
+                }
+            }
+        }
     }
-    let background_distances = distance_transform(&background_mask, Norm::L2);
-    let first_depth = median_distance(&clusters[ink[0]].pixels, &background_distances);
-    let second_depth = median_distance(&clusters[ink[1]].pixels, &background_distances);
-    let (fill_index, stroke_index) = if first_depth >= second_depth {
-        (ink[0], ink[1])
+    while let Some((x, y)) = queue.pop_front() {
+        for next_y in y.saturating_sub(1)..=(y + 1).min(height - 1) {
+            for next_x in x.saturating_sub(1)..=(x + 1).min(width - 1) {
+                let index = next_y as usize * width as usize + next_x as usize;
+                if assignments[index] == cluster && !selected[index] {
+                    selected[index] = true;
+                    queue.push_back((next_x, next_y));
+                }
+            }
+        }
+    }
+    cluster_pixels
+        .iter()
+        .copied()
+        .filter(|pixel| selected[pixel.y as usize * width as usize + pixel.x as usize])
+        .collect()
+}
+
+fn cluster_ink_score(cluster: &ColorCluster, background: [u8; 3]) -> u64 {
+    let inside = cluster
+        .pixels
+        .iter()
+        .filter(|pixel| pixel.inside_mask)
+        .count();
+    let evidence = if inside >= 8 {
+        inside + cluster.pixels.len()
     } else {
-        (ink[1], ink[0])
+        cluster.pixels.len()
     };
-    let fill = &clusters[fill_index];
-    let stroke = &clusters[stroke_index];
+    u64::from(color_distance_squared(cluster.color, background)) * evidence.min(4096) as u64
+}
 
-    let Some(stroke_width) = measured_stroke_width(&stroke.pixels, &background_distances) else {
-        return (normalize_text_color(fill.color), None, None);
-    };
-    let is_antialias = stroke_width <= f32::from(MIN_MEASURED_STROKE_WIDTH)
-        && color_lies_between(stroke.color, fill.color, background_color);
-    if color_distance_squared(fill.color, stroke.color) < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
-        || color_distance_squared(stroke.color, background_color)
-            < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
-        || is_antialias
-    {
-        return (normalize_text_color(fill.color), None, None);
+fn representative_ink_color(cluster: &ColorCluster) -> [u8; 3] {
+    let inside = cluster
+        .pixels
+        .iter()
+        .copied()
+        .filter(|pixel| pixel.inside_mask)
+        .collect::<Vec<_>>();
+    if inside.len() >= 8 {
+        median_pixel_color(&inside)
+    } else {
+        median_pixel_color(&cluster.pixels)
     }
-    let fill_color = normalize_text_color(fill.color);
-    let stroke_color = normalize_text_color(stroke.color);
-    if fill_color == stroke_color {
-        return (fill_color, None, None);
-    }
-    (fill_color, Some(stroke_color), Some(stroke_width))
 }
 
 struct ColorCluster {
@@ -887,29 +1153,42 @@ struct ColorCluster {
     pixels: Vec<MaskPixel>,
 }
 
-fn color_clusters(pixels: &[MaskPixel], background: [u8; 3]) -> [ColorCluster; 3] {
-    let first_ink = distant_color(pixels, &[background]);
-    let second_ink = distant_color(pixels, &[background, first_ink]);
-    let mut centers = [background, first_ink, second_ink];
-    let mut groups: [Vec<MaskPixel>; 3] = std::array::from_fn(|_| Vec::new());
+fn color_clusters(
+    pixels: &[MaskPixel],
+    background: [u8; 3],
+) -> [ColorCluster; COLOR_CLUSTER_COUNT] {
+    let palette = color_palette(pixels);
+    let darkest = extreme_palette_color(&palette, true);
+    let lightest = extreme_palette_color(&palette, false);
+    let distant = distant_palette_color(&palette, &[background, darkest, lightest]);
+    let mut centers = [background, darkest, lightest, distant];
     for _ in 0..4 {
-        for group in &mut groups {
-            group.clear();
-        }
-        for pixel in pixels {
+        let mut accumulators = [ColorAccumulator::default(); COLOR_CLUSTER_COUNT];
+        for entry in &palette {
+            let color = entry.color();
             let index = centers
                 .iter()
                 .enumerate()
-                .min_by_key(|(_, center)| color_distance_squared(pixel.color, **center))
+                .min_by_key(|(_, center)| color_distance_squared(color, **center))
                 .map(|(index, _)| index)
                 .unwrap();
-            groups[index].push(*pixel);
+            accumulators[index].add(entry);
         }
-        for (center, group) in centers.iter_mut().zip(&groups) {
-            if !group.is_empty() {
-                *center = median_pixel_color(group);
+        for (center, accumulator) in centers.iter_mut().zip(accumulators) {
+            if let Some(color) = accumulator.color() {
+                *center = color;
             }
         }
+    }
+    let mut groups: [Vec<MaskPixel>; COLOR_CLUSTER_COUNT] = std::array::from_fn(|_| Vec::new());
+    for pixel in pixels {
+        let index = centers
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, center)| color_distance_squared(pixel.color, **center))
+            .map(|(index, _)| index)
+            .unwrap();
+        groups[index].push(*pixel);
     }
     std::array::from_fn(|index| ColorCluster {
         color: centers[index],
@@ -917,14 +1196,85 @@ fn color_clusters(pixels: &[MaskPixel], background: [u8; 3]) -> [ColorCluster; 3
     })
 }
 
-fn distant_color(pixels: &[MaskPixel], centers: &[[u8; 3]]) -> [u8; 3] {
-    let mut ranked = pixels.to_vec();
-    ranked.sort_unstable_by(|left, right| {
-        minimum_color_distance(right.color, centers)
-            .cmp(&minimum_color_distance(left.color, centers))
-    });
-    let count = ranked.len().div_ceil(16).max(1);
-    median_pixel_color(&ranked[..count])
+fn extreme_palette_color(palette: &[ColorBin], darkest: bool) -> [u8; 3] {
+    let select = |significant_only: bool| {
+        let candidates = palette
+            .iter()
+            .filter(|bin| !significant_only || bin.count >= MIN_EXTREME_COLOR_PIXELS);
+        if darkest {
+            candidates.min_by_key(|bin| color_luminance(bin.color()))
+        } else {
+            candidates.max_by_key(|bin| color_luminance(bin.color()))
+        }
+    };
+    select(true)
+        .or_else(|| select(false))
+        .map(ColorBin::color)
+        .unwrap_or_default()
+}
+
+#[derive(Clone, Copy, Default)]
+struct ColorBin {
+    count: u32,
+    sums: [u64; 3],
+}
+
+impl ColorBin {
+    fn add(&mut self, color: [u8; 3]) {
+        self.count += 1;
+        for (sum, channel) in self.sums.iter_mut().zip(color) {
+            *sum += u64::from(channel);
+        }
+    }
+
+    fn color(&self) -> [u8; 3] {
+        std::array::from_fn(|channel| {
+            ((self.sums[channel] + u64::from(self.count / 2)) / u64::from(self.count)) as u8
+        })
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct ColorAccumulator {
+    count: u64,
+    sums: [u64; 3],
+}
+
+impl ColorAccumulator {
+    fn add(&mut self, bin: &ColorBin) {
+        self.count += u64::from(bin.count);
+        for (sum, value) in self.sums.iter_mut().zip(bin.sums) {
+            *sum += value;
+        }
+    }
+
+    fn color(self) -> Option<[u8; 3]> {
+        (self.count != 0).then(|| {
+            std::array::from_fn(|channel| {
+                ((self.sums[channel] + self.count / 2) / self.count) as u8
+            })
+        })
+    }
+}
+
+fn color_palette(pixels: &[MaskPixel]) -> Vec<ColorBin> {
+    let mut bins = vec![ColorBin::default(); 16 * 16 * 16];
+    for pixel in pixels {
+        let [red, green, blue] = pixel.color.map(|channel| usize::from(channel >> 4));
+        bins[(red << 8) | (green << 4) | blue].add(pixel.color);
+    }
+    bins.retain(|bin| bin.count != 0);
+    bins
+}
+
+fn distant_palette_color(palette: &[ColorBin], centers: &[[u8; 3]]) -> [u8; 3] {
+    palette
+        .iter()
+        .max_by_key(|bin| {
+            u64::from(minimum_color_distance(bin.color(), centers)) * u64::from(bin.count.min(64))
+        })
+        .map(ColorBin::color)
+        .unwrap_or_default()
 }
 
 fn minimum_color_distance(color: [u8; 3], centers: &[[u8; 3]]) -> u32 {
@@ -936,36 +1286,60 @@ fn minimum_color_distance(color: [u8; 3], centers: &[[u8; 3]]) -> u32 {
 }
 
 fn median_pixel_color(pixels: &[MaskPixel]) -> [u8; 3] {
-    let colors = pixels.iter().map(|pixel| pixel.color).collect::<Vec<_>>();
-    median_color(&colors)
+    let mut histograms = [[0_u32; 256]; 3];
+    for pixel in pixels {
+        for (histogram, channel) in histograms.iter_mut().zip(pixel.color) {
+            histogram[usize::from(channel)] += 1;
+        }
+    }
+    std::array::from_fn(|channel| histogram_median(&histograms[channel], pixels.len()))
 }
 
 fn measured_stroke_width(
     stroke_pixels: &[MaskPixel],
-    background_distances: &GrayImage,
+    fill_pixels: &[MaskPixel],
+    outside: &[bool],
+    width: u32,
+    height: u32,
 ) -> Option<f32> {
-    if stroke_pixels.len() < 8 {
+    if stroke_pixels.len() < 8 || fill_pixels.len() < 8 {
         return None;
     }
-    let mut widths = stroke_pixels
-        .iter()
-        .map(|pixel| background_distances.get_pixel(pixel.x, pixel.y).0[0])
-        .filter(|distance| *distance > 0)
-        .collect::<Vec<_>>();
-    if widths.len() < 8 {
+    let mut fill_mask = GrayImage::from_pixel(width, height, Luma([0]));
+    for pixel in fill_pixels {
+        fill_mask.put_pixel(pixel.x, pixel.y, Luma([u8::MAX]));
+    }
+    let fill_distances = distance_transform(&fill_mask, Norm::L2);
+    let mut histogram = [0_u32; 256];
+    let mut count = 0_usize;
+    for pixel in stroke_pixels {
+        let mut touches_outside = false;
+        for y in pixel.y.saturating_sub(1)..=(pixel.y + 1).min(height - 1) {
+            for x in pixel.x.saturating_sub(1)..=(pixel.x + 1).min(width - 1) {
+                if outside[y as usize * width as usize + x as usize] {
+                    touches_outside = true;
+                    break;
+                }
+            }
+            if touches_outside {
+                break;
+            }
+        }
+        if !touches_outside {
+            continue;
+        }
+        let distance = fill_distances.get_pixel(pixel.x, pixel.y).0[0];
+        if distance == 0 {
+            continue;
+        }
+        histogram[usize::from(distance)] += 1;
+        count += 1;
+    }
+    if count < 8 {
         return None;
     }
-    widths.sort_unstable();
-    let width = widths[(widths.len() - 1) * 9 / 10];
+    let width = histogram_median(&histogram, count);
     (width >= MIN_MEASURED_STROKE_WIDTH).then_some(f32::from(width))
-}
-
-fn median_distance(pixels: &[MaskPixel], distances: &GrayImage) -> u8 {
-    let mut values = pixels
-        .iter()
-        .map(|pixel| distances.get_pixel(pixel.x, pixel.y).0[0])
-        .collect::<Vec<_>>();
-    median_channel(&mut values)
 }
 
 fn color_lies_between(candidate: [u8; 3], start: [u8; 3], end: [u8; 3]) -> bool {
@@ -1000,13 +1374,13 @@ fn color_lies_between(candidate: [u8; 3], start: [u8; 3], end: [u8; 3]) -> bool 
 }
 
 fn median_color(colors: &[[u8; 3]]) -> [u8; 3] {
-    std::array::from_fn(|channel| {
-        let mut values = colors
-            .iter()
-            .map(|color| color[channel])
-            .collect::<Vec<_>>();
-        median_channel(&mut values)
-    })
+    let mut histograms = [[0_u32; 256]; 3];
+    for color in colors {
+        for (histogram, channel) in histograms.iter_mut().zip(*color) {
+            histogram[usize::from(channel)] += 1;
+        }
+    }
+    std::array::from_fn(|channel| histogram_median(&histograms[channel], colors.len()))
 }
 
 fn color_distance_squared(left: [u8; 3], right: [u8; 3]) -> u32 {
@@ -1018,10 +1392,13 @@ fn color_distance_squared(left: [u8; 3], right: [u8; 3]) -> u32 {
 }
 
 fn normalize_text_color(color: [u8; 3]) -> [u8; 3] {
-    if color_luminance(color) < BINARY_TEXT_LUMINANCE_THRESHOLD {
+    let luminance = color_luminance(color);
+    if luminance <= COLOR_SNAP_DARK_LUMINANCE {
         [0, 0, 0]
-    } else {
+    } else if luminance >= COLOR_SNAP_LIGHT_LUMINANCE {
         [u8::MAX; 3]
+    } else {
+        color
     }
 }
 
@@ -1455,10 +1832,10 @@ mod tests {
     };
 
     use super::{
-        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, ImageSize, PageRegions,
-        RegionOutput, TextReuse, generation, infer_typography, layout_order, link_dialogue_regions,
-        mask_containment, mask_for, mask_geometry, non_maximum_suppression, normalize_text_color,
-        write_region,
+        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, ImageSize, MaskPixel,
+        PageRegions, RegionOutput, TextReuse, color_palette, generation, infer_typography,
+        layout_order, link_dialogue_regions, mask_containment, mask_for, mask_geometry,
+        non_maximum_suppression, normalize_text_color, write_region,
     };
 
     #[tokio::test]
@@ -1642,10 +2019,19 @@ mod tests {
         fill: [u8; 3],
         stroke: [u8; 3],
     ) -> (RgbImage, KoharuLayoutDetection) {
+        outlined_text_on_background(stroke_width, fill, stroke, [16, 24, 88])
+    }
+
+    fn outlined_text_on_background(
+        stroke_width: u32,
+        fill: [u8; 3],
+        stroke: [u8; 3],
+        background: [u8; 3],
+    ) -> (RgbImage, KoharuLayoutDetection) {
         let width = 96;
         let height = 96;
         let [left, top, right, bottom] = [20, 38, 76, 58];
-        let mut image = RgbImage::from_pixel(width, height, Rgb([16, 24, 88]));
+        let mut image = RgbImage::from_pixel(width, height, Rgb(background));
         let mut pixels = vec![0; width as usize * height as usize];
         for y in top..bottom {
             for x in left..right {
@@ -1689,6 +2075,57 @@ mod tests {
             for y in 28..68 {
                 for ink_x in x..x + 3 {
                     image.put_pixel(ink_x, y, Rgb(fill));
+                }
+            }
+        }
+        (
+            image,
+            KoharuLayoutDetection {
+                label_id: 0,
+                label: "text".to_owned(),
+                score: 1.0,
+                bbox: [left as f32, top as f32, right as f32, bottom as f32],
+                area: pixels.iter().filter(|value| **value != 0).count() as u32,
+                mask: KoharuLayoutMask {
+                    width,
+                    height,
+                    pixels,
+                },
+            },
+        )
+    }
+
+    fn outlined_text_on_textured_background() -> (RgbImage, KoharuLayoutDetection) {
+        let width = 96;
+        let height = 96;
+        let [left, top, right, bottom] = [20, 20, 76, 76];
+        let mut image = RgbImage::from_pixel(width, height, Rgb([24, 32, 96]));
+        let mut pixels = vec![0; width as usize * height as usize];
+        for y in top..bottom {
+            for x in left..right {
+                pixels[y as usize * width as usize + x as usize] = u8::MAX;
+                let background = match (x / 7 + y / 5) % 3 {
+                    0 => [0, 0, 0],
+                    1 => [38, 48, 128],
+                    _ => [24, 32, 96],
+                };
+                image.put_pixel(x, y, Rgb(background));
+            }
+        }
+        for glyph_left in [26, 38, 50, 62] {
+            for y in 28..68 {
+                for x in glyph_left..glyph_left + 9 {
+                    let is_fill =
+                        x >= glyph_left + 3 && x < glyph_left + 6 && (31..65).contains(&y);
+                    image.put_pixel(
+                        x,
+                        y,
+                        if is_fill {
+                            Rgb([0, 0, 0])
+                        } else {
+                            Rgb([255, 255, 255])
+                        },
+                    );
                 }
             }
         }
@@ -1924,7 +2361,7 @@ mod tests {
         let inferred = infer_typography(&image, &detection).unwrap();
 
         assert!((inferred.angle_degrees - 12.0).abs() < 1.0);
-        assert_eq!(inferred.color, [0, 0, 0]);
+        assert_eq!(inferred.color, [24, 80, 160]);
         assert_eq!(inferred.stroke_color, None);
         assert_eq!(inferred.stroke_width, None);
         assert_eq!(inferred.writing_mode, WritingMode::Horizontal);
@@ -1999,11 +2436,12 @@ mod tests {
     }
 
     #[test]
-    fn text_colors_are_binarized_by_luminance() {
+    fn text_colors_snap_only_at_luminance_extremes() {
         assert_eq!(normalize_text_color([20, 31, 24]), [0, 0, 0]);
         assert_eq!(normalize_text_color([230, 240, 250]), [255, 255, 255]);
         assert_eq!(normalize_text_color([255, 0, 0]), [0, 0, 0]);
-        assert_eq!(normalize_text_color([0, 255, 0]), [255, 255, 255]);
+        assert_eq!(normalize_text_color([0, 255, 0]), [0, 255, 0]);
+        assert_eq!(normalize_text_color([20, 115, 235]), [20, 115, 235]);
         assert_eq!(normalize_text_color([40, 70, 40]), [0, 0, 0]);
     }
 
@@ -2032,8 +2470,9 @@ mod tests {
     }
 
     #[test]
-    fn colors_in_the_same_luminance_class_do_not_create_a_border() {
-        let (image, detection) = outlined_text(3, [0, 0, 0], [96, 96, 96]);
+    fn glyph_holes_matching_the_background_do_not_invert_the_paint() {
+        let (image, detection) =
+            outlined_text_on_background(3, [255, 255, 255], [0, 0, 0], [255, 255, 255]);
 
         let inferred = infer_typography(&image, &detection).unwrap();
 
@@ -2043,10 +2482,49 @@ mod tests {
     }
 
     #[test]
+    fn outlined_text_is_separated_from_matching_dark_artwork() {
+        let (image, detection) = outlined_text_on_textured_background();
+
+        let inferred = infer_typography(&image, &detection).unwrap();
+
+        assert_eq!(inferred.color, [0, 0, 0]);
+        assert_eq!(inferred.stroke_color, Some([255, 255, 255]));
+        assert_eq!(inferred.stroke_width, Some(3.0));
+    }
+
+    #[test]
+    fn colors_in_the_same_luminance_class_do_not_create_a_border() {
+        let (image, detection) = outlined_text(3, [0, 0, 0], [48, 48, 48]);
+
+        let inferred = infer_typography(&image, &detection).unwrap();
+
+        assert_eq!(inferred.color, [0, 0, 0]);
+        assert_eq!(inferred.stroke_color, None);
+        assert_eq!(inferred.stroke_width, None);
+    }
+
+    #[test]
+    fn wide_antialias_bands_do_not_create_borders() {
+        for (fill, antialias, background) in [
+            ([20, 115, 235], [133, 180, 240], [245, 245, 245]),
+            ([0, 0, 0], [96, 96, 96], [245, 245, 245]),
+        ] {
+            let (image, detection) = outlined_text_on_background(4, fill, antialias, background);
+
+            let inferred = infer_typography(&image, &detection).unwrap();
+
+            assert_eq!(inferred.color, fill);
+            assert_eq!(inferred.stroke_color, None);
+            assert_eq!(inferred.stroke_width, None);
+        }
+    }
+
+    #[test]
     fn text_region_background_is_not_mistaken_for_the_fill() {
         for (fill, background, expected) in [
             ([24, 40, 80], [225, 130, 175], [0, 0, 0]),
             ([220, 240, 255], [16, 24, 88], [255, 255, 255]),
+            ([20, 115, 235], [245, 245, 245], [20, 115, 235]),
         ] {
             let (image, detection) = region_masked_text(fill, background);
 
@@ -2056,5 +2534,23 @@ mod tests {
             assert_eq!(inferred.stroke_color, None);
             assert_eq!(inferred.stroke_width, None);
         }
+    }
+
+    #[test]
+    fn color_palette_is_bounded_independently_of_crop_area() {
+        let pixels = (0..65_536_u32)
+            .map(|index| MaskPixel {
+                x: 0,
+                y: 0,
+                color: [
+                    index as u8,
+                    (index >> 8) as u8,
+                    index.wrapping_mul(31) as u8,
+                ],
+                inside_mask: true,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(color_palette(&pixels).len() <= 16 * 16 * 16);
     }
 }
