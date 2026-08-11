@@ -25,7 +25,7 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 
 ---
 
-![screenshot](docs/en-US/assets/koharu-screenshot-en.png)
+![screenshot](docs/screenshot.png)
 
 > [!NOTE]
 > Support and discussion are available on the [Discord server](https://discord.gg/mHvHkxGnUY).
