@@ -7,9 +7,10 @@ use std::{
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use async_trait::async_trait;
 use image::{
-    DynamicImage, GenericImageView as _, GrayImage, ImageFormat, Luma, Rgb, RgbImage, Rgba,
-    RgbaImage,
+    DynamicImage, GenericImageView as _, GrayImage, ImageBuffer, ImageFormat, Luma, Rgb, RgbImage,
+    Rgba, RgbaImage,
 };
+use imageproc::region_labelling::{Connectivity, connected_components};
 use koharu_ml::{
     aot_inpainting::AotInpainting,
     flux2_klein::{Flux2KleinInpaint, Flux2KleinInpaintOptions},
@@ -503,10 +504,17 @@ const TILE_CONTEXT: u32 = 128;
 const UNIFORM_BACKGROUND_MIN_PIXELS: usize = 16;
 const FLAT_FILL_EDGE_MARGIN: f32 = 3.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct InpaintTile {
+    components: Vec<u32>,
     core: [u32; 4],
     crop: [u32; 4],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MaskComponent {
+    label: u32,
+    bounds: [u32; 4],
 }
 
 // BallonsTranslator avoids model inference for a text block when the non-text
@@ -533,7 +541,8 @@ fn inpaint_tiled(
     let mut output = image.to_rgb8();
     let mut pending_mask = mask.clone();
     fill_uniform_regions(&mut output, &mut pending_mask, text_mask, flat_fill_regions);
-    for tile in inpaint_tiles(&pending_mask) {
+    let (component_labels, tiles) = inpaint_tiles(&pending_mask);
+    for tile in &tiles {
         let [left, top, right, bottom] = tile.crop;
         let crop_width = right - left;
         let crop_height = bottom - top;
@@ -553,7 +562,7 @@ fn inpaint_tiled(
                 )
                 .to_rgb8()
         };
-        composite_generated(&mut output, &pending_mask, tile, &generated);
+        composite_generated(&mut output, &component_labels, tile, &generated);
     }
     Ok(DynamicImage::ImageRgb8(output))
 }
@@ -590,40 +599,149 @@ fn fill_uniform_regions(
     }
 }
 
-fn inpaint_tiles(mask: &GrayImage) -> Vec<InpaintTile> {
-    let mut tiles = Vec::new();
-    let mut top = 0;
-    while top < mask.height() {
-        let bottom = top.saturating_add(TILE_SIZE).min(mask.height());
-        let mut left = 0;
-        while left < mask.width() {
-            let right = left.saturating_add(TILE_SIZE).min(mask.width());
-            if let Some([mask_left, mask_top, mask_right, mask_bottom]) =
-                mask_bounds_in(mask, [left, top, right, bottom])
-            {
-                tiles.push(InpaintTile {
-                    core: [left, top, right, bottom],
-                    crop: [
-                        mask_left.saturating_sub(TILE_CONTEXT),
-                        mask_top.saturating_sub(TILE_CONTEXT),
-                        mask_right.saturating_add(TILE_CONTEXT).min(mask.width()),
-                        mask_bottom.saturating_add(TILE_CONTEXT).min(mask.height()),
-                    ],
+fn inpaint_tiles(mask: &GrayImage) -> (ImageBuffer<Luma<u32>, Vec<u32>>, Vec<InpaintTile>) {
+    let (labels, components) = mask_components(mask);
+    let mut bounded_tiles: Vec<InpaintTile> = Vec::new();
+    let mut split_tiles = Vec::new();
+
+    for component in components {
+        let [left, top, right, bottom] = component.bounds;
+        if right - left <= TILE_SIZE && bottom - top <= TILE_SIZE {
+            let best = bounded_tiles
+                .iter()
+                .enumerate()
+                .filter_map(|(index, tile)| {
+                    let bounds = union_bounds(tile.core, component.bounds);
+                    ((bounds[2] - bounds[0] <= TILE_SIZE) && (bounds[3] - bounds[1] <= TILE_SIZE))
+                        .then_some((bounds_area(bounds) - bounds_area(tile.core), index, bounds))
+                })
+                .min_by_key(|(growth, index, _)| (*growth, *index));
+            if let Some((_, index, bounds)) = best {
+                let tile = &mut bounded_tiles[index];
+                tile.components.push(component.label);
+                tile.core = bounds;
+                tile.crop = expand_bounds(bounds, mask.width(), mask.height());
+            } else {
+                bounded_tiles.push(InpaintTile {
+                    components: vec![component.label],
+                    core: component.bounds,
+                    crop: expand_bounds(component.bounds, mask.width(), mask.height()),
                 });
             }
-            left = right;
+            continue;
         }
-        top = bottom;
+
+        let mut core_top = top;
+        while core_top < bottom {
+            let core_bottom = core_top.saturating_add(TILE_SIZE).min(bottom);
+            let mut core_left = left;
+            while core_left < right {
+                let core_right = core_left.saturating_add(TILE_SIZE).min(right);
+                let core = [core_left, core_top, core_right, core_bottom];
+                if let Some(owned_bounds) = component_bounds_in(&labels, component.label, core) {
+                    split_tiles.push(InpaintTile {
+                        components: vec![component.label],
+                        core,
+                        crop: expand_bounds(owned_bounds, mask.width(), mask.height()),
+                    });
+                }
+                core_left = core_right;
+            }
+            core_top = core_bottom;
+        }
     }
-    tiles
+
+    bounded_tiles.append(&mut split_tiles);
+    bounded_tiles.sort_by_key(|tile| (tile.core[1], tile.core[0], tile.core[3], tile.core[2]));
+    (labels, bounded_tiles)
 }
 
-fn crop_tile_mask(mask: &GrayImage, tile: InpaintTile) -> GrayImage {
+fn mask_components(mask: &GrayImage) -> (ImageBuffer<Luma<u32>, Vec<u32>>, Vec<MaskComponent>) {
+    let binary = GrayImage::from_fn(mask.width(), mask.height(), |x, y| {
+        Luma([(mask.get_pixel(x, y)[0] >= 127) as u8 * u8::MAX])
+    });
+    let labels = connected_components(&binary, Connectivity::Eight, Luma([0]));
+    let mut bounds = Vec::<Option<[u32; 4]>>::new();
+    for (x, y, pixel) in labels.enumerate_pixels() {
+        let label = pixel[0] as usize;
+        if label == 0 {
+            continue;
+        }
+        if label >= bounds.len() {
+            bounds.resize(label + 1, None);
+        }
+        if let Some(bounds) = &mut bounds[label] {
+            bounds[0] = bounds[0].min(x);
+            bounds[1] = bounds[1].min(y);
+            bounds[2] = bounds[2].max(x + 1);
+            bounds[3] = bounds[3].max(y + 1);
+        } else {
+            bounds[label] = Some([x, y, x + 1, y + 1]);
+        }
+    }
+    let components = bounds
+        .into_iter()
+        .enumerate()
+        .skip(1)
+        .filter_map(|(label, bounds)| {
+            bounds.map(|bounds| MaskComponent {
+                label: label as u32,
+                bounds,
+            })
+        })
+        .collect();
+    (labels, components)
+}
+
+fn union_bounds(left: [u32; 4], right: [u32; 4]) -> [u32; 4] {
+    [
+        left[0].min(right[0]),
+        left[1].min(right[1]),
+        left[2].max(right[2]),
+        left[3].max(right[3]),
+    ]
+}
+
+fn bounds_area([left, top, right, bottom]: [u32; 4]) -> u64 {
+    u64::from(right - left) * u64::from(bottom - top)
+}
+
+fn expand_bounds([left, top, right, bottom]: [u32; 4], width: u32, height: u32) -> [u32; 4] {
+    [
+        left.saturating_sub(TILE_CONTEXT),
+        top.saturating_sub(TILE_CONTEXT),
+        right.saturating_add(TILE_CONTEXT).min(width),
+        bottom.saturating_add(TILE_CONTEXT).min(height),
+    ]
+}
+
+fn component_bounds_in(
+    labels: &ImageBuffer<Luma<u32>, Vec<u32>>,
+    label: u32,
+    [region_left, region_top, region_right, region_bottom]: [u32; 4],
+) -> Option<[u32; 4]> {
+    let mut left = region_right;
+    let mut top = region_bottom;
+    let mut right = 0;
+    let mut bottom = 0;
+    for y in region_top..region_bottom {
+        for x in region_left..region_right {
+            if labels.get_pixel(x, y)[0] == label {
+                left = left.min(x);
+                top = top.min(y);
+                right = right.max(x + 1);
+                bottom = bottom.max(y + 1);
+            }
+        }
+    }
+    (right > left && bottom > top).then_some([left, top, right, bottom])
+}
+
+fn crop_tile_mask(mask: &GrayImage, tile: &InpaintTile) -> GrayImage {
     let [left, top, right, bottom] = tile.crop;
-    let [core_left, core_top, core_right, core_bottom] = tile.core;
     let mut crop = GrayImage::new(right - left, bottom - top);
-    for y in core_top..core_bottom {
-        for x in core_left..core_right {
+    for y in top..bottom {
+        for x in left..right {
             if mask.get_pixel(x, y)[0] >= 127 {
                 crop.put_pixel(x - left, y - top, Luma([u8::MAX]));
             }
@@ -715,27 +833,6 @@ fn polygon_edge_distance_squared(point: (f32, f32), polygon: &[(f32, f32)]) -> f
     minimum
 }
 
-fn mask_bounds_in(
-    mask: &GrayImage,
-    [region_left, region_top, region_right, region_bottom]: [u32; 4],
-) -> Option<[u32; 4]> {
-    let mut left = region_right;
-    let mut top = region_bottom;
-    let mut right = 0;
-    let mut bottom = 0;
-    for y in region_top..region_bottom {
-        for x in region_left..region_right {
-            if mask.get_pixel(x, y)[0] >= 127 {
-                left = left.min(x);
-                top = top.min(y);
-                right = right.max(x + 1);
-                bottom = bottom.max(y + 1);
-            }
-        }
-    }
-    (right > left && bottom > top).then_some([left, top, right, bottom])
-}
-
 fn median(values: &mut [u8]) -> u8 {
     values.sort_unstable();
     let middle = values.len() / 2;
@@ -757,15 +854,19 @@ fn standard_deviation(values: &[u8], center: f64) -> f64 {
 
 fn composite_generated(
     output: &mut RgbImage,
-    mask: &GrayImage,
-    tile: InpaintTile,
+    labels: &ImageBuffer<Luma<u32>, Vec<u32>>,
+    tile: &InpaintTile,
     generated: &RgbImage,
 ) {
     let [left, top, _, _] = tile.crop;
     let [core_left, core_top, core_right, core_bottom] = tile.core;
     for y in core_top..core_bottom {
         for x in core_left..core_right {
-            if mask.get_pixel(x, y)[0] >= 127 {
+            if tile
+                .components
+                .binary_search(&labels.get_pixel(x, y)[0])
+                .is_ok()
+            {
                 output.put_pixel(x, y, *generated.get_pixel(x - left, y - top));
             }
         }
@@ -926,6 +1027,77 @@ mod tests {
         assert_eq!(calls, 0);
         assert_eq!(output.get_pixel(45, 50), &Rgb([245, 245, 245]));
         assert_eq!(output.get_pixel(150, 50), &Rgb([250, 240, 220]));
+    }
+
+    #[test]
+    fn connected_mask_crossing_both_page_grid_axes_is_inferred_once() {
+        let image = RgbImage::from_pixel(900, 900, Rgb([20, 40, 60]));
+        let mut mask = GrayImage::new(900, 900);
+        for y in 500..525 {
+            for x in 500..525 {
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+        let mut calls = 0;
+
+        let output = inpaint_tiled(
+            &DynamicImage::ImageRgb8(image),
+            &mask,
+            &mask,
+            &[],
+            |tile, tile_mask| {
+                calls += 1;
+                assert_eq!(
+                    tile_mask.pixels().filter(|pixel| pixel[0] >= 127).count(),
+                    25 * 25
+                );
+                Ok(DynamicImage::ImageRgb8(RgbImage::from_pixel(
+                    tile.width(),
+                    tile.height(),
+                    Rgb([1, 2, 3]),
+                )))
+            },
+        )
+        .unwrap()
+        .to_rgb8();
+
+        assert_eq!(calls, 1);
+        assert_eq!(output.get_pixel(500, 500), &Rgb([1, 2, 3]));
+        assert_eq!(output.get_pixel(524, 524), &Rgb([1, 2, 3]));
+        assert_eq!(output.get_pixel(499, 499), &Rgb([20, 40, 60]));
+    }
+
+    #[test]
+    fn oversized_component_tiles_mask_their_continuation_context() {
+        let mut mask = GrayImage::new(1000, 300);
+        for y in 100..120 {
+            for x in 50..850 {
+                mask.put_pixel(x, y, Luma([u8::MAX]));
+            }
+        }
+
+        let (labels, tiles) = inpaint_tiles(&mask);
+
+        assert_eq!(tiles.len(), 2);
+        for tile in &tiles {
+            assert!(tile.crop[2] - tile.crop[0] <= TILE_SIZE + TILE_CONTEXT * 2);
+            assert!(tile.crop[3] - tile.crop[1] <= TILE_SIZE + TILE_CONTEXT * 2);
+            let label = tile.components[0];
+            let [left, top, right, bottom] = tile.core;
+            let mut owned = 0;
+            for y in top..bottom {
+                for x in left..right {
+                    if labels.get_pixel(x, y)[0] == label {
+                        owned += 1;
+                    }
+                }
+            }
+            let masked = crop_tile_mask(&mask, tile)
+                .pixels()
+                .filter(|pixel| pixel[0] >= 127)
+                .count();
+            assert!(masked > owned);
+        }
     }
 
     #[test]
