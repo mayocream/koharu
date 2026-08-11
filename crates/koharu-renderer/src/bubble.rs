@@ -101,6 +101,7 @@ fn topological_flow_cells(
 
 #[derive(Clone)]
 struct LobeSplit {
+    structural_support: f32,
     length_squared: f32,
     first: Vec<(f32, f32)>,
     second: Vec<(f32, f32)>,
@@ -126,20 +127,25 @@ fn decompose_lobes(
     }
     let minimum_reflex_cross = tolerance * tolerance * 0.05;
     let reflex = (0..simplified.len())
-        .filter(|&index| {
+        .filter_map(|index| {
             let previous = polygon[simplified[(index + simplified.len() - 1) % simplified.len()]];
             let current = polygon[simplified[index]];
             let next = polygon[simplified[(index + 1) % simplified.len()]];
-            turn(previous, current, next) * orientation < -minimum_reflex_cross
+            let cross = turn(previous, current, next) * orientation;
+            if cross >= -minimum_reflex_cross {
+                return None;
+            }
+            let edge_product =
+                (distance_squared(previous, current) * distance_squared(current, next)).sqrt();
+            (edge_product > f32::EPSILON).then_some((simplified[index], -cross / edge_product))
         })
-        .map(|index| simplified[index])
         .collect::<Vec<_>>();
 
     let mut candidates = Vec::new();
     for first_index in 0..reflex.len() {
         for second_index in first_index + 1..reflex.len() {
-            let first_vertex = reflex[first_index];
-            let second_vertex = reflex[second_index];
+            let (first_vertex, first_strength) = reflex[first_index];
+            let (second_vertex, second_strength) = reflex[second_index];
             if !valid_diagonal(&polygon, first_vertex, second_vertex, tolerance) {
                 continue;
             }
@@ -171,8 +177,13 @@ fn decompose_lobes(
             if !assigns_cleanly || first_anchors.is_empty() || second_anchors.is_empty() {
                 continue;
             }
+            let length_squared = distance_squared(polygon[first_vertex], polygon[second_vertex]);
+            if length_squared <= f32::EPSILON {
+                continue;
+            }
             candidates.push(LobeSplit {
-                length_squared: distance_squared(polygon[first_vertex], polygon[second_vertex]),
+                structural_support: first_strength.min(second_strength) / length_squared.sqrt(),
+                length_squared,
                 first,
                 second,
                 first_anchors,
@@ -180,7 +191,15 @@ fn decompose_lobes(
             });
         }
     }
-    candidates.sort_by(|left, right| left.length_squared.total_cmp(&right.length_squared));
+    // A structural neck is a short cut supported by sharp concave corners. Ranking
+    // their normalized corner strength per unit length rejects both long cuts
+    // across a lobe and short cuts terminating on weak segmentation stair steps.
+    candidates.sort_by(|left, right| {
+        right
+            .structural_support
+            .total_cmp(&left.structural_support)
+            .then_with(|| left.length_squared.total_cmp(&right.length_squared))
+    });
     for candidate in candidates {
         let Some(mut first) = decompose_lobes(candidate.first, candidate.first_anchors, tolerance)
         else {
@@ -713,6 +732,175 @@ mod tests {
         assert!(point_in_polygon(&cells[1], (65.0, 50.0), 0.001));
         // The anchor bisector is x=40; x=50 proves that the physical neck won.
         assert!(!contains_edge(&cells[0], (40.0, 0.0), (40.0, 100.0)));
+    }
+
+    #[test]
+    fn flow_cells_ignore_edge_noise_when_splitting_overlapping_boxes() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 167.0,
+                height: 311.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![
+            (163.0, 0.0),
+            (162.0, 1.0),
+            (71.0, 1.0),
+            (70.0, 2.0),
+            (62.0, 1.0),
+            (60.0, 2.0),
+            (59.0, 3.0),
+            (59.0, 56.0),
+            (60.0, 57.0),
+            (59.0, 100.0),
+            (56.0, 102.0),
+            (17.0, 101.0),
+            (9.0, 103.0),
+            (3.0, 102.0),
+            (1.0, 104.0),
+            (0.0, 107.0),
+            (1.0, 110.0),
+            (0.0, 182.0),
+            (1.0, 183.0),
+            (2.0, 234.0),
+            (1.0, 235.0),
+            (0.0, 282.0),
+            (2.0, 288.0),
+            (2.0, 309.0),
+            (7.0, 311.0),
+            (46.0, 311.0),
+            (47.0, 310.0),
+            (89.0, 311.0),
+            (93.0, 308.0),
+            (92.0, 300.0),
+            (93.0, 294.0),
+            (92.0, 239.0),
+            (93.0, 237.0),
+            (95.0, 235.0),
+            (164.0, 235.0),
+            (166.0, 233.0),
+            (165.0, 136.0),
+            (167.0, 117.0),
+            (167.0, 72.0),
+            (166.0, 71.0),
+            (167.0, 23.0),
+            (166.0, 1.0),
+        ];
+
+        let cells = flow_cells(frame, &contour, &[(114.0, 115.0), (47.0, 207.0)]);
+
+        assert!(contains_edge(&cells[0], (59.0, 100.0), (95.0, 235.0)));
+        assert!(contains_edge(&cells[1], (59.0, 100.0), (95.0, 235.0)));
+        assert!(!contains_edge(&cells[0], (59.0, 100.0), (165.0, 136.0)));
+    }
+
+    #[test]
+    fn flow_cells_keep_the_short_neck_between_rounded_lobes() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 91.0,
+                height: 181.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![
+            (62.0, 0.0),
+            (61.0, 1.0),
+            (50.0, 1.0),
+            (49.0, 2.0),
+            (47.0, 2.0),
+            (41.0, 5.0),
+            (37.0, 10.0),
+            (37.0, 18.0),
+            (36.0, 19.0),
+            (36.0, 38.0),
+            (35.0, 39.0),
+            (35.0, 51.0),
+            (32.0, 54.0),
+            (30.0, 54.0),
+            (29.0, 55.0),
+            (25.0, 55.0),
+            (24.0, 56.0),
+            (17.0, 56.0),
+            (16.0, 57.0),
+            (13.0, 57.0),
+            (10.0, 59.0),
+            (6.0, 60.0),
+            (4.0, 62.0),
+            (2.0, 66.0),
+            (2.0, 68.0),
+            (1.0, 69.0),
+            (1.0, 80.0),
+            (0.0, 81.0),
+            (0.0, 105.0),
+            (1.0, 106.0),
+            (1.0, 134.0),
+            (2.0, 135.0),
+            (2.0, 144.0),
+            (3.0, 145.0),
+            (3.0, 153.0),
+            (4.0, 154.0),
+            (4.0, 161.0),
+            (5.0, 162.0),
+            (5.0, 166.0),
+            (6.0, 167.0),
+            (6.0, 169.0),
+            (7.0, 171.0),
+            (12.0, 176.0),
+            (14.0, 177.0),
+            (20.0, 178.0),
+            (21.0, 179.0),
+            (24.0, 179.0),
+            (25.0, 180.0),
+            (39.0, 180.0),
+            (40.0, 181.0),
+            (47.0, 181.0),
+            (48.0, 180.0),
+            (50.0, 180.0),
+            (54.0, 178.0),
+            (59.0, 173.0),
+            (60.0, 170.0),
+            (63.0, 166.0),
+            (64.0, 160.0),
+            (65.0, 159.0),
+            (65.0, 156.0),
+            (66.0, 155.0),
+            (66.0, 143.0),
+            (68.0, 141.0),
+            (71.0, 141.0),
+            (72.0, 140.0),
+            (78.0, 140.0),
+            (81.0, 138.0),
+            (85.0, 137.0),
+            (87.0, 135.0),
+            (89.0, 131.0),
+            (89.0, 126.0),
+            (90.0, 125.0),
+            (90.0, 115.0),
+            (91.0, 114.0),
+            (91.0, 51.0),
+            (90.0, 50.0),
+            (90.0, 18.0),
+            (89.0, 17.0),
+            (89.0, 13.0),
+            (88.0, 12.0),
+            (88.0, 9.0),
+            (87.0, 7.0),
+            (83.0, 3.0),
+            (81.0, 2.0),
+            (77.0, 2.0),
+            (76.0, 1.0),
+        ];
+
+        let cells = flow_cells(frame, &contour, &[(65.0, 71.0), (29.0, 118.0)]);
+
+        assert!(contains_edge(&cells[0], (35.0, 51.0), (90.0, 115.0)));
+        assert!(contains_edge(&cells[1], (35.0, 51.0), (90.0, 115.0)));
     }
 
     #[test]
