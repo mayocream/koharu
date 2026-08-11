@@ -169,8 +169,10 @@ mod tests {
             vulkan: true,
         };
         let mut plan = Plan::default();
-        let llama = plan.require::<Llama>(&hardware).unwrap();
-        let diffusion = plan.require::<Diffusion>(&hardware).unwrap();
+        let llama = plan.insert(Llama::WindowsCuda.into(), &hardware).unwrap();
+        let diffusion = plan
+            .insert(Diffusion::WindowsCuda.into(), &hardware)
+            .unwrap();
         plan.sequence(llama, diffusion);
         plan.validate().unwrap();
 
