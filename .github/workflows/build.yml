@@ -37,18 +37,6 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
-      - uses: Jimver/cuda-toolkit@master
-        if: startsWith(matrix.os, 'ubuntu')
-        with:
-          cuda: '13.0.0'
-          log-file-suffix: '${{ matrix.os }}.txt'
-      - uses: Jimver/cuda-toolkit@master
-        if: startsWith(matrix.os, 'windows')
-        with:
-          cuda: '13.0.0'
-          method: 'network'
-          sub-packages: '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "nvrtc", "nvrtc_dev"]'
-          log-file-suffix: '${{ matrix.os }}.txt'
       - uses: ilammy/msvc-dev-cmd@v1
         if: startsWith(matrix.os, 'windows')
       - uses: actions/cache@v6
