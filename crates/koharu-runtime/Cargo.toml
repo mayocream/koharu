@@ -30,7 +30,6 @@ libloading = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 fast-glob = { workspace = true }
-cudarc = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
 strum = { workspace = true }
