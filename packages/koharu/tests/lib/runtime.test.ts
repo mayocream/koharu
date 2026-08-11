@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { createElement } from 'react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { createElement, StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Providers from '@/app/providers'
@@ -97,6 +97,31 @@ describe('Tauri runtime', () => {
     expect(await screen.findByText('Loading')).toBeInTheDocument()
     projectPending.resolve(null)
     expect(await screen.findByText('Closed')).toBeInTheDocument()
+    view.unmount()
+  })
+
+  it('keeps one live job channel through Strict Mode effect replay', async () => {
+    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
+    const view = render(
+      createElement(StrictMode, null, createElement(Providers, null, createElement('div'))),
+    )
+
+    await waitFor(() => expect(binding).toHaveBeenCalledTimes(1))
+    const [, jobChannel] = binding.mock.calls[0]
+    act(() => {
+      jobChannel.onmessage({
+        id: 'job',
+        state: 'running',
+        completed: 0,
+        total: 4,
+        page: 'page',
+        stage: 'detection',
+        model: 'model',
+        error: null,
+      })
+    })
+
+    expect(useKoharuStore.getState().jobs.job).toMatchObject({ state: 'running', total: 4 })
     view.unmount()
   })
 

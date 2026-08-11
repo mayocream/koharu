@@ -2,7 +2,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query'
 import { Channel } from '@tauri-apps/api/core'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 
 import { StartupView } from '@/components/app/StartupView'
@@ -31,52 +31,58 @@ import { Toaster } from '@koharu/ui/components/toast'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 export function Providers({ children }: { children: ReactNode }) {
+  const runtime = useRef({ active: false, bound: false })
+
   useEffect(() => {
-    let active = true
-    const completed = new Map<string, number>()
-    const channel = <T,>(receive: (value: T) => void) =>
-      new Channel<T>((value) => {
-        if (active) receive(value)
-      })
+    const lifecycle = runtime.current
+    lifecycle.active = true
+    if (!lifecycle.bound) {
+      lifecycle.bound = true
+      const completed = new Map<string, number>()
+      const channel = <T,>(receive: (value: T) => void) =>
+        new Channel<T>((value) => {
+          if (lifecycle.active) receive(value)
+        })
 
-    void refreshTranslationModels().catch(() => undefined)
+      void refreshTranslationModels().catch(() => undefined)
 
-    void commands
-      .subscribe(
-        channel<CanvasState>(receiveCanvas),
-        channel<Job>((job) => {
-          const previous = completed.get(job.id) ?? 0
-          completed.set(job.id, job.completed)
-          receiveJob(job)
-          if (job.completed > previous || job.state !== 'running') {
-            void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
-          }
-        }),
-        channel<Download>(receiveDownload),
-        channel<ModelResources>(receiveResources),
-        channel<ProjectInfo | null>((project) => {
-          const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
-          queryClient.setQueryData(projectKey, project)
-          if (previous?.name !== project?.name) {
-            const store = useKoharuStore.getState()
-            store.selectPages(project?.active_page ? [project.active_page] : [])
-            store.selectLayers([])
-          }
-          if (project) {
-            void refresh(pagesKey, pageKey).catch(() => undefined)
-          } else {
-            queryClient.setQueryData(pagesKey, [])
-            queryClient.setQueryData(pageKey, null)
-          }
-        }),
-      )
-      .then((state) => {
-        if (active) receiveStartupState(state)
-      })
-      .catch(() => undefined)
+      void commands
+        .subscribe(
+          channel<CanvasState>(receiveCanvas),
+          channel<Job>((job) => {
+            const previous = completed.get(job.id) ?? 0
+            completed.set(job.id, job.completed)
+            receiveJob(job)
+            if (job.completed > previous || job.state !== 'running') {
+              void refresh(projectKey, pagesKey, pageKey).catch(() => undefined)
+            }
+          }),
+          channel<Download>(receiveDownload),
+          channel<ModelResources>(receiveResources),
+          channel<ProjectInfo | null>((project) => {
+            const previous = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+            queryClient.setQueryData(projectKey, project)
+            if (previous?.name !== project?.name) {
+              const store = useKoharuStore.getState()
+              store.selectPages(project?.active_page ? [project.active_page] : [])
+              store.selectLayers([])
+            }
+            if (project) {
+              void refresh(pagesKey, pageKey).catch(() => undefined)
+            } else {
+              queryClient.setQueryData(pagesKey, [])
+              queryClient.setQueryData(pageKey, null)
+            }
+          }),
+        )
+        .then((state) => {
+          if (lifecycle.active) receiveStartupState(state)
+        })
+        .catch(() => undefined)
+    }
 
     return () => {
-      active = false
+      lifecycle.active = false
     }
   }, [])
 
