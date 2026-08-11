@@ -1,0 +1,71 @@
+---
+title: 開発環境のセットアップ
+description: Tauri アプリのビルド、集中チェック、IPC 生成、ドキュメントビルドを行います。
+---
+
+# 開発環境のセットアップ
+
+## 前提条件
+
+- Rust 1.95 以降と Rust 2024 edition ツールチェーン
+- Bun 1.0 以降
+- LLVM 15 以降
+- ネイティブ依存関係に必要な C/C++ ビルドツール
+
+Linux では WebKitGTK 4.1 と `.github/workflows/build.yml` にある Tauri デスクトップライブラリが必要です。Windows は MSVC ビルドツールを使います。
+
+## インストールと実行
+
+```bash
+git clone https://github.com/mayocream/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun dev` は Next.js UI と Tauri アプリを同時に起動します。
+
+Windows では起動前に既定の WebView2 デバッグエンドポイントを設定します。
+
+```powershell
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=4000'
+bun dev
+```
+
+接続先は `http://127.0.0.1:4000` です。
+
+## ビルドと集中チェック
+
+```bash
+bun run build
+
+cargo check -p koharu
+cargo test -p koharu-pipeline
+cargo fmt --all --check
+
+bun run lint
+bun run test
+bun run check
+bun run --filter @koharu/ui typecheck
+```
+
+`bun run build` は `tauri build --no-bundle` を使い、実行ファイルを `target/release` に出力します。インストーラー作成はリリースワークフローの責任です。E2E テストは明示的に必要な作業だけで実行します。
+
+## IPC バインディング
+
+Rust のコマンド署名と Specta 型が正本です。
+
+```bash
+cargo run -p koharu --bin generate
+```
+
+`packages/koharu/lib/protocol.ts` を手編集しないでください。
+
+## ドキュメント
+
+```bash
+bun run docs:dev
+bun run docs:build
+```
+
+コンテンツと単一の設定ファイル `docs/zensical.toml` は `docs` にあります。英語は `/`、日本語は `/ja-JP/`、簡体字中国語は `/zh-CN/` に配置し、3 言語のページ集合と共有ナビゲーション構造を同一に保ちます。

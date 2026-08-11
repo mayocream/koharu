@@ -1,58 +1,135 @@
 [project]
-site_name = "koharu"
-site_description = "ML-powered manga translator, written in Rust."
+site_name = "Koharu"
+site_description = "A practical guide to Koharu's editable manga translation workflow."
 site_author = "Mayo"
 site_url = "https://koharu.rs/"
 repo_url = "https://github.com/mayocream/koharu"
 repo_name = "mayocream/koharu"
-edit_uri = "edit/main/docs/en-US/"
-docs_dir = "en-US"
+edit_uri = "edit/main/docs/"
+docs_dir = "."
 site_dir = "site"
+extra_css = ["stylesheets/extra.css"]
+extra_javascript = ["javascripts/navigation.js"]
 nav = [
-  {"Overview" = "index.md"},
-  {"Tutorials" = [
-    "tutorials/index.md",
-    "tutorials/translate-your-first-page.md",
-  ]},
-  {"How-To Guides" = [
-    "how-to/index.md",
-    "how-to/install-koharu.md",
-    "how-to/runtime-and-model-downloads.md",
-    "how-to/run-gui-headless-and-mcp.md",
-    "how-to/configure-mcp-clients.md",
-    "how-to/use-openai-compatible-api.md",
-    "how-to/use-codex-image-generation.md",
-    "how-to/export-and-manage-projects.md",
-    "how-to/build-from-source.md",
-    "how-to/troubleshooting.md",
-  ]},
-  {"Explanation" = [
-    "explanation/index.md",
-    "explanation/how-koharu-works.md",
-    "explanation/technical-deep-dive.md",
-    "explanation/text-rendering-and-vertical-cjk-layout.md",
-    "explanation/acceleration-and-runtime.md",
-    "explanation/models-and-providers.md",
-  ]},
-  {"Reference" = [
-    "reference/index.md",
-    "reference/cli.md",
-    "reference/http-api.md",
-    "reference/mcp-tools.md",
-    "reference/settings.md",
-    "reference/keyboard-shortcuts.md",
-  ]},
-  {"Contribute" = [
-    "contribute/introduction.md",
-    "contribute/development.md",
-  ]},
+  { "Start" = [
+    { "English" = [
+      { "Overview" = "index.md" },
+      "getting-started/install.md",
+      "getting-started/first-project.md",
+      "getting-started/runtime-models-and-hardware.md",
+    ] },
+    { "日本語" = [
+      { "概要" = "ja-JP/index.md" },
+      "ja-JP/getting-started/install.md",
+      "ja-JP/getting-started/first-project.md",
+      "ja-JP/getting-started/runtime-models-and-hardware.md",
+    ] },
+    { "简体中文" = [
+      { "概览" = "zh-CN/index.md" },
+      "zh-CN/getting-started/install.md",
+      "zh-CN/getting-started/first-project.md",
+      "zh-CN/getting-started/runtime-models-and-hardware.md",
+    ] },
+  ] },
+  { "Workflow" = [
+    { "English" = [
+      "workflow/projects-and-imports.md",
+      "workflow/process-pages.md",
+      "workflow/review-text.md",
+      "workflow/canvas-basics.md",
+      "workflow/cleanup-and-inpainting.md",
+      "workflow/typesetting.md",
+      "workflow/export.md",
+    ] },
+    { "日本語" = [
+      "ja-JP/workflow/projects-and-imports.md",
+      "ja-JP/workflow/process-pages.md",
+      "ja-JP/workflow/review-text.md",
+      "ja-JP/workflow/canvas-basics.md",
+      "ja-JP/workflow/cleanup-and-inpainting.md",
+      "ja-JP/workflow/typesetting.md",
+      "ja-JP/workflow/export.md",
+    ] },
+    { "简体中文" = [
+      "zh-CN/workflow/projects-and-imports.md",
+      "zh-CN/workflow/process-pages.md",
+      "zh-CN/workflow/review-text.md",
+      "zh-CN/workflow/canvas-basics.md",
+      "zh-CN/workflow/cleanup-and-inpainting.md",
+      "zh-CN/workflow/typesetting.md",
+      "zh-CN/workflow/export.md",
+    ] },
+  ] },
+  { "Models" = [
+    { "English" = [
+      "models/vision-and-inpainting.md",
+      "models/translation-providers.md",
+      "models/translation-and-generation.md",
+    ] },
+    { "日本語" = [
+      "ja-JP/models/vision-and-inpainting.md",
+      "ja-JP/models/translation-providers.md",
+      "ja-JP/models/translation-and-generation.md",
+    ] },
+    { "简体中文" = [
+      "zh-CN/models/vision-and-inpainting.md",
+      "zh-CN/models/translation-providers.md",
+      "zh-CN/models/translation-and-generation.md",
+    ] },
+  ] },
+  { "Agent" = [
+    { "English" = ["agent/setup.md", "agent/work-with-projects.md"] },
+    { "日本語" = ["ja-JP/agent/setup.md", "ja-JP/agent/work-with-projects.md"] },
+    { "简体中文" = ["zh-CN/agent/setup.md", "zh-CN/agent/work-with-projects.md"] },
+  ] },
+  { "Reference" = [
+    { "English" = [
+      "reference/settings.md",
+      "reference/keyboard-shortcuts.md",
+      "reference/formats-and-data.md",
+      "reference/troubleshooting.md",
+    ] },
+    { "日本語" = [
+      "ja-JP/reference/settings.md",
+      "ja-JP/reference/keyboard-shortcuts.md",
+      "ja-JP/reference/formats-and-data.md",
+      "ja-JP/reference/troubleshooting.md",
+    ] },
+    { "简体中文" = [
+      "zh-CN/reference/settings.md",
+      "zh-CN/reference/keyboard-shortcuts.md",
+      "zh-CN/reference/formats-and-data.md",
+      "zh-CN/reference/troubleshooting.md",
+    ] },
+  ] },
+  { "Development" = [
+    { "English" = [
+      "development/contributing.md",
+      "development/setup.md",
+      "development/architecture.md",
+      "development/scene-and-storage.md",
+      "development/pipeline-rendering-and-desktop.md",
+    ] },
+    { "日本語" = [
+      "ja-JP/development/contributing.md",
+      "ja-JP/development/setup.md",
+      "ja-JP/development/architecture.md",
+      "ja-JP/development/scene-and-storage.md",
+      "ja-JP/development/pipeline-rendering-and-desktop.md",
+    ] },
+    { "简体中文" = [
+      "zh-CN/development/contributing.md",
+      "zh-CN/development/setup.md",
+      "zh-CN/development/architecture.md",
+      "zh-CN/development/scene-and-storage.md",
+      "zh-CN/development/pipeline-rendering-and-desktop.md",
+    ] },
+  ] },
 ]
 
 [project.extra]
 generator = false
-og_image = "assets/koharu-screenshot-en.png"
-og_image_alt = "Koharu manga translator interface"
-twitter_card = "summary_large_image"
+homepage = "/"
 
 [[project.extra.alternate]]
 name = "English"
@@ -62,12 +139,12 @@ lang = "en"
 [[project.extra.alternate]]
 name = "日本語"
 link = "/ja-JP/"
-lang = "ja-JP"
+lang = "ja"
 
 [[project.extra.alternate]]
 name = "简体中文"
 link = "/zh-CN/"
-lang = "zh-CN"
+lang = "zh"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
@@ -82,12 +159,12 @@ icon = "fontawesome/brands/discord"
 link = "https://discord.gg/mHvHkxGnUY"
 
 [project.theme]
+variant = "modern"
 language = "en"
 custom_dir = "overrides"
-logo = "assets/Koharu_Halo.png"
-favicon = "assets/Koharu_Halo.png"
-font.text = "Nunito"
-font.code = "Fira Code"
+logo = "assets/koharu-icon.png"
+favicon = "assets/koharu-icon.png"
+font = false
 features = [
   "navigation.sections",
   "navigation.indexes",
@@ -107,32 +184,25 @@ features = [
 [project.theme.icon]
 repo = "fontawesome/brands/github"
 
-[project.theme.icon.admonition]
-question = "fontawesome/solid/paper-plane"
-user = "lucide/user-round"
-
-# Palette toggle for automatic mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
-primary = "pink"
-accent = "teal"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun-moon"
 toggle.name = "Switch to light mode"
 
-# Palette toggle for light mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
-primary = "pink"
-accent = "teal"
+primary = "custom"
+accent = "custom"
 scheme = "default"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
-# Palette toggle for dark mode
 [[project.theme.palette]]
 media = "(prefers-color-scheme: dark)"
-primary = "pink"
-accent = "teal"
+primary = "custom"
+accent = "custom"
 scheme = "slate"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to system preference"

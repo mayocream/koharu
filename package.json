@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build --no-bundle",
+    "docs:dev": "cd docs && uvx --from zensical==0.0.43 zensical serve",
+    "docs:build": "cd docs && uvx --from zensical==0.0.43 zensical build",
     "lint": "bun run --filter '@koharu/*' lint",
     "test": "bun run --filter @koharu/app test",
     "sponsors": "cd .github/sponsorkit && sponsorkit --force",

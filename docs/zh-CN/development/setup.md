@@ -1,0 +1,71 @@
+---
+title: 开发环境
+description: 构建 Tauri 桌面应用、运行聚焦检查、生成 IPC 绑定并构建文档。
+---
+
+# 开发环境
+
+## 前置要求
+
+- Rust 1.95 或更高版本及 Rust 2024 edition 工具链
+- Bun 1.0 或更高版本
+- LLVM 15 或更高版本
+- 原生依赖需要的平台 C/C++ 构建工具
+
+Linux 还需要 WebKitGTK 4.1 与 `.github/workflows/build.yml` 中列出的 Tauri 桌面库。Windows 使用 MSVC 构建工具。
+
+## 安装与运行
+
+```bash
+git clone https://github.com/mayocream/koharu.git
+cd koharu
+bun install
+bun dev
+```
+
+`bun dev` 会同时启动 Next.js UI 与 Tauri 应用。
+
+Windows 启动前请设置默认 WebView2 调试端点：
+
+```powershell
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS='--remote-debugging-port=4000'
+bun dev
+```
+
+端点为 `http://127.0.0.1:4000`。
+
+## 构建与聚焦检查
+
+```bash
+bun run build
+
+cargo check -p koharu
+cargo test -p koharu-pipeline
+cargo fmt --all --check
+
+bun run lint
+bun run test
+bun run check
+bun run --filter @koharu/ui typecheck
+```
+
+`bun run build` 使用 `tauri build --no-bundle`，可执行文件写入 `target/release`。安装包由发布工作流构建。只有任务明确要求时才运行端到端测试。
+
+## IPC 绑定
+
+Rust 命令签名与 Specta 类型是权威源：
+
+```bash
+cargo run -p koharu --bin generate
+```
+
+不要手工编辑 `packages/koharu/lib/protocol.ts`。
+
+## 文档
+
+```bash
+bun run docs:dev
+bun run docs:build
+```
+
+内容和唯一的配置文件 `docs/zensical.toml` 都位于 `docs`。英语位于 `/`，日语位于 `/ja-JP/`，简体中文位于 `/zh-CN/`；请保持三种语言的页面集合与共享导航结构一致。

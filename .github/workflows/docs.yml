@@ -14,15 +14,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/configure-pages@v6
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
-      - run: pip install zensical
-      - run: zensical build -f docs/zensical.toml --clean
-      - run: zensical build -f docs/zensical.ja-JP.toml
-      - run: zensical build -f docs/zensical.zh-CN.toml
+      - uses: astral-sh/setup-uv@v9
+      - uses: actions/configure-pages@v6
+      - run: uvx --from zensical==0.0.43 zensical build
+        working-directory: docs
       - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/site

@@ -3,7 +3,7 @@
 Thank you for your interest in contributing to Koharu!
 
 > [!IMPORTANT]
-> Please read the complete contributing guide on the [website](https://koharu.rs/contribute/introduction/).
+> Please read the complete contributing guide on the [website](https://koharu.rs/development/contributing/).
 
 Please check out our [good first issues](https://github.com/mayocream/koharu/contribute) or ask for guidance on [Discord](https://discord.gg/mHvHkxGnUY).
 
