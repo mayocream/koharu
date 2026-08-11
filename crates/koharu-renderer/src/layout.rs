@@ -422,22 +422,41 @@ impl<'a> TextLayout<'a> {
             // A balloon's usable width changes when the text reflows to a different
             // number of lines, so a smaller font can fail even though a larger one
             // fits. Search from largest to smallest instead of assuming monotonicity.
-            // Last-resort hyphenation applies to the whole fitting attempt, not each
-            // individual size. Otherwise a larger, fragmented setting wins over a
-            // slightly smaller unhyphenated one.
             if self.hyphenation_policy == HyphenationPolicy::LastResort {
                 let mut unhyphenated = self.clone();
                 unhyphenated.hyphenation_policy = HyphenationPolicy::Disabled;
-                if let Some(best) = largest_fitting_font_size(
+                let clean = largest_fitting_font_size(
                     minimum,
                     maximum,
                     |size| unhyphenated.run_with_size(text, size),
                     fits,
-                )? {
-                    return Ok(best);
+                )?;
+                // Avoiding a word break is no longer useful once it pins the text to
+                // the configured readability floor. Compare raster-size buckets so
+                // hyphenation must recover a visible pixel, not a tuned percentage.
+                if clean
+                    .as_ref()
+                    .is_some_and(|best| best.font_size.floor() > minimum.floor())
+                {
+                    return Ok(clean.unwrap());
                 }
-            }
-            if let Some(best) = largest_fitting_font_size(
+                let hyphenated = largest_fitting_font_size(
+                    minimum,
+                    maximum,
+                    |size| self.run_with_size(text, size),
+                    fits,
+                )?;
+                match (clean, hyphenated) {
+                    (Some(clean), Some(hyphenated))
+                        if hyphenated.font_size.floor() > clean.font_size.floor() =>
+                    {
+                        return Ok(hyphenated);
+                    }
+                    (Some(clean), _) => return Ok(clean),
+                    (None, Some(hyphenated)) => return Ok(hyphenated),
+                    (None, None) => {}
+                }
+            } else if let Some(best) = largest_fitting_font_size(
                 minimum,
                 maximum,
                 |size| self.run_with_size(text, size),
@@ -2969,6 +2988,41 @@ mod tests {
         assert!(!hyphenated.overflowed());
         assert!(hyphenated.font_size + 0.01 >= unhyphenated.font_size);
         assert!(hyphenated.lines.windows(2).any(|lines| {
+            let before = text[..lines[0].range.end].chars().next_back();
+            let after = text[lines[1].range.start..].chars().next();
+            matches!((before, after), (Some(left), Some(right)) if left.is_alphabetic() && right.is_alphabetic())
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn comic_auto_fit_hyphenates_at_the_readability_floor() -> anyhow::Result<()> {
+        let font = any_system_font();
+        let text = "For the villagers, it's a common occurrence.";
+        let layout = |policy| {
+            TextLayout::new(&font)
+                .with_max_font_size(80.0)
+                .with_min_font_size(9.0)
+                .with_line_height(1.2)
+                .with_hyphenation_language_tag("en")
+                .with_hyphenation_policy(policy)
+                .with_alignment(TextAlign::Center)
+                .with_max_width(68.0)
+                .with_max_height(218.0)
+                .with_comic_balloon(
+                    68.0,
+                    218.0,
+                    vec![(0.0, 0.0), (68.0, 0.0), (68.0, 218.0), (0.0, 218.0)],
+                    4.0,
+                )
+                .run(text)
+        };
+        let clean = layout(HyphenationPolicy::Disabled)?;
+        let last_resort = layout(HyphenationPolicy::LastResort)?;
+
+        assert_eq!(clean.font_size.floor(), 9.0);
+        assert!(last_resort.font_size.floor() > clean.font_size.floor());
+        assert!(last_resort.lines.windows(2).any(|lines| {
             let before = text[..lines[0].range.end].chars().next_back();
             let after = text[lines[1].range.start..].chars().next();
             matches!((before, after), (Some(left), Some(right)) if left.is_alphabetic() && right.is_alphabetic())

@@ -125,6 +125,12 @@ fn decompose_lobes(
     if orientation == 0.0 {
         return None;
     }
+    let hull = convex_hull(
+        &simplified
+            .iter()
+            .map(|&index| polygon[index])
+            .collect::<Vec<_>>(),
+    );
     let minimum_reflex_cross = tolerance * tolerance * 0.05;
     let reflex = (0..simplified.len())
         .filter_map(|index| {
@@ -137,15 +143,19 @@ fn decompose_lobes(
             }
             let edge_product =
                 (distance_squared(previous, current) * distance_squared(current, next)).sqrt();
-            (edge_product > f32::EPSILON).then_some((simplified[index], -cross / edge_product))
+            (edge_product > f32::EPSILON).then(|| {
+                let corner_strength = -cross / edge_product;
+                let recession = distance_to_polygon_boundary(current, &hull);
+                (simplified[index], corner_strength * recession)
+            })
         })
         .collect::<Vec<_>>();
 
     let mut candidates = Vec::new();
     for first_index in 0..reflex.len() {
         for second_index in first_index + 1..reflex.len() {
-            let (first_vertex, first_strength) = reflex[first_index];
-            let (second_vertex, second_strength) = reflex[second_index];
+            let (first_vertex, first_support) = reflex[first_index];
+            let (second_vertex, second_support) = reflex[second_index];
             if !valid_diagonal(&polygon, first_vertex, second_vertex, tolerance) {
                 continue;
             }
@@ -182,7 +192,7 @@ fn decompose_lobes(
                 continue;
             }
             candidates.push(LobeSplit {
-                structural_support: first_strength.min(second_strength) / length_squared.sqrt(),
+                structural_support: first_support.min(second_support) / length_squared.sqrt(),
                 length_squared,
                 first,
                 second,
@@ -191,9 +201,9 @@ fn decompose_lobes(
             });
         }
     }
-    // A structural neck is a short cut supported by sharp concave corners. Ranking
-    // their normalized corner strength per unit length rejects both long cuts
-    // across a lobe and short cuts terminating on weak segmentation stair steps.
+    // A structural neck connects sharp corners that are recessed from the bubble's
+    // convex envelope. Recession makes outer-wall raster kinks contribute almost no
+    // support without imposing a pixel- or scale-specific rejection threshold.
     candidates.sort_by(|left, right| {
         right
             .structural_support
@@ -213,6 +223,51 @@ fn decompose_lobes(
         return Some(first);
     }
     None
+}
+
+fn convex_hull(points: &[(f32, f32)]) -> Vec<(f32, f32)> {
+    let mut points = points.to_vec();
+    points.sort_by(|left, right| {
+        left.0
+            .total_cmp(&right.0)
+            .then_with(|| left.1.total_cmp(&right.1))
+    });
+    points.dedup();
+    if points.len() <= 2 {
+        return points;
+    }
+
+    let mut lower = Vec::new();
+    for &point in &points {
+        while lower.len() >= 2 && turn(lower[lower.len() - 2], lower[lower.len() - 1], point) <= 0.0
+        {
+            lower.pop();
+        }
+        lower.push(point);
+    }
+    let mut upper = Vec::new();
+    for &point in points.iter().rev() {
+        while upper.len() >= 2 && turn(upper[upper.len() - 2], upper[upper.len() - 1], point) <= 0.0
+        {
+            upper.pop();
+        }
+        upper.push(point);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
+}
+
+fn distance_to_polygon_boundary(point: (f32, f32), polygon: &[(f32, f32)]) -> f32 {
+    if polygon.len() < 2 {
+        return 0.0;
+    }
+    (0..polygon.len())
+        .map(|index| {
+            point_segment_distance(point, polygon[index], polygon[(index + 1) % polygon.len()])
+        })
+        .fold(f32::INFINITY, f32::min)
 }
 
 fn simplify_closed_indices(polygon: &[(f32, f32)], tolerance: f32) -> Vec<usize> {
@@ -899,8 +954,91 @@ mod tests {
 
         let cells = flow_cells(frame, &contour, &[(65.0, 71.0), (29.0, 118.0)]);
 
-        assert!(contains_edge(&cells[0], (35.0, 51.0), (90.0, 115.0)));
-        assert!(contains_edge(&cells[1], (35.0, 51.0), (90.0, 115.0)));
+        assert!(contains_edge(&cells[0], (32.0, 54.0), (66.0, 143.0)));
+        assert!(contains_edge(&cells[1], (32.0, 54.0), (66.0, 143.0)));
+    }
+
+    #[test]
+    fn flow_cells_use_the_overlap_junctions_of_uneven_rounded_lobes() {
+        let frame = GeometryFrame {
+            bounds: LayoutBox {
+                x: 0.0,
+                y: 0.0,
+                width: 186.0,
+                height: 313.0,
+            },
+            angle_degrees: 0.0,
+        };
+        let contour = vec![
+            (123.0, 0.0),
+            (111.0, 6.0),
+            (101.0, 15.0),
+            (97.0, 17.0),
+            (83.0, 31.0),
+            (75.0, 42.0),
+            (72.0, 47.0),
+            (67.0, 65.0),
+            (65.0, 90.0),
+            (63.0, 95.0),
+            (59.0, 98.0),
+            (45.0, 101.0),
+            (37.0, 105.0),
+            (23.0, 115.0),
+            (15.0, 123.0),
+            (9.0, 132.0),
+            (3.0, 146.0),
+            (1.0, 157.0),
+            (1.0, 170.0),
+            (0.0, 171.0),
+            (1.0, 203.0),
+            (9.0, 254.0),
+            (17.0, 277.0),
+            (28.0, 296.0),
+            (36.0, 303.0),
+            (43.0, 306.0),
+            (50.0, 313.0),
+            (59.0, 307.0),
+            (72.0, 304.0),
+            (79.0, 299.0),
+            (89.0, 284.0),
+            (92.0, 275.0),
+            (92.0, 271.0),
+            (94.0, 265.0),
+            (96.0, 263.0),
+            (102.0, 262.0),
+            (111.0, 266.0),
+            (124.0, 269.0),
+            (136.0, 269.0),
+            (149.0, 263.0),
+            (154.0, 258.0),
+            (161.0, 247.0),
+            (168.0, 229.0),
+            (169.0, 219.0),
+            (178.0, 179.0),
+            (181.0, 157.0),
+            (181.0, 148.0),
+            (182.0, 147.0),
+            (182.0, 138.0),
+            (183.0, 137.0),
+            (183.0, 128.0),
+            (184.0, 127.0),
+            (184.0, 118.0),
+            (185.0, 117.0),
+            (186.0, 83.0),
+            (185.0, 82.0),
+            (185.0, 71.0),
+            (183.0, 58.0),
+            (180.0, 46.0),
+            (172.0, 28.0),
+            (161.0, 16.0),
+            (150.0, 7.0),
+            (139.0, 1.0),
+        ];
+
+        let cells = flow_cells(frame, &contour, &[(126.25, 135.4353), (50.0, 202.05078)]);
+
+        assert!(contains_edge(&cells[0], (63.0, 95.0), (96.0, 263.0)));
+        assert!(contains_edge(&cells[1], (63.0, 95.0), (96.0, 263.0)));
     }
 
     #[test]
