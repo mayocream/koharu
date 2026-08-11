@@ -36,9 +36,8 @@ const PRODUCER: &str = "dev.koharu.pipeline.detection";
 const ANGLE_SNAP_DEGREES: f32 = 3.0;
 const ANGLE_SEARCH_HALF_STEPS: i32 = 90;
 const ANGLE_SEARCH_STEP_DEGREES: f64 = 0.5;
-const COLOR_SNAP_CHROMA: u8 = 24;
-const COLOR_SNAP_DARK_LUMINANCE: u16 = 64;
-const COLOR_SNAP_LIGHT_LUMINANCE: u16 = 191;
+const TYPOGRAPHY_SAMPLE_MARGIN: f32 = 2.0;
+const BINARY_TEXT_LUMINANCE_THRESHOLD: u32 = 128 * 256;
 const COLOR_CLUSTER_MIN_DISTANCE_SQUARED: u32 = 32 * 32;
 const MIN_MEASURED_STROKE_WIDTH: u8 = 2;
 const NMS_CONTAINMENT_THRESHOLD: f32 = 0.9;
@@ -644,7 +643,6 @@ struct MaskPoint {
 struct MaskPixel {
     x: u32,
     y: u32,
-    depth: u8,
     color: [u8; 3],
 }
 
@@ -661,44 +659,56 @@ fn infer_typography(
     let mask = &detection.mask;
     let width = image.width().min(mask.width);
     let height = image.height().min(mask.height);
-    let [left, top, right, bottom] = mask_window(detection.bbox, width, height)?;
+    let [bbox_left, bbox_top, bbox_right, bbox_bottom] = detection.bbox;
+    let [left, top, right, bottom] = mask_window(
+        [
+            bbox_left - TYPOGRAPHY_SAMPLE_MARGIN,
+            bbox_top - TYPOGRAPHY_SAMPLE_MARGIN,
+            bbox_right + TYPOGRAPHY_SAMPLE_MARGIN,
+            bbox_bottom + TYPOGRAPHY_SAMPLE_MARGIN,
+        ],
+        width,
+        height,
+    )?;
     let local_width = right - left + 2;
     let local_height = bottom - top + 2;
-    let mut inverted_mask = GrayImage::from_pixel(local_width, local_height, Luma([u8::MAX]));
     let mut points = Vec::new();
-    let mut foreground = Vec::new();
+    let mut pixels = Vec::new();
+    let mut background = Vec::new();
     for y in top..bottom {
         let row = y as usize * mask.width as usize;
         for x in left..right {
-            if mask.pixels.get(row + x as usize).copied().unwrap_or(0) == 0 {
-                continue;
-            }
             let local_x = x - left + 1;
             let local_y = y - top + 1;
-            inverted_mask.put_pixel(local_x, local_y, Luma([0]));
-            points.push(MaskPoint {
-                x: f64::from(x) + 0.5,
-                y: f64::from(y) + 0.5,
-            });
-            foreground.push(MaskPixel {
+            let color = image.get_pixel(x, y).0;
+            let inside_mask = mask.pixels.get(row + x as usize).copied().unwrap_or(0) != 0;
+            pixels.push(MaskPixel {
                 x: local_x,
                 y: local_y,
-                depth: 0,
-                color: image.get_pixel(x, y).0,
+                color,
             });
+            if inside_mask {
+                points.push(MaskPoint {
+                    x: f64::from(x) + 0.5,
+                    y: f64::from(y) + 0.5,
+                });
+            } else {
+                background.push(color);
+            }
         }
     }
     if points.is_empty() {
         return None;
     }
 
-    let depths = distance_transform(&inverted_mask, Norm::L2);
-    for pixel in &mut foreground {
-        pixel.depth = depths.get_pixel(pixel.x, pixel.y).0[0];
-    }
+    let background = if background.is_empty() {
+        median_pixel_color(&pixels)
+    } else {
+        median_color(&background)
+    };
     let (angle_degrees, vertical) = mask_angle(&points, detection.bbox);
     let (color, stroke_color, stroke_width) =
-        infer_text_paint(&foreground, local_width, local_height);
+        infer_text_paint(&pixels, background, local_width, local_height);
     Some(InferredTypography {
         color,
         stroke_color,
@@ -787,83 +797,142 @@ fn median_channel(values: &mut [u8]) -> u8 {
     }
 }
 
-// RF-DETR's text mask contains both the glyph fill and any visible outline.
-// Distance from the mask boundary is therefore the stable spatial signal:
-// deep pixels seed the fill color, while shallow pixels seed an outline color.
-// The outline width is measured back from that color partition instead of
-// being inferred from contrast or assigned a fixed rendering value.
+// The detector mask may trace glyphs or cover a whole text region, so mask
+// depth cannot identify the paint role. Cluster the local crop into its
+// background and two possible ink colors, then use distance from the actual
+// background-color pixels to decide which ink is the enclosed glyph fill.
 fn infer_text_paint(
-    foreground: &[MaskPixel],
-    mask_width: u32,
-    mask_height: u32,
+    pixels: &[MaskPixel],
+    background_seed: [u8; 3],
+    width: u32,
+    height: u32,
 ) -> ([u8; 3], Option<[u8; 3]>, Option<f32>) {
-    let maximum_depth = foreground
+    let clusters = color_clusters(pixels, background_seed);
+    let nonempty = clusters
         .iter()
-        .map(|pixel| pixel.depth)
-        .max()
-        .unwrap_or(1)
-        .max(1);
-    let core_depth = (u16::from(maximum_depth) * 3).div_ceil(4) as u8;
-    let boundary_depth = (maximum_depth / 3).max(1);
-    let core = foreground
-        .iter()
-        .filter(|pixel| pixel.depth >= core_depth)
-        .map(|pixel| pixel.color)
+        .enumerate()
+        .filter(|(_, cluster)| !cluster.pixels.is_empty())
+        .map(|(index, _)| index)
         .collect::<Vec<_>>();
-    let boundary = foreground
-        .iter()
-        .filter(|pixel| pixel.depth <= boundary_depth)
-        .map(|pixel| pixel.color)
-        .collect::<Vec<_>>();
-    let fill_seed = median_color(&core);
-    let stroke_seed = median_color(&boundary);
-    if color_distance_squared(fill_seed, stroke_seed) < COLOR_CLUSTER_MIN_DISTANCE_SQUARED {
-        return (normalize_text_color(fill_seed), None, None);
+    if nonempty.len() == 1 {
+        return (
+            normalize_text_color(clusters[nonempty[0]].color),
+            None,
+            None,
+        );
     }
 
-    let (fill_pixels, stroke_pixels) = split_by_color(foreground, fill_seed, stroke_seed);
-    if fill_pixels.is_empty() || stroke_pixels.is_empty() {
-        return (normalize_text_color(fill_seed), None, None);
+    let background_index = nonempty
+        .iter()
+        .copied()
+        .min_by_key(|index| color_distance_squared(clusters[*index].color, background_seed))
+        .unwrap();
+    let ink = nonempty
+        .iter()
+        .copied()
+        .filter(|index| *index != background_index)
+        .collect::<Vec<_>>();
+    if ink.is_empty() {
+        return (
+            normalize_text_color(clusters[background_index].color),
+            None,
+            None,
+        );
     }
-    let fill_color = median_pixel_color(&fill_pixels);
-    let stroke_color = median_pixel_color(&stroke_pixels);
-    let (mut fill_pixels, mut stroke_pixels) = split_by_color(foreground, fill_color, stroke_color);
-    if fill_pixels.is_empty() || stroke_pixels.is_empty() {
-        return (normalize_text_color(fill_color), None, None);
-    }
-    let (mut fill_color, mut stroke_color) = (fill_color, stroke_color);
-    if median_pixel_depth(&fill_pixels) < median_pixel_depth(&stroke_pixels) {
-        std::mem::swap(&mut fill_pixels, &mut stroke_pixels);
-        std::mem::swap(&mut fill_color, &mut stroke_color);
-    }
-    if color_distance_squared(fill_color, stroke_color) < COLOR_CLUSTER_MIN_DISTANCE_SQUARED {
-        return (normalize_text_color(fill_color), None, None);
+    if ink.len() == 1 {
+        return (normalize_text_color(clusters[ink[0]].color), None, None);
     }
 
-    let Some(stroke_width) = measured_stroke_width(
-        &fill_pixels,
-        &stroke_pixels,
-        mask_width,
-        mask_height,
-        maximum_depth,
-    ) else {
-        return (normalize_text_color(fill_color), None, None);
+    let background_color = clusters[background_index].color;
+    let mut background_mask = GrayImage::from_pixel(width, height, Luma([u8::MAX]));
+    for pixel in pixels {
+        background_mask.put_pixel(pixel.x, pixel.y, Luma([0]));
+    }
+    for pixel in &clusters[background_index].pixels {
+        background_mask.put_pixel(pixel.x, pixel.y, Luma([u8::MAX]));
+    }
+    let background_distances = distance_transform(&background_mask, Norm::L2);
+    let first_depth = median_distance(&clusters[ink[0]].pixels, &background_distances);
+    let second_depth = median_distance(&clusters[ink[1]].pixels, &background_distances);
+    let (fill_index, stroke_index) = if first_depth >= second_depth {
+        (ink[0], ink[1])
+    } else {
+        (ink[1], ink[0])
     };
-    (
-        normalize_text_color(fill_color),
-        Some(normalize_text_color(stroke_color)),
-        Some(stroke_width),
-    )
+    let fill = &clusters[fill_index];
+    let stroke = &clusters[stroke_index];
+
+    let Some(stroke_width) = measured_stroke_width(&stroke.pixels, &background_distances) else {
+        return (normalize_text_color(fill.color), None, None);
+    };
+    let is_antialias = stroke_width <= f32::from(MIN_MEASURED_STROKE_WIDTH)
+        && color_lies_between(stroke.color, fill.color, background_color);
+    if color_distance_squared(fill.color, stroke.color) < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
+        || color_distance_squared(stroke.color, background_color)
+            < COLOR_CLUSTER_MIN_DISTANCE_SQUARED
+        || is_antialias
+    {
+        return (normalize_text_color(fill.color), None, None);
+    }
+    let fill_color = normalize_text_color(fill.color);
+    let stroke_color = normalize_text_color(stroke.color);
+    if fill_color == stroke_color {
+        return (fill_color, None, None);
+    }
+    (fill_color, Some(stroke_color), Some(stroke_width))
 }
 
-fn split_by_color(
-    foreground: &[MaskPixel],
-    fill: [u8; 3],
-    stroke: [u8; 3],
-) -> (Vec<MaskPixel>, Vec<MaskPixel>) {
-    foreground.iter().copied().partition(|pixel| {
-        color_distance_squared(pixel.color, fill) <= color_distance_squared(pixel.color, stroke)
+struct ColorCluster {
+    color: [u8; 3],
+    pixels: Vec<MaskPixel>,
+}
+
+fn color_clusters(pixels: &[MaskPixel], background: [u8; 3]) -> [ColorCluster; 3] {
+    let first_ink = distant_color(pixels, &[background]);
+    let second_ink = distant_color(pixels, &[background, first_ink]);
+    let mut centers = [background, first_ink, second_ink];
+    let mut groups: [Vec<MaskPixel>; 3] = std::array::from_fn(|_| Vec::new());
+    for _ in 0..4 {
+        for group in &mut groups {
+            group.clear();
+        }
+        for pixel in pixels {
+            let index = centers
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, center)| color_distance_squared(pixel.color, **center))
+                .map(|(index, _)| index)
+                .unwrap();
+            groups[index].push(*pixel);
+        }
+        for (center, group) in centers.iter_mut().zip(&groups) {
+            if !group.is_empty() {
+                *center = median_pixel_color(group);
+            }
+        }
+    }
+    std::array::from_fn(|index| ColorCluster {
+        color: centers[index],
+        pixels: std::mem::take(&mut groups[index]),
     })
+}
+
+fn distant_color(pixels: &[MaskPixel], centers: &[[u8; 3]]) -> [u8; 3] {
+    let mut ranked = pixels.to_vec();
+    ranked.sort_unstable_by(|left, right| {
+        minimum_color_distance(right.color, centers)
+            .cmp(&minimum_color_distance(left.color, centers))
+    });
+    let count = ranked.len().div_ceil(16).max(1);
+    median_pixel_color(&ranked[..count])
+}
+
+fn minimum_color_distance(color: [u8; 3], centers: &[[u8; 3]]) -> u32 {
+    centers
+        .iter()
+        .map(|center| color_distance_squared(color, *center))
+        .min()
+        .unwrap_or_default()
 }
 
 fn median_pixel_color(pixels: &[MaskPixel]) -> [u8; 3] {
@@ -871,30 +940,17 @@ fn median_pixel_color(pixels: &[MaskPixel]) -> [u8; 3] {
     median_color(&colors)
 }
 
-fn median_pixel_depth(pixels: &[MaskPixel]) -> u8 {
-    let mut depths = pixels.iter().map(|pixel| pixel.depth).collect::<Vec<_>>();
-    median_channel(&mut depths)
-}
-
 fn measured_stroke_width(
-    fill_pixels: &[MaskPixel],
     stroke_pixels: &[MaskPixel],
-    mask_width: u32,
-    mask_height: u32,
-    maximum_mask_depth: u8,
+    background_distances: &GrayImage,
 ) -> Option<f32> {
-    if fill_pixels.len() < 4 || stroke_pixels.len() < 8 {
+    if stroke_pixels.len() < 8 {
         return None;
     }
-    let mut fill_mask = GrayImage::new(mask_width, mask_height);
-    for pixel in fill_pixels {
-        fill_mask.put_pixel(pixel.x, pixel.y, Luma([u8::MAX]));
-    }
-    let distances = distance_transform(&fill_mask, Norm::L2);
     let mut widths = stroke_pixels
         .iter()
-        .map(|pixel| distances.get_pixel(pixel.x, pixel.y).0[0])
-        .filter(|distance| *distance > 0 && *distance <= maximum_mask_depth)
+        .map(|pixel| background_distances.get_pixel(pixel.x, pixel.y).0[0])
+        .filter(|distance| *distance > 0)
         .collect::<Vec<_>>();
     if widths.len() < 8 {
         return None;
@@ -902,6 +958,45 @@ fn measured_stroke_width(
     widths.sort_unstable();
     let width = widths[(widths.len() - 1) * 9 / 10];
     (width >= MIN_MEASURED_STROKE_WIDTH).then_some(f32::from(width))
+}
+
+fn median_distance(pixels: &[MaskPixel], distances: &GrayImage) -> u8 {
+    let mut values = pixels
+        .iter()
+        .map(|pixel| distances.get_pixel(pixel.x, pixel.y).0[0])
+        .collect::<Vec<_>>();
+    median_channel(&mut values)
+}
+
+fn color_lies_between(candidate: [u8; 3], start: [u8; 3], end: [u8; 3]) -> bool {
+    let start = start.map(f64::from);
+    let end = end.map(f64::from);
+    let candidate = candidate.map(f64::from);
+    let direction = std::array::from_fn::<_, 3, _>(|channel| end[channel] - start[channel]);
+    let length_squared = direction.iter().map(|value| value * value).sum::<f64>();
+    if length_squared <= f64::EPSILON {
+        return false;
+    }
+    let projection = candidate
+        .iter()
+        .zip(start)
+        .zip(direction)
+        .map(|((&candidate, start), direction)| (candidate - start) * direction)
+        .sum::<f64>()
+        / length_squared;
+    if !(0.0..=1.0).contains(&projection) {
+        return false;
+    }
+    candidate
+        .iter()
+        .zip(start)
+        .zip(direction)
+        .map(|((&candidate, start), direction)| {
+            let difference = candidate - (start + direction * projection);
+            difference * difference
+        })
+        .sum::<f64>()
+        <= 24.0_f64.powi(2) * 3.0
 }
 
 fn median_color(colors: &[[u8; 3]]) -> [u8; 3] {
@@ -923,16 +1018,15 @@ fn color_distance_squared(left: [u8; 3], right: [u8; 3]) -> u32 {
 }
 
 fn normalize_text_color(color: [u8; 3]) -> [u8; 3] {
-    let minimum = color.iter().copied().min().unwrap_or_default();
-    let maximum = color.iter().copied().max().unwrap_or_default();
-    let luminance = color.iter().copied().map(u16::from).sum::<u16>() / 3;
-    if maximum - minimum <= COLOR_SNAP_CHROMA && luminance <= COLOR_SNAP_DARK_LUMINANCE {
+    if color_luminance(color) < BINARY_TEXT_LUMINANCE_THRESHOLD {
         [0, 0, 0]
-    } else if maximum - minimum <= COLOR_SNAP_CHROMA && luminance >= COLOR_SNAP_LIGHT_LUMINANCE {
-        [u8::MAX; 3]
     } else {
-        color
+        [u8::MAX; 3]
     }
+}
+
+fn color_luminance(color: [u8; 3]) -> u32 {
+    u32::from(color[0]) * 54 + u32::from(color[1]) * 183 + u32::from(color[2]) * 19
 }
 
 fn rectangle_geometry([left, top, right, bottom]: [f32; 4]) -> Geometry {
@@ -1543,7 +1637,11 @@ mod tests {
         )
     }
 
-    fn outlined_text(stroke_width: u32) -> (RgbImage, KoharuLayoutDetection) {
+    fn outlined_text(
+        stroke_width: u32,
+        fill: [u8; 3],
+        stroke: [u8; 3],
+    ) -> (RgbImage, KoharuLayoutDetection) {
         let width = 96;
         let height = 96;
         let [left, top, right, bottom] = [20, 38, 76, 58];
@@ -1556,15 +1654,42 @@ mod tests {
                     && x < right - stroke_width
                     && y >= top + stroke_width
                     && y < bottom - stroke_width;
-                image.put_pixel(
-                    x,
-                    y,
-                    if is_fill {
-                        Rgb([0, 0, 0])
-                    } else {
-                        Rgb([255, 255, 255])
-                    },
-                );
+                image.put_pixel(x, y, if is_fill { Rgb(fill) } else { Rgb(stroke) });
+            }
+        }
+        (
+            image,
+            KoharuLayoutDetection {
+                label_id: 0,
+                label: "text".to_owned(),
+                score: 1.0,
+                bbox: [left as f32, top as f32, right as f32, bottom as f32],
+                area: pixels.iter().filter(|value| **value != 0).count() as u32,
+                mask: KoharuLayoutMask {
+                    width,
+                    height,
+                    pixels,
+                },
+            },
+        )
+    }
+
+    fn region_masked_text(fill: [u8; 3], background: [u8; 3]) -> (RgbImage, KoharuLayoutDetection) {
+        let width = 96;
+        let height = 96;
+        let [left, top, right, bottom] = [20, 20, 76, 76];
+        let mut image = RgbImage::from_pixel(width, height, Rgb(background));
+        let mut pixels = vec![0; width as usize * height as usize];
+        for y in top..bottom {
+            for x in left..right {
+                pixels[y as usize * width as usize + x as usize] = u8::MAX;
+            }
+        }
+        for x in [27, 35, 43, 51, 59, 67] {
+            for y in 28..68 {
+                for ink_x in x..x + 3 {
+                    image.put_pixel(ink_x, y, Rgb(fill));
+                }
             }
         }
         (
@@ -1597,7 +1722,7 @@ mod tests {
             .unwrap();
         let snapshot = session.commit(create).await.unwrap().snapshot;
         let page = page.unwrap();
-        let (image, detection) = outlined_text(3);
+        let (image, detection) = outlined_text(3, [0, 0, 0], [255, 255, 255]);
         let generation = generation(super::PRODUCER, super::MODEL_ID).unwrap();
         let mut layer = None;
         let mut text_reuse = TextReuse {
@@ -1799,7 +1924,7 @@ mod tests {
         let inferred = infer_typography(&image, &detection).unwrap();
 
         assert!((inferred.angle_degrees - 12.0).abs() < 1.0);
-        assert_eq!(inferred.color, [24, 80, 160]);
+        assert_eq!(inferred.color, [0, 0, 0]);
         assert_eq!(inferred.stroke_color, None);
         assert_eq!(inferred.stroke_width, None);
         assert_eq!(inferred.writing_mode, WritingMode::Horizontal);
@@ -1874,24 +1999,62 @@ mod tests {
     }
 
     #[test]
-    fn near_neutral_extremes_snap_to_full_black_or_white() {
+    fn text_colors_are_binarized_by_luminance() {
         assert_eq!(normalize_text_color([20, 31, 24]), [0, 0, 0]);
         assert_eq!(normalize_text_color([230, 240, 250]), [255, 255, 255]);
-        assert_eq!(normalize_text_color([33, 33, 33]), [0, 0, 0]);
-        assert_eq!(normalize_text_color([205, 210, 216]), [255, 255, 255]);
-        assert_eq!(normalize_text_color([40, 70, 40]), [40, 70, 40]);
+        assert_eq!(normalize_text_color([255, 0, 0]), [0, 0, 0]);
+        assert_eq!(normalize_text_color([0, 255, 0]), [255, 255, 255]);
+        assert_eq!(normalize_text_color([40, 70, 40]), [0, 0, 0]);
     }
 
     #[test]
     fn outlined_text_uses_the_deep_fill_and_measures_the_border() {
         for stroke_width in [2, 3, 5] {
-            let (image, detection) = outlined_text(stroke_width);
+            let (image, detection) = outlined_text(stroke_width, [0, 0, 0], [255, 255, 255]);
 
             let inferred = infer_typography(&image, &detection).unwrap();
 
             assert_eq!(inferred.color, [0, 0, 0]);
             assert_eq!(inferred.stroke_color, Some([255, 255, 255]));
             assert_eq!(inferred.stroke_width, Some(stroke_width as f32));
+        }
+    }
+
+    #[test]
+    fn outlined_text_roles_do_not_flip_with_inverse_luminance() {
+        let (image, detection) = outlined_text(3, [255, 255, 255], [0, 0, 0]);
+
+        let inferred = infer_typography(&image, &detection).unwrap();
+
+        assert_eq!(inferred.color, [255, 255, 255]);
+        assert_eq!(inferred.stroke_color, Some([0, 0, 0]));
+        assert_eq!(inferred.stroke_width, Some(3.0));
+    }
+
+    #[test]
+    fn colors_in_the_same_luminance_class_do_not_create_a_border() {
+        let (image, detection) = outlined_text(3, [0, 0, 0], [96, 96, 96]);
+
+        let inferred = infer_typography(&image, &detection).unwrap();
+
+        assert_eq!(inferred.color, [0, 0, 0]);
+        assert_eq!(inferred.stroke_color, None);
+        assert_eq!(inferred.stroke_width, None);
+    }
+
+    #[test]
+    fn text_region_background_is_not_mistaken_for_the_fill() {
+        for (fill, background, expected) in [
+            ([24, 40, 80], [225, 130, 175], [0, 0, 0]),
+            ([220, 240, 255], [16, 24, 88], [255, 255, 255]),
+        ] {
+            let (image, detection) = region_masked_text(fill, background);
+
+            let inferred = infer_typography(&image, &detection).unwrap();
+
+            assert_eq!(inferred.color, expected);
+            assert_eq!(inferred.stroke_color, None);
+            assert_eq!(inferred.stroke_width, None);
         }
     }
 }
