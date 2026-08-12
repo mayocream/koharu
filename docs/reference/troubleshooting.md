@@ -48,7 +48,7 @@ Use a smaller manual Remove mask and avoid bubble borders or line art. Try a dir
 
 ## A translation provider fails
 
-Open **Settings -> Providers** and verify the credential, base URL, and provider-specific fields. Refresh the model picker. For an OpenAI-compatible server, confirm its chat endpoint and vision capability instead of assuming OpenAI defaults.
+Open **Settings -> Providers** and verify the credential, base URL, and provider-specific fields. Refresh the model picker. For an OpenAI-compatible server, confirm its chat endpoint and enable **Settings -> Translation -> Vision input** only when the selected model accepts image messages.
 
 ## Koharu Agent cannot sign in or run
 

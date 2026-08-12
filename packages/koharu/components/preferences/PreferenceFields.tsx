@@ -4,7 +4,6 @@ import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Input } from '@koharu/ui/components/input'
-import { Switch } from '@koharu/ui/components/switch'
 
 export function PreferencePage({
   title,
@@ -134,22 +133,5 @@ export function NumberField({
         }
       />
     </label>
-  )
-}
-
-export function ToggleField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: boolean
-  onChange: (value: boolean) => void
-}) {
-  return (
-    <div className='flex h-8 items-center justify-between gap-3'>
-      <span className='text-[11px]'>{label}</span>
-      <Switch checked={value} onCheckedChange={onChange} />
-    </div>
   )
 }

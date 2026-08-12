@@ -371,7 +371,8 @@
       "thinkingDescription": "让支持推理的模型使用思考模式。",
       "title": "生成",
       "topK": "前 K 项",
-      "topP": "Top P"
+      "topP": "Top P",
+      "vision": "视觉输入"
     },
     "loading": "正在加载偏好设置…",
     "pipeline": {
@@ -411,8 +412,7 @@
       "hideCredential": "隐藏 {{provider}} 凭据",
       "notConfigured": "未配置",
       "revealCredential": "显示 {{provider}} 凭据",
-      "title": "提供商",
-      "vision": "视觉输入"
+      "title": "提供商"
     },
     "shortcuts": {
       "description": "当文本字段未获得焦点时，可以使用单键快捷键。",

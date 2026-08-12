@@ -5,7 +5,7 @@ description: Connect local, hosted, machine-translation, and OpenAI-compatible p
 
 # Translation Providers
 
-Koharu presents one model picker across local and hosted translation backends. A model selection identifies its provider, model ID, optional quantization, and whether vision input is supported.
+Koharu presents one model picker across local and hosted translation backends. A model selection identifies its provider, model ID, optional quantization, and whether vision input is enabled.
 
 ## Provider types
 
@@ -23,7 +23,7 @@ Provider modules own their endpoint defaults, request mapping, and model catalog
 
 Open **Settings -> Providers**, choose a provider, and enter the fields it exposes. Hosted providers require a credential. LM Studio or another local compatible server usually requires a base URL and may not require a meaningful secret, depending on that server.
 
-OpenAI-compatible endpoints can declare whether their models accept vision input. Enable that only when the endpoint and chosen model actually support image messages.
+After choosing a model, use **Settings -> Translation -> Vision input** to include the source page image. For an OpenAI-compatible endpoint, enable it only when the endpoint and chosen model actually support image messages.
 
 Credentials are stored through the operating system's secure credential service. Endpoint and provider settings are written to `~/.koharu/config.toml`; secret values are not written there.
 

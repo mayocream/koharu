@@ -371,7 +371,8 @@
       "thinkingDescription": "Pide a los modelos con razonamiento que usen su modo de pensamiento.",
       "title": "Generación",
       "topK": "Top K",
-      "topP": "P superior"
+      "topP": "P superior",
+      "vision": "Entrada visual"
     },
     "loading": "Cargando preferencias…",
     "pipeline": {
@@ -411,8 +412,7 @@
       "hideCredential": "Ocultar credencial de {{provider}}",
       "notConfigured": "Sin configurar",
       "revealCredential": "Mostrar credencial de {{provider}}",
-      "title": "Proveedores",
-      "vision": "Entrada visual"
+      "title": "Proveedores"
     },
     "shortcuts": {
       "description": "Los atajos de una tecla están disponibles cuando ningún campo de texto tiene el foco.",

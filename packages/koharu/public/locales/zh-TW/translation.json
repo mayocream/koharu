@@ -371,7 +371,8 @@
       "thinkingDescription": "讓支援推理的模型使用思考模式。",
       "title": "產生",
       "topK": "前 K 項",
-      "topP": "Top P"
+      "topP": "Top P",
+      "vision": "視覺輸入"
     },
     "loading": "正在載入偏好設定…",
     "pipeline": {
@@ -411,8 +412,7 @@
       "hideCredential": "隱藏 {{provider}} 認證資訊",
       "notConfigured": "未設定",
       "revealCredential": "顯示 {{provider}} 認證資訊",
-      "title": "提供者",
-      "vision": "視覺輸入"
+      "title": "提供者"
     },
     "shortcuts": {
       "description": "當文字欄位未取得焦點時，可以使用單鍵快捷鍵。",

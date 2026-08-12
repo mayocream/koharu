@@ -27,7 +27,8 @@ The Generation settings expose controls supported by Koharu's common translation
 - top P, top K, and min P;
 - repeat, frequency, and presence penalties;
 - maximum output tokens;
-- thinking mode for models that support it.
+- thinking mode for models that support it;
+- vision input for models that accept source-page images.
 
 Provider defaults are a good baseline. Change one variable at a time. For translation, very high randomness usually makes terminology and names less consistent.
 
@@ -35,6 +36,6 @@ Thinking mode can improve difficult contextual choices but increases latency and
 
 ## Model capability
 
-Text-only models receive semantic source text. Vision-capable translation models may receive visual context when the provider path supports it. Capability is recorded with the model selection; do not mark an arbitrary compatible endpoint as vision-capable to bypass validation.
+Text-only models receive semantic source text. When Vision input is enabled, a vision-capable translation model also receives the source page image. The switch is unavailable for cataloged models without vision support; OpenAI-compatible endpoints are user-declared, so enable it only when the selected model accepts image messages.
 
 Review generated translations before export. Koharu stores the result as editable project data rather than treating model output as final authority.

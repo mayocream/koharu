@@ -38,7 +38,8 @@ Credentials are stored in the operating system credential service. Provider URLs
 - temperature, top P, top K, and min P;
 - repeat, frequency, and presence penalties;
 - maximum tokens;
-- thinking mode.
+- thinking mode;
+- vision input when the selected model supports source-page images.
 
 The processing selector exposes the most frequently changed model and output fields without opening the full settings page.
 

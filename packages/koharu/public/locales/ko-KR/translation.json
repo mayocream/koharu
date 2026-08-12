@@ -371,7 +371,8 @@
       "thinkingDescription": "추론 지원 모델이 사고 모드를 사용하도록 합니다.",
       "title": "생성",
       "topK": "상위 K개",
-      "topP": "Top P"
+      "topP": "Top P",
+      "vision": "비전 입력"
     },
     "loading": "환경 설정 불러오는 중…",
     "pipeline": {
@@ -411,8 +412,7 @@
       "hideCredential": "{{provider}} 자격 증명 숨기기",
       "notConfigured": "설정 안 됨",
       "revealCredential": "{{provider}} 자격 증명 표시",
-      "title": "제공자",
-      "vision": "비전 입력"
+      "title": "제공자"
     },
     "shortcuts": {
       "description": "텍스트 필드에 포커스가 없을 때 단일 키 단축키를 사용할 수 있습니다.",

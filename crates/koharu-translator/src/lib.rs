@@ -63,10 +63,8 @@ impl Translator {
 
     #[must_use]
     pub fn supports_vision(selection: &ModelSelection) -> bool {
-        if selection.provider == Provider::Local {
-            return local::supports_vision(selection);
-        }
         selection.vision
+            && (selection.provider != Provider::Local || local::supports_vision(selection))
     }
 
     #[must_use]
@@ -167,5 +165,35 @@ impl Translator {
                 .expect("local translator was loaded")
                 .translator,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn local_selection(model: &str, vision: bool) -> ModelSelection {
+        ModelSelection {
+            provider: Provider::Local,
+            model: Some(model.to_owned()),
+            quantization: None,
+            vision,
+        }
+    }
+
+    #[test]
+    fn local_vision_requires_capability_and_selection() {
+        assert!(Translator::supports_vision(&local_selection(
+            "gemma4-e2b-it",
+            true
+        )));
+        assert!(!Translator::supports_vision(&local_selection(
+            "gemma4-e2b-it",
+            false
+        )));
+        assert!(!Translator::supports_vision(&local_selection(
+            "lfm2.5-1.2b-instruct",
+            true
+        )));
     }
 }

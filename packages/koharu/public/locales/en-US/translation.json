@@ -371,7 +371,8 @@
       "thinkingDescription": "Ask reasoning-capable models to use their thinking mode.",
       "title": "Generation",
       "topK": "Top K",
-      "topP": "Top P"
+      "topP": "Top P",
+      "vision": "Vision input"
     },
     "loading": "Loading preferences…",
     "pipeline": {
@@ -411,8 +412,7 @@
       "hideCredential": "Hide {{provider}} credential",
       "notConfigured": "Not configured",
       "revealCredential": "Reveal {{provider}} credential",
-      "title": "Providers",
-      "vision": "Vision input"
+      "title": "Providers"
     },
     "shortcuts": {
       "description": "Single-key shortcuts are available whenever a text field is not focused.",

@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render as testingRender, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render as testingRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from 'next-themes'
 import type { ReactNode } from 'react'
@@ -78,7 +78,7 @@ const preferences: Preferences = {
     translation: {
       model: {
         provider: 'local',
-        model: 'lfm2.5-1.2b-instruct',
+        model: 'gemma4-e2b-it',
         quantization: null,
         vision: true,
       },
@@ -100,7 +100,7 @@ const preferences: Preferences = {
         name: 'OpenAI-compatible',
         config: {
           provider: 'openai-compatible',
-          settings: { base_url: 'http://localhost:11434/v1' },
+          settings: { base_url: 'http://localhost:11434/v1', vision: false },
         },
         credential: emptyCredential(),
       },
@@ -155,8 +155,8 @@ function installProject() {
     translationModels: [
       {
         provider: 'local',
-        model: 'lfm2.5-1.2b-instruct',
-        name: 'LFM 2.5 1.2B Instruct',
+        model: 'gemma4-e2b-it',
+        name: 'Gemma 4 E2B Instruct',
         quantizations: [],
         vision: true,
       },
@@ -570,7 +570,7 @@ describe('greenfield editor', () => {
     expect(runButton).toHaveClass('h-7', 'bg-primary/80', 'hover:bg-primary/90')
     fireEvent.click(selector)
     await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
-    expect(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Scope Page/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Stages 4 stages/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Output English/ })).toBeInTheDocument()
@@ -654,12 +654,12 @@ describe('greenfield editor', () => {
     render(<CanvasCommandBar />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
-    fireEvent.click(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ }))
     const search = screen.getByRole('textbox', { name: 'Search models' })
     expect(search).toHaveFocus()
-    await user.type(search, 'gemma')
+    await user.type(search, '12b')
     expect(
-      screen.queryByRole('button', { name: 'Use LFM 2.5 1.2B Instruct from Local' }),
+      screen.queryByRole('button', { name: 'Use Gemma 4 E2B Instruct from Local' }),
     ).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Use Gemma 4 12B from Local' }))
 
@@ -693,7 +693,7 @@ describe('greenfield editor', () => {
     render(<CanvasCommandBar />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
-    fireEvent.click(screen.getByRole('button', { name: /Model LFM 2.5 1.2B Instruct/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ }))
 
     const label = await screen.findByText(longName)
     await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
@@ -737,11 +737,27 @@ describe('greenfield editor', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Providers' })).toBeInTheDocument()
     expect(screen.getByLabelText('DeepL credential')).toBeInTheDocument()
     expect(screen.getAllByLabelText('Base URL')).toHaveLength(3)
+    expect(screen.queryByRole('switch', { name: 'Vision input' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Translation' })).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: 'Enable thinking' })).toBeInTheDocument()
     expect(screen.queryByText('Enable thinking')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Translation model')).toHaveTextContent('LFM 2.5 1.2B Instruct')
+    const vision = screen.getByRole('switch', { name: 'Vision input' })
+    expect(vision).toBeChecked()
+    save.mockClear()
+    await user.click(vision)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            model: expect.objectContaining({ vision: false }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+    expect(screen.getByLabelText('Translation model')).toHaveTextContent('Gemma 4 E2B Instruct')
     await user.click(screen.getByLabelText('Translation model'))
     const modelSearch = screen.getByRole('textbox', { name: 'Search models' })
     expect(modelSearch).toHaveFocus()
@@ -749,10 +765,85 @@ describe('greenfield editor', () => {
     expect(screen.getByText('No models match this search.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(
-      screen.getByRole('button', { name: 'Use LFM 2.5 1.2B Instruct from Local' }),
+      screen.getByRole('button', { name: 'Use Gemma 4 E2B Instruct from Local' }),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Target language')).toHaveTextContent('English')
+  })
+
+  it('saves a newer OpenRouter selection after an in-flight provider save', async () => {
+    installProject()
+    const user = userEvent.setup()
+    const configured: Preferences = {
+      ...preferences,
+      providers: {
+        entries: [
+          ...preferences.providers.entries,
+          {
+            name: 'OpenRouter',
+            config: { provider: 'openrouter', settings: {} },
+            credential: emptyCredential(),
+          },
+        ],
+      },
+    }
+    useKoharuStore.setState({
+      settingsOpen: true,
+      preferences: configured,
+      translationModels: [
+        ...useKoharuStore.getState().translationModels,
+        {
+          provider: 'openrouter',
+          model: 'openrouter/auto',
+          name: 'OpenRouter Auto',
+          quantizations: [],
+          vision: true,
+        },
+      ],
+    })
+    let resolveFirst: ((value: Preferences) => void) | undefined
+    const first = new Promise<Preferences>((resolve) => {
+      resolveFirst = resolve
+    })
+    let firstResult: Preferences | undefined
+    let invocation = 0
+    const save = vi
+      .spyOn(commands, 'savePreferences')
+      .mockImplementation(async (pipeline, providers, typesetting) => {
+        const saved = { ...configured, pipeline, providers, typesetting }
+        if (invocation++ === 0) {
+          firstResult = saved
+          return first
+        }
+        return saved
+      })
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsPage />
+      </ThemeProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Providers' }))
+    await user.type(screen.getByLabelText('OpenRouter credential'), 'secret')
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    await user.click(screen.getByRole('button', { name: 'Translation' }))
+    await user.click(screen.getByLabelText('Translation model'))
+    await user.click(screen.getByRole('button', { name: 'Use OpenRouter Auto from OpenRouter' }))
+    await user.click(screen.getByRole('button', { name: 'Back to editor' }))
+
+    expect(save).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      resolveFirst?.(firstResult!)
+      await first
+    })
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    await waitFor(() => {
+      expect(useKoharuStore.getState().settingsOpen).toBe(false)
+      expect(useKoharuStore.getState().preferences?.pipeline.translation.model).toMatchObject({
+        provider: 'openrouter',
+        model: 'openrouter/auto',
+      })
+    })
   })
 
   it('adds and removes default font families from typesetting settings', async () => {

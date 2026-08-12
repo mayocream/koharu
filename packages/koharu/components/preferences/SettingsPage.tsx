@@ -13,7 +13,7 @@ import {
   Type,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
@@ -30,6 +30,7 @@ import { supportedLanguages } from '@/lib/i18n'
 import {
   commands,
   type PipelineConfig,
+  type Preferences,
   type ProviderPreferences as ProviderSettings,
   type TypesettingConfig,
 } from '@/lib/protocol'
@@ -72,6 +73,53 @@ export function SettingsPage() {
   const translation = pipeline?.translation ?? null
   const lastSaved = useRef<string | null>(null)
   const lastSavedProviders = useRef<string | null>(null)
+  const saveGeneration = useRef(0)
+  const saveQueue = useRef<Promise<void>>(Promise.resolve())
+  const lastPending = useRef<{ serialized: string; promise: Promise<Preferences> } | null>(null)
+  const currentDraft = useRef<string | null>(null)
+  currentDraft.current =
+    pipeline && providers && typesetting ? JSON.stringify([pipeline, providers, typesetting]) : null
+
+  const saveDraft = useCallback(
+    async (
+      pipeline: PipelineConfig,
+      providers: ProviderSettings,
+      typesetting: TypesettingConfig,
+    ) => {
+      const serialized = JSON.stringify([pipeline, providers, typesetting])
+      if (serialized === lastSaved.current) {
+        const pending = lastPending.current
+        if (pending?.serialized === serialized) await pending.promise
+        return
+      }
+      lastSaved.current = serialized
+      const serializedProviders = JSON.stringify(providers)
+      const providersChanged = serializedProviders !== lastSavedProviders.current
+      const generation = ++saveGeneration.current
+      const pending = saveQueue.current
+        .catch(() => undefined)
+        .then(() => call(commands.savePreferences, pipeline, providers, typesetting))
+      lastPending.current = { serialized, promise: pending }
+      saveQueue.current = pending.then(
+        () => undefined,
+        () => undefined,
+      )
+      let saved: Preferences
+      try {
+        saved = await pending
+      } catch (error) {
+        if (lastSaved.current === serialized) lastSaved.current = null
+        throw error
+      }
+      if (generation !== saveGeneration.current || currentDraft.current !== serialized) return
+      receivePreferences(saved)
+      if (providersChanged) {
+        lastSavedProviders.current = serializedProviders
+        void refreshTranslationModels(true).catch(() => undefined)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -98,22 +146,11 @@ export function SettingsPage() {
     if (!open || !pipeline || !providers || !typesetting) return
     const serialized = JSON.stringify([pipeline, providers, typesetting])
     if (serialized === lastSaved.current) return
-    const serializedProviders = JSON.stringify(providers)
     const timeout = window.setTimeout(() => {
-      lastSaved.current = serialized
-      const providersChanged = serializedProviders !== lastSavedProviders.current
-      void call(commands.savePreferences, pipeline, providers, typesetting)
-        .then((saved) => {
-          receivePreferences(saved)
-          if (providersChanged) {
-            lastSavedProviders.current = serializedProviders
-            void refreshTranslationModels(true).catch(() => undefined)
-          }
-        })
-        .catch(() => undefined)
+      void saveDraft(pipeline, providers, typesetting).catch(() => undefined)
     }, 260)
     return () => window.clearTimeout(timeout)
-  }, [open, pipeline, providers, typesetting])
+  }, [open, pipeline, providers, saveDraft, typesetting])
 
   if (!open) return null
 
@@ -124,7 +161,15 @@ export function SettingsPage() {
           type='button'
           variant='ghost'
           className='mb-5 h-9 justify-start gap-2 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            if (!pipeline || !providers || !typesetting) {
+              setOpen(false)
+              return
+            }
+            void saveDraft(pipeline, providers, typesetting)
+              .then(() => setOpen(false))
+              .catch(() => undefined)
+          }}
         >
           <ArrowLeft className='size-4' /> {t('settings.backToEditor')}
         </Button>
@@ -175,6 +220,19 @@ export function SettingsPage() {
                   languages={preferences?.languages ?? []}
                   onChange={(translation) =>
                     setPipeline((current) => (current ? { ...current, translation } : current))
+                  }
+                  onProviderChange={(replacement) =>
+                    setProviders((current) =>
+                      current
+                        ? {
+                            entries: current.entries.map((entry) =>
+                              entry.config.provider === replacement.config.provider
+                                ? replacement
+                                : entry,
+                            ),
+                          }
+                        : current,
+                    )
                   }
                 />
               ) : (

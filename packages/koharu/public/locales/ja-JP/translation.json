@@ -371,7 +371,8 @@
       "thinkingDescription": "推論対応モデルに思考モードを使用させます。",
       "title": "生成",
       "topK": "上位 K 件",
-      "topP": "Top P"
+      "topP": "Top P",
+      "vision": "ビジョン入力"
     },
     "loading": "設定を読み込み中…",
     "pipeline": {
@@ -411,8 +412,7 @@
       "hideCredential": "{{provider}}の認証情報を隠す",
       "notConfigured": "未設定",
       "revealCredential": "{{provider}}の認証情報を表示",
-      "title": "プロバイダー",
-      "vision": "ビジョン入力"
+      "title": "プロバイダー"
     },
     "shortcuts": {
       "description": "テキスト入力欄にフォーカスがないとき、単一キーのショートカットを使用できます。",
