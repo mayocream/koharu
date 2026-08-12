@@ -1,3 +1,11 @@
+## [0.64.2](https://github.com/mayocream/koharu/compare/0.64.1..0.64.2) - 2026-08-12
+
+### 🐛 Bug Fixes
+
+- Windows path bug - ([981703c](https://github.com/mayocream/koharu/commit/981703c7ad7afffa1871bae80309b3f2b35a5047))
+- Support hip 6.x - ([e7e9378](https://github.com/mayocream/koharu/commit/e7e93783cbb6e254d21731cad3de96c70dfeb213))
+
+
 ## [0.64.1](https://github.com/mayocream/koharu/compare/0.64.0..0.64.1) - 2026-08-12
 
 ### 🐛 Bug Fixes
