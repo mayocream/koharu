@@ -44,6 +44,10 @@ impl From<PackageArg> for Package {
 }
 
 fn main() {
+    env_logger::Builder::new()
+        .filter_module("tauri_bundler", log::LevelFilter::Debug)
+        .format_timestamp(None)
+        .init();
     let cli = Cli::parse();
     let result = koharu_bundle::bundle(&BundleConfig {
         package: cli.package.into(),
