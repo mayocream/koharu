@@ -10,7 +10,7 @@ struct Properties([u8; BUFFER_SIZE]);
 
 pub(super) fn probe() -> Option<String> {
     let names: &[&str] = if cfg!(target_os = "windows") {
-        &["amdhip64.dll", "amdhip64_7.dll"]
+        &["amdhip64.dll", "amdhip64_6.dll", "amdhip64_7.dll"]
     } else if cfg!(target_os = "linux") {
         &["libamdhip64.so", "libamdhip64.so.7"]
     } else {
