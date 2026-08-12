@@ -20,7 +20,15 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y build-essential cmake ninja-build pkg-config libssl-dev
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libfontconfig-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt -- --check
       - run: cargo check --workspace --locked
