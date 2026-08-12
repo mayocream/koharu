@@ -4258,6 +4258,7 @@ version = "0.64.1"
 dependencies = [
  "anyhow",
  "dirs",
+ "dunce",
  "fast-glob",
  "flate2",
  "fs4",

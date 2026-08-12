@@ -10,8 +10,7 @@ static LOADED: OnceLock<Mutex<HashMap<PathBuf, libloading::Library>>> = OnceLock
 
 pub(super) fn load(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
-    let path = path
-        .canonicalize()
+    let path = dunce::canonicalize(path)
         .with_context(|| format!("dynamic library does not exist: {}", path.display()))?;
     let mut loaded = LOADED
         .get_or_init(|| Mutex::new(HashMap::new()))
