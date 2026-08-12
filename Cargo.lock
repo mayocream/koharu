@@ -9569,7 +9569,7 @@ dependencies = [
 [[package]]
 name = "tauri-bundler"
 version = "2.9.4"
-source = "git+https://github.com/mayocream/tauri?rev=90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f#90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f"
+source = "git+https://github.com/mayocream/tauri?rev=b8abdbbccc8dd41659f4b07b04aa720b73119e47#b8abdbbccc8dd41659f4b07b04aa720b73119e47"
 dependencies = [
  "anyhow",
  "ar",
@@ -9597,7 +9597,7 @@ dependencies = [
  "strsim",
  "tar",
  "tauri-icns",
- "tauri-macos-sign 2.3.4 (git+https://github.com/mayocream/tauri?rev=90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f)",
+ "tauri-macos-sign 2.3.4 (git+https://github.com/mayocream/tauri?rev=b8abdbbccc8dd41659f4b07b04aa720b73119e47)",
  "tauri-utils",
  "tempfile",
  "thiserror 2.0.18",
@@ -9649,7 +9649,7 @@ dependencies = [
 [[package]]
 name = "tauri-macos-sign"
 version = "2.3.4"
-source = "git+https://github.com/mayocream/tauri?rev=90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f#90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f"
+source = "git+https://github.com/mayocream/tauri?rev=b8abdbbccc8dd41659f4b07b04aa720b73119e47#b8abdbbccc8dd41659f4b07b04aa720b73119e47"
 dependencies = [
  "apple-codesign",
  "base64 0.22.1",
@@ -9672,7 +9672,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "2.9.3"
-source = "git+https://github.com/mayocream/tauri?rev=90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f#90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f"
+source = "git+https://github.com/mayocream/tauri?rev=b8abdbbccc8dd41659f4b07b04aa720b73119e47#b8abdbbccc8dd41659f4b07b04aa720b73119e47"
 dependencies = [
  "anyhow",
  "ctor",
