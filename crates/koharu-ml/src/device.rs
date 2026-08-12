@@ -127,11 +127,11 @@ pub fn device(cpu: bool) -> Device {
     let hardware = Hardware::discover();
     if cpu {
         Device::cpu()
-    } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+    } else if hardware.supports_metal() {
         Device::metal(0)
-    } else if hardware.cuda_driver().is_some() {
+    } else if hardware.supports_cuda() && koharu_torch::Cuda::is_available() {
         Device::cuda(0)
-    } else if hardware.rocm_target().is_some() {
+    } else if hardware.supports_rocm() && koharu_torch::Cuda::is_available() {
         Device::rocm(0)
     } else if hardware.supports_vulkan() {
         Device::vulkan(0)

@@ -110,10 +110,7 @@ impl Package for Llama {
 impl DiscoverablePackage for Llama {
     fn discover(hardware: &Hardware) -> Result<Self> {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            if hardware
-                .cuda_driver()
-                .is_some_and(|version| version >= 13000)
-            {
+            if hardware.supports_cuda() {
                 return Ok(Self::WindowsCuda);
             }
             if Rocm::discover(hardware).is_ok() {
@@ -129,7 +126,7 @@ impl DiscoverablePackage for Llama {
             } else {
                 anyhow::bail!("llama requires Vulkan")
             }
-        } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        } else if hardware.supports_metal() {
             Ok(Self::MacosMetal)
         } else {
             anyhow::bail!("llama does not support this target")

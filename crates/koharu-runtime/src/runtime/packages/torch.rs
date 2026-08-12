@@ -202,7 +202,7 @@ impl Package for Torch {
 
 impl DiscoverablePackage for Torch {
     fn discover(hardware: &Hardware) -> Result<Self> {
-        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        if hardware.supports_metal() {
             return Ok(Self::CPU);
         }
         if !cfg!(any(
@@ -211,10 +211,7 @@ impl DiscoverablePackage for Torch {
         )) {
             anyhow::bail!("Torch does not support this target")
         }
-        if hardware
-            .cuda_driver()
-            .is_some_and(|version| version >= 13000)
-        {
+        if hardware.supports_cuda() {
             return Ok(Self(Backend::Cuda13));
         }
         if cfg!(target_os = "windows")

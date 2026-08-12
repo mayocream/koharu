@@ -21,8 +21,13 @@ impl Hardware {
     }
 
     #[must_use]
-    pub fn cuda_driver(&self) -> Option<i32> {
-        self.cuda_driver
+    pub fn supports_cuda(&self) -> bool {
+        self.cuda_driver.is_some_and(|version| version >= 13000)
+    }
+
+    #[must_use]
+    pub fn supports_rocm(&self) -> bool {
+        self.rocm_target.is_some()
     }
 
     #[must_use]
@@ -33,6 +38,11 @@ impl Hardware {
     #[must_use]
     pub fn supports_vulkan(&self) -> bool {
         self.vulkan
+    }
+
+    #[must_use]
+    pub fn supports_metal(&self) -> bool {
+        cfg!(all(target_os = "macos", target_arch = "aarch64"))
     }
 }
 
