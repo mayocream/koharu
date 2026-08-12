@@ -1,3 +1,6 @@
+## [0.65.1](https://github.com/mayocream/koharu/compare/0.65.0..0.65.1) - 2026-08-12
+
+
 ## [0.65.0](https://github.com/mayocream/koharu/compare/0.64.2..0.65.0) - 2026-08-12
 
 ### ⛰️  Features
