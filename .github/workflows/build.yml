@@ -65,7 +65,7 @@ jobs:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
-      - run: bun run build:ui
+      - run: bun run --filter @koharu/app build
       - run: cargo build -p koharu --release --locked --target ${{ matrix.target }}
       - name: Bundle native distribution
         run: >-

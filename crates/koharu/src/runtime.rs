@@ -105,7 +105,7 @@ impl DesktopPaths {
             let ui = bundled.map_or_else(source_ui, |layout| layout.ui);
             if !ui.join("index.html").is_file() {
                 bail!(
-                    "the exported frontend is missing {}; run `bun run build:ui`",
+                    "the exported frontend is missing {}; run `bun run --filter @koharu/app build`",
                     ui.join("index.html").display()
                 );
             }

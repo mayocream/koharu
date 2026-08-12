@@ -154,6 +154,9 @@ function installProject() {
       element: { x: 10, y: 20, width: 100, height: 50, angle_degrees: 0 },
     },
   })
+  vi.spyOn(commands, 'getPreferences').mockImplementation(
+    async () => useKoharuStore.getState().preferences!,
+  )
   vi.spyOn(commands, 'getTranslationModels').mockImplementation(async () => [
     ...useKoharuStore.getState().translationModels,
   ])

@@ -94,8 +94,8 @@ jobs:
           fi
           printf 'APP_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
 
-      - run: bun run build:ui
-      - name: Build native application
+      - run: bun run --filter @koharu/app build
+      - name: Build desktop application
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
