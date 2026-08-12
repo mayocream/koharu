@@ -77,6 +77,8 @@ jobs:
             ninja-build \
             pkg-config \
             libfontconfig-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
             libssl-dev
 
       - uses: oven-sh/setup-bun@v2
