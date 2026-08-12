@@ -4750,10 +4750,11 @@ dependencies = [
  "cef",
  "cef-dll-sys",
  "clap",
+ "koharu-runtime",
  "plist",
  "semver",
  "tauri-bundler",
- "tauri-macos-sign",
+ "tauri-macos-sign 2.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -9568,8 +9569,7 @@ dependencies = [
 [[package]]
 name = "tauri-bundler"
 version = "2.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2698487e03a730743bf275f16474d87a41c4457b2d7cca4a81cb40c6fc195c43"
+source = "git+https://github.com/mayocream/tauri?rev=842b19faa07dcc5eaec9152b113267ce0c214e10#842b19faa07dcc5eaec9152b113267ce0c214e10"
 dependencies = [
  "anyhow",
  "ar",
@@ -9597,7 +9597,7 @@ dependencies = [
  "strsim",
  "tar",
  "tauri-icns",
- "tauri-macos-sign",
+ "tauri-macos-sign 2.3.4 (git+https://github.com/mayocream/tauri?rev=842b19faa07dcc5eaec9152b113267ce0c214e10)",
  "tauri-utils",
  "tempfile",
  "thiserror 2.0.18",
@@ -9647,10 +9647,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-macos-sign"
+version = "2.3.4"
+source = "git+https://github.com/mayocream/tauri?rev=842b19faa07dcc5eaec9152b113267ce0c214e10#842b19faa07dcc5eaec9152b113267ce0c214e10"
+dependencies = [
+ "apple-codesign",
+ "base64 0.22.1",
+ "chrono",
+ "dirs 6.0.0",
+ "log",
+ "once_cell",
+ "os_pipe",
+ "p12",
+ "plist",
+ "rand 0.9.4",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "x509-certificate",
+]
+
+[[package]]
 name = "tauri-utils"
 version = "2.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e176a18e67764923c4f1ce66f25ae4abe5f688384d5eb1a0fa6c77f3d90f887"
+source = "git+https://github.com/mayocream/tauri?rev=842b19faa07dcc5eaec9152b113267ce0c214e10#842b19faa07dcc5eaec9152b113267ce0c214e10"
 dependencies = [
  "anyhow",
  "ctor",

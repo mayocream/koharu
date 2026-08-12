@@ -56,7 +56,7 @@ enum Backend {
 impl Torch {
     pub const CPU: Self = Self(Backend::Cpu);
 
-    fn libraries(self) -> Result<impl Iterator<Item = &'static str>> {
+    pub fn library_names(self) -> Result<impl Iterator<Item = &'static str>> {
         let property = if cfg!(target_os = "windows") {
             "windows"
         } else if cfg!(target_os = "linux") {
@@ -75,7 +75,7 @@ impl Torch {
 
     fn complete(self, root: &Path, rocm: Option<Rocm>) -> bool {
         let library = root.join("libtorch/lib");
-        self.libraries()
+        self.library_names()
             .is_ok_and(|names| names.into_iter().all(|name| library.join(name).is_file()))
             && rocm.is_none_or(|target| {
                 root.join("libtorch/.kpack")
@@ -166,7 +166,7 @@ impl Package for Torch {
             .join(version)
             .join(rocm.map_or_else(|| self.to_string(), |target| format!("rocm-{target}")));
         let urls = self.urls(rocm)?;
-        let libraries = self.libraries()?.collect::<Vec<_>>();
+        let libraries = self.library_names()?.collect::<Vec<_>>();
         let mut patterns = libraries
             .iter()
             .map(|name| format!("torch/lib/{name}"))
@@ -254,12 +254,9 @@ impl RuntimePackage for Torch {
     }
 
     async fn activate(self) -> Result<()> {
-        let libraries = self.libraries()?.collect::<Vec<_>>();
+        let libraries = self.library_names()?.collect::<Vec<_>>();
         let directory = self.install().await?.join("libtorch/lib");
         for library in libraries {
-            #[cfg(target_os = "linux")]
-            loader::load_global(directory.join(library))?;
-            #[cfg(not(target_os = "linux"))]
             loader::load(directory.join(library))?;
         }
         Ok(())

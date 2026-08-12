@@ -16,6 +16,9 @@ tauri-bundler = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+koharu-runtime = { workspace = true }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = { workspace = true }
 tauri-macos-sign = { workspace = true }

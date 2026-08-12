@@ -7,6 +7,8 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
+use koharu_runtime::Torch;
+#[cfg(target_os = "linux")]
 use tauri_bundler::AppImageSettings;
 use tauri_bundler::{
     AppCategory, BundleBinary, BundleSettings, PackageSettings, PackageType, SettingsBuilder,
@@ -76,6 +78,9 @@ pub enum BundleError {
     },
     #[error("cef-rs could not prepare its runtime: {0}")]
     Cef(String),
+    #[cfg(target_os = "linux")]
+    #[error("could not configure runtime-owned libraries: {0}")]
+    Runtime(String),
     #[error("tauri-bundler failed: {0}")]
     Tauri(#[from] tauri_bundler::Error),
     #[cfg(target_os = "macos")]
@@ -259,6 +264,13 @@ fn configure_payload(
     }
     settings.appimage = AppImageSettings {
         files,
+        // Torch backends are installed and activated at runtime; the CPU
+        // package used to link the shim must not become AppImage payload.
+        exclude_libraries: Torch::CPU
+            .library_names()
+            .map_err(|error| BundleError::Runtime(error.to_string()))?
+            .map(str::to_owned)
+            .collect(),
         ..Default::default()
     };
     Ok(())
