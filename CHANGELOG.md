@@ -1,3 +1,10 @@
+## [0.63.5](https://github.com/mayocream/koharu/compare/0.63.4..0.63.5) - 2026-08-12
+
+### 🐛 Bug Fixes
+
+- Device selection - ([e7a8d07](https://github.com/mayocream/koharu/commit/e7a8d075adf86be40dd258c68404561db7e33a1e))
+
+
 ## [0.63.4](https://github.com/mayocream/koharu/compare/0.63.3..0.63.4) - 2026-08-11
 
 
@@ -73,11 +80,6 @@
 
 - Package native runtimes across supported platforms - ([7b79680](https://github.com/mayocream/koharu/commit/7b796801fbecdf934f887b1230982ea1179c82f8))
 
-## New Contributors ❤️
-
-* @github-actions[bot] made their first contribution in [#898](https://github.com/mayocream/koharu/pull/898)
-* @binyangzhu000-sudo made their first contribution in [#881](https://github.com/mayocream/koharu/pull/881)
-* @obsgolem made their first contribution in [#851](https://github.com/mayocream/koharu/pull/851)
 
 ## [0.61.2](https://github.com/mayocream/koharu/compare/0.61.1..0.61.2) - 2026-06-16
 
@@ -119,9 +121,6 @@
 - Add ARM64 build support ([#757](https://github.com/mayocream/koharu/issues/757)) - ([2822d18](https://github.com/mayocream/koharu/commit/2822d18bc547a298692cc8ad67c7e446394ae5e7))
 - Hu-HU label translation ([#762](https://github.com/mayocream/koharu/issues/762)) - ([e83ff7b](https://github.com/mayocream/koharu/commit/e83ff7b4f53432357afaa90c18dd8204ebc83539))
 
-## New Contributors ❤️
-
-* @Cathgao made their first contribution in [#757](https://github.com/mayocream/koharu/pull/757)
 
 ## [0.60.0](https://github.com/mayocream/koharu/compare/0.59.2..0.60.0) - 2026-06-09
 
@@ -136,9 +135,6 @@
 - *(dev)* Remove unused script - ([ccecce6](https://github.com/mayocream/koharu/commit/ccecce6054314e55e9ec2058b7761084899b3255))
 - *(tests)* Remove unused warning - ([4ec5a15](https://github.com/mayocream/koharu/commit/4ec5a15b2030a7767340a4a60535537452cbc1eb))
 
-## New Contributors ❤️
-
-* @bloksma made their first contribution in [#759](https://github.com/mayocream/koharu/pull/759)
 
 ## [0.59.2](https://github.com/mayocream/koharu/compare/0.59.1..0.59.2) - 2026-05-23
 
@@ -153,9 +149,6 @@
 
 - Update README with icon image ([#703](https://github.com/mayocream/koharu/issues/703)) - ([19a9b8f](https://github.com/mayocream/koharu/commit/19a9b8fdd369cc49b1434243f04b15171e840f50))
 
-## New Contributors ❤️
-
-* @wahidalawy made their first contribution in [#702](https://github.com/mayocream/koharu/pull/702)
 
 ## [0.59.1](https://github.com/mayocream/koharu/compare/0.59.0..0.59.1) - 2026-05-12
 
@@ -229,9 +222,6 @@
 
 - Brush and Mask Layer not syncing on undo/redo ([#557](https://github.com/mayocream/koharu/issues/557)) - ([3cc8ac9](https://github.com/mayocream/koharu/commit/3cc8ac9506375c18b1f73457202df08f131baa32))
 
-## New Contributors ❤️
-
-* @mvanhorn made their first contribution in [#599](https://github.com/mayocream/koharu/pull/599)
 
 ## [0.53.0](https://github.com/mayocream/koharu/compare/0.52.0..0.53.0) - 2026-04-26
 
@@ -285,9 +275,6 @@
 
 - Update ko_KR/translation.json ([#573](https://github.com/mayocream/koharu/issues/573)) - ([60a2be4](https://github.com/mayocream/koharu/commit/60a2be40843d8463bfa9746d83d92de8ec506158))
 
-## New Contributors ❤️
-
-* @Rerica0302 made their first contribution in [#573](https://github.com/mayocream/koharu/pull/573)
 
 ## [0.50.0](https://github.com/mayocream/koharu/compare/0.49.0..0.50.0) - 2026-04-25
 
@@ -314,11 +301,6 @@
 
 - Add Winget Releaser workflow ([#570](https://github.com/mayocream/koharu/issues/570)) - ([e4529ed](https://github.com/mayocream/koharu/commit/e4529edba9aad4f2a16029eb23591edf33dad1a0))
 
-## New Contributors ❤️
-
-* @edsporfekt made their first contribution in [#572](https://github.com/mayocream/koharu/pull/572)
-* @sitiom made their first contribution in [#570](https://github.com/mayocream/koharu/pull/570)
-* @dragoon4890 made their first contribution in [#565](https://github.com/mayocream/koharu/pull/565)
 
 ## [0.49.0](https://github.com/mayocream/koharu/compare/0.48.0..0.49.0) - 2026-04-25
 
@@ -472,9 +454,6 @@
 - *(sentry)* Enable session tracking - ([e677200](https://github.com/mayocream/koharu/commit/e677200a3c2ccd53982b35e76e21c70158bcbc5d))
 - Configure sentry sample rate to 0.1 - ([a2bba3a](https://github.com/mayocream/koharu/commit/a2bba3aeaa12cb668356ca2035937aef7dc6331b))
 
-## New Contributors ❤️
-
-* @Thrapis made their first contribution in [#512](https://github.com/mayocream/koharu/pull/512)
 
 ## [0.45.3](https://github.com/mayocream/koharu/compare/0.45.2..0.45.3) - 2026-04-19
 
@@ -572,10 +551,6 @@
 - Build pt-BR docs and fix Portuguese wording ([#481](https://github.com/mayocream/koharu/issues/481)) - ([5edb16e](https://github.com/mayocream/koharu/commit/5edb16e1d91ad2fc466e0f69ce22cd0c96aefe87))
 - Replace prettier with oxfmt and apply formatting ([#472](https://github.com/mayocream/koharu/issues/472)) - ([19be246](https://github.com/mayocream/koharu/commit/19be246108f8c479ebde8f21c706bc83cd859ab7))
 
-## New Contributors ❤️
-
-* @RexGhidorah made their first contribution in [#456](https://github.com/mayocream/koharu/pull/456)
-* @Mooshieblob1 made their first contribution in [#482](https://github.com/mayocream/koharu/pull/482)
 
 ## [0.44.5](https://github.com/mayocream/koharu/compare/0.44.4..0.44.5) - 2026-04-15
 
@@ -628,10 +603,6 @@
 - Add Docker deployment ([#401](https://github.com/mayocream/koharu/issues/401)) - ([ff9f95c](https://github.com/mayocream/koharu/commit/ff9f95caae675a6f1b3b7734fecf974b22fd7ba2))
 - Add missing SENTRY_AUTH_TOKEN - ([82e8c46](https://github.com/mayocream/koharu/commit/82e8c461162847d10771894de49e172cdce24702))
 
-## New Contributors ❤️
-
-* @josebrunoleite made their first contribution in [#430](https://github.com/mayocream/koharu/pull/430)
-* @AxalotLDev made their first contribution in [#401](https://github.com/mayocream/koharu/pull/401)
 
 ## [0.44.0](https://github.com/mayocream/koharu/compare/0.43.2..0.44.0) - 2026-04-13
 
@@ -681,14 +652,6 @@
 - Enable Sentry only for production builds ([#397](https://github.com/mayocream/koharu/issues/397)) - ([bc38c49](https://github.com/mayocream/koharu/commit/bc38c49206f2256c69bd52831915da568f5fbb65))
 - Update CODEOWNERS - ([b6972d2](https://github.com/mayocream/koharu/commit/b6972d2becf534f784e9b6565c5bf61fa5a66d95))
 
-## New Contributors ❤️
-
-* @Pixlox made their first contribution in [#409](https://github.com/mayocream/koharu/pull/409)
-* @kidonng made their first contribution in [#418](https://github.com/mayocream/koharu/pull/418)
-* @apiweb made their first contribution in [#393](https://github.com/mayocream/koharu/pull/393)
-* @Duvet13d made their first contribution in [#361](https://github.com/mayocream/koharu/pull/361)
-* @hotball made their first contribution in [#377](https://github.com/mayocream/koharu/pull/377)
-* @SirEdvin made their first contribution in [#328](https://github.com/mayocream/koharu/pull/328)
 
 ## [0.43.2](https://github.com/mayocream/koharu/compare/0.43.1..0.43.2) - 2026-04-06
 
@@ -707,11 +670,6 @@
 - Batch procssing pipeline - ([537f088](https://github.com/mayocream/koharu/commit/537f088bba316f7f4006cd7d099c7a0e69328bd0))
 - Enhance pipeline processing - ([d8e3bce](https://github.com/mayocream/koharu/commit/d8e3bced01de2e560309a41c9c54a02d95aa58d5))
 
-## New Contributors ❤️
-
-* @liksunrice made their first contribution in [#349](https://github.com/mayocream/koharu/pull/349)
-* @louisoes05-png made their first contribution
-* @cyphercodes made their first contribution
 
 ## [0.43.1](https://github.com/mayocream/koharu/compare/0.43.0..0.43.1) - 2026-04-05
 
@@ -826,11 +784,6 @@
 
 - Remove macos warnings - ([58e5391](https://github.com/mayocream/koharu/commit/58e539104d4c60621f549f31fec2b5f944e96199))
 
-## New Contributors ❤️
-
-* @gabrieljcodes made their first contribution in [#317](https://github.com/mayocream/koharu/pull/317)
-* @DevNergis made their first contribution
-* @kyoshau made their first contribution in [#315](https://github.com/mayocream/koharu/pull/315)
 
 ## [0.41.4](https://github.com/mayocream/koharu/compare/0.41.3..0.41.4) - 2026-03-30
 
@@ -921,10 +874,6 @@
 - Make clippy happy - ([8af2862](https://github.com/mayocream/koharu/commit/8af2862cc17eba9607fdb1894cd84b5fe77a6494))
 - Vendor paddleocr-vl - ([8003e9b](https://github.com/mayocream/koharu/commit/8003e9bf8a41d327b28e334db989c28b4d69060a))
 
-## New Contributors ❤️
-
-* @EverythingSuckz made their first contribution in [#291](https://github.com/mayocream/koharu/pull/291)
-* @spgsroot made their first contribution in [#282](https://github.com/mayocream/koharu/pull/282)
 
 ## [0.40.1](https://github.com/mayocream/koharu/compare/0.40.0..0.40.1) - 2026-03-21
 
@@ -1132,9 +1081,6 @@ Fixes #197 - ([8de0019](https://github.com/mayocream/koharu/commit/8de00194dd20a
 
 - Update deps - ([211ae37](https://github.com/mayocream/koharu/commit/211ae376ac9a5293f05cf6921bd345b9251c9d19))
 
-## New Contributors ❤️
-
-* @vanja-san made their first contribution in [#195](https://github.com/mayocream/koharu/pull/195)
 
 ## [0.34.0](https://github.com/mayocream/koharu/compare/0.33.0..0.34.0) - 2026-02-21
 
@@ -1412,9 +1358,6 @@ Fix #169 - ([e09a2b2](https://github.com/mayocream/koharu/commit/e09a2b2d14e8757
 
 - Change window size to 1024x768 - ([e57bf42](https://github.com/mayocream/koharu/commit/e57bf4221eb396d7de1170a33ef6b940b8248b72))
 
-## New Contributors ❤️
-
-* @MARJORIESHA-pBAD made their first contribution in [#154](https://github.com/mayocream/koharu/pull/154)
 
 ## [0.27.0](https://github.com/mayocream/koharu/compare/0.26.2..0.27.0) - 2026-01-27
 
@@ -1528,9 +1471,6 @@ Fixes #118 - ([8afb656](https://github.com/mayocream/koharu/commit/8afb65673af20
 
 - Add benchmark for renderer - ([a78fb20](https://github.com/mayocream/koharu/commit/a78fb20e515b3c21942d28c0f837f6e8bac57261))
 
-## New Contributors ❤️
-
-* @schattenan made their first contribution in [#115](https://github.com/mayocream/koharu/pull/115)
 
 ## [0.25.1](https://github.com/mayocream/koharu/compare/0.25.0..0.25.1) - 2025-12-23
 
@@ -1559,9 +1499,6 @@ Fixes #118 - ([8afb656](https://github.com/mayocream/koharu/commit/8afb65673af20
 
 - Reorganize code - ([7ac87c9](https://github.com/mayocream/koharu/commit/7ac87c90735a5bf9a3397384c6bc69772973bf0f))
 
-## New Contributors ❤️
-
-* @xieyan110 made their first contribution
 
 ## [0.24.0](https://github.com/mayocream/koharu/compare/0.23.1..0.24.0) - 2025-12-23
 
@@ -2079,9 +2016,6 @@ close #65 - ([f3039b6](https://github.com/mayocream/koharu/commit/f3039b64ff45f1
 
 - 0.11.0 - ([ab47678](https://github.com/mayocream/koharu/commit/ab476788fd0a707df68748628e602fb52688af26))
 
-## New Contributors ❤️
-
-* @Aloxaf made their first contribution in [#49](https://github.com/mayocream/koharu/pull/49)
 
 ## [0.10.1](https://github.com/mayocream/koharu/compare/0.10.0..0.10.1) - 2025-11-25
 
@@ -2596,9 +2530,6 @@ close #65 - ([f3039b6](https://github.com/mayocream/koharu/commit/f3039b64ff45f1
 
 - 5.0.1 - ([ca9c856](https://github.com/mayocream/koharu/commit/ca9c856467e2b9a6ac2b8a9f01f6524909767674))
 
-## New Contributors ❤️
-
-* @dependabot[bot] made their first contribution in [#15](https://github.com/mayocream/koharu/pull/15)
 
 ## [0.5.0](https://github.com/mayocream/koharu/compare/0.4.0..0.5.0) - 2025-10-28
 
@@ -3008,9 +2939,6 @@ close #65 - ([f3039b6](https://github.com/mayocream/koharu/commit/f3039b64ff45f1
 - Add inpaint inference - ([4641857](https://github.com/mayocream/koharu/commit/4641857bf71faac327e92a48fcc0e6a4478cca98))
 - Add ocr to web - ([a80b61b](https://github.com/mayocream/koharu/commit/a80b61b54f07926d3b8081105546f178ba22f399))
 
-## New Contributors ❤️
-
-* @Phundrak made their first contribution in [#4](https://github.com/mayocream/koharu/pull/4)
 
 ## [0.1.1](https://github.com/mayocream/koharu/compare/v0.1.0..v0.1.1) - 2025-04-23
 
@@ -3054,9 +2982,6 @@ close #65 - ([f3039b6](https://github.com/mayocream/koharu/commit/f3039b64ff45f1
 - Upload portable executable - ([1bd1416](https://github.com/mayocream/koharu/commit/1bd141646082efa63197cdd0b71a3b4125685dca))
 - Add rust cache - ([b12e77d](https://github.com/mayocream/koharu/commit/b12e77d33a1fb13ae7d8e12fe9f47fc7b79a2a16))
 
-## New Contributors ❤️
-
-* @fffonion made their first contribution
 
 ## [0.1.0] - 2025-04-22
 
@@ -3127,9 +3052,5 @@ close #65 - ([f3039b6](https://github.com/mayocream/koharu/commit/f3039b64ff45f1
 - Update @types/react and vite to latest versions - ([09a9301](https://github.com/mayocream/koharu/commit/09a9301f7dc8e506f9f6244738fc56c2a2a91eca))
 - Update dependencies to specific versions in bun.lock - ([f6b6f69](https://github.com/mayocream/koharu/commit/f6b6f6979f7c05dc37290b0202fb1d14520edc2e))
 
-## New Contributors ❤️
-
-* @mayocream made their first contribution
-* @Map1en made their first contribution
 
 <!-- generated by git-cliff -->
