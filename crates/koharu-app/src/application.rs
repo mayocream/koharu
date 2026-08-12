@@ -18,10 +18,10 @@ use tokio::sync::{Mutex, RwLock, Semaphore};
 use walkdir::WalkDir;
 
 use crate::agent::{AgentState, KoharuHost};
+use crate::presentation_coordinator::PresentationCoordinator;
 use crate::{
     CanvasOperation, CanvasOutput, DialogFilter, FileDialogs, PageRenderer, Presentation,
-    PresentationUpdate, ProcessingRuntime, ProjectLibrary, ViewDisposition, event_hub::EventHub,
-    project::Project,
+    ProcessingRuntime, ProjectLibrary, ViewDisposition, event_hub::EventHub, project::Project,
 };
 
 const THUMBNAIL_WORKERS: usize = 2;
@@ -73,6 +73,7 @@ pub struct Application {
     project: Arc<Mutex<Option<Project>>>,
     renderer: Arc<dyn PageRenderer>,
     presentation: Arc<dyn Presentation>,
+    presentation_coordinator: PresentationCoordinator,
     dialogs: Arc<dyn FileDialogs>,
     processing: Arc<dyn ProcessingRuntime>,
     lifecycle: RwLock<Lifecycle>,
@@ -123,14 +124,19 @@ impl Application {
         let project = Arc::new(Mutex::new(None));
         let events = EventHub::default();
         let stops = Arc::new(parking_lot::Mutex::new(HashMap::new()));
+        let presentation_coordinator = PresentationCoordinator::new(
+            Arc::clone(&project),
+            Arc::clone(&renderer),
+            Arc::clone(&presentation),
+            events.clone(),
+        );
         let agent = Arc::new(AgentState::new(
             KoharuHost::new(
                 Arc::clone(&project),
                 Arc::clone(&renderer),
-                Arc::clone(&presentation),
+                presentation_coordinator.clone(),
                 Arc::clone(&processing),
                 Arc::clone(&stops),
-                events.clone(),
             ),
             events.clone(),
         )?);
@@ -139,6 +145,7 @@ impl Application {
             project,
             renderer,
             presentation,
+            presentation_coordinator,
             dialogs,
             processing,
             lifecycle: RwLock::new(Lifecycle::Starting),
@@ -229,20 +236,11 @@ impl Application {
                 }
             });
         }
-        let canvas = {
-            let project = self.project.lock().await;
-            match project.as_ref() {
-                Some(project) => {
-                    self.present(
-                        &project.snapshot(),
-                        project.active_page(),
-                        ViewDisposition::Fit,
-                    )
-                    .await?
-                }
-                None => self.clear_presentation().await?,
-            }
-        };
+        let canvas = self
+            .presentation_coordinator
+            .synchronize(ViewDisposition::Fit, false)
+            .await
+            .map_err(AppError::internal)?;
         let preferences = load_preferences().map_err(AppError::internal)?;
         Ok(StartupState {
             preferences,
@@ -348,7 +346,7 @@ impl Application {
                 Ok(CommandResult::Unit(()))
             }
             Command::RenamePage { page, label } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -356,14 +354,12 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::DeletePages { pages } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -372,14 +368,12 @@ impl Application {
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
                     project.reconcile_page();
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Fit)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Fit).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::MovePage { page, index } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -387,14 +381,12 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::SetSourceText { layer, text } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -402,14 +394,12 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::SetTranslation { layer, text } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -417,14 +407,12 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::SetTypography { updates } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -432,14 +420,12 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::SetGeometry { updates } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -447,10 +433,8 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::SetVisibility {
@@ -458,7 +442,7 @@ impl Application {
                 visible,
                 opacity,
             } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -466,14 +450,12 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::DeleteLayers { layers } => {
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -481,10 +463,8 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::MoveLayer {
@@ -492,7 +472,7 @@ impl Application {
                 parent,
                 index,
             } => {
-                let (commit, active, view) = {
+                let view = {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -503,30 +483,25 @@ impl Application {
                     let active = project.active_page().ok_or_else(|| {
                         AppError::new(AppErrorCode::NoProject, "project has no active page")
                     })?;
-                    let view =
-                        Project::page(&commit.snapshot, active).map_err(AppError::internal)?;
-                    (commit, active, view)
+                    Project::page(&commit.snapshot, active).map_err(AppError::internal)?
                 };
-                self.publish_commit(&commit, Some(active), ViewDisposition::Preserve)
-                    .await?;
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::PageValue(view))
             }
             operation @ (Command::Undo {} | Command::Redo {}) => {
                 let redo = matches!(operation, Command::Redo {});
-                let (commit, active) = {
+                {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
-                    let commit = if redo {
+                    if redo {
                         project.redo().await
                     } else {
                         project.undo().await
                     }
                     .map_err(AppError::internal)?;
                     project.reconcile_page();
-                    (commit, project.active_page())
-                };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                }
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Unit(()))
             }
             Command::Process { scope, operation } => self
@@ -589,7 +564,7 @@ impl Application {
                 Ok(CommandResult::Unit(()))
             }
             Command::AddPointText { point } => {
-                let (commit, active, layer) = {
+                let (commit, layer) = {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let page = project.active_page().ok_or_else(no_project)?;
@@ -598,17 +573,16 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page(), layer)
+                    (commit, layer)
                 };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::LayerCommit(LayerCommit {
                     revision: commit.revision,
                     layer,
                 }))
             }
             Command::AddTextBox { frame } => {
-                let (commit, active, layer) = {
+                let (commit, layer) = {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let page = project.active_page().ok_or_else(no_project)?;
@@ -617,10 +591,9 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page(), layer)
+                    (commit, layer)
                 };
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::LayerCommit(LayerCommit {
                     revision: commit.revision,
                     layer,
@@ -667,7 +640,7 @@ impl Application {
                     CanvasOutput::Raster(stroke) => stroke,
                     _ => return Err(invalid_canvas("finish raster")),
                 };
-                let (commit, active, layer) = {
+                let (commit, layer) = {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let (commit, layer) = project
@@ -689,15 +662,14 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page(), layer)
+                    (commit, layer)
                 };
                 self.canvas_unit(CanvasOperation::AcknowledgeRaster {
                     page: stroke.page,
                     revision: commit.revision,
                 })
                 .await?;
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::LayerCommit(LayerCommit {
                     revision: commit.revision,
                     layer,
@@ -737,7 +709,7 @@ impl Application {
                 }) else {
                     return Ok(CommandResult::Revision(None));
                 };
-                let (commit, active) = {
+                let commit = {
                     let mut project = self.project.lock().await;
                     let project = project.as_mut().ok_or_else(no_project)?;
                     let commit = project
@@ -745,15 +717,14 @@ impl Application {
                         .await
                         .map_err(AppError::internal)?;
                     project.record_commit(&commit);
-                    (commit, project.active_page())
+                    commit
                 };
                 self.canvas_unit(CanvasOperation::AcknowledgeTransform {
                     page: transform.page,
                     revision: commit.revision,
                 })
                 .await?;
-                self.publish_commit(&commit, active, ViewDisposition::Preserve)
-                    .await?;
+                self.publish_current(ViewDisposition::Preserve).await?;
                 Ok(CommandResult::Revision(Some(commit.revision)))
             }
             Command::CancelTransform {} => {
@@ -872,7 +843,9 @@ impl Application {
             | Command::WindowClose {}
             | Command::WindowBeginDrag {}
             | Command::OpenExternal { .. }
-            | Command::GetVersion {} => Err(AppError::new(
+            | Command::GetVersion {}
+            | Command::CheckUpdate {}
+            | Command::InstallUpdate { .. } => Err(AppError::new(
                 AppErrorCode::InvalidRequest,
                 "command belongs to the desktop shell",
             )),
@@ -915,7 +888,7 @@ impl Application {
     }
 
     async fn import_pages(&self, source: PageImportSource) -> std::result::Result<(), AppError> {
-        if !self.jobs.lock().is_empty() {
+        if !self.stops.lock().is_empty() {
             return Err(AppError::new(
                 AppErrorCode::Conflict,
                 "pages cannot be imported while processing is running",
@@ -956,7 +929,7 @@ impl Application {
             .map_err(AppError::internal)?
             .map_err(AppError::internal)?;
 
-        let (commit, page) = {
+        {
             let mut project = self.project.lock().await;
             let project = project.as_mut().ok_or_else(no_project)?;
             let source = AssetRole::new("source").map_err(AppError::internal)?;
@@ -996,10 +969,8 @@ impl Application {
                 .map_err(AppError::internal)?;
             project.record_commit(&commit);
             project.reconcile_page();
-            (commit, project.active_page())
-        };
-        self.publish_commit(&commit, page, ViewDisposition::Fit)
-            .await
+        }
+        self.publish_current(ViewDisposition::Fit).await
     }
 
     async fn export_pages(
@@ -1007,10 +978,6 @@ impl Application {
         pages: Vec<EntityId>,
         format: ExportFormat,
     ) -> std::result::Result<(), AppError> {
-        let snapshot = {
-            let project = self.project.lock().await;
-            project.as_ref().ok_or_else(no_project)?.snapshot()
-        };
         let Some(directory) = self
             .dialogs
             .pick_folder()
@@ -1018,6 +985,19 @@ impl Application {
             .map_err(AppError::internal)?
         else {
             return Ok(());
+        };
+        if !self.stops.lock().is_empty() {
+            return Err(AppError::new(
+                AppErrorCode::Conflict,
+                "pages cannot be exported while processing is running",
+            ));
+        }
+        // The folder picker can remain open while a pipeline commit finishes.
+        // Capture the export revision only after the dialog returns so PNG/PSD
+        // output cannot silently omit that newly committed cleanup layer.
+        let snapshot = {
+            let project = self.project.lock().await;
+            project.as_ref().ok_or_else(no_project)?.snapshot()
         };
         let pages = if pages.is_empty() {
             snapshot.pages().map(|page| page.id()).collect::<Vec<_>>()
@@ -1172,8 +1152,7 @@ impl Application {
         let events = self.events.clone();
         let processing = Arc::clone(&self.processing);
         let project = Arc::clone(&self.project);
-        let renderer = Arc::clone(&self.renderer);
-        let presentation = Arc::clone(&self.presentation);
+        let presentation_coordinator = self.presentation_coordinator.clone();
         tokio::spawn(async move {
             let progress = Arc::new(parking_lot::Mutex::new((0_usize, 0_usize)));
             let progress_state = Arc::clone(&progress);
@@ -1226,9 +1205,7 @@ impl Application {
 
             let mut committer = ApplicationCommitter {
                 project,
-                renderer,
-                presentation,
-                events: events.clone(),
+                presentation_coordinator,
                 revisions: Vec::new(),
             };
             let result = processing.execute(snapshot, request, &mut committer).await;
@@ -1275,112 +1252,37 @@ impl Application {
         Ok((page.width.ceil() as u32, page.height.ceil() as u32))
     }
 
-    async fn publish_commit(
-        &self,
-        commit: &koharu_scene::Commit,
-        page: Option<EntityId>,
-        view: ViewDisposition,
-    ) -> std::result::Result<(), AppError> {
-        let canvas = self.present(&commit.snapshot, page, view).await?;
-        let info = self.project().await;
-        self.events.publish(AppEvent::Project { project: info });
-        self.events.publish(AppEvent::Canvas { state: canvas });
-        Ok(())
+    async fn publish_current(&self, view: ViewDisposition) -> std::result::Result<(), AppError> {
+        self.presentation_coordinator
+            .synchronize(view, true)
+            .await
+            .map(|_| ())
+            .map_err(AppError::internal)
     }
 
     async fn replace_project(&self, project: Project) -> std::result::Result<(), AppError> {
         self.agent.reset().await;
-        let canvas = self
-            .present(
-                &project.snapshot(),
-                project.active_page(),
-                ViewDisposition::Fit,
-            )
-            .await?;
-        let info = project.info();
         self.cancel_jobs();
-        *self.project.lock().await = Some(project);
-        self.events.publish(AppEvent::Project {
-            project: Some(info),
-        });
-        self.events.publish(AppEvent::Canvas { state: canvas });
-        Ok(())
-    }
-
-    async fn close_project(&self) -> std::result::Result<(), AppError> {
-        self.agent.reset().await;
-        let canvas = self.clear_presentation().await?;
-        self.cancel_jobs();
-        self.project.lock().await.take();
-        self.events.publish(AppEvent::Project { project: None });
-        self.events.publish(AppEvent::Canvas { state: canvas });
-        Ok(())
-    }
-
-    async fn select_page(&self, page: EntityId) -> std::result::Result<(), AppError> {
-        let (snapshot, info) = {
-            let project = self.project.lock().await;
-            let project = project
-                .as_ref()
-                .ok_or_else(|| AppError::new(AppErrorCode::NoProject, "no project is open"))?;
-            project.snapshot().page(page).map_err(AppError::internal)?;
-            (project.snapshot(), project.info())
-        };
-        let canvas = self
-            .present(&snapshot, Some(page), ViewDisposition::Fit)
-            .await?;
-        let info = {
-            let mut project = self.project.lock().await;
-            let project = project.as_mut().ok_or_else(|| {
-                AppError::new(
-                    AppErrorCode::NoProject,
-                    "project closed while selecting a page",
-                )
-            })?;
-            if project.info().revision != info.revision {
-                return Err(AppError::new(
-                    AppErrorCode::Conflict,
-                    "project changed while selecting a page",
-                ));
-            }
-            project.select_page(page).map_err(AppError::internal)?;
-            project.info()
-        };
-        self.events.publish(AppEvent::Project {
-            project: Some(info),
-        });
-        self.events.publish(AppEvent::Canvas { state: canvas });
-        Ok(())
-    }
-
-    async fn present(
-        &self,
-        snapshot: &koharu_scene::Snapshot,
-        page: Option<EntityId>,
-        view: ViewDisposition,
-    ) -> std::result::Result<CanvasState, AppError> {
-        let Some(page) = page else {
-            return self.clear_presentation().await;
-        };
-        let frame = self
-            .renderer
-            .render(snapshot, page)
-            .await
-            .map_err(AppError::internal)?;
-        self.presentation
-            .apply(PresentationUpdate::Frame { frame, view })
+        self.presentation_coordinator
+            .replace(project)
             .await
             .map_err(AppError::internal)
     }
 
-    async fn clear_presentation(&self) -> std::result::Result<CanvasState, AppError> {
-        let canvas = self
-            .presentation
-            .apply(PresentationUpdate::Clear)
+    async fn close_project(&self) -> std::result::Result<(), AppError> {
+        self.agent.reset().await;
+        self.cancel_jobs();
+        self.presentation_coordinator
+            .close()
             .await
-            .map_err(AppError::internal)?;
-        self.renderer.discard_retained_nodes();
-        Ok(canvas)
+            .map_err(AppError::internal)
+    }
+
+    async fn select_page(&self, page: EntityId) -> std::result::Result<(), AppError> {
+        self.presentation_coordinator
+            .select_page(page)
+            .await
+            .map_err(AppError::internal)
     }
 
     pub async fn stop(&self) {
@@ -1400,9 +1302,7 @@ impl Application {
 
 struct ApplicationCommitter {
     project: Arc<Mutex<Option<Project>>>,
-    renderer: Arc<dyn PageRenderer>,
-    presentation: Arc<dyn Presentation>,
-    events: EventHub,
+    presentation_coordinator: PresentationCoordinator,
     revisions: Vec<koharu_scene::Revision>,
 }
 
@@ -1412,30 +1312,18 @@ impl koharu_pipeline::Committer for ApplicationCommitter {
         &mut self,
         output: koharu_pipeline::StageOutput,
     ) -> Result<koharu_scene::Snapshot> {
-        let (commit, page, project_info) = {
+        let commit = {
             let mut project = self.project.lock().await;
             let project = project.as_mut().context("no project is open")?;
             let commit = project.session.commit(output.patch).await?;
             if commit.changes.from != commit.changes.to {
                 self.revisions.push(commit.revision);
             }
-            (commit, project.active_page(), project.info())
+            commit
         };
-        let canvas = if let Some(page) = page {
-            let frame = self.renderer.render(&commit.snapshot, page).await?;
-            self.presentation
-                .apply(PresentationUpdate::Frame {
-                    frame,
-                    view: ViewDisposition::Preserve,
-                })
-                .await?
-        } else {
-            self.presentation.apply(PresentationUpdate::Clear).await?
-        };
-        self.events.publish(AppEvent::Project {
-            project: Some(project_info),
-        });
-        self.events.publish(AppEvent::Canvas { state: canvas });
+        self.presentation_coordinator
+            .synchronize(ViewDisposition::Preserve, true)
+            .await?;
         Ok(commit.snapshot)
     }
 }
@@ -1753,13 +1641,19 @@ fn load_page_sources(files: Vec<PathBuf>) -> Result<Vec<PageSource>> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::{
+        collections::BTreeMap,
+        sync::atomic::{AtomicBool, Ordering},
+    };
 
     use async_trait::async_trait;
     use koharu_protocol::{RequestId, Response};
+    use koharu_scene::{Origin, RasterLayer, RasterLayerKind, Session};
     use tempfile::TempDir;
+    use tokio::sync::Notify;
 
     use super::*;
+    use crate::PresentationUpdate;
 
     static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -1841,6 +1735,33 @@ mod tests {
         }
     }
 
+    struct BlockingFolderDialogs {
+        directory: PathBuf,
+        started: Notify,
+        resume: Notify,
+    }
+
+    #[async_trait]
+    impl FileDialogs for BlockingFolderDialogs {
+        async fn pick_files(&self, _filters: &[DialogFilter]) -> Result<Option<Vec<PathBuf>>> {
+            Ok(None)
+        }
+
+        async fn pick_folder(&self) -> Result<Option<PathBuf>> {
+            self.started.notify_one();
+            self.resume.notified().await;
+            Ok(Some(self.directory.clone()))
+        }
+
+        async fn save_file(
+            &self,
+            _suggested_name: &str,
+            _filters: &[DialogFilter],
+        ) -> Result<Option<PathBuf>> {
+            Ok(None)
+        }
+    }
+
     struct FakeProcessing;
 
     #[async_trait]
@@ -1873,6 +1794,14 @@ mod tests {
             Arc::new(FakeProcessing),
         )
         .unwrap()
+    }
+
+    fn test_png(image: image::RgbaImage) -> Arc<[u8]> {
+        let mut bytes = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner().into()
     }
 
     #[tokio::test]
@@ -1963,5 +1892,117 @@ mod tests {
                 .all(|character| character.is_ascii_digit())
         );
         assert_eq!(output.attachments[0].bytes, [1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn export_captures_cleanup_committed_while_folder_dialog_is_open() {
+        let _test = TEST_LOCK.lock().await;
+        let root = TempDir::new().unwrap();
+        let export = TempDir::new().unwrap();
+        let dialogs = Arc::new(BlockingFolderDialogs {
+            directory: export.path().to_owned(),
+            started: Notify::new(),
+            resume: Notify::new(),
+        });
+        let app = Arc::new(
+            Application::with_components(
+                ProjectLibrary::new(root.path()).unwrap(),
+                Arc::new(FakePresentation {
+                    fail: AtomicBool::new(false),
+                }),
+                Arc::new(koharu_renderer::Renderer::new().unwrap()),
+                dialogs.clone(),
+                Arc::new(FakeProcessing),
+            )
+            .unwrap(),
+        );
+        let source = AssetRole::new("source").unwrap();
+        let mut session = Session::memory().await.unwrap();
+        let mut page = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let created = edit.add_page(PageDraft::new("page", 4.0, 4.0), At::End)?;
+                edit.set_asset(
+                    created,
+                    &source,
+                    AssetInput::new(
+                        test_png(image::RgbaImage::from_pixel(
+                            4,
+                            4,
+                            image::Rgba([10, 20, 200, 255]),
+                        )),
+                        "image/png",
+                        AssetMetadata {
+                            width: Some(4),
+                            height: Some(4),
+                            attributes: BTreeMap::new(),
+                        },
+                    ),
+                )?;
+                page = Some(created);
+                Ok(())
+            })
+            .unwrap();
+        session.commit(patch).await.unwrap();
+        let page = page.unwrap();
+        *app.project.lock().await = Some(Project {
+            session,
+            name: "test".to_owned(),
+            active_page: Some(page),
+            undo: Vec::new(),
+            redo: Vec::new(),
+        });
+
+        let exporting = tokio::spawn({
+            let app = app.clone();
+            async move { app.export_pages(vec![page], ExportFormat::Png).await }
+        });
+        dialogs.started.notified().await;
+
+        {
+            let mut project = app.project.lock().await;
+            let project = project.as_mut().unwrap();
+            let mut cleanup = image::RgbaImage::new(4, 4);
+            cleanup.put_pixel(2, 1, image::Rgba([240, 30, 20, 255]));
+            let patch = project
+                .snapshot()
+                .patch(|edit| {
+                    let layer = edit.add_entity(page, At::Start)?;
+                    edit.set(
+                        layer,
+                        &RasterLayer {
+                            origin: Origin::User,
+                            name: "Cleanup".to_owned(),
+                            kind: RasterLayerKind::Cleanup,
+                        },
+                    )?;
+                    edit.set_asset(
+                        layer,
+                        &source,
+                        AssetInput::new(
+                            test_png(cleanup),
+                            "image/png",
+                            AssetMetadata {
+                                width: Some(4),
+                                height: Some(4),
+                                attributes: BTreeMap::new(),
+                            },
+                        ),
+                    )?;
+                    Ok(())
+                })
+                .unwrap();
+            let commit = project.session.commit(patch).await.unwrap();
+            project.record_commit(&commit);
+        }
+        dialogs.resume.notify_one();
+        exporting.await.unwrap().unwrap();
+
+        let image = image::open(export.path().join("0001_page.png"))
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(image.get_pixel(0, 0).0, [10, 20, 200, 255]);
+        assert_eq!(image.get_pixel(2, 1).0, [240, 30, 20, 255]);
     }
 }

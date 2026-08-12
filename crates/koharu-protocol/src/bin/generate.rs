@@ -71,6 +71,8 @@ export const commands = {
   saveAgentConfig: (config: Config) => request<Config>('save_agent_config', { config }),
   runAgent: (prompt: string) => request<RunId>('run_agent', { prompt }),
   cancelAgent: (run: RunId) => request<null>('cancel_agent', { run }),
+  checkUpdate: () => request<UpdateInfo | null>('check_update'),
+  installUpdate: (version: string) => request<null>('install_update', { version }),
 } as const
 
 "#;

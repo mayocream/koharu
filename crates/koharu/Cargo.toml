@@ -23,6 +23,7 @@ koharu-desktop = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-protocol = { workspace = true }
 koharu-torch-sys = { workspace = true }
+koharu-updater = { workspace = true }
 parking_lot = { workspace = true }
 open = { workspace = true }
 rfd = { workspace = true }

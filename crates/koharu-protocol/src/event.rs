@@ -3,7 +3,7 @@ use specta::Type;
 
 use crate::{
     AgentLoginEvent, AgentRunEvent, AppError, CanvasState, Download, Job, ModelResources,
-    ProjectInfo, StartupState, WindowState,
+    ProjectInfo, StartupState, UpdateProgress, WindowState,
 };
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -19,6 +19,7 @@ pub enum AppEvent {
     AgentLogin { event: AgentLoginEvent },
     AgentRun { event: AgentRunEvent },
     WindowState { state: WindowState },
+    UpdateProgress { progress: UpdateProgress },
 }
 
 #[derive(Clone, Debug, Serialize, Type)]

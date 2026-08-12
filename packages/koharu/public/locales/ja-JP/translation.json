@@ -503,6 +503,25 @@
     "select": "選択",
     "text": "テキスト"
   },
+  "updater": {
+    "available": {
+      "description": "Koharu {{version}} をインストールできます。",
+      "title": "アップデートが利用可能"
+    },
+    "close": "閉じる",
+    "downloading": {
+      "subtitle": "Koharu {{version}}",
+      "title": "アップデートをダウンロード中…"
+    },
+    "error": {
+      "description": "アップデート中に問題が発生しました",
+      "title": "アップデートに失敗しました"
+    },
+    "later": "後で",
+    "noNotes": "リリースノートはありません。",
+    "retry": "再試行",
+    "update": "更新"
+  },
   "window": {
     "close": "閉じる",
     "maximize": "最大化",

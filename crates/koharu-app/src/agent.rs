@@ -20,36 +20,33 @@ use serde_json::json;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 use crate::{
-    PageRenderer, Presentation, PresentationUpdate, ProcessingRuntime, ViewDisposition,
-    event_hub::EventHub, project::Project,
+    PageRenderer, ProcessingRuntime, ViewDisposition, event_hub::EventHub,
+    presentation_coordinator::PresentationCoordinator, project::Project,
 };
 
 #[derive(Clone)]
 pub(crate) struct KoharuHost {
     project: Arc<AsyncMutex<Option<Project>>>,
     renderer: Arc<dyn PageRenderer>,
-    presentation: Arc<dyn Presentation>,
+    presentation_coordinator: PresentationCoordinator,
     processing: Arc<dyn ProcessingRuntime>,
     stops: Arc<Mutex<HashMap<koharu_protocol::JobId, StopToken>>>,
-    events: EventHub,
 }
 
 impl KoharuHost {
     pub(crate) fn new(
         project: Arc<AsyncMutex<Option<Project>>>,
         renderer: Arc<dyn PageRenderer>,
-        presentation: Arc<dyn Presentation>,
+        presentation_coordinator: PresentationCoordinator,
         processing: Arc<dyn ProcessingRuntime>,
         stops: Arc<Mutex<HashMap<koharu_protocol::JobId, StopToken>>>,
-        events: EventHub,
     ) -> Self {
         Self {
             project,
             renderer,
-            presentation,
+            presentation_coordinator,
             processing,
             stops,
-            events,
         }
     }
 
@@ -89,39 +86,23 @@ impl KoharuHost {
     where
         T: serde::Serialize + Send,
     {
-        let (commit, value, page, project) = {
+        let (commit, value, project) = {
             let mut current = self.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
             let (commit, value) = mutation(project).await?;
             project.record_commit(&commit);
             project.reconcile_page();
-            (commit, value, project.active_page(), project.info())
+            (commit, value, project.info())
         };
         let revision = commit.revision;
-        self.synchronize(&commit.snapshot, page).await?;
+        self.presentation_coordinator
+            .synchronize(ViewDisposition::Preserve, true)
+            .await?;
         Invocation::changed(json!({
             "revision": revision,
             "project": project,
             "result": value,
         }))
-    }
-
-    async fn synchronize(&self, snapshot: &Snapshot, page: Option<EntityId>) -> Result<()> {
-        let canvas = if let Some(page) = page {
-            let frame = self.renderer.render(snapshot, page).await?;
-            self.presentation
-                .apply(PresentationUpdate::Frame {
-                    frame,
-                    view: ViewDisposition::Preserve,
-                })
-                .await?
-        } else {
-            self.presentation.apply(PresentationUpdate::Clear).await?
-        };
-        let project = self.project.lock().await.as_ref().map(Project::info);
-        self.events.publish(AppEvent::Project { project });
-        self.events.publish(AppEvent::Canvas { state: canvas });
-        Ok(())
     }
 
     async fn run_pipeline(&self, arguments: RunPipeline, control: &Control) -> Result<Invocation> {
@@ -462,14 +443,17 @@ struct AgentCommitter {
 #[async_trait]
 impl Committer for AgentCommitter {
     async fn commit(&mut self, output: StageOutput) -> Result<Snapshot> {
-        let (commit, page) = {
+        let commit = {
             let mut current = self.host.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
             let commit = project.session.commit(output.patch).await?;
             project.record_commit(&commit);
-            (commit, project.active_page())
+            commit
         };
-        self.host.synchronize(&commit.snapshot, page).await?;
+        self.host
+            .presentation_coordinator
+            .synchronize(ViewDisposition::Preserve, true)
+            .await?;
         Ok(commit.snapshot)
     }
 }

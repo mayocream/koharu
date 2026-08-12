@@ -41,6 +41,7 @@ koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
 koharu-canvas = { path = "crates/koharu-canvas" }
 koharu-secrets = { path = "crates/koharu-secrets" }
+koharu-updater = { path = "crates/koharu-updater" }
 
 # external dependencies
 cef = { version = "=151.3.0", default-features = false }

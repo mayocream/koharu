@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 
 import { StartupView } from '@/components/app/StartupView'
+import { Updater } from '@/components/app/Updater'
 import ClientOnly from '@/components/ClientOnly'
 import { refreshTranslationModels } from '@/lib/backend'
 import { subscribeAppEvents } from '@/lib/events'
@@ -150,7 +151,14 @@ export function Providers({ children }: { children: ReactNode }) {
 
 function StartupBoundary({ children }: { children: ReactNode }) {
   const startup = useKoharuStore((state) => state.startup)
-  return startup.state === 'ready' ? children : <StartupView />
+  return startup.state === 'ready' ? (
+    <>
+      {children}
+      <Updater />
+    </>
+  ) : (
+    <StartupView />
+  )
 }
 
 export default Providers

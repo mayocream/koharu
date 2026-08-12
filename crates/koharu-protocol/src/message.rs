@@ -210,6 +210,10 @@ pub enum Command {
         url: String,
     },
     GetVersion {},
+    CheckUpdate {},
+    InstallUpdate {
+        version: String,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Type)]
@@ -237,6 +241,7 @@ pub enum CommandResult {
     AgentRun(RunId),
     WindowState(WindowState),
     Version(String),
+    OptionalUpdate(Option<UpdateInfo>),
 }
 
 #[derive(Clone, Debug, Serialize, Type)]

@@ -9,6 +9,7 @@ import type {
   ModelResources,
   ProjectInfo,
   StartupState,
+  UpdateProgress,
 } from './protocol'
 import { subscribe, type AppError, type EventGapError } from './transport'
 
@@ -30,6 +31,7 @@ export type AppEvent =
   | { type: 'agent_login'; event: AgentLoginEvent }
   | { type: 'agent_run'; event: AgentRunEvent }
   | { type: 'window_state'; state: WindowState }
+  | { type: 'update_progress'; progress: UpdateProgress }
 
 export function subscribeAppEvents(
   listener: (event: AppEvent) => void,

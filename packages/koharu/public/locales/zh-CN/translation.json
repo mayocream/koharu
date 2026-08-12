@@ -503,6 +503,25 @@
     "select": "选择",
     "text": "文本"
   },
+  "updater": {
+    "available": {
+      "description": "Koharu {{version}} 已准备好安装。",
+      "title": "有可用更新"
+    },
+    "close": "关闭",
+    "downloading": {
+      "subtitle": "Koharu {{version}}",
+      "title": "正在下载更新…"
+    },
+    "error": {
+      "description": "更新过程中出现问题",
+      "title": "更新失败"
+    },
+    "later": "稍后",
+    "noNotes": "未提供发行说明。",
+    "retry": "重试",
+    "update": "更新"
+  },
   "window": {
     "close": "关闭",
     "maximize": "最大化",

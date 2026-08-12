@@ -50,6 +50,21 @@ pub enum AppErrorCode {
     Internal,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+pub struct UpdateInfo {
+    pub version: String,
+    pub body: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+pub struct UpdateProgress {
+    pub version: String,
+    #[specta(type = f64)]
+    pub downloaded: u64,
+    #[specta(type = Option<f64>)]
+    pub total: Option<u64>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
 pub struct StartupState {
     pub preferences: Preferences,

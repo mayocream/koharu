@@ -171,10 +171,27 @@ jobs:
             trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu "$installer"
           done
 
+      - name: Create macOS updater package
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: >-
+          tar -czf
+          "target/bundle/macos/bundle/macos/Koharu_${APP_VERSION}_aarch64.app.tar.gz"
+          -C target/bundle/macos/bundle/macos
+          Koharu.app
+
       - name: Upload release package
         uses: softprops/action-gh-release@v3
         with:
           files: ${{ matrix.artifact }}
+          draft: true
+          fail_on_unmatched_files: true
+
+      - name: Upload macOS updater package
+        if: matrix.platform == 'macos'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: target/bundle/macos/bundle/macos/*.app.tar.gz
           draft: true
           fail_on_unmatched_files: true
 

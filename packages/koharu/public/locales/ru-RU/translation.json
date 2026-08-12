@@ -503,6 +503,25 @@
     "select": "Выбор",
     "text": "Текст"
   },
+  "updater": {
+    "available": {
+      "description": "Koharu {{version}} готов к установке.",
+      "title": "Доступно обновление"
+    },
+    "close": "Закрыть",
+    "downloading": {
+      "subtitle": "Koharu {{version}}",
+      "title": "Загрузка обновления…"
+    },
+    "error": {
+      "description": "Что-то пошло не так во время обновления",
+      "title": "Ошибка обновления"
+    },
+    "later": "Позже",
+    "noNotes": "Примечания к выпуску отсутствуют.",
+    "retry": "Повторить",
+    "update": "Обновить"
+  },
   "window": {
     "close": "Закрыть",
     "maximize": "Развернуть",

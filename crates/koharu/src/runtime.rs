@@ -44,11 +44,16 @@ pub async fn run() -> Result<()> {
             .context("failed to create the application")?,
     );
     let fatal = Arc::new(Mutex::new(None));
+    let updater = Arc::new(
+        koharu_updater::Updater::new(env!("CARGO_PKG_VERSION"))
+            .context("failed to configure the application updater")?,
+    );
     let delegate = ApplicationDelegate::new(
         tokio::runtime::Handle::current(),
         Arc::clone(&application),
         presentation,
         Arc::clone(&fatal),
+        updater,
     );
     let config = DesktopConfig {
         title: "Koharu".into(),
@@ -634,6 +639,8 @@ struct ApplicationDelegate {
     initialized: bool,
     event_subscription: Option<broadcast::Receiver<ServerEvent>>,
     fatal: Arc<Mutex<Option<String>>>,
+    updater: Arc<koharu_updater::Updater>,
+    available_update: Arc<Mutex<Option<koharu_updater::Update>>>,
 }
 
 struct PendingShell {
@@ -656,6 +663,7 @@ impl ApplicationDelegate {
         application: Arc<Application>,
         presentation: Arc<DesktopPresentation>,
         fatal: Arc<Mutex<Option<String>>>,
+        updater: Arc<koharu_updater::Updater>,
     ) -> Self {
         let event_subscription = application.events().subscribe();
         Self {
@@ -668,6 +676,8 @@ impl ApplicationDelegate {
             initialized: false,
             event_subscription: Some(event_subscription),
             fatal,
+            updater,
+            available_update: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -710,6 +720,90 @@ impl ApplicationDelegate {
                     }
                 }
                 Err(error) => send_failure(&handle, request, error),
+            }
+        });
+    }
+
+    fn check_update(&self, request: RequestId, handle: DesktopHandle) {
+        let updater = Arc::clone(&self.updater);
+        let available_update = Arc::clone(&self.available_update);
+        self.runtime.spawn(async move {
+            let info = match updater.check().await {
+                Ok(Some(update)) => {
+                    let info = koharu_protocol::UpdateInfo {
+                        version: update.version().to_string(),
+                        body: update.body().map(str::to_owned),
+                    };
+                    *available_update.lock() = Some(update);
+                    Some(info)
+                }
+                Ok(None) => {
+                    *available_update.lock() = None;
+                    None
+                }
+                Err(error) => {
+                    *available_update.lock() = None;
+                    tracing::warn!(%error, "could not discover a Koharu update");
+                    None
+                }
+            };
+            send_server(
+                &handle,
+                Response::success(request, CommandResult::OptionalUpdate(info)).into(),
+                Vec::new(),
+            );
+        });
+    }
+
+    fn install_update(&self, request: RequestId, version: String, handle: DesktopHandle) {
+        let update = self
+            .available_update
+            .lock()
+            .as_ref()
+            .filter(|update| update.version().to_string() == version)
+            .cloned();
+        let Some(update) = update else {
+            send_failure(
+                &handle,
+                request,
+                AppError::new(
+                    AppErrorCode::NotFound,
+                    "the requested update is no longer available; check again",
+                ),
+            );
+            return;
+        };
+        let updater = Arc::clone(&self.updater);
+        let events = self.application.events();
+        self.runtime.spawn(async move {
+            let progress_version = version.clone();
+            let result = updater
+                .download_and_install(&update, move |progress| {
+                    events.publish(AppEvent::UpdateProgress {
+                        progress: koharu_protocol::UpdateProgress {
+                            version: progress_version.clone(),
+                            downloaded: progress.downloaded,
+                            total: progress.total,
+                        },
+                    });
+                })
+                .await;
+            match result {
+                Ok(()) => {
+                    send_server(
+                        &handle,
+                        Response::success(request, CommandResult::Unit(())).into(),
+                        Vec::new(),
+                    );
+                    if let Err(error) = handle.shutdown() {
+                        tracing::warn!(%error, "could not close Koharu after installing an update");
+                    }
+                }
+                Err(error) => send_failure(
+                    &handle,
+                    request,
+                    AppError::new(AppErrorCode::Unavailable, error.to_string()),
+                ),
             }
         });
     }
@@ -807,6 +901,10 @@ impl DesktopDelegate for ApplicationDelegate {
                     .into(),
                 Vec::new(),
             ),
+            Command::CheckUpdate {} => self.check_update(id, handle.clone()),
+            Command::InstallUpdate { version } => {
+                self.install_update(id, version, handle.clone());
+            }
             command => self.dispatch_application(id, command, handle.clone()),
         }
     }

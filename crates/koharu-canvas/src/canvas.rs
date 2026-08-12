@@ -112,7 +112,7 @@ impl Canvas {
             )));
         }
         if self.frame.as_ref().is_some_and(|current| {
-            current.page() == frame.page() && current.revision() == frame.revision()
+            current.page() == frame.page() && current.revision() >= frame.revision()
         }) {
             return Ok(());
         }

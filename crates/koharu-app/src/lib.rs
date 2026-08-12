@@ -5,6 +5,7 @@ mod application;
 mod dialogs;
 mod event_hub;
 mod presentation;
+mod presentation_coordinator;
 mod processing;
 mod project;
 

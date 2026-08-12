@@ -4662,6 +4662,7 @@ dependencies = [
  "koharu-pipeline",
  "koharu-protocol",
  "koharu-torch-sys",
+ "koharu-updater",
  "open",
  "parking_lot",
  "rfd",
@@ -5114,6 +5115,24 @@ dependencies = [
  "toml 1.1.2+spec-1.1.0",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "koharu-updater"
+version = "0.64.2"
+dependencies = [
+ "flate2",
+ "futures",
+ "reqwest 0.13.4",
+ "semver",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
