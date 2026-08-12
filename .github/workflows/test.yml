@@ -27,6 +27,7 @@ jobs:
             pkg-config \
             libfontconfig-dev \
             libssl-dev \
+            mesa-vulkan-drivers \
             fonts-noto-cjk \
             dbus-x11 \
             gnome-keyring
