@@ -301,6 +301,7 @@ fn configure_payload(
     Ok(())
 }
 
+#[allow(unused)]
 fn insert_licenses(
     config: &BundleConfig,
     cef_root: &Path,

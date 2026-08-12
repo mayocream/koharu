@@ -12,10 +12,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-defaults:
-  run:
-    shell: bash
-
 jobs:
   prepare:
     name: Create GitHub release
@@ -86,6 +82,7 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Validate release version
+        shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -104,12 +101,14 @@ jobs:
 
       - name: Install Azure Trusted Signing client
         if: matrix.platform == 'windows'
+        shell: bash
         run: |
           curl -fsSL 'https://github.com/Levminer/trusted-signing-cli/releases/download/0.8.0/trusted-signing-cli.exe' -o "$RUNNER_TEMP/trusted-signing-cli.exe"
           printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/trusted-signing-cli.exe" --version
       - name: Sign Koharu Windows binaries
         if: matrix.platform == 'windows'
+        shell: bash
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -154,6 +153,7 @@ jobs:
 
       - name: Sign Koharu Windows installer
         if: matrix.platform == 'windows'
+        shell: bash
         env:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
