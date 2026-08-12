@@ -37,11 +37,13 @@ pub enum Package {
 }
 
 impl Package {
-    fn tauri(self) -> PackageType {
+    fn tauri(self) -> Vec<PackageType> {
         match self {
-            Self::Nsis => PackageType::Nsis,
-            Self::AppImage => PackageType::AppImage,
-            Self::Dmg => PackageType::Dmg,
+            Self::Nsis => vec![PackageType::Nsis],
+            Self::AppImage => vec![PackageType::AppImage],
+            // Keep the notarized application bundle for the updater archive.
+            // Tauri removes it when DMG is the only requested macOS artifact.
+            Self::Dmg => vec![PackageType::MacOsBundle, PackageType::Dmg],
         }
     }
 }
@@ -123,7 +125,7 @@ fn bundle_inner(config: &BundleConfig) -> Result<Vec<PathBuf>> {
 
     let settings = SettingsBuilder::new()
         .project_out_directory(&config.output)
-        .package_types(vec![config.package.tauri()])
+        .package_types(config.package.tauri())
         .package_settings(PackageSettings {
             product_name: "Koharu".into(),
             version: config.version.clone(),
@@ -394,9 +396,12 @@ mod tests {
 
     #[test]
     fn package_mapping_uses_tauri_artifacts() {
-        assert_eq!(Package::Nsis.tauri(), PackageType::Nsis);
-        assert_eq!(Package::AppImage.tauri(), PackageType::AppImage);
-        assert_eq!(Package::Dmg.tauri(), PackageType::Dmg);
+        assert_eq!(Package::Nsis.tauri(), [PackageType::Nsis]);
+        assert_eq!(Package::AppImage.tauri(), [PackageType::AppImage]);
+        assert_eq!(
+            Package::Dmg.tauri(),
+            [PackageType::MacOsBundle, PackageType::Dmg]
+        );
     }
 
     #[test]
