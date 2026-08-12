@@ -25,6 +25,7 @@ jobs:
             cmake \
             ninja-build \
             pkg-config \
+            libfontconfig-dev \
             libssl-dev \
             fonts-noto-cjk \
             dbus-x11 \

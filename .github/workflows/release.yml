@@ -71,7 +71,13 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y build-essential cmake ninja-build pkg-config libssl-dev
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libfontconfig-dev \
+            libssl-dev
 
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
