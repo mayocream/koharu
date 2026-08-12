@@ -1,3 +1,18 @@
+## [0.65.0](https://github.com/mayocream/koharu/compare/0.64.2..0.65.0) - 2026-08-12
+
+### ⛰️  Features
+
+- Updater & improve canvas - ([0b7b5f2](https://github.com/mayocream/koharu/commit/0b7b5f295f5e89f7180af0783566f8613623c2d8))
+
+### 🐛 Bug Fixes
+
+- Support multiple GPUs - ([f0acda1](https://github.com/mayocream/koharu/commit/f0acda102f0f165828cbc79f2b97740d4e8ca7bb))
+
+### 🚜 Refactor
+
+- Use CEF to replace Tauri - ([920faac](https://github.com/mayocream/koharu/commit/920faac6c5cea2209d68ee31588bc5cba3f4f9ee))
+
+
 ## [0.64.2](https://github.com/mayocream/koharu/compare/0.64.1..0.64.2) - 2026-08-12
 
 ### 🐛 Bug Fixes

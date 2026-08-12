@@ -4650,7 +4650,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4676,7 +4676,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4697,7 +4697,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-app"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -4732,7 +4732,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4745,7 +4745,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bundle"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "cef",
  "cef-dll-sys",
@@ -4760,7 +4760,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "criterion",
  "image",
@@ -4774,7 +4774,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "atomicwrites",
@@ -4788,7 +4788,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-desktop"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -4810,7 +4810,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
@@ -4820,7 +4820,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4830,7 +4830,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -4845,7 +4845,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4855,7 +4855,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -4886,7 +4886,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4915,7 +4915,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-protocol"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "koharu-agent",
@@ -4934,7 +4934,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "image",
  "koharu-renderer",
@@ -4946,7 +4946,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4981,7 +4981,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "dirs 6.0.0",
@@ -5009,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-scene"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "blake3",
  "bytes",
@@ -5031,7 +5031,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-secrets"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "keyring",
@@ -5043,7 +5043,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-storage"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "blake3",
  "bytes",
@@ -5063,7 +5063,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "half",
@@ -5080,7 +5080,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "cmake",
@@ -5093,7 +5093,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-translator"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -5119,7 +5119,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-updater"
-version = "0.64.2"
+version = "0.65.0"
 dependencies = [
  "flate2",
  "futures",
