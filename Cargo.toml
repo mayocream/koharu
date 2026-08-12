@@ -136,6 +136,7 @@ percent-encoding = "2.3"
 plist = "1.10"
 semver = "1"
 tauri-bundler = "=2.9.4"
+log = "0.4"
 # Pinned to Vello's upstream WGPU 30 migration until it is released. cef-rs's
 # accelerated OSR importer must share the presenter's exact WGPU device type.
 vello = { git = "https://github.com/linebender/vello", rev = "b9f820846810cff9e96bcd83aed5218a6ae79288" }

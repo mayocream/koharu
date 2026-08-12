@@ -4750,6 +4750,7 @@ dependencies = [
  "cef",
  "cef-dll-sys",
  "clap",
+ "log",
  "plist",
  "semver",
  "tauri-bundler",
