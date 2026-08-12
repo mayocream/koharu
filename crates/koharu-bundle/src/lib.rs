@@ -87,7 +87,10 @@ pub type Result<T> = std::result::Result<T, BundleError>;
 
 pub fn bundle(config: &BundleConfig) -> Result<Vec<PathBuf>> {
     fs::create_dir_all(&config.output).map_err(|source| io(&config.output, source))?;
-    bundle_inner(config)
+    let mut config = config.clone();
+    config.output =
+        std::path::absolute(&config.output).map_err(|source| io(config.output.clone(), source))?;
+    bundle_inner(&config)
 }
 
 fn bundle_inner(config: &BundleConfig) -> Result<Vec<PathBuf>> {
@@ -349,6 +352,7 @@ fn require_package(actual: Package, expected: Package) -> Result<()> {
     }
 }
 
+#[allow(unused)]
 fn remove_staged_binary(runtime: &Path, name: &str) -> Result<()> {
     let path = runtime.join(name);
     fs::remove_file(&path).map_err(|source| io(path, source))
