@@ -28,11 +28,7 @@ pub struct Model {
 impl Model {
     pub fn new(config: &YoloV8mSpeechBubbleConfig, device: Device) -> Result<Self> {
         let mut vs = nn::VarStore::new(device);
-        vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut vs);
         let model = YoloV8Seg::load(&(&vs.root() / "model"), config)?;
         vs.freeze();
         Ok(Self { vs, model })
@@ -40,11 +36,7 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.bfloat16();
-        } else {
-            self.vs.float();
-        }
+        crate::device::set_precision(&mut self.vs);
         Ok(())
     }
 

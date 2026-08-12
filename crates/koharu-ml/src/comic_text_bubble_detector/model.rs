@@ -29,11 +29,7 @@ pub struct Model {
 impl Model {
     pub fn new(config: RTDetrV2Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut vs);
         let model = RTDetrV2ForObjectDetection::new(&vs.root(), &config);
         vs.freeze();
         Self { vs, model }
@@ -41,11 +37,7 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.bfloat16();
-        } else {
-            self.vs.float();
-        }
+        crate::device::set_precision(&mut self.vs);
         Ok(())
     }
 

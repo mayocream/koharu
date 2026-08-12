@@ -24,11 +24,7 @@ pub(crate) struct Model {
 impl Model {
     pub(crate) fn new(config: &PPOCRV6MediumRecConfig, device: koharu_torch::Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut vs);
         let backbone = PPLCNetV4Backbone::new(
             &(&vs.root() / "model" / "backbone"),
             &config.backbone_config,
@@ -40,11 +36,7 @@ impl Model {
 
     pub(crate) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.bfloat16();
-        } else {
-            self.vs.float();
-        }
+        crate::device::set_precision(&mut self.vs);
         Ok(())
     }
 

@@ -165,6 +165,7 @@ mod tests {
     fn shared_dependencies_are_deduplicated() {
         let hardware = Hardware {
             cuda_driver: Some(13000),
+            cuda_compute_capability: 80,
             rocm_target: None,
             vulkan: true,
         };

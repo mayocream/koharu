@@ -6,6 +6,7 @@ mod vulkan;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Hardware {
     pub(crate) cuda_driver: Option<i32>,
+    pub(crate) cuda_compute_capability: u32,
     pub(crate) rocm_target: Option<String>,
     pub(crate) vulkan: bool,
 }
@@ -13,16 +14,26 @@ pub struct Hardware {
 impl Hardware {
     #[must_use]
     pub fn discover() -> Self {
-        Self {
-            cuda_driver: cuda::probe(),
+        let mut hardware = Self {
             rocm_target: hip::probe(),
             vulkan: vulkan::probe(),
+            ..Self::default()
+        };
+        if let Some((driver, compute_capability)) = cuda::probe() {
+            hardware.cuda_driver = Some(driver);
+            hardware.cuda_compute_capability = compute_capability;
         }
+        hardware
     }
 
     #[must_use]
     pub fn supports_cuda(&self) -> bool {
         self.cuda_driver.is_some_and(|version| version >= 13000)
+    }
+
+    #[must_use]
+    pub fn cuda_compute_capability(&self) -> u32 {
+        self.cuda_compute_capability
     }
 
     #[must_use]

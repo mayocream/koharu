@@ -8,7 +8,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Kind, Tensor,
+    Device, Tensor,
     nn::{self, Module, ModuleT},
 };
 
@@ -31,29 +31,17 @@ pub struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut blk_det_vs = nn::VarStore::new(device);
-        blk_det_vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut blk_det_vs);
         let blk_det = YoloV5::new(&blk_det_vs.root());
         blk_det_vs.freeze();
 
         let mut text_seg_vs = nn::VarStore::new(device);
-        text_seg_vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        text_seg_vs.set_kind(blk_det_vs.kind());
         let text_seg = UnetHead::new(&text_seg_vs.root());
         text_seg_vs.freeze();
 
         let mut text_det_vs = nn::VarStore::new(device);
-        text_det_vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        text_det_vs.set_kind(blk_det_vs.kind());
         let text_det = DBHead::new(&text_det_vs.root());
         text_det_vs.freeze();
 
@@ -76,14 +64,12 @@ impl Model {
         self.blk_det_vs.load(yolo_path)?;
         self.text_seg_vs.load(unet_path)?;
         self.text_det_vs.load(dbnet_path)?;
-        if self.blk_det_vs.device().is_cuda() {
-            self.blk_det_vs.bfloat16();
-            self.text_seg_vs.bfloat16();
-            self.text_det_vs.bfloat16();
-        } else {
-            self.blk_det_vs.float();
-            self.text_seg_vs.float();
-            self.text_det_vs.float();
+        for var_store in [
+            &mut self.blk_det_vs,
+            &mut self.text_seg_vs,
+            &mut self.text_det_vs,
+        ] {
+            crate::device::set_precision(var_store);
         }
         Ok(())
     }

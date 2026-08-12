@@ -26,11 +26,7 @@ pub(super) struct Model {
 impl Model {
     pub(super) fn new(config: PaddleOCRVLConfig, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut vs);
         let root = vs.root();
 
         // Transformers renames the checkpoint's `visual`, `model`, and `mlp_AR`
@@ -59,11 +55,7 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.bfloat16();
-        } else {
-            self.vs.float();
-        }
+        crate::device::set_precision(&mut self.vs);
         Ok(())
     }
 

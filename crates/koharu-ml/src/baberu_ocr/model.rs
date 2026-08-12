@@ -39,11 +39,7 @@ impl Model {
     ) -> Result<Self> {
         config.validate(vision_config)?;
         let mut vs = nn::VarStore::new(device);
-        vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut vs);
         let root = vs.root();
         let vision_encoder = Dinov2Model::new(&(&root / "vision_encoder"), vision_config);
         let projector = BaberuVisionProjector::new(&(&root / "projector"), config);
@@ -64,11 +60,7 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>, image_size: i64) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.bfloat16();
-        } else {
-            self.vs.float();
-        }
+        crate::device::set_precision(&mut self.vs);
         self.model.set_kind(self.vs.kind());
         // The processor always emits one fixed 224x224 crop, so cache the exact
         // DINOv2 bicubic position interpolation instead of repeating it per crop.

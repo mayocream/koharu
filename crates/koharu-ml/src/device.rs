@@ -2,6 +2,7 @@ use std::fmt;
 
 use koharu_llama::{LlamaBackendDevice, LlamaBackendDeviceType};
 use koharu_runtime::Hardware;
+use koharu_torch::{Kind, nn};
 use serde::{Deserialize, Serialize};
 
 /// Compute backend used by a machine-learning device.
@@ -138,6 +139,29 @@ pub fn device(cpu: bool) -> Device {
     } else {
         tracing::warn!("GPU is not available, falling back to CPU");
         Device::cpu()
+    }
+}
+
+pub(crate) fn set_precision(var_store: &mut nn::VarStore) {
+    let device = var_store.device();
+    let kind = if let koharu_torch::Device::Cuda(_) = device {
+        if Hardware::discover().cuda_compute_capability() >= 80 {
+            Kind::BFloat16
+        } else {
+            Kind::Half
+        }
+    } else {
+        Kind::Float
+    };
+
+    if var_store.is_empty() {
+        var_store.set_kind(kind);
+    } else if kind == Kind::BFloat16 {
+        var_store.bfloat16();
+    } else if kind == Kind::Half {
+        var_store.half();
+    } else {
+        var_store.float();
     }
 }
 

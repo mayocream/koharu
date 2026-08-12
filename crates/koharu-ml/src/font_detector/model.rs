@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use koharu_torch::{
-    Device, Kind, Tensor,
+    Device, Tensor,
     nn::{self, ModuleT},
 };
 
@@ -22,11 +22,7 @@ pub(super) struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        vs.set_kind(if device.is_cuda() {
-            Kind::BFloat16
-        } else {
-            Kind::Float
-        });
+        crate::device::set_precision(&mut vs);
         // The published safetensors retain Lightning's `model` wrapper and
         // torch.compile's `_orig_mod` wrapper from the upstream checkpoint.
         let model = koharu_torch::vision::resnet::resnet50(
@@ -42,11 +38,7 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        if self.vs.device().is_cuda() {
-            self.vs.bfloat16();
-        } else {
-            self.vs.float();
-        }
+        crate::device::set_precision(&mut self.vs);
         Ok(())
     }
 
