@@ -279,10 +279,10 @@ fn validate_package(path: &Path) -> Result<()> {
 fn updateable_executable() -> Result<PathBuf> {
     #[cfg(target_os = "linux")]
     {
-        return std::env::var_os("APPIMAGE")
+        std::env::var_os("APPIMAGE")
             .map(PathBuf::from)
             .filter(|path| path.is_file())
-            .ok_or(Error::NotInstalledPackage);
+            .ok_or(Error::NotInstalledPackage)
     }
     #[cfg(not(target_os = "linux"))]
     Ok(std::env::current_exe()?)

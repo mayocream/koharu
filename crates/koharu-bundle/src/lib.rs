@@ -306,6 +306,7 @@ fn configure_payload(
         frameworks: Some(signed_frameworks),
         files,
         minimum_system_version: Some("12.0".into()),
+        hardened_runtime: true,
         signing_identity,
         entitlements: Some(Entitlements::Path(entitlements.to_path_buf())),
         ..Default::default()
