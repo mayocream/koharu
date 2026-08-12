@@ -136,7 +136,7 @@ percent-encoding = "2.3"
 plist = "1.10"
 semver = "1"
 # Pinned fork adds AppImage library exclusions to tauri-bundler 2.9.4.
-tauri-bundler = { git = "https://github.com/mayocream/tauri", rev = "842b19faa07dcc5eaec9152b113267ce0c214e10" }
+tauri-bundler = { git = "https://github.com/mayocream/tauri", rev = "90da1b0fa54dbabc52dc6a45da9b76ad07f9fd6f" }
 # Pinned to Vello's upstream WGPU 30 migration until it is released. cef-rs's
 # accelerated OSR importer must share the presenter's exact WGPU device type.
 vello = { git = "https://github.com/linebender/vello", rev = "b9f820846810cff9e96bcd83aed5218a6ae79288" }
