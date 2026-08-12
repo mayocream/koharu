@@ -117,7 +117,6 @@ fn bundle_inner(config: &BundleConfig) -> Result<Vec<PathBuf>> {
     configure_payload(config, &cef_root, &cef_runtime, &mut settings)?;
 
     let settings = SettingsBuilder::new()
-        .log_level(log::Level::Debug)
         .project_out_directory(&config.output)
         .package_types(vec![config.package.tauri()])
         .package_settings(PackageSettings {

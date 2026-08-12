@@ -441,7 +441,7 @@ dependencies = [
  "digest 0.10.7",
  "dirs 5.0.1",
  "elliptic-curve",
- "env_logger 0.10.2",
+ "env_logger",
  "figment",
  "filetime",
  "glob",
@@ -2792,16 +2792,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_filter"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "900d271a03799a1ee8d1ca9b19893b48ca674a9284fefcfb85f05e74ed314217"
-dependencies = [
- "log",
- "regex",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2812,19 +2802,6 @@ dependencies = [
  "log",
  "regex",
  "termcolor",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.11.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de671bd27a75a797dc9ae289ba1e77276e75e2026408aab65185384e2d5cd3f6"
-dependencies = [
- "anstream",
- "anstyle",
- "env_filter",
- "jiff",
- "log",
 ]
 
 [[package]]
@@ -4773,8 +4750,6 @@ dependencies = [
  "cef",
  "cef-dll-sys",
  "clap",
- "env_logger 0.11.11",
- "log",
  "plist",
  "semver",
  "tauri-bundler",

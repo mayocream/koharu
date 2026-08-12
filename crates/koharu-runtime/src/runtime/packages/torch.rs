@@ -257,6 +257,9 @@ impl RuntimePackage for Torch {
         let libraries = self.libraries()?.collect::<Vec<_>>();
         let directory = self.install().await?.join("libtorch/lib");
         for library in libraries {
+            #[cfg(target_os = "linux")]
+            loader::load_global(directory.join(library))?;
+            #[cfg(not(target_os = "linux"))]
             loader::load(directory.join(library))?;
         }
         Ok(())

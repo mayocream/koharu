@@ -11,8 +11,6 @@ publish.workspace = true
 cef = { workspace = true, features = ["build-util"] }
 cef-dll-sys = { workspace = true }
 clap = { workspace = true }
-env_logger = { workspace = true }
-log = { workspace = true }
 semver = { workspace = true }
 tauri-bundler = { workspace = true }
 thiserror = { workspace = true }
