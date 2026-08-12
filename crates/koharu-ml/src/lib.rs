@@ -1,6 +1,6 @@
 use anyhow::Context;
 use koharu_llama::llama_backend::LlamaBackend;
-use koharu_runtime::{Feature, Runtime};
+use koharu_runtime::{Feature, Hardware, Runtime};
 use tokio::sync::OnceCell;
 
 macro_rules! model_repository {
@@ -22,7 +22,7 @@ macro_rules! model_repository {
     };
 }
 
-mod device;
+mod backend;
 
 pub mod aot_inpainting;
 pub mod baberu_ocr;
@@ -45,14 +45,14 @@ pub mod rorem_mixed;
 pub mod speech_bubble_yolo11n;
 pub mod speech_bubble_yolov8m;
 
-pub use device::{Backend, Device, DeviceConversionError, DeviceType, device};
 pub use koharu_diffusion as diffusion;
 pub use koharu_llama as llama;
+pub use koharu_runtime::{Backend, Device, DeviceType};
 pub use koharu_torch as torch;
 
 static LLAMA: OnceCell<LlamaBackend> = OnceCell::const_new();
 static DIFFUSION: OnceCell<()> = OnceCell::const_new();
-static READY: OnceCell<()> = OnceCell::const_new();
+static READY: OnceCell<Device> = OnceCell::const_new();
 
 /// Initializes every process-wide model runtime used by Koharu.
 ///
@@ -64,7 +64,9 @@ static READY: OnceCell<()> = OnceCell::const_new();
 pub async fn init() -> anyhow::Result<()> {
     READY
         .get_or_try_init(|| async {
-            Runtime::discover([Feature::Torch, Feature::Llama, Feature::Diffusion])?
+            let runtime = Runtime::discover([Feature::Torch, Feature::Llama, Feature::Diffusion])?;
+            let device = runtime.device().cloned().unwrap_or_else(Device::cpu);
+            runtime
                 .initialize()
                 .await
                 .context("failed to initialize runtimes")?;
@@ -82,10 +84,25 @@ pub async fn init() -> anyhow::Result<()> {
                     Ok::<(), anyhow::Error>(())
                 })
                 .await?;
-            Ok::<(), anyhow::Error>(())
+            Ok::<Device, anyhow::Error>(device)
         })
         .await?;
     Ok(())
+}
+
+/// Returns the runtime-owned device selected for every model backend.
+#[must_use]
+pub fn device(cpu: bool) -> Device {
+    if cpu {
+        Device::cpu()
+    } else if let Some(device) = READY.get() {
+        device.clone()
+    } else if let Some(device) = Hardware::discover().device() {
+        device.clone()
+    } else {
+        tracing::warn!("GPU is not available, falling back to CPU");
+        Device::cpu()
+    }
 }
 
 /// Returns the initialized process-wide llama.cpp backend.

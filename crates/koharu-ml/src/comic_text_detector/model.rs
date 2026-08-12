@@ -31,7 +31,7 @@ pub struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut blk_det_vs = nn::VarStore::new(device);
-        crate::device::set_precision(&mut blk_det_vs);
+        crate::backend::set_precision(&mut blk_det_vs);
         let blk_det = YoloV5::new(&blk_det_vs.root());
         blk_det_vs.freeze();
 
@@ -69,7 +69,7 @@ impl Model {
             &mut self.text_seg_vs,
             &mut self.text_det_vs,
         ] {
-            crate::device::set_precision(var_store);
+            crate::backend::set_precision(var_store);
         }
         Ok(())
     }

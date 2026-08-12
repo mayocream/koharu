@@ -41,7 +41,7 @@ impl Model {
         );
 
         let mut vs = nn::VarStore::new(device);
-        crate::device::set_precision(&mut vs);
+        crate::backend::set_precision(&mut vs);
         let encoder = ViTModel::new(&(&vs.root() / "encoder"), &config.encoder);
         let decoder = BertLMHeadModel::new(&(&vs.root() / "decoder"), &config.decoder);
         vs.freeze();
@@ -64,7 +64,7 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::device::set_precision(&mut self.vs);
+        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 

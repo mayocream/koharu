@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbImage};
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 pub use self::config::{HDStrategy, InpaintRequest};
 use self::{config::FFCResNetGeneratorConfig, model::Model, processor::InpaintModel};
 
@@ -23,7 +25,7 @@ pub struct LaMa {
 
 impl LaMa {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
         let weights_path = WEIGHTS
             .resolve()
             .await

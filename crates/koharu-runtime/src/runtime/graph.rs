@@ -164,10 +164,18 @@ mod tests {
     #[test]
     fn shared_dependencies_are_deduplicated() {
         let hardware = Hardware {
-            cuda_driver: Some(13000),
-            cuda_compute_capability: 80,
-            rocm_target: None,
-            vulkan: true,
+            devices: vec![crate::Device {
+                index: 0,
+                name: "CUDA0".to_owned(),
+                description: "CUDA0".to_owned(),
+                backend: crate::Backend::Cuda,
+                device_type: crate::DeviceType::Gpu,
+                memory_total: 0,
+                memory_free: 0,
+                compute_capability: 80,
+                target: None,
+            }],
+            selected: Some(0),
         };
         let mut plan = Plan::default();
         let llama = plan.insert(Llama::WindowsCuda.into(), &hardware).unwrap();

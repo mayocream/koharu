@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 pub use self::{
     config::YoloV8mSpeechBubbleConfig,
     processor::{
@@ -31,7 +33,7 @@ pub struct YoloV8mSpeechBubbleSegmenter {
 
 impl YoloV8mSpeechBubbleSegmenter {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
         let config_path = CONFIG
             .resolve()
             .await

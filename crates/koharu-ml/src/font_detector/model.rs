@@ -22,7 +22,7 @@ pub(super) struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        crate::device::set_precision(&mut vs);
+        crate::backend::set_precision(&mut vs);
         // The published safetensors retain Lightning's `model` wrapper and
         // torch.compile's `_orig_mod` wrapper from the upstream checkpoint.
         let model = koharu_torch::vision::resnet::resnet50(
@@ -38,7 +38,7 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::device::set_precision(&mut self.vs);
+        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 

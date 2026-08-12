@@ -30,7 +30,7 @@ pub(super) struct Model {
 impl Model {
     pub(super) fn new(config: &Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        crate::device::set_precision(&mut vs);
+        crate::backend::set_precision(&mut vs);
         let root = &vs.root() / "module";
         let transformation = TpsSpatialTransformerNetwork::new(
             &(&root / "Transformation"),
@@ -80,7 +80,7 @@ impl Model {
 
     pub(super) fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::device::set_precision(&mut self.vs);
+        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 

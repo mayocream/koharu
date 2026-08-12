@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 pub use self::{
     config::{HGNetV2Config, PPDocLayoutV3Config},
     processor::{
@@ -30,7 +32,7 @@ pub struct PPDocLayoutV3 {
 
 impl PPDocLayoutV3 {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
 
         let config_path = CONFIG
             .resolve()

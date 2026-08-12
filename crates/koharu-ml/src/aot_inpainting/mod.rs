@@ -7,6 +7,8 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, GrayImage, RgbImage};
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 use self::{model::Model, processor::Processor};
 
 model_repository!("mayocream/aot-inpainting" @ "cffe2346ac2b5ebe1f2d61335d602d12cc144c6f" {
@@ -21,7 +23,7 @@ pub struct AotInpainting {
 
 impl AotInpainting {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
         let weights_path = WEIGHTS
             .resolve()
             .await

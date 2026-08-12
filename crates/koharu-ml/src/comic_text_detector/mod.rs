@@ -5,6 +5,8 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 pub use self::processor::{Quad, TextBlock};
 
 use self::{
@@ -26,7 +28,7 @@ pub struct ComicTextDetector {
 
 impl ComicTextDetector {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
         let yolo_path = YOLO_WEIGHTS
             .resolve()
             .await

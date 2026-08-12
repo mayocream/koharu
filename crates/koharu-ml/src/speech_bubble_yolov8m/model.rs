@@ -28,7 +28,7 @@ pub struct Model {
 impl Model {
     pub fn new(config: &YoloV8mSpeechBubbleConfig, device: Device) -> Result<Self> {
         let mut vs = nn::VarStore::new(device);
-        crate::device::set_precision(&mut vs);
+        crate::backend::set_precision(&mut vs);
         let model = YoloV8Seg::load(&(&vs.root() / "model"), config)?;
         vs.freeze();
         Ok(Self { vs, model })
@@ -36,7 +36,7 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::device::set_precision(&mut self.vs);
+        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 

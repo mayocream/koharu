@@ -1,3 +1,4 @@
+mod device;
 mod hardware;
 mod network;
 mod runtime;
@@ -6,6 +7,7 @@ mod store;
 
 pub mod downloads;
 
+pub use device::{Backend, Device, DeviceType};
 pub use hardware::Hardware;
 pub use runtime::{Feature, Package, Runtime, Torch};
 pub use source::HuggingFaceFile;

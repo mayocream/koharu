@@ -11,6 +11,8 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 pub use self::{
     config::{RTDetrResNetConfig, RTDetrV2Config},
     processor::{RTDetrImageProcessor, SizeDict, TextBlock},
@@ -38,7 +40,7 @@ pub struct RTDetrV2Detection {
 
 impl RTDetrV2Detection {
     pub async fn load(device: crate::Device) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
         let config_path = CONFIG
             .resolve()
             .await

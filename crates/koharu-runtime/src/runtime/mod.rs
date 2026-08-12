@@ -6,7 +6,7 @@ use std::{fmt::Display, hash::Hash, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::Hardware;
+use crate::{Device, Hardware};
 use graph::{Component, Plan};
 use packages::{Diffusion, Llama};
 
@@ -52,6 +52,7 @@ pub enum Feature {
 #[derive(Debug)]
 pub struct Runtime {
     plan: Plan,
+    hardware: Hardware,
 }
 
 impl Runtime {
@@ -74,7 +75,13 @@ impl Runtime {
             previous = Some(node);
         }
         plan.validate()?;
-        Ok(Self { plan })
+        Ok(Self { plan, hardware })
+    }
+
+    /// Returns the one accelerator selected for every model backend.
+    #[must_use]
+    pub fn device(&self) -> Option<&Device> {
+        self.hardware.device()
     }
 
     /// Installs and activates packages sequentially in topological order.

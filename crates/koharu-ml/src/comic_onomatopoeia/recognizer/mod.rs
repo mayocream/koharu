@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use koharu_torch::Device;
 
+use crate::backend::TryIntoDevice;
+
 pub use self::processor::Recognition;
 
 use self::{config::Config, model::Model, processor::Processor};
@@ -34,7 +36,7 @@ impl ComicOnomatopoeiaRecognizer {
     }
 
     pub fn load_from_path(device: crate::Device, path: impl AsRef<Path>) -> Result<Self> {
-        let device: Device = device.try_into()?;
+        let device: Device = device.try_into_device()?;
         let config = Config::default();
         let processor = Processor::new(include_str!("character_set.txt"), &config)?;
         let mut model = Model::new(&config, device);

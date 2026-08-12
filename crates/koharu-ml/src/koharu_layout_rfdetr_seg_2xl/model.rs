@@ -45,7 +45,7 @@ pub(super) struct Model {
 impl Model {
     pub fn new(device: Device) -> Self {
         let mut var_store = nn::VarStore::new(device);
-        crate::device::set_precision(&mut var_store);
+        crate::backend::set_precision(&mut var_store);
         let root = var_store.root();
         // Joiner is nn.Sequential(backbone, position_embedding), hence the `0`.
         let backbone = Backbone::new(&(&root / "backbone" / 0));
@@ -85,7 +85,7 @@ impl Model {
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         // The complete RF-DETR tree is registered before this strict VarStore load.
         self.var_store.load(path)?;
-        crate::device::set_precision(&mut self.var_store);
+        crate::backend::set_precision(&mut self.var_store);
         Ok(())
     }
 

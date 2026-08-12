@@ -29,7 +29,7 @@ pub struct Model {
 impl Model {
     pub fn new(config: RTDetrV2Config, device: Device) -> Self {
         let mut vs = nn::VarStore::new(device);
-        crate::device::set_precision(&mut vs);
+        crate::backend::set_precision(&mut vs);
         let model = RTDetrV2ForObjectDetection::new(&vs.root(), &config);
         vs.freeze();
         Self { vs, model }
@@ -37,7 +37,7 @@ impl Model {
 
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.vs.load(path)?;
-        crate::device::set_precision(&mut self.vs);
+        crate::backend::set_precision(&mut self.vs);
         Ok(())
     }
 
