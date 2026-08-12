@@ -1,3 +1,10 @@
+## [0.64.1](https://github.com/mayocream/koharu/compare/0.64.0..0.64.1) - 2026-08-12
+
+### 🐛 Bug Fixes
+
+- Only enable bf16 when compute capability >= 80 - ([3b9ca08](https://github.com/mayocream/koharu/commit/3b9ca08e3027cb77ae3bec08c74fabf387b4e9ca))
+
+
 ## [0.64.0](https://github.com/mayocream/koharu/compare/0.63.5..0.64.0) - 2026-08-12
 
 
