@@ -1,12 +1,9 @@
-//! Koharu's Tauri application, native runtime, and diagnostics.
+//! Koharu's process entrypoint integration and diagnostics.
 
-mod app;
-mod commands;
-mod desktop;
+mod runtime;
 
 pub mod panic;
 pub mod sentry;
 pub mod tracing;
 
-pub use app::run;
-pub use commands::bindings;
+pub use runtime::run;

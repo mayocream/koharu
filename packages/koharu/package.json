@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start",
     "lint": "oxlint -c .oxlintrc.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -16,10 +15,6 @@
     "@koharu/ui": "workspace:*",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-virtual": "^3.14.9",
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-opener": "^2.5.4",
-    "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-updater": "^2.10.1",
     "i18next": "^26.3.3",
     "i18next-browser-languagedetector": "^8.2.1",
     "i18next-localstorage-backend": "^4.3.1",

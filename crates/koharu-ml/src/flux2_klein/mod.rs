@@ -208,7 +208,7 @@ impl Flux2KleinInpaint {
         let crop_coords = options.padding_mask_crop.and_then(|padding| {
             Flux2ImageProcessor::get_crop_region(&mask_image, width, height, padding)
         });
-        let (init_image, mut native_mask) = if let Some((x1, y1, x2, y2)) = crop_coords {
+        let (init_image, mut inference_mask) = if let Some((x1, y1, x2, y2)) = crop_coords {
             let image_crop = DynamicImage::ImageRgb8(
                 image::imageops::crop_imm(&image, x1, y1, x2 - x1, y2 - y1).to_image(),
             );
@@ -222,7 +222,7 @@ impl Flux2KleinInpaint {
         } else {
             (image.clone(), mask_image.clone())
         };
-        Flux2ImageProcessor::binarize(&mut native_mask);
+        Flux2ImageProcessor::binarize(&mut inference_mask);
 
         let mut reference_images = vec![init_image.clone()];
         if let Some(image_reference) = image_reference {
@@ -264,7 +264,7 @@ impl Flux2KleinInpaint {
                 init_image: Some(init_image),
                 reference_images,
                 auto_resize_reference_images: false,
-                mask_image: Some(native_mask),
+                mask_image: Some(inference_mask),
                 sample: SampleParams {
                     guidance: GuidanceParams {
                         text_cfg: 1.0,

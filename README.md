@@ -126,14 +126,6 @@ You can download the latest release of Koharu from the [releases page](https://g
 
 We provide prebuilt binaries for Windows, macOS, and Linux.
 
-### WinGet
-
-On Windows, you can install Koharu with [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
-
-```bash
-winget install koharu
-```
-
 ### Homebrew
 
 On macOS, you can install Koharu with [Homebrew](https://brew.sh/):

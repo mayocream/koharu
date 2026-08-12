@@ -37,8 +37,8 @@ The canvas, flattened PNG, layer crops, and PSD adapter consume this same frame.
 
 ## Desktop composition
 
-The WebView draws interface chrome, menus, controls, and inspectors. It stays transparent over the canvas region. Native WGPU/Vello output is composed beneath it in the same desktop window.
+The desktop runtime owns one winit window and one WGPU surface. `koharu-canvas` renders the retained page into a canvas texture. Windowless CEF renders React chrome, menus, controls, and inspectors into a platform shared texture. cef-rs imports it into the same WGPU 30 device, and transparent pixels in the copied UI texture reveal the canvas below it.
 
-Validate visual changes through the final desktop window. A WebView screenshot alone cannot prove that native canvas pixels are present, and a native render alone cannot prove that transparency and interface composition are correct.
+CEF's pooled resource is valid only during the accelerated paint callback, so Koharu crops and copies it into an owned GPU texture before returning. The presenter composites the UI and canvas textures and performs the only surface presentation. A bounded, latest-wins in-process mailbox prevents an unbounded presentation backlog. If accelerated import is unavailable or fails, the browser is recreated with software painting.
 
-On Windows, the development WebView2 endpoint is `http://127.0.0.1:4000`; use semantic CDP inspection for the web layer and native window capture for the final composite.
+Validate visual changes through the final desktop window. A browser-only screenshot cannot prove that native canvas pixels are present, and a canvas readback cannot prove that alpha, controls, and final color composition are correct. Use off-screen WGPU readback for deterministic compositor tests and native window capture for the final composite.

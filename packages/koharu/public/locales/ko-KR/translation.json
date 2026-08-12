@@ -503,24 +503,6 @@
     "select": "선택",
     "text": "텍스트"
   },
-  "updater": {
-    "available": {
-      "title": "업데이트 사용 가능"
-    },
-    "close": "닫기",
-    "downloading": {
-      "subtitle": "코하루 {{version}}",
-      "title": "업데이트 다운로드 중…"
-    },
-    "error": {
-      "description": "업데이트 중 문제가 발생했습니다",
-      "title": "업데이트 실패"
-    },
-    "later": "나중에",
-    "noNotes": "릴리스 노트가 제공되지 않았습니다.",
-    "retry": "다시 시도",
-    "update": "업데이트"
-  },
   "window": {
     "close": "닫기",
     "maximize": "최대화",

@@ -503,24 +503,6 @@
     "select": "Select",
     "text": "Text"
   },
-  "updater": {
-    "available": {
-      "title": "Update available"
-    },
-    "close": "Close",
-    "downloading": {
-      "subtitle": "Koharu {{version}}",
-      "title": "Downloading update…"
-    },
-    "error": {
-      "description": "Something went wrong while updating",
-      "title": "Update failed"
-    },
-    "later": "Later",
-    "noNotes": "No release notes provided.",
-    "retry": "Retry",
-    "update": "Update"
-  },
   "window": {
     "close": "Close",
     "maximize": "Maximize",

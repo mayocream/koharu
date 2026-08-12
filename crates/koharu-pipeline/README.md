@@ -118,7 +118,7 @@ preflight failures.
 `StopToken` is cooperative scheduling control, not transactional cancellation.
 
 - `stop()` prevents new work from starting.
-- A native inference already in progress reaches its safe return boundary.
+- An inference already in progress reaches its safe return boundary.
 - Its result is discarded if stop was requested before commit.
 - Every earlier commit remains in the project.
 - `execute` returns `Ok(Report { status: RunStatus::Stopped, .. })`.

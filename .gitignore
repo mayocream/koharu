@@ -39,9 +39,6 @@ target/
 # Python
 .venv/
 
-# Tauri
-gen/
-
 # Temporary files
 temp/
 tmp/

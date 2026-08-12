@@ -7,17 +7,9 @@ import { call } from '@/lib/backend'
 import { commands, type Preferences, type ProjectInfo, type StartupState } from '@/lib/protocol'
 import { useProject } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { MemoryTransport, RequestError, setTransport } from '@/lib/transport'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  Channel: class<T> {
-    onmessage: (payload: T) => void
-
-    constructor(handler: (payload: T) => void) {
-      this.onmessage = handler
-    }
-  },
-  invoke: vi.fn(),
-}))
+let transport: MemoryTransport
 
 const preferences: Preferences = {
   pipeline: {
@@ -55,6 +47,11 @@ const project: ProjectInfo = {
 }
 
 beforeEach(() => {
+  transport = new MemoryTransport()
+  setTransport(transport)
+  vi.spyOn(commands, 'getStartup').mockRejectedValue(
+    new RequestError({ code: 'not_ready', message: 'Koharu is still starting.' }),
+  )
   vi.spyOn(commands, 'getTranslationModels').mockResolvedValue([])
 })
 
@@ -70,12 +67,10 @@ const startupState = (): StartupState => ({
 })
 
 async function start() {
-  const pending = deferred<StartupState>()
-  const binding = vi.spyOn(commands, 'subscribe').mockReturnValue(pending.promise)
   const view = render(createElement(Providers, null, createElement('div')))
-  pending.resolve(startupState())
+  act(() => transport.emit({ type: 'startup_ready', startup: startupState() }))
   await waitFor(() => expect(useKoharuStore.getState().preferences).toBe(preferences))
-  return { binding, dispose: view.unmount }
+  return { dispose: view.unmount }
 }
 
 function ProjectProbe() {
@@ -87,12 +82,49 @@ function ProjectProbe() {
   )
 }
 
-describe('Tauri runtime', () => {
+describe('runtime', () => {
+  it('reconciles startup when the ready event was emitted before React subscribed', async () => {
+    vi.spyOn(commands, 'getStartup').mockResolvedValue(startupState())
+
+    const view = render(createElement(Providers, null, createElement('div')))
+
+    await waitFor(() => expect(useKoharuStore.getState().startup.state).toBe('ready'))
+    expect(useKoharuStore.getState().preferences).toBe(preferences)
+    view.unmount()
+  })
+
+  it('keeps waiting after a not-ready startup snapshot and accepts the ready event', async () => {
+    const view = render(createElement(Providers, null, createElement('div')))
+
+    await waitFor(() => expect(commands.getStartup).toHaveBeenCalledOnce())
+    expect(useKoharuStore.getState().startup.state).toBe('connecting')
+
+    act(() => transport.emit({ type: 'startup_ready', startup: startupState() }))
+    expect(useKoharuStore.getState().startup.state).toBe('ready')
+    view.unmount()
+  })
+
+  it('surfaces startup snapshot failures other than not-ready', async () => {
+    vi.spyOn(commands, 'getStartup').mockRejectedValue(
+      new RequestError({ code: 'internal', message: 'Startup snapshot failed.' }),
+    )
+
+    const view = render(createElement(Providers, null, createElement('div')))
+
+    await waitFor(() =>
+      expect(useKoharuStore.getState().startup).toEqual({
+        state: 'failed',
+        error: { code: 'internal', message: 'Startup snapshot failed.' },
+      }),
+    )
+    view.unmount()
+  })
+
   it('keeps the project unresolved until its backend query returns', async () => {
     const projectPending = deferred<ProjectInfo | null>()
     vi.spyOn(commands, 'getProject').mockReturnValue(projectPending.promise)
-    vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
     const view = render(createElement(Providers, null, createElement(ProjectProbe)))
+    act(() => transport.emit({ type: 'startup_ready', startup: startupState() }))
 
     expect(await screen.findByText('Loading')).toBeInTheDocument()
     projectPending.resolve(null)
@@ -100,24 +132,25 @@ describe('Tauri runtime', () => {
     view.unmount()
   })
 
-  it('keeps one live job channel through Strict Mode effect replay', async () => {
-    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
+  it('keeps one live event stream through Strict Mode effect replay', async () => {
     const view = render(
       createElement(StrictMode, null, createElement(Providers, null, createElement('div'))),
     )
 
-    await waitFor(() => expect(binding).toHaveBeenCalledTimes(1))
-    const [, jobChannel] = binding.mock.calls[0]
     act(() => {
-      jobChannel.onmessage({
-        id: 'job',
-        state: 'running',
-        completed: 0,
-        total: 4,
-        page: 'page',
-        stage: 'detection',
-        model: 'model',
-        error: null,
+      transport.emit({ type: 'startup_ready', startup: startupState() })
+      transport.emit({
+        type: 'job',
+        job: {
+          id: 'job',
+          state: 'running',
+          completed: 0,
+          total: 4,
+          page: 'page',
+          stage: 'detection',
+          model: 'model',
+          error: null,
+        },
       })
     })
 
@@ -138,26 +171,31 @@ describe('Tauri runtime', () => {
     expect(open).toHaveBeenCalledWith('Volume 1')
   })
 
-  it('applies independent channel updates directly to the store', async () => {
+  it('applies independent event updates directly to the store', async () => {
     useKoharuStore.setState({ downloads: {}, resources: null })
-    const { binding, dispose } = await start()
-    const [, , downloadChannel, resourcesChannel] = binding.mock.calls[0]
+    const { dispose } = await start()
 
-    downloadChannel.onmessage({
-      id: 7,
-      state: 'running',
-      name: 'model.bin',
-      completed: 25,
-      total: 100,
-      error: null,
+    transport.emit({
+      type: 'download',
+      download: {
+        id: 7,
+        state: 'running',
+        name: 'model.bin',
+        completed: 25,
+        total: 100,
+        error: null,
+      },
     })
-    resourcesChannel.onmessage({
-      process_memory: 1024,
-      system_memory: 8192,
-      process_cpu: 5,
-      devices: [
-        { name: 'GPU', selected: true, memory_budget: 8192, memory_used: 4096, utilization: 40 },
-      ],
+    transport.emit({
+      type: 'resources',
+      resources: {
+        process_memory: 1024,
+        system_memory: 8192,
+        process_cpu: 5,
+        devices: [
+          { name: 'GPU', selected: true, memory_budget: 8192, memory_used: 4096, utilization: 40 },
+        ],
+      },
     })
     expect(useKoharuStore.getState().downloads[7]).toMatchObject({ completed: 25, total: 100 })
     expect(useKoharuStore.getState().resources).toMatchObject({
@@ -169,20 +207,22 @@ describe('Tauri runtime', () => {
 
   it('refreshes project queries when an autonomous job commits work', async () => {
     vi.spyOn(commands, 'getProject').mockResolvedValueOnce(null).mockResolvedValue(project)
-    const binding = vi.spyOn(commands, 'subscribe').mockResolvedValue(startupState())
     const view = render(createElement(Providers, null, createElement(ProjectProbe)))
+    act(() => transport.emit({ type: 'startup_ready', startup: startupState() }))
     expect(await screen.findByText('Closed')).toBeInTheDocument()
 
-    const [, jobChannel] = binding.mock.calls[0]
-    jobChannel.onmessage({
-      id: 'job',
-      state: 'running',
-      completed: 1,
-      total: 2,
-      page: 'page',
-      stage: 'ocr',
-      model: 'model',
-      error: null,
+    transport.emit({
+      type: 'job',
+      job: {
+        id: 'job',
+        state: 'running',
+        completed: 1,
+        total: 2,
+        page: 'page',
+        stage: 'ocr',
+        model: 'model',
+        error: null,
+      },
     })
 
     expect(await screen.findByText('Book')).toBeInTheDocument()

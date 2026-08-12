@@ -1,6 +1,6 @@
 # koharu-canvas
 
-`koharu-canvas` is Koharu's native WGPU/Vello editor viewport. It presents a
+`koharu-canvas` is Koharu's WGPU/Vello editor viewport. It presents a
 rendered page, supports live editor previews, manages editable mask/raster
 state, and returns validated commits to the application.
 
@@ -247,7 +247,7 @@ The canvas migration must not be combined with UI behavior changes:
    or readiness semantics.
 4. Update desktop and React callers directly; add no compatibility facade.
 5. Delete duplicated canvas model/resource/rendering code only after focused
-   native and UI tests pass.
+   desktop and UI tests pass.
 6. Compare representative desktop screenshots and sampled pixels before and
    after the migration.
 7. Delete the unused rendered-page view, transition, text-mask, and COO-mask
@@ -261,4 +261,4 @@ cargo check -p koharu-canvas --all-targets
 ```
 
 Run real-GPU visual tests separately on a provisioned adapter. Validate the
-final native-canvas/WebView composition through the desktop window.
+final canvas/WebView composition through the desktop window.

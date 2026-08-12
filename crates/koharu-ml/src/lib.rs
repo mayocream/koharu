@@ -54,7 +54,7 @@ static LLAMA: OnceCell<LlamaBackend> = OnceCell::const_new();
 static DIFFUSION: OnceCell<()> = OnceCell::const_new();
 static READY: OnceCell<()> = OnceCell::const_new();
 
-/// Initializes every process-wide native runtime used by Koharu.
+/// Initializes every process-wide model runtime used by Koharu.
 ///
 /// Concurrent callers share one attempt. A failed attempt may be retried; any
 /// backend that completed successfully is retained and is not initialized

@@ -1,17 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use clap::Parser as _;
 use koharu::panic;
 use koharu::sentry;
+use std::process::ExitCode;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
-#[derive(clap::Parser)]
-#[command(version, about)]
-struct Cli {}
+fn main() -> ExitCode {
+    if let Some(exit) = koharu_desktop::browser::dispatch_cef_process() {
+        return exit;
+    }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let _cli = Cli::parse();
     let _guard = sentry::initialize();
     panic::install();
     let filter = tracing_subscriber::filter::EnvFilter::builder()
@@ -22,5 +20,17 @@ async fn main() -> anyhow::Result<()> {
         .with(sentry::tracing_layer())
         .with(koharu::tracing::TimingLayer::new())
         .init();
-    tokio::task::block_in_place(|| koharu::run(tauri::generate_context!()))
+
+    match application() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("Koharu stopped: {error:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[tokio::main]
+async fn application() -> anyhow::Result<()> {
+    koharu::run().await
 }

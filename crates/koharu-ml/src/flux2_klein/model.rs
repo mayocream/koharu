@@ -1,4 +1,4 @@
-//! Native FLUX.2 Klein model assembly.
+//! FLUX.2 Klein model assembly.
 //!
 //! Component mapping follows stable-diffusion.cpp at:
 //! https://github.com/leejet/stable-diffusion.cpp/blob/cc734292286f85f9c48305d94d7fd22f42838522/docs/flux2.md

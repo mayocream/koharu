@@ -4,7 +4,7 @@ use ::image::{GrayImage, ImageBuffer, Rgb, RgbImage};
 
 use crate::{Error, Result, sys};
 
-/// An RGB image borrowing native preview pixels for one callback invocation.
+/// An RGB image borrowing preview pixels for one callback invocation.
 pub type RgbImageView<'a> = ImageBuffer<Rgb<u8>, &'a [u8]>;
 
 fn image_len(width: u32, height: u32, channels: u32) -> Result<usize> {
@@ -55,35 +55,35 @@ pub(crate) fn raw_rgb_images(images: &[RgbImage]) -> Result<Vec<sys::sd_image_t>
 
 pub(crate) unsafe fn copy_rgb_from_raw(raw: &sys::sd_image_t) -> Result<RgbImage> {
     if raw.channel != 3 {
-        return Err(Error::UnexpectedNativeImageChannelCount {
+        return Err(Error::UnexpectedFfiImageChannelCount {
             expected: 3,
             actual: raw.channel,
         });
     }
     let len = image_len(raw.width, raw.height, raw.channel)?;
     if raw.data.is_null() {
-        return Err(Error::InvalidNativeOutput { kind: "RGB image" });
+        return Err(Error::InvalidFfiOutput { kind: "RGB image" });
     }
     let bytes = unsafe { slice::from_raw_parts(raw.data, len) }.to_vec();
     RgbImage::from_raw(raw.width, raw.height, bytes)
-        .ok_or(Error::InvalidNativeOutput { kind: "RGB image" })
+        .ok_or(Error::InvalidFfiOutput { kind: "RGB image" })
 }
 
 pub(crate) unsafe fn rgb_view_from_raw<'a>(raw: &'a sys::sd_image_t) -> Result<RgbImageView<'a>> {
     if raw.channel != 3 {
-        return Err(Error::UnexpectedNativeImageChannelCount {
+        return Err(Error::UnexpectedFfiImageChannelCount {
             expected: 3,
             actual: raw.channel,
         });
     }
     let len = image_len(raw.width, raw.height, raw.channel)?;
     if raw.data.is_null() {
-        return Err(Error::InvalidNativeOutput {
+        return Err(Error::InvalidFfiOutput {
             kind: "RGB preview image",
         });
     }
     let bytes = unsafe { slice::from_raw_parts(raw.data, len) };
-    ImageBuffer::from_raw(raw.width, raw.height, bytes).ok_or(Error::InvalidNativeOutput {
+    ImageBuffer::from_raw(raw.width, raw.height, bytes).ok_or(Error::InvalidFfiOutput {
         kind: "RGB preview image",
     })
 }
@@ -153,7 +153,7 @@ impl Audio {
             .filter(|len| *len <= isize::MAX as usize / size_of::<f32>())
             .ok_or(Error::AudioDimensionsOverflow)?;
         if raw.data.is_null() && len != 0 {
-            return Err(Error::InvalidNativeOutput { kind: "audio" });
+            return Err(Error::InvalidFfiOutput { kind: "audio" });
         }
         let data = if len == 0 {
             Vec::new()
@@ -195,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_rgb_inputs_to_native_views() {
+    fn converts_rgb_inputs_to_ffi_views() {
         let image = RgbImage::from_raw(2, 1, vec![1, 2, 3, 4, 5, 6]).unwrap();
         let raw = raw_rgb_image(&image).unwrap();
         assert_eq!((raw.width, raw.height, raw.channel), (2, 1, 3));
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn copies_native_outputs_into_rgb_images() {
+    fn copies_ffi_outputs_into_rgb_images() {
         let mut pixels = vec![1, 2, 3, 4, 5, 6];
         let raw = sys::sd_image_t {
             width: 2,
@@ -216,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_views_borrow_native_rgb_pixels() {
+    fn preview_views_borrow_ffi_rgb_pixels() {
         let mut pixels = vec![1, 2, 3];
         let raw = sys::sd_image_t {
             width: 1,

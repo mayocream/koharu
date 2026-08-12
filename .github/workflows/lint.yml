@@ -14,27 +14,17 @@ env:
 jobs:
   rust:
     name: Rust
-    env:
-      REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
     steps:
-      # refer: https://v2.tauri.app/start/prerequisites/#linux
-      - run: |
-          sudo apt update
-          sudo apt install libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
       - uses: actions/checkout@v7
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential cmake ninja-build pkg-config libssl-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt -- --check
-      - run: cargo check
-      - run: cargo clippy -- -D warnings
+      - run: cargo check --workspace --locked
+      - run: cargo clippy --workspace --locked -- -D warnings
 
   ui:
     name: UI
@@ -45,7 +35,6 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
-      - name: Lint UI
-        run: bun run --filter @koharu/app lint
+      - run: bun run --filter @koharu/app lint

@@ -1,6 +1,5 @@
 'use client'
 
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { FolderOpen, ImagePlus, LoaderCircle, Settings } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
@@ -10,6 +9,7 @@ import { AboutDialog } from '@/components/app/AboutDialog'
 import { WindowControls } from '@/components/app/WindowChrome'
 import { call, dispatch } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
+import { platform } from '@/lib/platform'
 import { commands, type Operation, type Scope, type Stage } from '@/lib/protocol'
 import {
   pageKey,
@@ -58,7 +58,7 @@ export function TitleBar() {
   return (
     <>
       <header
-        data-tauri-drag-region='deep'
+        data-koharu-drag-region
         className='flex h-10 shrink-0 items-center bg-[var(--surface-titlebar)] text-[12px]'
       >
         <div className='flex h-full w-10 shrink-0 items-center justify-center rounded-br-lg'>
@@ -228,13 +228,17 @@ export function TitleBar() {
             <MenubarTrigger>{t('menu.help')}</MenubarTrigger>
             <MenubarContent>
               <MenubarItem
-                onClick={() => void openUrl('https://discord.gg/mHvHkxGnUY').catch(() => undefined)}
+                onClick={() =>
+                  void platform.openExternal('https://discord.gg/mHvHkxGnUY').catch(() => undefined)
+                }
               >
                 {t('menu.discord')}
               </MenubarItem>
               <MenubarItem
                 onClick={() =>
-                  void openUrl('https://github.com/mayocream/koharu').catch(() => undefined)
+                  void platform
+                    .openExternal('https://github.com/mayocream/koharu')
+                    .catch(() => undefined)
                 }
               >
                 {t('menu.github')}

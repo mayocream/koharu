@@ -64,7 +64,7 @@ function report(error: unknown): Error {
       ? error.message
       : typeof error === 'string'
         ? error
-        : 'The native application returned an unknown error.'
+        : 'Koharu returned an unknown error.'
   receiveError(message)
   return error instanceof Error ? error : new Error(message)
 }

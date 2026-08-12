@@ -3,6 +3,7 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import { queryClient } from '@/lib/queries'
 import { defaultShortcuts, useKoharuStore } from '@/lib/store'
+import { MemoryTransport, setTransport } from '@/lib/transport'
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>()
@@ -22,17 +23,6 @@ vi.mock('react-i18next', async (importOriginal) => {
     initReactI18next: { type: '3rdParty', init: () => undefined },
     I18nextProvider: ({ children }: { children: React.ReactNode }) => children,
   }
-})
-
-vi.mock('@tauri-apps/api/window', () => {
-  const window = {
-    close: vi.fn(async () => undefined),
-    isMaximized: vi.fn(async () => false),
-    minimize: vi.fn(async () => undefined),
-    onResized: vi.fn(async () => () => undefined),
-    toggleMaximize: vi.fn(async () => undefined),
-  }
-  return { getCurrentWindow: () => window }
 })
 
 class Observer {
@@ -66,10 +56,11 @@ Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), writable: true }
 
 const initial = useKoharuStore.getState()
 beforeEach(() => {
+  setTransport(new MemoryTransport())
   queryClient.clear()
   useKoharuStore.setState({
     ...initial,
-    initialized: false,
+    startup: { state: 'connecting' },
     preferences: null,
     translationModels: [],
     resources: null,

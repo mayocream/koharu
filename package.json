@@ -3,22 +3,40 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build --no-bundle",
+    "predev": "kill-port 3000",
+    "dev": "run-p --race --print-label ui desktop",
+    "postdev": "kill-port 3000",
+    "ui": "bun run --filter @koharu/app dev",
+    "desktop": "nodemon",
+    "build": "bun run --filter @koharu/app build && cargo build -p koharu --release --locked",
     "docs:dev": "cd docs && uvx --from zensical==0.0.43 zensical serve",
     "docs:build": "cd docs && uvx --from zensical==0.0.43 zensical build",
     "lint": "bun run --filter '@koharu/*' lint",
     "test": "bun run --filter @koharu/app test",
     "sponsors": "cd .github/sponsorkit && sponsorkit --force",
-    "format": "oxfmt packages tests package.json .oxfmtrc.json .vscode",
-    "check": "oxfmt --check packages tests package.json .oxfmtrc.json .vscode"
+    "format": "oxfmt packages tests scripts package.json .oxfmtrc.json .vscode",
+    "check": "oxfmt --check packages tests scripts package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.1.1",
     "git-cliff": "^2.13.1",
+    "kill-port": "^2.0.1",
+    "nodemon": "^3.1.14",
+    "npm-run-all2": "^9.0.3",
     "oxfmt": "^0.56.0",
     "sponsorkit": "^17.1.1",
     "typescript": "^6.0.3"
+  },
+  "nodemonConfig": {
+    "exec": "cargo run -p koharu --locked",
+    "ext": "rs,toml",
+    "ignore": [
+      "target/**"
+    ],
+    "watch": [
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates"
+    ]
   }
 }

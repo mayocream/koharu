@@ -1,4 +1,4 @@
-//! Native RORem SDXL inpainting model assembly.
+//! RORem SDXL inpainting model assembly.
 //!
 //! Split checkpoint loading follows stable-diffusion.cpp at:
 //! https://github.com/leejet/stable-diffusion.cpp/blob/cc734292286f85f9c48305d94d7fd22f42838522/src/stable-diffusion.cpp#L617-L673

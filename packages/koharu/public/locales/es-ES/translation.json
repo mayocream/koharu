@@ -503,24 +503,6 @@
     "select": "Seleccionar",
     "text": "Texto"
   },
-  "updater": {
-    "available": {
-      "title": "Actualización disponible"
-    },
-    "close": "Cerrar",
-    "downloading": {
-      "subtitle": "Koharu {{version}}",
-      "title": "Descargando actualización…"
-    },
-    "error": {
-      "description": "Algo salió mal durante la actualización",
-      "title": "Error de actualización"
-    },
-    "later": "Más tarde",
-    "noNotes": "No se proporcionaron notas de versión.",
-    "retry": "Reintentar",
-    "update": "Actualizar"
-  },
   "window": {
     "close": "Cerrar",
     "maximize": "Maximizar",

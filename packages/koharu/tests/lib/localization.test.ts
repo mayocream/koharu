@@ -25,7 +25,6 @@ describe('editor localization', () => {
   it('defines the same flattened translation schema in every locale', () => {
     const expected = keys(resources['en-US'].translation).sort()
     for (const [locale, resource] of Object.entries(resources)) {
-      expect('native' in resource.translation, locale).toBe(false)
       expect(keys(resource.translation).sort(), locale).toEqual(expected)
     }
   })

@@ -1,6 +1,6 @@
 ---
 title: 安装 Koharu
-description: 安装发行版，完成首次启动并保持更新。
+description: 安装并启动 Koharu 发行版。
 ---
 
 # 安装 Koharu
@@ -9,15 +9,9 @@ description: 安装发行版，完成首次启动并保持更新。
 
 ## 下载发行版
 
-打开[最新 GitHub Release](https://github.com/mayocream/koharu/releases/latest)，选择适合操作系统的安装程序或软件包。
+打开[最新 GitHub Release](https://github.com/mayocream/koharu/releases/latest)。Windows 运行 NSIS Installer，Linux 启动 AppImage，macOS 则打开已签名的 DMG 并将 Koharu 拖入 Applications。
 
-Windows 也可以使用 WinGet：
-
-```powershell
-winget install --id mayocream.koharu
-```
-
-Linux 可能需要 Tauri 应用常用的 WebKit 和桌面库。若有适配当前发行版的软件包，请优先使用它。
+发布包包含固定版本的 Chromium Embedded Framework 运行时及其资源。Linux 用户应优先使用对应发行版的软件包，以便正确声明原生窗口系统、图形、sandbox 与 CEF 运行库依赖。Koharu 不需要 WebKitGTK 或系统浏览器。
 
 ## 首次启动
 
@@ -27,7 +21,7 @@ Linux 可能需要 Tauri 应用常用的 WebKit 和桌面库。若有适配当�
 
 ## 更新
 
-发行版包含更新器，会检查 Koharu 已签名的 GitHub 发布源。出现更新提示后，请等待下载完成再重启。
+Koharu 目前不包含应用内更新器。请先关闭 Koharu，再安装 GitHub Releases 中的新 Package，以保持可执行文件、原生库与内置 CEF Runtime 版本一致。
 
 下一步请[翻译第一个项目](/zh-CN/getting-started/first-project/)。硬件选择与缓存行为见[运行时、模型与硬件](/zh-CN/getting-started/runtime-models-and-hardware/)。
 

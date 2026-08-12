@@ -35,6 +35,8 @@ flowchart LR
 
 ## 桌面合成
 
-WebView 绘制窗口控件、菜单、检查器与界面，并在画布区域保持透明。原生 WGPU/Vello 输出合成在同一个桌面窗口下方。
+桌面运行时拥有一个 winit 窗口和一个 WGPU Surface。`koharu-canvas` 把保留页面绘制到画布纹理。无窗口 CEF 把 React 窗口控件、菜单、操作控件与检查器绘制到平台共享纹理。cef-rs 将其导入同一 WGPU 30 Device，复制后的 UI 纹理中的透明像素会显示下方画布。
 
-视觉修改必须通过最终桌面窗口验证。Windows 开发 WebView2 端点为 `http://127.0.0.1:4000`；Web 层可用语义 CDP 检查，最终合成需要原生窗口截图。
+CEF 的池化资源仅在 accelerated paint callback 期间有效，因此 Koharu 会在 callback 返回前将其裁剪并复制到自己拥有的 GPU 纹理。Presenter 合成 UI 与画布纹理，并执行唯一的 Surface Present。有界的 latest-wins 进程内 mailbox 可避免无限的 Present backlog。如果 accelerated import 不可用或失败，Browser 会以软件绘制模式重新创建。
+
+视觉修改必须通过最终桌面窗口验证。仅浏览器截图无法证明原生画布像素存在，仅画布 readback 也无法证明 alpha、操作控件与最终颜色合成正确。确定性的 Compositor 测试使用 off-screen WGPU readback，最终合成验证使用原生窗口捕获。

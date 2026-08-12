@@ -236,11 +236,18 @@ impl GpuRenderer {
             };
             let result = match ready {
                 Ok(()) => {
-                    let mapped = slot.buffer.slice(..).get_mapped_range();
-                    let color = (mapped.len() >= 4)
-                        .then(|| [mapped[0], mapped[1], mapped[2], mapped[3]])
-                        .ok_or_else(|| "mapped color sample is truncated".to_owned());
-                    drop(mapped);
+                    let color = slot
+                        .buffer
+                        .slice(..)
+                        .get_mapped_range()
+                        .map_err(|error| format!("failed to access mapped color sample: {error}"))
+                        .and_then(|mapped| {
+                            let color = (mapped.len() >= 4)
+                                .then(|| [mapped[0], mapped[1], mapped[2], mapped[3]])
+                                .ok_or_else(|| "mapped color sample is truncated".to_owned());
+                            drop(mapped);
+                            color
+                        });
                     slot.buffer.unmap();
                     color
                 }

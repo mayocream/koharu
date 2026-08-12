@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     Audio, CancelMode, ContextParams, Error, ImageGenerationParams, Result, RgbImage, SampleMethod,
-    Scheduler, Video, VideoGenerationParams, ffi::NativeCall, image::copy_rgb_from_raw, sys,
+    Scheduler, Video, VideoGenerationParams, ffi::FfiCall, image::copy_rgb_from_raw, sys,
 };
 
 struct ContextInner {
@@ -17,14 +17,14 @@ struct ContextInner {
 }
 
 // Context operations require `&mut Context`. The only operation exposed on a
-// shared inner handle is native cancellation, which upstream implements using
+// shared inner handle is cancellation, which upstream implements using
 // an atomic cancellation flag.
 unsafe impl Send for ContextInner {}
 unsafe impl Sync for ContextInner {}
 
 impl Drop for ContextInner {
     fn drop(&mut self) {
-        let _call = NativeCall::enter();
+        let _call = FfiCall::enter();
         unsafe { sys::free_sd_ctx(self.pointer.as_ptr()) };
     }
 }
@@ -50,9 +50,9 @@ impl Context {
     /// Loads a model context with the supplied components and backend settings.
     #[tracing::instrument(skip_all)]
     pub fn new(params: &ContextParams) -> Result<Self> {
-        let native = params.to_native()?;
-        let _call = NativeCall::enter();
-        let pointer = unsafe { sys::new_sd_ctx(&raw const native.raw) };
+        let ffi = params.to_ffi()?;
+        let _call = FfiCall::enter();
+        let pointer = unsafe { sys::new_sd_ctx(&raw const ffi.raw) };
         let pointer = NonNull::new(pointer).ok_or(Error::ContextCreationFailed)?;
         Ok(Self {
             inner: Arc::new(ContextInner { pointer }),
@@ -62,26 +62,26 @@ impl Context {
 
     #[must_use]
     pub fn supports_image_generation(&self) -> bool {
-        let _call = NativeCall::enter();
+        let _call = FfiCall::enter();
         unsafe { sys::sd_ctx_supports_image_generation(self.inner.pointer.as_ptr()) }
     }
 
     #[must_use]
     pub fn supports_video_generation(&self) -> bool {
-        let _call = NativeCall::enter();
+        let _call = FfiCall::enter();
         unsafe { sys::sd_ctx_supports_video_generation(self.inner.pointer.as_ptr()) }
     }
 
-    /// Returns the native model-specific default sampling method.
+    /// Returns the model-specific default sampling method.
     pub fn default_sample_method(&self) -> Result<SampleMethod> {
-        let _call = NativeCall::enter();
+        let _call = FfiCall::enter();
         let raw = unsafe { sys::sd_get_default_sample_method(self.inner.pointer.as_ptr()) };
         SampleMethod::try_from(raw)
     }
 
-    /// Returns the native model-specific scheduler default for a sampler.
+    /// Returns the model-specific scheduler default for a sampler.
     pub fn default_scheduler(&self, sample_method: SampleMethod) -> Result<Scheduler> {
-        let _call = NativeCall::enter();
+        let _call = FfiCall::enter();
         let raw = unsafe {
             sys::sd_get_default_scheduler(self.inner.pointer.as_ptr(), sample_method.as_raw())
         };
@@ -90,13 +90,13 @@ impl Context {
 
     /// Generates one or more owned images.
     pub fn generate_image(&mut self, params: &ImageGenerationParams) -> Result<Vec<RgbImage>> {
-        let native = params.to_native()?;
-        let _call = NativeCall::enter();
+        let ffi = params.to_ffi()?;
+        let _call = FfiCall::enter();
         let mut output = RawImages::default();
         let succeeded = unsafe {
             sys::generate_image(
                 self.inner.pointer.as_ptr(),
-                &raw const native.raw,
+                &raw const ffi.raw,
                 &raw mut output.pointer,
                 &raw mut output.count,
             )
@@ -109,14 +109,14 @@ impl Context {
 
     /// Generates owned video frames and optional audio.
     pub fn generate_video(&mut self, params: &VideoGenerationParams) -> Result<Video> {
-        let native = params.to_native()?;
-        let _call = NativeCall::enter();
+        let ffi = params.to_ffi()?;
+        let _call = FfiCall::enter();
         let mut frames = RawImages::default();
         let mut audio = RawAudio::default();
         let succeeded = unsafe {
             sys::generate_video(
                 self.inner.pointer.as_ptr(),
-                &raw const native.raw,
+                &raw const ffi.raw,
                 &raw mut frames.pointer,
                 &raw mut frames.count,
                 &raw mut audio.pointer,
@@ -150,7 +150,7 @@ impl Context {
     }
 }
 
-/// A cloneable handle to the atomic native cancellation flag.
+/// A cloneable handle to the atomic cancellation flag.
 #[derive(Clone)]
 pub struct CancelHandle {
     inner: Arc<ContextInner>,
@@ -166,7 +166,7 @@ impl fmt::Debug for CancelHandle {
 
 impl CancelHandle {
     pub fn cancel(&self, mode: CancelMode) {
-        let _call = NativeCall::enter();
+        let _call = FfiCall::enter();
         unsafe { sys::sd_cancel_generation(self.inner.pointer.as_ptr(), mode.as_raw()) };
     }
 }
@@ -188,12 +188,12 @@ impl Default for RawImages {
 
 impl RawImages {
     pub(crate) fn copy(&self, kind: &'static str) -> Result<Vec<RgbImage>> {
-        let count = usize::try_from(self.count).map_err(|_| Error::InvalidNativeOutput { kind })?;
+        let count = usize::try_from(self.count).map_err(|_| Error::InvalidFfiOutput { kind })?;
         if count == 0 || self.pointer.is_null() {
-            return Err(Error::InvalidNativeOutput { kind });
+            return Err(Error::InvalidFfiOutput { kind });
         }
         if count > isize::MAX as usize / size_of::<sys::sd_image_t>() {
-            return Err(Error::InvalidNativeOutput { kind });
+            return Err(Error::InvalidFfiOutput { kind });
         }
         let raw_images = unsafe { slice::from_raw_parts(self.pointer, count) };
         raw_images

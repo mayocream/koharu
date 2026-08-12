@@ -2,7 +2,7 @@
 //!
 //! The crate mirrors the upstream API closely while keeping C strings, input
 //! buffers, contexts, generated images, and generated audio under Rust
-//! ownership. The native library is loaded dynamically by
+//! ownership. The shared library is loaded dynamically by
 //! [`koharu_diffusion_sys`].
 //!
 //! Raster inputs and outputs use the `image` crate directly: [`RgbImage`] for

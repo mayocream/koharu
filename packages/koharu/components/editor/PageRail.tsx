@@ -217,6 +217,7 @@ export function PageRail() {
                   >
                     <PageItem
                       page={page}
+                      loadThumbnail={!pageVirtualizer.isScrolling}
                       active={active === page.id}
                       selected={selected.includes(page.id)}
                       dragged={dragged === page.id}
@@ -359,6 +360,7 @@ function PageImportMenu({
 
 function PageItem({
   page,
+  loadThumbnail,
   active,
   selected,
   dragged,
@@ -370,6 +372,7 @@ function PageItem({
   onDrop,
 }: {
   page: PageSummary
+  loadThumbnail: boolean
   active: boolean
   selected: boolean
   dragged: boolean
@@ -411,7 +414,12 @@ function PageItem({
     >
       <div className='grid h-16 w-12 place-items-center overflow-hidden rounded-lg bg-[var(--surface-well)]'>
         {page.source_asset ? (
-          <PageThumbnail page={page.id} asset={page.source_asset} label={page.label} />
+          <PageThumbnail
+            page={page.id}
+            asset={page.source_asset}
+            label={page.label}
+            load={loadThumbnail}
+          />
         ) : (
           <span className='text-[9px] text-muted-foreground'>{t('navigator.noImage')}</span>
         )}
@@ -452,7 +460,17 @@ function PageItem({
   )
 }
 
-function PageThumbnail({ page, asset, label }: { page: string; asset: string; label: string }) {
+function PageThumbnail({
+  page,
+  asset,
+  label,
+  load,
+}: {
+  page: string
+  asset: string
+  label: string
+  load: boolean
+}) {
   const { t } = useTranslation()
   const [source, setSource] = useState<string | null>(null)
   const [settled, setSettled] = useState(false)
@@ -466,7 +484,7 @@ function PageThumbnail({ page, asset, label }: { page: string; asset: string; la
   const thumbnail = useQuery({
     queryKey: ['thumbnail', asset],
     queryFn: async () => new Uint8Array(await call(commands.getThumbnail, page)),
-    enabled: settled,
+    enabled: settled && load,
     staleTime: Number.POSITIVE_INFINITY,
     notifyOnChangeProps: ['data'],
   }).data

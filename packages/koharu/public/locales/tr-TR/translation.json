@@ -503,24 +503,6 @@
     "select": "Seç",
     "text": "Metin"
   },
-  "updater": {
-    "available": {
-      "title": "Güncelleme mevcut"
-    },
-    "close": "Kapat",
-    "downloading": {
-      "subtitle": "Koharu {{version}}",
-      "title": "Güncelleme indiriliyor…"
-    },
-    "error": {
-      "description": "Güncelleme sırasında bir hata oluştu",
-      "title": "Güncelleme başarısız"
-    },
-    "later": "Daha sonra",
-    "noNotes": "Sürüm notu sağlanmadı.",
-    "retry": "Tekrar dene",
-    "update": "Güncelle"
-  },
   "window": {
     "close": "Kapat",
     "maximize": "Ekranı kapla",

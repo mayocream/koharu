@@ -1,6 +1,6 @@
 ---
 title: Koharu のインストール
-description: リリース版をインストールし、初回起動と更新を行います。
+description: Koharu のリリース版をインストールして起動します。
 ---
 
 # Koharu のインストール
@@ -9,15 +9,9 @@ Koharu 自体を変更する目的でなければ、リリース版を使用し�
 
 ## リリースを入手する
 
-[最新の GitHub リリース](https://github.com/mayocream/koharu/releases/latest)を開き、OS に合ったインストーラーまたはパッケージを選びます。
+[最新の GitHub リリース](https://github.com/mayocream/koharu/releases/latest)を開きます。Windows では NSIS Installer を実行し、Linux では AppImage を起動し、macOS では署名済み DMG を開いて Koharu を Applications にドラッグします。
 
-Windows では WinGet も使用できます。
-
-```powershell
-winget install --id mayocream.koharu
-```
-
-Linux では Tauri アプリが利用する WebKit とデスクトップライブラリが必要になる場合があります。利用できるならディストリビューション向けパッケージを優先してください。
+リリースパッケージには固定した Chromium Embedded Framework ランタイムとリソースが含まれます。Linux では、ネイティブウィンドウシステム、グラフィックス、sandbox、CEF ランタイムの依存関係が正しく宣言されたディストリビューション向けパッケージを優先してください。Koharu は WebKitGTK やシステムブラウザーを必要としません。
 
 ## 初回起動
 
@@ -27,7 +21,7 @@ Linux では Tauri アプリが利用する WebKit とデスクトップライ�
 
 ## 更新
 
-リリース版には署名済み GitHub リリースフィードを確認するアップデーターがあります。更新が表示されたら、ダウンロード完了後に再起動してください。
+Koharu には現在、アプリ内アップデーターはありません。Koharu を終了してから GitHub Releases の新しい Package をインストールし、実行ファイル、ネイティブライブラリ、同梱 CEF Runtime のバージョンを揃えてください。
 
 次は[最初のプロジェクト](/ja-JP/getting-started/first-project/)を作成します。ハードウェア選択とキャッシュについては[ランタイム、モデル、ハードウェア](/ja-JP/getting-started/runtime-models-and-hardware/)を参照してください。
 

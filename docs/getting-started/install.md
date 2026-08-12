@@ -1,6 +1,6 @@
 ---
 title: Install Koharu
-description: Install a release build, launch Koharu, and keep it updated.
+description: Install and launch a Koharu release build.
 ---
 
 # Install Koharu
@@ -9,15 +9,9 @@ Use a release build unless you intend to modify Koharu itself. Current releases 
 
 ## Download a release
 
-Open the [latest GitHub release](https://github.com/mayocream/koharu/releases/latest) and choose the installer or package for your operating system.
+Open the [latest GitHub release](https://github.com/mayocream/koharu/releases/latest). Run the NSIS installer on Windows, launch the AppImage on Linux, or open the signed DMG and drag Koharu to Applications on macOS.
 
-On Windows, you can also install the published package with WinGet:
-
-```powershell
-winget install --id mayocream.koharu
-```
-
-Linux packages may require the WebKit and desktop libraries normally used by Tauri applications. Prefer the package produced for your distribution when one is available.
+Release packages include the pinned Chromium Embedded Framework runtime and its resources. On Linux, prefer the package produced for your distribution so its native window-system, graphics, sandbox, and CEF runtime dependencies are declared correctly. Koharu does not require WebKitGTK or a system browser.
 
 ## First launch
 
@@ -27,7 +21,7 @@ Downloads require access to GitHub release assets and, for model weights, Huggin
 
 ## Updates
 
-Release builds include an updater that checks Koharu's signed GitHub release feed. When an update is offered, let the download finish before restarting the application.
+Koharu does not currently include an in-application updater. Close Koharu and install the newer package from GitHub Releases so the executable, native libraries, and bundled CEF runtime stay in sync.
 
 ## Next step
 

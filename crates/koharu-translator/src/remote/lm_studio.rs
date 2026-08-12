@@ -165,7 +165,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uses_native_v1_endpoints() {
+    fn uses_canonical_v1_endpoints() {
         let base_url = Url::parse("http://localhost:1234/").unwrap();
         assert_eq!(
             endpoint(Some(&base_url), "chat"),
@@ -178,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn serializes_native_chat_options() {
+    fn serializes_lm_studio_chat_options() {
         let value = serde_json::to_value(ChatRequest {
             model: "publisher/model",
             input: ChatInput::Text("input"),
@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn serializes_native_image_input() {
+    fn serializes_lm_studio_image_input() {
         let input =
             ChatInput::new("translate", Some(&image::DynamicImage::new_rgb8(1, 1))).unwrap();
         let value = serde_json::to_value(input).unwrap();

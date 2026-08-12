@@ -1,0 +1,32 @@
+[package]
+name = "koharu-desktop"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+authors.workspace = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+bytemuck = { workspace = true }
+cef = { workspace = true, features = ["accelerated_osr"] }
+image = { workspace = true }
+koharu-canvas = { workspace = true }
+pollster = { workspace = true }
+percent-encoding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+vello = { workspace = true }
+wgpu = { workspace = true }
+winit = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

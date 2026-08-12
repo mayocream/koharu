@@ -1,48 +1,38 @@
 # koharu
 
-`koharu` is Koharu's native Tauri application. It owns startup, diagnostics,
-commands, application state, pipeline policy, and desktop integration.
+`koharu` is Koharu's thin desktop process entrypoint. It dispatches CEF helper
+processes before initializing diagnostics, then composes the transport-neutral
+application with the desktop shell.
 
 ## Application boundary
 
 ```text
-React
-  | direct Tauri commands
-  | typed IPC channels
+React static export
+  | generated request/response + one sequenced event stream
   v
-koharu
-  | Tauri-managed project, canvas, pipeline, jobs, and channel state
-  +-> koharu-scene
-  +-> koharu-desktop -> koharu-canvas
-  +-> koharu-renderer -> raster / koharu-psd
+koharu-protocol
+  v
+koharu -> koharu-app -> scene / pipeline / renderer / agent
+       -> koharu-desktop -> windowless CEF + canvas -> sole WGPU surface
 ```
 
-Every operation has a named Tauri command. Commands that mutate a project take
-its id and current revision directly. The frontend serializes those mutations
-and uses the returned revision for the next call.
-
-Native updates do not share an event envelope. `connect` binds independent
-typed channels for project snapshots, canvas state, jobs, downloads,
-preferences, resource telemetry, and cleanup reports. Tauri state is the only
-application state container.
-
-Thumbnails are read with `get_thumbnail`; the frontend creates a temporary
-object URL from the returned bytes. There is no custom URI scheme or resource
-protocol.
+`koharu-app` owns durable application state and use cases without browser,
+window, or surface types. `koharu-desktop` owns exactly one winit window and
+one presenter; its windowless CEF host supplies GPU-imported UI frames with a
+software fallback, while `koharu-canvas` supplies the canvas texture. Binary
+results use transferable attachments instead of base64.
 
 ## Generated bindings
 
 Rust command signatures and data types are authoritative:
 
 ```powershell
-cargo run -p koharu --bin generate
+cargo run -p koharu-protocol --bin generate
 ```
 
 Focused validation:
 
 ```powershell
 cargo check -p koharu
-bun x tsc --noEmit -p packages/koharu/tsconfig.json
-cd packages/koharu
-bun run test
+bun x tsc --noEmit --incremental false -p packages/koharu/tsconfig.json
 ```

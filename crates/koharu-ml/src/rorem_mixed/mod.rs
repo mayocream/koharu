@@ -74,8 +74,9 @@ impl RoremMixed {
 
         let original = image.to_rgb8();
         let init_image = Processor::resize_image(&original, options.resolution)?;
-        let native_mask = Processor::resize_mask(mask, options.resolution, options.mask_dilation)?;
-        if native_mask.as_raw().iter().all(|&value| value == 0) {
+        let inference_mask =
+            Processor::resize_mask(mask, options.resolution, options.mask_dilation)?;
+        if inference_mask.as_raw().iter().all(|&value| value == 0) {
             return Ok(original);
         }
 
@@ -85,7 +86,7 @@ impl RoremMixed {
                 prompt: prompt.to_owned(),
                 negative_prompt: negative_prompt.to_owned(),
                 init_image: Some(init_image),
-                mask_image: Some(native_mask.clone()),
+                mask_image: Some(inference_mask.clone()),
                 width: i32::try_from(options.resolution)?,
                 height: i32::try_from(options.resolution)?,
                 sample: SampleParams {
@@ -112,6 +113,6 @@ impl RoremMixed {
             generated.dimensions()
         );
 
-        Processor::composite(&original, &native_mask, &generated)
+        Processor::composite(&original, &inference_mask, &generated)
     }
 }

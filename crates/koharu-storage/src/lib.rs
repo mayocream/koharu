@@ -1,4 +1,4 @@
-//! Filesystem-native project snapshots and immutable content-addressed blobs.
+//! Filesystem-backed project snapshots and immutable content-addressed blobs.
 
 mod blobs;
 mod durability;
