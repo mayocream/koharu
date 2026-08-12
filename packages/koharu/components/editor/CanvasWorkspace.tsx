@@ -411,6 +411,12 @@ export function CanvasWorkspace() {
               const additive = event.shiftKey || event.ctrlKey || event.metaKey
               if (!target) {
                 if (!additive) selectLayers([])
+                gesture.current = {
+                  kind: 'pan',
+                  pointer: event.pointerId,
+                  start: physical,
+                  translation: camera.translation,
+                }
                 return
               }
               const next = additive
