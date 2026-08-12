@@ -495,9 +495,14 @@ export function CanvasWorkspace() {
             event.preventDefault()
             const point = clientPhysicalPoint(event.clientX, event.clientY)
             const current = useKoharuStore.getState().camera
+            const zoomModifier =
+              event.ctrlKey ||
+              event.metaKey ||
+              event.getModifierState('Control') ||
+              event.getModifierState('Meta')
             let zoom = current.zoom
             let translation = current.translation
-            if (event.ctrlKey) {
+            if (zoomModifier) {
               zoom = clamp(current.zoom * Math.exp(-event.deltaY * 0.0015), 0.02, 16)
               const pageX = (point.x - current.translation[0]) / current.zoom
               const pageY = (point.y - current.translation[1]) / current.zoom

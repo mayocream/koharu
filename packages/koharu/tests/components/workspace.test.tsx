@@ -107,6 +107,19 @@ describe('canvas interaction adapter', () => {
     expect(setCanvasView).toHaveBeenCalledWith(1, [0, -10])
   })
 
+  it('uses Ctrl+wheel to zoom the canvas view', async () => {
+    installProject()
+    const setCanvasView = vi.spyOn(commands, 'setCanvasView').mockResolvedValue(null)
+    const surface = renderWorkspace()
+
+    fireEvent.wheel(surface, { clientX: 120, clientY: 120, deltaY: 100, ctrlKey: true })
+
+    runAnimationFrame()
+    await waitFor(() => expect(setCanvasView).toHaveBeenCalledOnce())
+    const [zoom] = setCanvasView.mock.calls[0]
+    expect(zoom).toBeLessThan(1)
+  })
+
   it('interprets a brush gesture in React and sends paint data to Rust', async () => {
     installProject()
     useKoharuStore.setState({ tool: 'draw', brush: { diameter: 48, color: '#FFFFFF' } })
