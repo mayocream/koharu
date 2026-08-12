@@ -17,7 +17,7 @@ async function main() {
   } else {
     console.log('Calculating bumped version with git-cliff...')
     bumpedVersion = (
-      await exec('bun git-cliff --unreleased --bumped-version', execOpts)
+      await exec('bun git-cliff --offline --unreleased --bumped-version', execOpts)
     ).stdout.trim()
   }
 
@@ -53,7 +53,7 @@ async function main() {
   await exec(`git tag ${bumpedVersion}`, execOpts)
   console.log('Created git tag')
 
-  await exec(`bun git-cliff -o CHANGELOG.md`, execOpts)
+  await exec(`bun git-cliff --offline -o CHANGELOG.md`, execOpts)
   console.log('Updated CHANGELOG.md')
 
   await exec('git add CHANGELOG.md', execOpts)
