@@ -38,7 +38,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "licenseFile": "../../LICENSE"
   },
   "plugins": {
     "updater": {
