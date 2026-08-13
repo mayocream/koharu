@@ -1,3 +1,14 @@
+## [0.66.1](https://github.com/mayocream/koharu/compare/0.66.0..0.66.1) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Update dialog overflow - ([66ce7c6](https://github.com/mayocream/koharu/commit/66ce7c635ef4d8fbcfbe445c7fc929746063fa3a))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update sponsors ([#903](https://github.com/mayocream/koharu/issues/903)) - ([fe8075e](https://github.com/mayocream/koharu/commit/fe8075e9b67e9dca7275758149173a8b25f0e640))
+
+
 ## [0.66.0](https://github.com/mayocream/koharu/compare/0.65.3..0.66.0) - 2026-08-13
 
 ### ⛰️  Features
