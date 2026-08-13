@@ -82,6 +82,14 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
+            koharu_runtime::Store::configure(
+                application
+                    .path()
+                    .resource_dir()
+                    .context("failed to locate Koharu's installation directory")?
+                    .join("store"),
+            )?;
+
             application.manage(CurrentProject {
                 project: Mutex::new(None),
             });
