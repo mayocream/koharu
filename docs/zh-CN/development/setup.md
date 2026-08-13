@@ -12,7 +12,7 @@ description: 构建 Tauri 桌面应用、运行聚焦检查、生成 IPC 绑定�
 - LLVM 15 或更高版本
 - 原生依赖需要的平台 C/C++ 构建工具
 
-Linux 还需要 WebKitGTK 4.1 与对应发行版的 Tauri 桌面系统库。Windows 使用 MSVC 构建工具。
+Linux 还需要 GTK 3 与对应发行版的 X11 桌面库。Windows 使用 MSVC 构建工具。
 
 ## 安装与运行
 

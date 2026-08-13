@@ -9,7 +9,7 @@ use koharu_scene::{EntityId, Revision};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Manager as _, State, ipc::Channel};
+use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
 
 use super::{
     ChannelExt as _, Error, processing,
@@ -526,7 +526,7 @@ pub(crate) async fn extend_inpaint(
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn finish_inpaint(
-    handle: AppHandle,
+    handle: AppHandle<Cef>,
     desktop: State<'_, Desktop>,
 ) -> Result<Option<JobId>, Error> {
     let Some(mask) = desktop.lock().canvas().finish_mask_stroke(INPAINT_MASK)? else {

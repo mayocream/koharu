@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install --no-install-recommends \
-            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
             build-essential \
             curl \
             wget \
@@ -37,6 +37,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
+      - name: Install macOS CEF helper targets
+        if: startsWith(matrix.os, 'macos')
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: ilammy/msvc-dev-cmd@v1
         if: startsWith(matrix.os, 'windows')
       - uses: actions/cache@v6
@@ -44,13 +47,7 @@ jobs:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
       - run: bun install
-      - uses: actions/cache@v6
-        with:
-          path: ${{ github.workspace }}/packages/koharu/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('packages/**/*.js', 'packages/**/*.jsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
-      - run: bun tauri build --no-bundle
+      - run: bun run build
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:

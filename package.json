@@ -3,8 +3,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build --no-bundle",
+    "tauri": "cargo tauri",
+    "postinstall": "cargo install --git https://github.com/tauri-apps/tauri --rev 4af26a3f7f8b692d62cca549bbacd93f5ce90b41 --locked tauri-cli",
+    "dev": "cargo tauri dev",
+    "build": "cargo tauri build --no-bundle",
     "docs:dev": "cd docs && uvx --from zensical==0.0.43 zensical serve",
     "docs:build": "cd docs && uvx --from zensical==0.0.43 zensical build",
     "lint": "bun run --filter '@koharu/*' lint",
@@ -14,7 +16,6 @@
     "check": "oxfmt --check packages tests package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.1.1",
     "git-cliff": "^2.13.1",
     "oxfmt": "^0.56.0",

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context as _, Result};
-use tauri::{AppHandle, Manager as _, WindowEvent};
+use tauri::{AppHandle, Cef, Manager as _, WindowEvent};
 use tokio::sync::Mutex;
 
 use crate::commands::{
@@ -15,7 +15,7 @@ use crate::commands::{
     project::{CurrentProject, ProjectLibrary},
 };
 
-pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
+pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
     koharu_ml::init()
         .await
         .context("failed to initialize the ML runtime")?;
@@ -55,8 +55,11 @@ pub(crate) async fn initialize(handle: AppHandle) -> Result<()> {
     Ok(())
 }
 
-pub fn run(context: tauri::Context<tauri::Wry>) -> Result<()> {
-    tauri::Builder::default()
+pub fn run(context: tauri::Context<Cef>) -> Result<()> {
+    let builder = tauri::Builder::<Cef>::default();
+    #[cfg(debug_assertions)]
+    let builder = builder.command_line_args([("remote-debugging-port", Some("4000"))]);
+    builder
         .plugin(tauri_plugin_single_instance::init(|handle, _, _| {
             if let Some(window) = handle.get_webview_window("main") {
                 let _ = window.unminimize();

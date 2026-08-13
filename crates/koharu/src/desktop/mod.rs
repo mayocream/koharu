@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result};
 use koharu_canvas::{Camera, Canvas, ViewState};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use parking_lot::{Mutex, MutexGuard};
-use tauri::{AppHandle, Manager as _, WebviewWindow};
+use tauri::{AppHandle, Cef, Manager as _, WebviewWindow};
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 mod gpu;
@@ -24,7 +24,7 @@ const MAIN_WINDOW: &str = "main";
 const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
 pub(crate) struct Desktop {
-    app: AppHandle,
+    app: AppHandle<Cef>,
     renderer: koharu_renderer::Renderer,
     presenter: OnceCell<Mutex<Presenter>>,
     preparation: AsyncMutex<()>,
@@ -32,7 +32,7 @@ pub(crate) struct Desktop {
 }
 
 impl Desktop {
-    pub(crate) fn new(app: AppHandle) -> Result<Self> {
+    pub(crate) fn new(app: AppHandle<Cef>) -> Result<Self> {
         Ok(Self {
             app,
             renderer: koharu_renderer::Renderer::new()?,
@@ -98,7 +98,7 @@ impl Desktop {
     }
 }
 
-pub(crate) async fn attach(window: WebviewWindow) -> Result<()> {
+pub(crate) async fn attach(window: WebviewWindow<Cef>) -> Result<()> {
     let app = window.app_handle().clone();
     let wake_app = app.clone();
     let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {

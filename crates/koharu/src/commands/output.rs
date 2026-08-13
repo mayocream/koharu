@@ -5,7 +5,7 @@ use koharu_renderer::{RasterOptions, Renderer};
 use koharu_scene::{AssetRole, EntityId, Snapshot};
 use serde::Deserialize;
 use specta::Type;
-use tauri::{State, WebviewWindow, ipc::IpcResponse};
+use tauri::{Cef, State, WebviewWindow, ipc::IpcResponse};
 
 use super::{Error, project::CurrentProject};
 use crate::desktop::Desktop;
@@ -32,7 +32,7 @@ pub enum ExportFormat {
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn export_pages(
-    window: WebviewWindow,
+    window: WebviewWindow<Cef>,
     pages: Vec<EntityId>,
     format: ExportFormat,
     project: State<'_, CurrentProject>,

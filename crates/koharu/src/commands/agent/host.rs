@@ -13,7 +13,7 @@ use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tauri::{AppHandle, Manager as _};
+use tauri::{AppHandle, Cef, Manager as _};
 
 use crate::{
     commands::{
@@ -30,11 +30,11 @@ use crate::{
 
 #[derive(Clone)]
 pub(super) struct KoharuHost {
-    handle: AppHandle,
+    handle: AppHandle<Cef>,
 }
 
 impl KoharuHost {
-    pub(super) fn new(handle: AppHandle) -> Self {
+    pub(super) fn new(handle: AppHandle<Cef>) -> Self {
         Self { handle }
     }
 

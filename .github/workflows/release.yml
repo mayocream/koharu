@@ -35,11 +35,17 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install macOS CEF helper targets
+        if: startsWith(matrix.platform, 'macos')
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - name: install dependencies (ubuntu only)
         if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install dependencies
         run: bun install
@@ -106,15 +112,13 @@ jobs:
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
-          tauriScript: npx @tauri-apps/cli
+          tauriScript: cargo tauri
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseBody: ${{ steps.release_notes.outputs.release_body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
 
   winget:
     needs: release

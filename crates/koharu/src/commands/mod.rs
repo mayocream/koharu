@@ -51,7 +51,7 @@ impl<T: IpcResponse> ChannelExt<T> for Mutex<Option<Channel<T>>> {
     }
 }
 
-pub fn bindings() -> tauri_specta::Builder<tauri::Wry> {
+pub fn bindings() -> tauri_specta::Builder<tauri::Cef> {
     use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
 
     Builder::new()

@@ -10,7 +10,7 @@ use koharu_scene::{Revision, Snapshot};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Manager as _, State, ipc::Channel};
+use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
 use uuid::Uuid;
 
 use super::{
@@ -82,7 +82,7 @@ pub(crate) struct JobChannel {
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn process(
-    handle: AppHandle,
+    handle: AppHandle<Cef>,
     scope: koharu_pipeline::Scope,
     operation: koharu_pipeline::Operation,
     project: State<'_, CurrentProject>,
@@ -176,7 +176,7 @@ pub(crate) async fn process(
         }));
 
         struct PipelineCommitter {
-            handle: AppHandle,
+            handle: AppHandle<Cef>,
             revisions: Vec<Revision>,
         }
 

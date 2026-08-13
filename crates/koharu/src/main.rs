@@ -9,8 +9,9 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 #[command(version, about)]
 struct Cli {}
 
+#[tauri::cef_entry_point]
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
     let _cli = Cli::parse();
     let _guard = sentry::initialize();
     panic::install();
@@ -23,4 +24,5 @@ async fn main() -> anyhow::Result<()> {
         .with(koharu::tracing::TimingLayer::new())
         .init();
     tokio::task::block_in_place(|| koharu::run(tauri::generate_context!()))
+        .expect("failed to run the desktop application");
 }

@@ -12,7 +12,7 @@ description: Build the Tauri desktop application, run focused checks, regenerate
 - LLVM 15 or later;
 - platform C/C++ build tools required by native dependencies.
 
-Linux development also needs WebKitGTK 4.1 and the Tauri desktop system libraries for your distribution. Windows native work uses MSVC build tools. Release builds for Apple platforms target Apple silicon.
+Linux development also needs GTK 3 and the X11 desktop libraries for your distribution. Windows native work uses MSVC build tools.
 
 ## Install and run
 
