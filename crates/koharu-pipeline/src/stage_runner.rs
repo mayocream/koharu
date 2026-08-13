@@ -7,16 +7,16 @@ use anyhow::Result;
 use koharu_scene::{EntityId, Patch};
 
 use crate::{
-    ErrorKind, PipelineConfig, PipelineError, Progress, ProgressSink, Stage, StopToken, progress,
-    residency::{Admission, Residency, is_out_of_memory},
+    ErrorKind, PipelineConfig, PipelineError, Progress, ProgressSink, Stage, StopToken,
+    accelerator::AcceleratorGate,
+    progress,
     resources::ResourceMonitor,
     stages::{StageInput, Stages},
 };
 
 pub(crate) struct StageRunner {
     stages: Stages,
-    residency: Residency,
-    resources: Arc<ResourceMonitor>,
+    accelerator: AcceleratorGate,
 }
 
 impl StageRunner {
@@ -28,8 +28,7 @@ impl StageRunner {
     ) -> Result<Self> {
         Ok(Self {
             stages: Stages::new(config, translator, device)?,
-            residency: Residency::new(resources.clone()),
-            resources,
+            accelerator: AcceleratorGate::new(device, resources),
         })
     }
 
@@ -56,54 +55,27 @@ impl StageRunner {
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
-        let admission = self.residency.enter(job.stage, &self.stages).await;
+        let permit = self.accelerator.acquire().await;
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
-        let first = self.run_admitted(job, model, &admission).await;
+        let first = self.load_and_process(job, model).await;
         let failure = match first {
-            Ok(outcome) => {
-                self.residency.touch(job.stage, &self.stages);
-                return Ok(outcome);
-            }
-            Err(failure) if is_out_of_memory(&failure.error) && !job.stop.stopped() => {
-                self.residency.penalize(job.stage);
-                failure
-            }
+            Ok(outcome) => return Ok(outcome),
+            Err(failure) if is_out_of_memory(&failure.error) && !job.stop.stopped() => failure,
             Err(failure) => return Err(self.stage_error(job.stage, model, failure)),
         };
 
-        drop(admission);
+        drop(permit);
         tracing::warn!(stage = %job.stage, page = %job.input.page(), error = %failure.error, "retrying stage after memory pressure");
-        let recovery = self.residency.recover(job.stage, &self.stages).await;
+        let _permit = self.accelerator.recover(job.stage, &self.stages).await;
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
-        match self.run_admitted(job, model, &recovery).await {
-            Ok(outcome) => {
-                self.residency.touch(job.stage, &self.stages);
-                Ok(outcome)
-            }
+        match self.load_and_process(job, model).await {
+            Ok(outcome) => Ok(outcome),
             Err(failure) => Err(self.stage_error(job.stage, model, failure)),
         }
-    }
-
-    async fn run_admitted(
-        &self,
-        job: &StageJob,
-        model: &str,
-        admission: &Admission<'_>,
-    ) -> std::result::Result<StageOutcome, AttemptFailure> {
-        if !admission.tracked_memory() {
-            return self.load_and_process(job, model).await;
-        }
-        let (outcome, measurement) = self
-            .resources
-            .measure(self.load_and_process(job, model), admission.profiling())
-            .await;
-        self.residency
-            .observe(job.stage, admission.was_loaded(), measurement);
-        outcome
     }
 
     async fn load_and_process(
@@ -166,6 +138,15 @@ impl StageRunner {
 struct AttemptFailure {
     kind: ErrorKind,
     error: anyhow::Error,
+}
+
+fn is_out_of_memory(error: &anyhow::Error) -> bool {
+    error.chain().any(|source| {
+        let message = source.to_string().to_ascii_lowercase();
+        message.contains("out of memory")
+            || message.contains("cuda_error_out_of_memory")
+            || message.contains("not enough memory")
+    })
 }
 
 pub(crate) struct StageJob {

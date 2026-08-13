@@ -27,7 +27,7 @@ use koharu_scene::{
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{ModelRef, StageInput, StageProcessor, finish, generation};
+use super::{StageInput, StageProcessor, finish, generation};
 use crate::{DetectionModel, ModelCell};
 
 const MODEL_ID: &str = "mayocream/koharu-layout-rfdetr-seg-2xl-1152";
@@ -86,8 +86,12 @@ impl Processor {
 
 #[async_trait]
 impl StageProcessor for Processor {
-    fn model(&self) -> ModelRef<'_> {
-        ModelRef::new(MODEL_NAME, &self.model)
+    fn model(&self) -> &'static str {
+        MODEL_NAME
+    }
+
+    fn unload(&self) -> bool {
+        self.model.unload()
     }
 
     async fn load(&self) -> Result<()> {

@@ -67,7 +67,6 @@ fn sample_nvml_device(nvml: &Nvml, index: u32) -> Result<Sample, String> {
         vendor: Vendor::Nvidia,
         budget_bytes: memory.total,
         used_bytes: memory.used,
-        available_bytes: memory.free,
         utilization_percent: device
             .utilization_rates()
             .ok()
@@ -106,7 +105,6 @@ fn sample_drm(skip_nvidia: bool) -> Vec<Sample> {
                 vendor,
                 budget_bytes: total,
                 used_bytes: used,
-                available_bytes: total.saturating_sub(used),
                 utilization_percent: read_number(device.join("gpu_busy_percent"))
                     .map(|value| value as f32),
             })

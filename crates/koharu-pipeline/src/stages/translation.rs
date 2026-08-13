@@ -1,5 +1,3 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{Authored, LanguageTag, Origin, SourceText, Translation};
@@ -7,48 +5,29 @@ use koharu_translator::{TranslationRequest, Translator};
 
 use crate::TranslationConfig;
 
-use super::{ModelRef, ModelState, StageInput, StageProcessor, finish, generation};
+use super::{StageInput, StageProcessor, finish, generation};
 
 const PRODUCER: &str = "dev.koharu.pipeline.translation";
 
 pub(super) struct Processor {
     config: TranslationConfig,
     translator: Translator,
-    last_used: AtomicU64,
 }
 
 impl Processor {
     pub(super) fn new(config: TranslationConfig, translator: Translator) -> Self {
-        Self {
-            config,
-            translator,
-            last_used: AtomicU64::new(0),
-        }
-    }
-}
-
-impl ModelState for Processor {
-    fn loaded(&self) -> bool {
-        self.translator.loaded(&self.config.model)
-    }
-
-    fn unload(&self) -> bool {
-        self.translator.unload()
-    }
-
-    fn touch(&self, sequence: u64) {
-        self.last_used.store(sequence, Ordering::Relaxed);
-    }
-
-    fn last_used(&self) -> u64 {
-        self.last_used.load(Ordering::Relaxed)
+        Self { config, translator }
     }
 }
 
 #[async_trait]
 impl StageProcessor for Processor {
-    fn model(&self) -> ModelRef<'_> {
-        ModelRef::new(Translator::model(&self.config.model), self)
+    fn model(&self) -> &'static str {
+        Translator::model(&self.config.model)
+    }
+
+    fn unload(&self) -> bool {
+        self.translator.unload()
     }
 
     async fn load(&self) -> Result<()> {

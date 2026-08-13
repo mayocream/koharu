@@ -1,14 +1,15 @@
 //! In-process, scene-native model orchestration for Koharu.
 
+mod accelerator;
 mod config;
 mod error;
+mod execution;
 mod images;
 mod model_cell;
 mod pipeline;
 mod progress;
 mod report;
 mod request;
-mod residency;
 mod resources;
 mod scheduler;
 mod scope;

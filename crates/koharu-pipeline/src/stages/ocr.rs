@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use super::{ModelRef, StageInput, StageProcessor, finish, generation};
+use super::{StageInput, StageProcessor, finish, generation};
 use crate::{ModelCell, OcrModel, scope::geometry_extents};
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -34,13 +34,16 @@ impl Processor {
 
 #[async_trait]
 impl StageProcessor for Processor {
-    fn model(&self) -> ModelRef<'_> {
-        let name = match self.config {
+    fn model(&self) -> &'static str {
+        match self.config {
             OcrModel::MangaOcr => "manga-ocr",
             OcrModel::BaberuOcr => "baberu-ocr",
             OcrModel::PaddleOcrVl1_6 => "paddleocr-vl-1.6",
-        };
-        ModelRef::new(name, &self.model)
+        }
+    }
+
+    fn unload(&self) -> bool {
+        self.model.unload()
     }
 
     async fn load(&self) -> Result<()> {

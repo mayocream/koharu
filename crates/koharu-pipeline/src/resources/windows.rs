@@ -24,9 +24,8 @@ impl Monitor {
     }
 
     pub(super) fn sample(&mut self) -> Result<Vec<Sample>, String> {
-        // DXGI exposes the OS-assigned budget and this process's usage. That is
-        // more useful for admission than physical capacity because the budget
-        // already reacts to pressure from other applications.
+        // DXGI exposes the OS-assigned budget and this process's usage, which
+        // better describes current pressure than physical capacity alone.
         let mut samples = Vec::new();
         for index in 0.. {
             let adapter = match unsafe {
@@ -60,7 +59,6 @@ impl Monitor {
                 vendor: vendor(description.VendorId),
                 budget_bytes: memory.Budget,
                 used_bytes: memory.CurrentUsage,
-                available_bytes: memory.Budget.saturating_sub(memory.CurrentUsage),
                 utilization_percent: None,
             });
         }

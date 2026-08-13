@@ -82,16 +82,16 @@ this workflow:
 For each page, a stage starts only after its selected prerequisite commits.
 Pages enter in project order and the scheduler always selects the oldest ready
 page; there is no global wave barrier. On an accelerator, ready jobs share one
-execution lane while loaded models remain resident according to the VRAM
-budget. Benchmarks on the target CUDA workload showed that overlapping every
-pair of heterogeneous models increased makespan by 2.5-4x through kernel and
-memory-bandwidth contention. Serial model execution therefore produces more
-pages per second than maximizing the activity percentage reported by the GPU.
+execution lane while loaded models remain resident across pages. Benchmarks on
+the target CUDA workload showed that overlapping heterogeneous model pairs
+increased makespan by 2.5-4x through kernel and memory-bandwidth contention.
+Serial model execution therefore produces more pages per second than maximizing
+the activity percentage reported by the GPU.
 
 The readiness window still matters: completed detection immediately exposes
 both of that page's branches, commits remain page-local, and the next best job
 can start without waiting for an unrelated page to finish. CPU-only execution
-retains independent per-model lanes because it has no accelerator admission
+retains independent per-model lanes because it does not use the accelerator
 gate.
 
 ```text
@@ -128,32 +128,28 @@ and commit failure. An error also leaves earlier page-stage commits intact.
 
 ## Model residency
 
-Models are loaded lazily and remain resident for reuse. The resource monitor
-samples the selected accelerator ten times per second. On Windows, DXGI supplies
-the process-aware memory budget while NVML supplies NVIDIA compute utilization.
-A model's first measured run is isolated so the residency manager can learn its
-resident and peak workspace footprint. Later runs use that profile to decide
-whether the requested model fits or idle models must be evicted. Admission
-relies on observed memory rather than a stage-specific device-memory
-declaration.
+Models are loaded lazily and remain resident for reuse across pages. Normal
+execution never unloads a model based on recent usage or sampled memory.
+If a stage reports an out-of-memory failure, the accelerator gate unloads the
+other stage models, allows the device to settle, and retries that stage once.
+The requested model remains loaded when possible.
 
-Loaded models require only their incremental workspace. A model that must be
-loaded requires its measured peak footprint. The budget also retains a safety
-margin for driver and non-pipeline allocations. Idle models are evicted in
-least-recently-used order when a ready lane does not fit. A detected
-out-of-memory failure raises the learned estimate, performs cleanup, and retries
-once.
+The resource monitor samples the selected accelerator ten times per second for
+UI telemetry. On Windows, DXGI supplies the process-aware memory budget while
+NVML supplies NVIDIA compute utilization. Telemetry does not control model
+lifetime.
 
 `ModelCell` serializes access to one model and prevents an active model from
 being unloaded.
 
 ## Stages
 
-`stages/mod.rs` defines `StageProcessor`. Each stage implements the same small
-contract:
+`stages/mod.rs` defines `StageProcessor`. Each stage owns the same small
+lifecycle contract:
 
 - identify its model;
 - load lazily;
+- unload during explicit memory-pressure recovery;
 - process exactly one page and produce a semantic `Patch`.
 
 `StageInput` carries one page ID plus optional entity and region filters for
@@ -179,20 +175,21 @@ isolated from panics and cannot crash execution.
 
 ```text
 src/
+  accelerator.rs  serialized accelerator execution and OOM recovery
   config.rs       model selection and serialized settings
   error.rs        typed execution failures
+  execution.rs    one request's scheduling, commits, progress, and report
   images.rs       decoded scene-asset reuse within each active page
   model_cell.rs   lazy model ownership and per-model serialization
-  pipeline.rs     execution lifecycle, stage attempts, and incremental commits
+  pipeline.rs     configuration generations and public execution entry point
   progress.rs     request-local progress events
   report.rs       run outcome, stage output, and Committer
   request.rs      operation, scope, and StopToken
-  residency.rs    VRAM admission, unloading, and OOM retry policy
-  resources.rs    accelerator and host-memory telemetry
+  resources.rs    UI-facing accelerator and host-memory telemetry
   scheduler.rs    page window, stage readiness, and lane scheduling
   scope.rs        validated project/page/region/entity scope
   stage.rs        stable stage identifiers
-  stage_runner.rs model execution, VRAM admission, and OOM recovery
+  stage_runner.rs model loading, processing, progress, and retry classification
   stages/         detection, OCR, translation, and inpainting processors
 ```
 

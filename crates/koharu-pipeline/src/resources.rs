@@ -2,7 +2,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 use sysinfo::{ProcessesToUpdate, System, get_current_pid};
 
@@ -14,7 +14,6 @@ pub struct DeviceResources {
     pub selected: bool,
     pub memory_budget_bytes: Option<u64>,
     pub memory_used_bytes: Option<u64>,
-    pub memory_available_bytes: Option<u64>,
     pub utilization_percent: Option<f32>,
 }
 
@@ -24,14 +23,6 @@ pub struct ResourceSnapshot {
     pub system_memory_bytes: u64,
     pub process_cpu_percent: f32,
     pub devices: Vec<DeviceResources>,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct DeviceMemoryMeasurement {
-    pub budget_bytes: Option<u64>,
-    pub used_before_bytes: Option<u64>,
-    pub peak_used_bytes: Option<u64>,
-    pub used_after_bytes: Option<u64>,
 }
 
 pub(crate) struct ResourceMonitor {
@@ -72,8 +63,8 @@ impl ResourceMonitor {
             let logical_processors =
                 std::thread::available_parallelism().map_or(1, |count| count.get()) as f32;
             // Most page-local model calls finish in well under 500 ms. A shorter
-            // interval keeps their VRAM peaks and utilization visible to both
-            // admission control and the UI without polling in a tight loop.
+            // interval keeps their VRAM use and utilization visible in the UI
+            // without polling in a tight loop.
             let mut interval = tokio::time::interval(Duration::from_millis(100));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut host_refresh_tick = 0_u8;
@@ -93,7 +84,6 @@ impl ResourceMonitor {
                 let system_memory = vram::SystemMemory {
                     total_bytes: system.total_memory(),
                     used_bytes: system.used_memory(),
-                    available_bytes: system.available_memory(),
                 };
                 let devices = match vram.sample(system_memory) {
                     Ok(devices) => {
@@ -132,82 +122,7 @@ impl ResourceMonitor {
         let _ = tokio::time::timeout(std::time::Duration::from_secs(2), notified).await;
     }
 
-    pub(crate) fn snapshot(&self) -> ResourceSnapshot {
-        self.changed.borrow().clone()
-    }
-
-    pub(crate) async fn measure<F>(
-        &self,
-        future: F,
-        settle: bool,
-    ) -> (F::Output, DeviceMemoryMeasurement)
-    where
-        F: Future,
-    {
-        let mut changed = self.changed.subscribe();
-        let before = self.snapshot();
-        let mut measurement = DeviceMemoryMeasurement::from_snapshot(&before);
-        tokio::pin!(future);
-
-        let output = loop {
-            tokio::select! {
-                output = &mut future => break output,
-                result = changed.changed() => {
-                    if result.is_err() {
-                        break future.await;
-                    }
-                    measurement.observe(&changed.borrow());
-                }
-            }
-        };
-
-        if settle
-            && tokio::time::timeout(Duration::from_millis(600), changed.changed())
-                .await
-                .is_ok_and(|result| result.is_ok())
-        {
-            measurement.observe(&changed.borrow());
-        } else {
-            measurement.observe(&self.snapshot());
-        }
-        measurement.used_after_bytes =
-            selected_device(&self.snapshot()).and_then(|device| device.memory_used_bytes);
-        (output, measurement)
-    }
-
     pub(crate) fn subscribe(&self) -> tokio::sync::watch::Receiver<ResourceSnapshot> {
         self.changed.subscribe()
     }
-}
-
-impl DeviceMemoryMeasurement {
-    fn from_snapshot(snapshot: &ResourceSnapshot) -> Self {
-        let device = selected_device(snapshot);
-        let used = device.and_then(|device| device.memory_used_bytes);
-        Self {
-            budget_bytes: device.and_then(|device| device.memory_budget_bytes),
-            used_before_bytes: used,
-            peak_used_bytes: used,
-            used_after_bytes: used,
-        }
-    }
-
-    fn observe(&mut self, snapshot: &ResourceSnapshot) {
-        let Some(device) = selected_device(snapshot) else {
-            return;
-        };
-        self.budget_bytes = self.budget_bytes.or(device.memory_budget_bytes);
-        if let Some(used) = device.memory_used_bytes {
-            self.peak_used_bytes = Some(self.peak_used_bytes.map_or(used, |peak| peak.max(used)));
-            self.used_after_bytes = Some(used);
-        }
-    }
-}
-
-pub(crate) fn selected_device(snapshot: &ResourceSnapshot) -> Option<&DeviceResources> {
-    snapshot
-        .devices
-        .iter()
-        .find(|device| device.selected)
-        .or_else(|| snapshot.devices.first())
 }

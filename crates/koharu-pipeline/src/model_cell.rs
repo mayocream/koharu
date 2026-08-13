@@ -1,20 +1,15 @@
-use std::{
-    future::Future,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::future::Future;
 
 use anyhow::Result;
 
 pub(crate) struct ModelCell<M> {
     model: tokio::sync::Mutex<Option<M>>,
-    last_used: AtomicU64,
 }
 
 impl<M> ModelCell<M> {
     pub(crate) fn new() -> Self {
         Self {
             model: tokio::sync::Mutex::new(None),
-            last_used: AtomicU64::new(0),
         }
     }
 
@@ -34,26 +29,11 @@ impl<M> ModelCell<M> {
         self.model.lock().await
     }
 
-    pub(crate) fn loaded(&self) -> bool {
-        self.model
-            .try_lock()
-            .map(|model| model.is_some())
-            .unwrap_or(true)
-    }
-
     pub(crate) fn unload(&self) -> bool {
         self.model
             .try_lock()
             .map(|mut model| model.take().is_some())
             .unwrap_or(false)
-    }
-
-    pub(crate) fn touch(&self, sequence: u64) {
-        self.last_used.store(sequence, Ordering::Relaxed);
-    }
-
-    pub(crate) fn last_used(&self) -> u64 {
-        self.last_used.load(Ordering::Relaxed)
     }
 }
 
@@ -74,7 +54,6 @@ mod tests {
         cell.ensure(|| async { Ok(2_u32) }).await.unwrap();
         assert_eq!(*cell.lock().await, Some(1));
         assert!(cell.unload());
-        assert!(!cell.loaded());
         cell.ensure(|| async { Ok(3_u32) }).await.unwrap();
         assert_eq!(*cell.lock().await, Some(3));
     }

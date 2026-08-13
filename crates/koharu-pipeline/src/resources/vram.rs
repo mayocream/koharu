@@ -31,7 +31,6 @@ pub(super) struct Sample {
     pub vendor: Vendor,
     pub budget_bytes: u64,
     pub used_bytes: u64,
-    pub available_bytes: u64,
     pub utilization_percent: Option<f32>,
 }
 
@@ -39,7 +38,6 @@ pub(super) struct Sample {
 pub(super) struct SystemMemory {
     pub total_bytes: u64,
     pub used_bytes: u64,
-    pub available_bytes: u64,
 }
 
 pub(super) struct Monitor {
@@ -60,11 +58,7 @@ impl Monitor {
     pub(super) fn sample(&mut self, _system: SystemMemory) -> Result<Vec<DeviceResources>, String> {
         let target = &self.target;
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-        let _ = (
-            _system.total_bytes,
-            _system.used_bytes,
-            _system.available_bytes,
-        );
+        let _ = (_system.total_bytes, _system.used_bytes);
         if target.device_type == DeviceType::Cpu || target.backend == Backend::Cpu {
             return Ok(Vec::new());
         }
@@ -79,7 +73,6 @@ impl Monitor {
                     vendor: Vendor::Apple,
                     budget_bytes: _system.total_bytes,
                     used_bytes: _system.used_bytes,
-                    available_bytes: _system.available_bytes,
                     utilization_percent: None,
                 }],
             ));
@@ -112,7 +105,6 @@ pub(super) fn unavailable(target: &Device) -> Vec<DeviceResources> {
             selected: true,
             memory_budget_bytes: None,
             memory_used_bytes: None,
-            memory_available_bytes: None,
             utilization_percent: None,
         }]
     }
@@ -128,7 +120,6 @@ fn map_samples(target: &Device, samples: Vec<Sample>) -> Vec<DeviceResources> {
             selected: selected == Some(index),
             memory_budget_bytes: (sample.budget_bytes > 0).then_some(sample.budget_bytes),
             memory_used_bytes: (sample.budget_bytes > 0).then_some(sample.used_bytes),
-            memory_available_bytes: (sample.budget_bytes > 0).then_some(sample.available_bytes),
             utilization_percent: sample.utilization_percent,
         })
         .collect()
@@ -192,7 +183,6 @@ mod tests {
             vendor,
             budget_bytes: 8 * 1024 * 1024 * 1024,
             used_bytes: 2 * 1024 * 1024 * 1024,
-            available_bytes: 6 * 1024 * 1024 * 1024,
             utilization_percent: Some(25.0),
         }
     }
@@ -211,10 +201,6 @@ mod tests {
         assert!(!devices[0].selected);
         assert!(!devices[1].selected);
         assert!(devices[2].selected);
-        assert_eq!(
-            devices[2].memory_available_bytes,
-            Some(6 * 1024 * 1024 * 1024)
-        );
     }
 
     #[test]
@@ -222,6 +208,5 @@ mod tests {
         let devices = unavailable(&Device::vulkan(0));
         assert!(devices[0].selected);
         assert_eq!(devices[0].memory_budget_bytes, None);
-        assert_eq!(devices[0].memory_available_bytes, None);
     }
 }
