@@ -1,3 +1,11 @@
+## [0.66.0](https://github.com/mayocream/koharu/compare/0.65.3..0.66.0) - 2026-08-13
+
+### ⛰️  Features
+
+- CEF OSR - ([9379006](https://github.com/mayocream/koharu/commit/937900683eea385a89e0e6e7fc0065cc757e1fa2))
+- Use CEF runtime - ([547106f](https://github.com/mayocream/koharu/commit/547106f17e8183046fb22572b532f6755eef02f7))
+
+
 ## [0.65.3](https://github.com/mayocream/koharu/compare/0.65.2..0.65.3) - 2026-08-13
 
 ### 🐛 Bug Fixes
