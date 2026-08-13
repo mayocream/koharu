@@ -191,10 +191,10 @@ opt-level = 3
 opt-level = 3
 
 [patch.crates-io]
-tauri = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
-tauri-build = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
-tauri-codegen = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
-tauri-macros = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
-tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
-tauri-runtime = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
-tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "9973aa2c6567fdabfe25b5a2eea9744149c94902" }
+tauri = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
+tauri-build = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
+tauri-codegen = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
+tauri-macros = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
+tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
+tauri-runtime = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
+tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "023753b7dd8982cf0dbe71b788b2e0b60770e0af" }
