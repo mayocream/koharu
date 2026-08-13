@@ -6,12 +6,12 @@
     "linux": {
       "deb": {
         "files": {
-          "/usr/bin/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
+          "/usr/share/koharu/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
         }
       },
       "rpm": {
         "files": {
-          "/usr/bin/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
+          "/usr/share/koharu/libkoharu-torch.so": "../../target/release/libkoharu-torch.so"
         }
       }
     }
