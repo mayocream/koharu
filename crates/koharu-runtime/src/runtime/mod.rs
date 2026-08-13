@@ -37,7 +37,7 @@ pub(crate) trait RuntimePackage: Package + std::fmt::Debug + Eq + Hash {
 }
 
 pub(crate) trait DiscoverablePackage: RuntimePackage {
-    fn discover(hardware: &Hardware) -> Result<Self>;
+    fn discover(hardware: &Hardware) -> Option<Self>;
 }
 
 /// A process-wide runtime capability requested by a consumer.
@@ -57,15 +57,30 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn discover(features: impl IntoIterator<Item = Feature>) -> Result<Self> {
+        let features = features.into_iter().collect::<Vec<_>>();
         let hardware = Hardware::discover();
+        for candidate in hardware.candidates() {
+            if let Some(plan) = Self::plan(&features, &candidate)? {
+                return Ok(Self {
+                    plan,
+                    hardware: candidate,
+                });
+            }
+        }
+        anyhow::bail!("no device supports the requested runtime features")
+    }
+
+    fn plan(features: &[Feature], hardware: &Hardware) -> Result<Option<Plan>> {
         let mut plan = Plan::default();
         let mut previous = None;
 
         for feature in features {
-            let node = match feature {
-                Feature::Torch => plan.require::<Torch>(&hardware)?,
-                Feature::Llama => plan.require::<Llama>(&hardware)?,
-                Feature::Diffusion => plan.require::<Diffusion>(&hardware)?,
+            let Some(node) = (match feature {
+                Feature::Torch => plan.require::<Torch>(hardware)?,
+                Feature::Llama => plan.require::<Llama>(hardware)?,
+                Feature::Diffusion => plan.require::<Diffusion>(hardware)?,
+            }) else {
+                return Ok(None);
             };
             if let Some(previous) = previous
                 && previous != node
@@ -75,7 +90,7 @@ impl Runtime {
             previous = Some(node);
         }
         plan.validate()?;
-        Ok(Self { plan, hardware })
+        Ok(Some(plan))
     }
 
     /// Returns the one accelerator selected for every model backend.

@@ -6,10 +6,11 @@ use std::{cmp::Reverse, sync::OnceLock};
 
 use crate::{Backend, Device, DeviceType};
 
-/// Accelerator capabilities and the authoritative process-wide device choice.
+/// Accelerator capabilities and their process-wide selection priority.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Hardware {
     pub(crate) devices: Vec<Device>,
+    pub(crate) candidates: Vec<usize>,
     pub(crate) selected: Option<usize>,
 }
 
@@ -52,49 +53,59 @@ impl Hardware {
             });
         }
 
-        let selected = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        let candidates = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
             devices
                 .iter()
                 .position(|device| device.backend == Backend::Metal)
+                .into_iter()
+                .collect()
         } else {
-            cuda_driver
-                .filter(|version| *version >= 13000)
-                .and_then(|_| {
-                    devices
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, device)| device.backend == Backend::Cuda)
-                        .max_by_key(|(_, device)| {
-                            (
-                                !device.is_integrated(),
-                                device.memory_total,
-                                device.compute_capability,
-                                Reverse(device.index),
-                            )
-                        })
-                        .map(|(index, _)| index)
-                })
-                .or_else(|| {
-                    devices
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, device)| device.backend == Backend::Rocm)
-                        .max_by_key(|(_, device)| {
-                            (
-                                !device.is_integrated(),
-                                device.memory_total,
-                                Reverse(device.index),
-                            )
-                        })
-                        .map(|(index, _)| index)
-                })
-                .or_else(|| {
-                    devices
-                        .iter()
-                        .position(|device| device.backend == Backend::Vulkan)
-                })
+            let mut candidates = Vec::new();
+            if cuda_driver.is_some_and(|version| version >= 13000) {
+                let mut cuda = devices
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, device)| device.backend == Backend::Cuda)
+                    .collect::<Vec<_>>();
+                cuda.sort_by_key(|(_, device)| {
+                    (
+                        !device.is_integrated(),
+                        device.memory_total,
+                        device.compute_capability,
+                        Reverse(device.index),
+                    )
+                });
+                candidates.extend(cuda.into_iter().rev().map(|(index, _)| index));
+            }
+
+            let mut rocm = devices
+                .iter()
+                .enumerate()
+                .filter(|(_, device)| device.backend == Backend::Rocm)
+                .collect::<Vec<_>>();
+            rocm.sort_by_key(|(_, device)| {
+                (
+                    !device.is_integrated(),
+                    device.memory_total,
+                    Reverse(device.index),
+                )
+            });
+            candidates.extend(rocm.into_iter().rev().map(|(index, _)| index));
+            candidates.extend(
+                devices
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, device)| device.backend == Backend::Vulkan)
+                    .map(|(index, _)| index),
+            );
+            candidates
         };
-        Self { devices, selected }
+        let selected = candidates.first().copied();
+        Self {
+            devices,
+            candidates,
+            selected,
+        }
     }
 
     #[must_use]
@@ -105,6 +116,22 @@ impl Hardware {
     #[must_use]
     pub fn device(&self) -> Option<&Device> {
         self.selected.and_then(|index| self.devices.get(index))
+    }
+
+    pub(crate) fn candidates(&self) -> impl Iterator<Item = Self> + '_ {
+        self.candidates
+            .iter()
+            .copied()
+            .map(|selected| {
+                let mut hardware = self.clone();
+                hardware.selected = Some(selected);
+                hardware
+            })
+            .chain(std::iter::once_with(|| {
+                let mut hardware = self.clone();
+                hardware.selected = None;
+                hardware
+            }))
     }
 
     #[must_use]

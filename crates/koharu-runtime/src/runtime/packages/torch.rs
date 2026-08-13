@@ -209,26 +209,31 @@ impl Package for Torch {
 }
 
 impl DiscoverablePackage for Torch {
-    fn discover(hardware: &Hardware) -> Result<Self> {
+    fn discover(hardware: &Hardware) -> Option<Self> {
         if hardware.supports_metal() {
-            return Ok(Self::CPU);
+            return Some(Self::CPU);
         }
         if !cfg!(any(
             all(target_os = "windows", target_arch = "x86_64"),
             all(target_os = "linux", target_arch = "x86_64")
         )) {
-            anyhow::bail!("Torch does not support this target")
+            return None;
         }
         if hardware.supports_cuda() {
-            return Ok(Self(Backend::Cuda13));
+            return Some(Self(Backend::Cuda13));
         }
-        if cfg!(target_os = "windows")
-            && let Ok(target) = Rocm::discover(hardware)
-        {
-            return Ok(Self(Backend::Rocm714(target)));
+        if hardware.supports_rocm() {
+            return if cfg!(target_os = "windows") {
+                Rocm::discover(hardware)
+                    .ok()
+                    .map(Backend::Rocm714)
+                    .map(Self)
+            } else {
+                None
+            };
         }
         tracing::warn!("no supported Torch accelerator was discovered; using CPU");
-        Ok(Self::CPU)
+        Some(Self::CPU)
     }
 }
 

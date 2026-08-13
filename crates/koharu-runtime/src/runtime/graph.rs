@@ -100,13 +100,14 @@ pub(crate) struct Plan {
 }
 
 impl Plan {
-    pub(crate) fn require<P>(&mut self, hardware: &Hardware) -> Result<NodeIndex>
+    pub(crate) fn require<P>(&mut self, hardware: &Hardware) -> Result<Option<NodeIndex>>
     where
         P: DiscoverablePackage,
         Component: From<P>,
     {
-        let package = P::discover(hardware)?;
-        self.insert(package.into(), hardware)
+        P::discover(hardware)
+            .map(|package| self.insert(package.into(), hardware))
+            .transpose()
     }
 
     fn insert(&mut self, component: Component, hardware: &Hardware) -> Result<NodeIndex> {
@@ -175,6 +176,7 @@ mod tests {
                 compute_capability: 80,
                 target: None,
             }],
+            candidates: vec![0],
             selected: Some(0),
         };
         let mut plan = Plan::default();

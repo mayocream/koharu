@@ -108,28 +108,24 @@ impl Package for Llama {
 }
 
 impl DiscoverablePackage for Llama {
-    fn discover(hardware: &Hardware) -> Result<Self> {
+    fn discover(hardware: &Hardware) -> Option<Self> {
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             if hardware.supports_cuda() {
-                return Ok(Self::WindowsCuda);
+                return Some(Self::WindowsCuda);
             }
             if Rocm::discover(hardware).is_ok() {
-                return Ok(Self::WindowsHip);
+                return Some(Self::WindowsHip);
             }
             if hardware.supports_vulkan() {
-                return Ok(Self::WindowsVulkan);
+                return Some(Self::WindowsVulkan);
             }
-            anyhow::bail!("llama requires CUDA 13, ROCm, or Vulkan")
+            None
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            if hardware.supports_vulkan() {
-                Ok(Self::LinuxVulkan)
-            } else {
-                anyhow::bail!("llama requires Vulkan")
-            }
+            hardware.supports_vulkan().then_some(Self::LinuxVulkan)
         } else if hardware.supports_metal() {
-            Ok(Self::MacosMetal)
+            Some(Self::MacosMetal)
         } else {
-            anyhow::bail!("llama does not support this target")
+            None
         }
     }
 }
