@@ -1,3 +1,10 @@
+## [0.66.3](https://github.com/mayocream/koharu/compare/0.66.2..0.66.3) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Put store in resource dir - ([9590631](https://github.com/mayocream/koharu/commit/959063121cf15330d41c8acd03f2ffab60a6a2ed))
+
+
 ## [0.66.2](https://github.com/mayocream/koharu/compare/0.66.1..0.66.2) - 2026-08-13
 
 ### 🐛 Bug Fixes
