@@ -65,14 +65,7 @@ impl CefBrowser {
         let executable = std::env::current_exe()
             .map_err(|error| format!("failed to resolve CEF subprocess executable: {error}"))?;
         #[cfg(not(target_os = "macos"))]
-        let resources_dir = {
-            let nested = config.distribution.join("Resources");
-            if nested.is_dir() {
-                nested
-            } else {
-                config.distribution.clone()
-            }
-        };
+        let resources_dir = cef_resources_dir(&config.distribution);
         let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
         let mut app = internal::browser_app();
         let settings = cef::Settings {
@@ -261,6 +254,23 @@ fn development_origin(url: &str) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn cef_resources_dir(distribution: &std::path::Path) -> PathBuf {
+    // The UI is bundled under `resources/ui`. Windows would otherwise treat
+    // that directory as CEF's conventional `Resources` directory.
+    distribution.to_path_buf()
+}
+
+#[cfg(target_os = "linux")]
+fn cef_resources_dir(distribution: &std::path::Path) -> PathBuf {
+    let nested = distribution.join("Resources");
+    if nested.is_dir() {
+        nested
+    } else {
+        distribution.to_path_buf()
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn macos_main_bundle(executable: &std::path::Path) -> Result<PathBuf, String> {
     executable
@@ -280,6 +290,15 @@ fn macos_main_bundle(executable: &std::path::Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn cef_resources_ignore_the_ui_resources_directory() {
+        let distribution = tempfile::tempdir().unwrap();
+        std::fs::create_dir(distribution.path().join("resources")).unwrap();
+
+        assert_eq!(cef_resources_dir(distribution.path()), distribution.path());
+    }
 
     #[test]
     fn development_origin_extracts_tuple_origin_without_policy() {
