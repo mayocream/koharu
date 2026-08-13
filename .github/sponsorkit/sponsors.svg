@@ -33,22 +33,15 @@ text {
 </a><text x="400" y="225" text-anchor="middle" class="sponsorkit-tier-title">Backers</text><a href="https://www.patreon.com/user?u=4409761" class="sponsorkit-link" target="_blank" id="fffonion">
   
   <clipPath id="ccde041">
-    <rect x="332" y="250" width="40" height="40" rx="20" ry="20" />
+    <rect x="356" y="250" width="40" height="40" rx="20" ry="20" />
   </clipPath>
-  <image x="332" y="250" width="40" height="40" href="data:image/webp;base64,UklGRtoAAABXRUJQVlA4IM4AAACwBQCdASoyADIAPm02mEgkIyKhJhVYoIANiWUA0XQdwADeOyIsD3iMLEOLbvqQJXSpxkdWrOAA/vFZlAmpP/5Z/+y3+W/ZOSkSNgaAhhE86gA40OGsf9Mr3vg2u7lh9Ox+Q7jcy0DNG/e5cnm/0+/VSCPqdjDoYGfdCOpiqp0ewKJvuqfdc5FtiW9jAuvv+3R9Td6376q8Nugx46mQN9/1FeZnKnu9nHXTRkjG50/2t0znCn6Tz+QF+JSOIIuSbkN2Eflzqh44m6NvgSegAA==" clip-path="url(#ccde041)"/>
-</a>
-<a class="sponsorkit-link" target="_blank" id="anonymous-1">
-  
-  <clipPath id="cd45cfd">
-    <rect x="380" y="250" width="40" height="40" rx="20" ry="20" />
-  </clipPath>
-  <image x="380" y="250" width="40" height="40" href="data:image/webp;base64,UklGRhgBAABXRUJQVlA4WAoAAAAQAAAAMQAAMQAAQUxQSBsAAAABF9D/iAgoatuI6bjFH3QB3Cui/xOAuPBuGR0AVlA4INYAAACwBwCdASoyADIAPm00lkgkIqIhIgswgA2JaQDUHKvxhGE3auNbopz3RcIG1C2ZAgg4bQPtXUBMXKEnlJNcdf7ZQOTTAt4AAP74BD2yd6XIDJnpNEdyfrH8N3XvHow2+VS9xG4RlgdVxkc1v4aoswOqgVstujEotH2EBDFAideTHI1DGcpWxT2Cn/+QYagKUv45MCduQcfIHDe1IyGDfMyFCBFgWZa/RF2mun5NMMSIWYR1MDNVoFDZ/m/h5zjMcD49WXG+iCad5AisNbvW66S9aN3AAAAA" clip-path="url(#cd45cfd)"/>
+  <image x="356" y="250" width="40" height="40" href="data:image/webp;base64,UklGRtoAAABXRUJQVlA4IM4AAACwBQCdASoyADIAPm02mEgkIyKhJhVYoIANiWUA0XQdwADeOyIsD3iMLEOLbvqQJXSpxkdWrOAA/vFZlAmpP/5Z/+y3+W/ZOSkSNgaAhhE86gA40OGsf9Mr3vg2u7lh9Ox+Q7jcy0DNG/e5cnm/0+/VSCPqdjDoYGfdCOpiqp0ewKJvuqfdc5FtiW9jAuvv+3R9Td6376q8Nugx46mQN9/1FeZnKnu9nHXTRkjG50/2t0znCn6Tz+QF+JSOIIuSbkN2Eflzqh44m6NvgSegAA==" clip-path="url(#ccde041)"/>
 </a>
 <a href="https://www.patreon.com/user?u=14570915" class="sponsorkit-link" target="_blank" id="Frederick">
   
   <clipPath id="c8ce87d">
-    <rect x="428" y="250" width="40" height="40" rx="20" ry="20" />
+    <rect x="404" y="250" width="40" height="40" rx="20" ry="20" />
   </clipPath>
-  <image x="428" y="250" width="40" height="40" href="data:image/webp;base64,UklGRvYAAABXRUJQVlA4IOoAAACQBQCdASoyADIAPm00lkikIqIhJhVYoIANiWMBOgKZzjB8VygwrE4Gei1BlIVXoH5Q+asW0AD+7RL8z6F69V92JkP/z0z/4///SbPgYfEBjaO81AfRX5iMeUx/obi6R6VUFzxs1KhnHRq7sfgZ6T7omgJdHV0awGqiEz1uS7s6lwJKE35g5bOPN6dKYet+WQqcUVcdPD3z6tD/U35YP3zTH0/mb6f6953+Tv7nJ+sszg63M36ksW9ASlEJw1fRSEqc+/mWOi5pcThW5tBKZfNIXlLtRjj91jS/EmzVL9SmrUYSRsTmRBwAAAA=" clip-path="url(#c8ce87d)"/>
+  <image x="404" y="250" width="40" height="40" href="data:image/webp;base64,UklGRvYAAABXRUJQVlA4IOoAAACQBQCdASoyADIAPm00lkikIqIhJhVYoIANiWMBOgKZzjB8VygwrE4Gei1BlIVXoH5Q+asW0AD+7RL8z6F69V92JkP/z0z/4///SbPgYfEBjaO81AfRX5iMeUx/obi6R6VUFzxs1KhnHRq7sfgZ6T7omgJdHV0awGqiEz1uS7s6lwJKE35g5bOPN6dKYet+WQqcUVcdPD3z6tD/U35YP3zTH0/mb6f6953+Tv7nJ+sszg63M36ksW9ASlEJw1fRSEqc+/mWOi5pcThW5tBKZfNIXlLtRjj91jS/EmzVL9SmrUYSRsTmRBwAAAA=" clip-path="url(#c8ce87d)"/>
 </a>
 </svg>
