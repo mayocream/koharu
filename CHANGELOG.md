@@ -1,3 +1,11 @@
+## [0.66.7](https://github.com/mayocream/koharu/compare/0.66.6..0.66.7) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Relax revision validation - ([f5467d4](https://github.com/mayocream/koharu/commit/f5467d4ae4a2eebc9a80cc55ed283f46a9d7410d))
+- Only configure store path for windows - ([f228507](https://github.com/mayocream/koharu/commit/f22850771edb9e7544d59678e6b985892e8b84ee))
+
+
 ## [0.66.6](https://github.com/mayocream/koharu/compare/0.66.5..0.66.6) - 2026-08-13
 
 ### 🐛 Bug Fixes
