@@ -1,3 +1,10 @@
+## [0.66.4](https://github.com/mayocream/koharu/compare/0.66.3..0.66.4) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Missing ROCm files - ([ff37a02](https://github.com/mayocream/koharu/commit/ff37a02002b3480d9f74630f393f464313fe97c1))
+
+
 ## [0.66.3](https://github.com/mayocream/koharu/compare/0.66.2..0.66.3) - 2026-08-13
 
 ### 🐛 Bug Fixes
