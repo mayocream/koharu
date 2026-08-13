@@ -74,13 +74,18 @@ impl Torch {
     }
 
     fn complete(self, root: &Path, rocm: Option<Rocm>) -> bool {
-        let library = root.join("libtorch/lib");
+        let torch = root.join("libtorch");
+        let library = torch.join("lib");
         self.library_names()
             .is_ok_and(|names| names.into_iter().all(|name| library.join(name).is_file()))
             && rocm.is_none_or(|target| {
-                root.join("libtorch/.kpack")
+                torch
+                    .join(".kpack")
                     .join(format!("torch_{target}.kpack"))
                     .is_file()
+                    && target
+                        .torch_family()
+                        .is_none_or(|_| library.join("aotriton.images").is_dir())
             })
     }
 
@@ -172,7 +177,10 @@ impl Package for Torch {
             .map(|name| format!("torch/lib/{name}"))
             .collect::<Vec<_>>();
         if rocm.is_some() {
-            patterns.push("torch/.kpack/**/*".to_owned());
+            patterns.extend([
+                "torch/.kpack/**/*".to_owned(),
+                "torch/lib/aotriton.images/**/*".to_owned(),
+            ]);
         } else if matches!(self.0, Backend::Cpu) {
             patterns.extend([
                 "torch/include/**/*".to_owned(),
