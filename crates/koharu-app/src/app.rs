@@ -82,6 +82,7 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(crate::commands::bindings().invoke_handler())
         .setup(move |application| {
+            #[cfg(target_os = "windows")]
             koharu_runtime::Store::configure(
                 application
                     .path()
