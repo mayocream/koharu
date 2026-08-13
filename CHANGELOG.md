@@ -1,3 +1,11 @@
+## [0.66.8](https://github.com/mayocream/koharu/compare/0.66.7..0.66.8) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- IME on CEF window - ([7a0b96b](https://github.com/mayocream/koharu/commit/7a0b96bdf9a7ae98c91b132777d026e797143eaf))
+- Libkoharu-torch.so path - ([1626c7f](https://github.com/mayocream/koharu/commit/1626c7f64ba83d0d7f6d57916a6ffb2b2c0d1429))
+
+
 ## [0.66.7](https://github.com/mayocream/koharu/compare/0.66.6..0.66.7) - 2026-08-13
 
 ### 🐛 Bug Fixes
