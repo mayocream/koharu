@@ -1,3 +1,14 @@
+## [0.66.5](https://github.com/mayocream/koharu/compare/0.66.4..0.66.5) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Runtime discover - ([c6f2271](https://github.com/mayocream/koharu/commit/c6f2271b26d995e5c3b671c34f33201eaee88a1c))
+
+### 🚜 Refactor
+
+- Remove usage-based eviction - ([47dd0d2](https://github.com/mayocream/koharu/commit/47dd0d29ac44e30d17fbc3d98caef05da612207b))
+
+
 ## [0.66.4](https://github.com/mayocream/koharu/compare/0.66.3..0.66.4) - 2026-08-13
 
 ### 🐛 Bug Fixes
