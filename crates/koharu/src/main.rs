@@ -10,8 +10,8 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 #[command(version, about)]
 struct Cli {}
 
-#[tauri::cef_entry_point]
 #[tokio::main]
+#[tauri::cef_entry_point]
 async fn main() {
     let _cli = Cli::parse();
     let _guard = sentry::initialize();
