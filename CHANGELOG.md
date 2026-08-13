@@ -1,3 +1,10 @@
+## [0.65.3](https://github.com/mayocream/koharu/compare/0.65.2..0.65.3) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Restore Windows packaged app startup and icon - ([99dd895](https://github.com/mayocream/koharu/commit/99dd895aee94c18919062b215c48c132efe3de93))
+
+
 ## [0.65.2](https://github.com/mayocream/koharu/compare/0.65.1..0.65.2) - 2026-08-12
 
 
