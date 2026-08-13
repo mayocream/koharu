@@ -35,8 +35,6 @@ flowchart LR
 
 ## デスクトップ合成
 
-デスクトップランタイムは 1 つの winit ウィンドウと 1 つの WGPU Surface を所有します。`koharu-canvas` は保持ページをキャンバステクスチャへ描画します。ウィンドウレス CEF は React のウィンドウ枠、メニュー、操作部、インスペクターをプラットフォーム共有テクスチャへ描画します。cef-rs が同じ WGPU 30 Device へ import し、コピー後の UI テクスチャの透明ピクセルから下のキャンバスが見えます。
+WebView はウィンドウ枠、メニュー、操作部、インスペクターを描き、キャンバス領域では透明です。ネイティブ WGPU/Vello 出力が同じウィンドウの下に合成されます。
 
-CEF の pooled resource は accelerated paint callback の間だけ有効なため、Koharu は callback から戻る前にクロップして所有 GPU テクスチャへコピーします。Presenter は UI とキャンバスのテクスチャを合成し、唯一の Surface Present を行います。上限付きの latest-wins 型 in-process mailbox が無制限な Present backlog を防ぎます。accelerated import が利用できない、または失敗した場合は、ソフトウェア描画で Browser を再作成します。
-
-見た目の変更は最終デスクトップウィンドウで検証してください。ブラウザーだけのスクリーンショットではネイティブキャンバスの存在を証明できず、キャンバス readback だけでは alpha、操作部、最終色合成を証明できません。決定的な Compositor テストには off-screen WGPU readback を使い、最終合成にはネイティブウィンドウのキャプチャを使います。
+見た目の変更は最終デスクトップウィンドウで検証してください。Windows の開発用 WebView2 エンドポイントは `http://127.0.0.1:4000` です。

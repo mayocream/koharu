@@ -44,7 +44,7 @@ Provider credentials use the operating system's secure credential service. They 
 
 ## Runtime and model cache
 
-Runtime packages and model files live below the operating system cache directory:
+Native runtime packages and model files live below the operating system cache directory:
 
 ```text
 <cache>/koharu/packages/

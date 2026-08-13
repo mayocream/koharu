@@ -8,26 +8,26 @@ use std::{
 use crate::{Error, Result};
 
 #[derive(Default)]
-struct FfiState {
+struct NativeState {
     active_calls: usize,
     configuring: bool,
 }
 
-fn ffi_state() -> &'static (Mutex<FfiState>, Condvar) {
-    static STATE: OnceLock<(Mutex<FfiState>, Condvar)> = OnceLock::new();
-    STATE.get_or_init(|| (Mutex::new(FfiState::default()), Condvar::new()))
+fn native_state() -> &'static (Mutex<NativeState>, Condvar) {
+    static STATE: OnceLock<(Mutex<NativeState>, Condvar)> = OnceLock::new();
+    STATE.get_or_init(|| (Mutex::new(NativeState::default()), Condvar::new()))
 }
 
 thread_local! {
-    static FFI_DEPTH: Cell<usize> = const { Cell::new(0) };
+    static NATIVE_DEPTH: Cell<usize> = const { Cell::new(0) };
     static CONFIGURATION_DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
-pub(crate) struct FfiCall;
+pub(crate) struct NativeCall;
 
-impl FfiCall {
+impl NativeCall {
     pub(crate) fn enter() -> Self {
-        let (mutex, condvar) = ffi_state();
+        let (mutex, condvar) = native_state();
         let mut state = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
         while state.configuring {
             state = condvar
@@ -36,15 +36,15 @@ impl FfiCall {
         }
         state.active_calls += 1;
         drop(state);
-        FFI_DEPTH.with(|depth| depth.set(depth.get() + 1));
+        NATIVE_DEPTH.with(|depth| depth.set(depth.get() + 1));
         Self
     }
 }
 
-impl Drop for FfiCall {
+impl Drop for NativeCall {
     fn drop(&mut self) {
-        FFI_DEPTH.with(|depth| depth.set(depth.get() - 1));
-        let (mutex, condvar) = ffi_state();
+        NATIVE_DEPTH.with(|depth| depth.set(depth.get() - 1));
+        let (mutex, condvar) = native_state();
         let mut state = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
         state.active_calls -= 1;
         if state.active_calls == 0 {
@@ -53,26 +53,26 @@ impl Drop for FfiCall {
     }
 }
 
-struct FfiConfiguration;
+struct NativeConfiguration;
 
-impl Drop for FfiConfiguration {
+impl Drop for NativeConfiguration {
     fn drop(&mut self) {
         CONFIGURATION_DEPTH.with(|depth| depth.set(depth.get() - 1));
-        let (mutex, condvar) = ffi_state();
+        let (mutex, condvar) = native_state();
         let mut state = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
         state.configuring = false;
         condvar.notify_all();
     }
 }
 
-pub(crate) fn configure_ffi<T>(configure: impl FnOnce() -> T) -> Result<T> {
-    if FFI_DEPTH.with(|depth| depth.get() != 0)
+pub(crate) fn configure_native<T>(configure: impl FnOnce() -> T) -> Result<T> {
+    if NATIVE_DEPTH.with(|depth| depth.get() != 0)
         || CONFIGURATION_DEPTH.with(|depth| depth.get() != 0)
     {
         return Err(Error::ReentrantCallbackConfiguration);
     }
 
-    let (mutex, condvar) = ffi_state();
+    let (mutex, condvar) = native_state();
     let mut state = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
     while state.configuring || state.active_calls != 0 {
         state = condvar
@@ -83,7 +83,7 @@ pub(crate) fn configure_ffi<T>(configure: impl FnOnce() -> T) -> Result<T> {
     drop(state);
 
     CONFIGURATION_DEPTH.with(|depth| depth.set(depth.get() + 1));
-    let _configuration = FfiConfiguration;
+    let _configuration = NativeConfiguration;
     Ok(configure())
 }
 

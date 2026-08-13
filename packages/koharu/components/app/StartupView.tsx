@@ -5,17 +5,14 @@ import Image from 'next/image'
 import { useTranslation } from 'react-i18next'
 
 import { WindowControls } from '@/components/app/WindowChrome'
-import { useKoharuStore } from '@/lib/store'
 
 export function StartupView() {
   const { t } = useTranslation()
-  const startup = useKoharuStore((state) => state.startup)
-  const failed = startup.state === 'failed'
 
   return (
     <div className='relative flex h-screen w-screen flex-col overflow-hidden bg-[var(--surface-titlebar)] text-foreground'>
       <header
-        data-koharu-drag-region
+        data-tauri-drag-region='deep'
         className='grid h-10 shrink-0 grid-cols-[132px_1fr_132px] items-center border-b border-border/80 bg-[var(--surface-titlebar)] shadow-[var(--shadow-titlebar)]'
       >
         <div className='grid h-full w-10 place-items-center rounded-br-lg'>
@@ -42,12 +39,10 @@ export function StartupView() {
           aria-live='polite'
           aria-labelledby='startup-title'
         >
-          {!failed && (
-            <LoaderCircle
-              className='startup-spinner mx-auto size-11 text-primary'
-              aria-hidden='true'
-            />
-          )}
+          <LoaderCircle
+            className='startup-spinner mx-auto size-11 text-primary'
+            aria-hidden='true'
+          />
           <h1
             id='startup-title'
             className='mt-5 text-[24px] font-semibold tracking-[-0.025em] text-balance'
@@ -55,15 +50,12 @@ export function StartupView() {
             {t('startup.title')}
           </h1>
           <p className='mx-auto mt-2 max-w-[48ch] text-[13px] leading-5 text-muted-foreground'>
-            {failed ? startup.error.message : t('startup.description')}
+            {t('startup.description')}
           </p>
 
           <div className='mx-auto mt-7 flex max-w-[480px] items-center justify-center gap-2.5 border-t border-border/80 pt-4 text-[12px] font-medium text-muted-foreground'>
-            <span
-              className={`size-2 rounded-full ${failed ? 'bg-destructive' : 'bg-primary'}`}
-              aria-hidden='true'
-            />
-            {failed ? startup.error.code : t('startup.status')}
+            <span className='size-2 rounded-full bg-primary' aria-hidden='true' />
+            {t('startup.status')}
           </div>
         </section>
       </main>

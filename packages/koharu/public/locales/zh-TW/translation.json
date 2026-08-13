@@ -505,7 +505,6 @@
   },
   "updater": {
     "available": {
-      "description": "Koharu {{version}} 已可安裝。",
       "title": "有可用更新"
     },
     "close": "關閉",

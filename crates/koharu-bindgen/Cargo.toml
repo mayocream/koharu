@@ -2,7 +2,7 @@
 name = "koharu-bindgen"
 version.workspace = true
 edition.workspace = true
-description = "Bindgen-based generator for dynamically loaded shared-library bindings."
+description = "Bindgen-based generator for dynamically loaded native-library bindings."
 license = "MIT OR Apache-2.0"
 authors.workspace = true
 readme.workspace = true

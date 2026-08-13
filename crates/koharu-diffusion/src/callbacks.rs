@@ -8,11 +8,11 @@ use std::{
 };
 
 use crate::{
-    Error, LogLevel, PreviewMode, Result, RgbImageView, ffi::configure_ffi,
+    Error, LogLevel, PreviewMode, Result, RgbImageView, ffi::configure_native,
     image::rgb_view_from_raw, sys,
 };
 
-/// A log message copied from the callback buffer.
+/// A log message copied from the native callback buffer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogMessage {
     pub level: LogLevel,
@@ -24,7 +24,7 @@ pub struct LogMessage {
 pub struct Progress {
     pub step: i32,
     pub steps: i32,
-    /// Seconds per iteration, or the analogous operation time.
+    /// Seconds per iteration, or the analogous native operation time.
     pub time: f32,
 }
 
@@ -65,7 +65,7 @@ pub struct GraphEvaluation<'a> {
 }
 
 impl GraphEvaluation<'_> {
-    /// Address of the opaque FFI tensor, useful for identity tracking.
+    /// Address of the opaque native tensor, useful for identity tracking.
     #[must_use]
     pub fn tensor_address(self) -> usize {
         self.tensor.as_ptr() as usize
@@ -192,10 +192,10 @@ unsafe extern "C" fn graph_trampoline(
     .unwrap_or(false)
 }
 
-/// Replaces the process-wide log callback.
+/// Replaces the process-wide native log callback.
 pub fn set_log_callback(callback: impl Fn(LogMessage) + Send + Sync + 'static) -> Result<()> {
     let callback: Arc<LogCallback> = Arc::new(callback);
-    configure_ffi(|| {
+    configure_native(|| {
         *log_slot()
             .write()
             .unwrap_or_else(|poison| poison.into_inner()) = Some(callback);
@@ -216,9 +216,9 @@ pub fn send_logs_to_tracing() -> Result<()> {
     })
 }
 
-/// Removes the process-wide log callback.
+/// Removes the process-wide native log callback.
 pub fn clear_log_callback() -> Result<()> {
-    configure_ffi(|| {
+    configure_native(|| {
         unsafe { sys::sd_set_log_callback(None, std::ptr::null_mut()) };
         *log_slot()
             .write()
@@ -226,10 +226,10 @@ pub fn clear_log_callback() -> Result<()> {
     })
 }
 
-/// Replaces the process-wide progress callback.
+/// Replaces the process-wide native progress callback.
 pub fn set_progress_callback(callback: impl Fn(Progress) + Send + Sync + 'static) -> Result<()> {
     let callback: Arc<ProgressCallback> = Arc::new(callback);
-    configure_ffi(|| {
+    configure_native(|| {
         *progress_slot()
             .write()
             .unwrap_or_else(|poison| poison.into_inner()) = Some(callback);
@@ -237,9 +237,9 @@ pub fn set_progress_callback(callback: impl Fn(Progress) + Send + Sync + 'static
     })
 }
 
-/// Removes the process-wide progress callback.
+/// Removes the process-wide native progress callback.
 pub fn clear_progress_callback() -> Result<()> {
-    configure_ffi(|| {
+    configure_native(|| {
         unsafe { sys::sd_set_progress_callback(None, std::ptr::null_mut()) };
         *progress_slot()
             .write()
@@ -256,7 +256,7 @@ where
         return Err(Error::InvalidPreviewInterval);
     }
     let callback: Arc<PreviewCallback> = Arc::new(callback);
-    configure_ffi(|| {
+    configure_native(|| {
         *preview_slot()
             .write()
             .unwrap_or_else(|poison| poison.into_inner()) = Some(callback);
@@ -273,9 +273,9 @@ where
     })
 }
 
-/// Disables previews and removes the callback.
+/// Disables native previews and removes the callback.
 pub fn clear_preview_callback() -> Result<()> {
-    configure_ffi(|| {
+    configure_native(|| {
         unsafe {
             sys::sd_set_preview_callback(
                 None,
@@ -294,7 +294,7 @@ pub fn clear_preview_callback() -> Result<()> {
 
 /// Replaces the process-wide backend graph-evaluation callback.
 ///
-/// Enabling importance-matrix collection replaces this callback in the loaded
+/// Enabling importance-matrix collection replaces this callback in the native
 /// library. Install it again after the collector is dropped if both features
 /// are used sequentially.
 pub fn set_graph_evaluation_callback<F>(callback: F) -> Result<()>
@@ -302,7 +302,7 @@ where
     F: for<'a> Fn(GraphEvaluation<'a>) -> bool + Send + Sync + 'static,
 {
     let callback: Arc<GraphCallback> = Arc::new(callback);
-    configure_ffi(|| {
+    configure_native(|| {
         *graph_slot()
             .write()
             .unwrap_or_else(|poison| poison.into_inner()) = Some(callback);
@@ -314,7 +314,7 @@ where
 
 /// Removes the process-wide backend graph-evaluation callback.
 pub fn clear_graph_evaluation_callback() -> Result<()> {
-    configure_ffi(|| {
+    configure_native(|| {
         unsafe { sys::sd_set_backend_eval_callback(None, std::ptr::null_mut()) };
         *graph_slot()
             .write()

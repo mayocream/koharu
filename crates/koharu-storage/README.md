@@ -1,6 +1,6 @@
 # koharu-storage
 
-`koharu-storage` owns one filesystem-backed project format: the latest complete
+`koharu-storage` owns one filesystem-native project format: the latest complete
 opaque state plus immutable content-addressed blobs. It is document persistence,
 not version control. Undo, redo, scene semantics, rendering, and autosave policy
 belong above this crate.

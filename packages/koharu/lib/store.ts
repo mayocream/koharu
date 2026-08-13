@@ -15,7 +15,6 @@ import type {
   StartupState,
   ModelResources,
 } from './protocol'
-import type { AppError } from './transport'
 
 export type CanvasTool = 'select' | 'text' | 'draw' | 'eraser' | 'color_picker' | 'remove' | 'pan'
 export interface CanvasBrush {
@@ -27,7 +26,7 @@ export type ShortcutAction = CanvasTool | 'fit'
 export type Shortcuts = Record<ShortcutAction, string>
 
 interface KoharuStore {
-  startup: { state: 'connecting' } | { state: 'ready' } | { state: 'failed'; error: AppError }
+  initialized: boolean
   preferences: Preferences | null
   translationModels: Model[]
   resources: ModelResources | null
@@ -65,7 +64,7 @@ export const defaultShortcuts: Shortcuts = {
 }
 
 export const useKoharuStore = create<KoharuStore>()((set) => ({
-  startup: { state: 'connecting' },
+  initialized: false,
   preferences: null,
   translationModels: [],
   resources: null,
@@ -106,15 +105,11 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
 
 export function receiveStartupState(state: StartupState): void {
   useKoharuStore.setState({
-    startup: { state: 'ready' },
+    initialized: true,
     preferences: state.preferences,
     jobs: byId(state.jobs),
     ...canvasSnapshot(state.canvas),
   })
-}
-
-export function receiveStartupFailure(error: AppError): void {
-  useKoharuStore.setState({ startup: { state: 'failed', error } })
 }
 
 export function receiveCanvas(canvas: CanvasState): void {

@@ -505,12 +505,11 @@
   },
   "updater": {
     "available": {
-      "description": "Koharu {{version}} 업데이트를 설치할 수 있습니다.",
       "title": "업데이트 사용 가능"
     },
     "close": "닫기",
     "downloading": {
-      "subtitle": "Koharu {{version}}",
+      "subtitle": "코하루 {{version}}",
       "title": "업데이트 다운로드 중…"
     },
     "error": {

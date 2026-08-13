@@ -13,79 +13,51 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.platform }}
+    name: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            package: appimage
-            target: x86_64-unknown-linux-gnu
-            executable: target/x86_64-unknown-linux-gnu/release/koharu
-            libraries: target/release/libkoharu-torch.so
-            artifact: target/bundle/linux/bundle/appimage/*.AppImage
-          - os: windows-2022
-            platform: windows
-            package: nsis
-            target: x86_64-pc-windows-msvc
-            executable: target/x86_64-pc-windows-msvc/release/koharu.exe
-            libraries: target/release/koharu-torch.dll
-            artifact: target/bundle/windows/bundle/nsis/*.exe
-          - os: macos-latest
-            platform: macos
-            package: dmg
-            target: aarch64-apple-darwin
-            executable: target/aarch64-apple-darwin/release/koharu
-            libraries: target/release/libkoharu-torch.dylib
-            artifact: target/bundle/macos/bundle/dmg/*.dmg
+        os: [macos-latest, windows-2022, ubuntu-latest]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Install native build dependencies
-        if: matrix.platform == 'linux'
+      - name: Install dependencies
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
+          sudo apt update
+          sudo apt install --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
             build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libfontconfig-dev \
-            libgtk-3-dev \
-            librsvg2-dev \
-            libssl-dev
-
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
       - uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.platform == 'windows'
-
+        if: startsWith(matrix.os, 'windows')
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-      - run: bun install --frozen-lockfile
-      - run: bun run --filter @koharu/app build
-      - name: Build desktop application
-        run: cargo build -p koharu --release --locked --target ${{ matrix.target }}
-      - name: Bundle native distribution
-        run: >-
-          cargo run -p koharu-bundle --locked --
-          --package ${{ matrix.package }}
-          --target ${{ matrix.target }}
-          --executable "${{ matrix.executable }}"
-          --libraries "${{ matrix.libraries }}"
-          --ui packages/koharu/out
-          --license LICENSE
-          --output "target/bundle/${{ matrix.platform }}"
-          --version "0.0.${{ github.run_number }}"
-
-      - uses: actions/upload-artifact@v7
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+      - run: bun install
+      - uses: actions/cache@v6
         with:
-          name: koharu-${{ matrix.platform }}
-          path: ${{ matrix.artifact }}
+          path: ${{ github.workspace }}/packages/koharu/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-${{ hashFiles('packages/**/*.js', 'packages/**/*.jsx', 'packages/**/*.ts', 'packages/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/bun.lock') }}-
+      - run: bun tauri build --no-bundle
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: koharu-${{ matrix.os }}
+          path: |
+            target/release/koharu*
+            target/release/koharu-torch.dll
+            target/release/libkoharu-torch.so
+            target/release/libkoharu-torch.dylib
           retention-days: 3

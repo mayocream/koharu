@@ -5,7 +5,7 @@ description: Understand automatic runtime selection, model downloads, caches, an
 
 # Runtimes, Models, and Hardware
 
-Koharu assembles the native libraries and model files required by the features you use. These dependencies are not all embedded in the release package.
+Koharu assembles the native libraries and model files required by the features you use. These dependencies are not all embedded in the application installer.
 
 ## Runtime selection
 

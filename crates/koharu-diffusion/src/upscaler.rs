@@ -3,7 +3,7 @@ use std::{cell::Cell, fmt, marker::PhantomData, path::PathBuf, ptr::NonNull};
 use crate::{
     Error, Result, RgbImage,
     context::RawImages,
-    ffi::{FfiCall, optional_cstring, path_cstring},
+    ffi::{NativeCall, optional_cstring, path_cstring},
     image::raw_rgb_image,
     sys,
 };
@@ -61,7 +61,7 @@ impl Upscaler {
         let model_path = path_cstring(&params.model_path, "upscaler model_path")?;
         let backend = optional_cstring(params.backend.as_deref(), "backend")?;
         let params_backend = optional_cstring(params.params_backend.as_deref(), "params_backend")?;
-        let _call = FfiCall::enter();
+        let _call = NativeCall::enter();
         let pointer = unsafe {
             sys::new_upscaler_ctx(
                 model_path.as_ptr(),
@@ -86,11 +86,11 @@ impl Upscaler {
     /// Returns the scale factor encoded by the loaded model.
     #[must_use]
     pub fn factor(&self) -> i32 {
-        let _call = FfiCall::enter();
+        let _call = NativeCall::enter();
         unsafe { sys::get_upscale_factor(self.pointer.as_ptr()) }
     }
 
-    /// Upscales an image and returns the FFI output as owned Rust images.
+    /// Upscales an image and returns the native output as owned Rust images.
     #[tracing::instrument(skip_all)]
     pub fn upscale(&mut self, image: &RgbImage, requested_factor: u32) -> Result<Vec<RgbImage>> {
         if requested_factor == 0 {
@@ -100,7 +100,7 @@ impl Upscaler {
             });
         }
         let image = raw_rgb_image(image)?;
-        let _call = FfiCall::enter();
+        let _call = NativeCall::enter();
         let mut output = RawImages::default();
         let succeeded = unsafe {
             sys::upscale(
@@ -120,7 +120,7 @@ impl Upscaler {
 
 impl Drop for Upscaler {
     fn drop(&mut self) {
-        let _call = FfiCall::enter();
+        let _call = NativeCall::enter();
         unsafe { sys::free_upscaler_ctx(self.pointer.as_ptr()) };
     }
 }

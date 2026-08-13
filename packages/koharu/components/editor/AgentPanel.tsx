@@ -1,15 +1,16 @@
 'use client'
 
+import { Channel } from '@tauri-apps/api/core'
 import { Bot, CircleStop, LogOut, Send, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
-import { subscribeAppEvents } from '@/lib/events'
 import {
   commands,
   type AgentStatus,
   type Config,
+  type Event,
   type LoginEvent,
   type Reasoning,
   type RunId,
@@ -43,74 +44,12 @@ export function AgentPanel() {
   const [prompt, setPrompt] = useState('')
   const [running, setRunning] = useState<RunId | null>(null)
   const [activity, setActivity] = useState<string | null>(null)
-  const activeRun = useRef<{
-    assistant: string
-    run: RunId | null
-    settled: boolean
-  } | null>(null)
 
   useEffect(() => {
     void call(commands.getAgentStatus)
       .then(setStatus)
       .catch(() => undefined)
   }, [])
-
-  useEffect(
-    () =>
-      subscribeAppEvents((message) => {
-        if (message.type === 'agent_login') {
-          setLoginEvent(message.event)
-          return
-        }
-        if (message.type !== 'agent_run') return
-        const current = activeRun.current
-        if (!current) return
-        const event = message.event
-        if (current.run && event.run !== current.run) return
-        switch (event.type) {
-          case 'started':
-            current.run = event.run
-            setRunning(event.run)
-            break
-          case 'text_delta':
-            updateAssistant(current.assistant, (text) => text + event.delta)
-            break
-          case 'reasoning_delta':
-            setActivity(t('agent.thinking'))
-            break
-          case 'tool_started':
-            setActivity(t('agent.applying'))
-            break
-          case 'tool_finished':
-            if (event.changed) void refresh(projectKey, pagesKey, pageKey)
-            setActivity(t('agent.working'))
-            break
-          case 'completed':
-            current.settled = true
-            updateAssistant(current.assistant, () => event.message)
-            settleRun()
-            void refresh(projectKey, pagesKey, pageKey)
-            break
-          case 'failed':
-            current.settled = true
-            updateAssistant(current.assistant, () => event.message, true)
-            settleRun()
-            break
-          case 'cancelled':
-            current.settled = true
-            updateAssistant(current.assistant, (text) => text || t('agent.cancelled'))
-            settleRun()
-            break
-        }
-
-        function settleRun() {
-          activeRun.current = null
-          setRunning(null)
-          setActivity(null)
-        }
-      }),
-    [t],
-  )
 
   const selectedModel = useMemo(
     () =>
@@ -315,8 +254,10 @@ export function AgentPanel() {
   async function login() {
     setLoggingIn(true)
     setLoginEvent({ type: 'progress', message: t('agent.signingIn') })
+    const channel = new Channel<LoginEvent>()
+    channel.onmessage = setLoginEvent
     try {
-      setStatus(await call(commands.loginAgent))
+      setStatus(await call(commands.loginAgent, channel))
       setLoginEvent(null)
     } finally {
       setLoggingIn(false)
@@ -339,8 +280,7 @@ export function AgentPanel() {
     if (!message || running) return
     const id = crypto.randomUUID()
     const assistant = crypto.randomUUID()
-    const active = { assistant, run: null as RunId | null, settled: false }
-    activeRun.current = active
+    let settled = false
     setPrompt('')
     setMessages((current) => [
       ...current,
@@ -349,32 +289,64 @@ export function AgentPanel() {
     ])
     setActivity(t('agent.working'))
 
-    try {
-      const run = await call(commands.runAgent, message)
-      if (!active.settled) {
-        active.run = run
-        setRunning(run)
+    const channel = new Channel<Event>()
+    channel.onmessage = (event) => {
+      switch (event.type) {
+        case 'started':
+          setRunning(event.run)
+          break
+        case 'text_delta':
+          updateAssistant((text) => text + event.delta)
+          break
+        case 'reasoning_delta':
+          setActivity(t('agent.thinking'))
+          break
+        case 'tool_started':
+          setActivity(t('agent.applying'))
+          break
+        case 'tool_finished':
+          if (event.changed) void refresh(projectKey, pagesKey, pageKey)
+          setActivity(t('agent.working'))
+          break
+        case 'completed':
+          settled = true
+          updateAssistant(() => event.message)
+          setRunning(null)
+          setActivity(null)
+          void refresh(projectKey, pagesKey, pageKey)
+          break
+        case 'failed':
+          settled = true
+          updateAssistant(() => event.message, true)
+          setRunning(null)
+          setActivity(null)
+          break
+        case 'cancelled':
+          settled = true
+          updateAssistant((text) => text || t('agent.cancelled'))
+          setRunning(null)
+          setActivity(null)
+          break
       }
+    }
+    try {
+      const run = await call(commands.runAgent, message, channel)
+      if (!settled) setRunning(run)
     } catch (error) {
-      active.settled = true
-      if (activeRun.current === active) activeRun.current = null
-      updateAssistant(
-        assistant,
-        () => (error instanceof Error ? error.message : t('agent.failed')),
-        true,
-      )
+      settled = true
+      updateAssistant(() => (error instanceof Error ? error.message : t('agent.failed')), true)
       setRunning(null)
       setActivity(null)
     }
-  }
 
-  function updateAssistant(assistant: string, update: (text: string) => string, error = false) {
-    setMessages((current) =>
-      current.map((item) =>
-        item.id === assistant
-          ? { ...item, text: update(item.text), error: error || item.error }
-          : item,
-      ),
-    )
+    function updateAssistant(update: (text: string) => string, error = false) {
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === assistant
+            ? { ...item, text: update(item.text), error: error || item.error }
+            : item,
+        ),
+      )
+    }
   }
 }

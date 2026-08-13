@@ -126,14 +126,14 @@ impl Processor {
 
     pub(super) fn composite(
         original: &RgbImage,
-        inference_mask: &GrayImage,
+        native_mask: &GrayImage,
         generated: &RgbImage,
     ) -> Result<RgbImage> {
         // The reference script returns its square model input size. Koharu restores
         // the caller's dimensions and exact unmasked pixels after the same square
         // inference so large-page inpainting does not silently shrink the page.
         let generated = Self::resize_rgb(generated, original.width(), original.height())?;
-        let mask = Self::resize_gray(inference_mask, original.width(), original.height())?;
+        let mask = Self::resize_gray(native_mask, original.width(), original.height())?;
         let mut output = generated;
         for (index, &masked) in mask.as_raw().iter().enumerate() {
             if masked == 0 {

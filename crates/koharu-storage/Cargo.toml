@@ -2,7 +2,7 @@
 name = "koharu-storage"
 version.workspace = true
 edition.workspace = true
-description = "Filesystem-backed snapshot and blob storage for Koharu."
+description = "Filesystem-native snapshot and blob storage for Koharu."
 license.workspace = true
 authors.workspace = true
 readme.workspace = true

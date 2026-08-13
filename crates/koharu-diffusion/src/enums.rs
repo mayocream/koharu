@@ -5,7 +5,7 @@
 
 use std::{ffi::CStr, fmt, str::FromStr};
 
-use crate::{Error, Result, ffi::FfiCall, sys};
+use crate::{Error, Result, ffi::NativeCall, sys};
 
 macro_rules! named_ffi_enum {
     (
@@ -37,10 +37,10 @@ macro_rules! named_ffi_enum {
                 }
             }
 
-            /// Returns the name supplied by the loaded library.
+            /// Returns the name supplied by the loaded native library.
             #[must_use]
-            pub fn library_name(self) -> String {
-                let _call = FfiCall::enter();
+            pub fn native_name(self) -> String {
+                let _call = NativeCall::enter();
                 let pointer = unsafe { $name_fn(self.as_raw()) };
                 if pointer.is_null() {
                     return String::new();
@@ -48,10 +48,10 @@ macro_rules! named_ffi_enum {
                 unsafe { CStr::from_ptr(pointer) }.to_string_lossy().into_owned()
             }
 
-            /// Parses a name using the loaded library's parser.
-            pub fn parse_library(value: &str) -> Result<Self> {
+            /// Parses a name using the loaded native library's parser.
+            pub fn parse_native(value: &str) -> Result<Self> {
                 let value_c = crate::ffi::cstring(value, $kind)?;
-                let _call = FfiCall::enter();
+                let _call = NativeCall::enter();
                 let raw = unsafe { $parse_fn(value_c.as_ptr()) };
                 if raw == $invalid {
                     return Err(Error::UnknownEnumName {
@@ -395,7 +395,7 @@ impl Default for CacheMode {
 }
 
 ffi_enum! {
-    /// Severity attached to a library log message.
+    /// Severity attached to a native log message.
     pub enum LogLevel: sys::sd_log_level_t, "log level" {
         Debug = sys::SD_LOG_DEBUG => "debug",
         Info = sys::SD_LOG_INFO => "info",
@@ -419,7 +419,7 @@ mod tests {
     use crate::{Error, sys};
 
     #[test]
-    fn enum_names_round_trip_without_loading_library() {
+    fn enum_names_round_trip_without_loading_native_library() {
         assert!(matches!(
             "dpm++2m_sde".parse(),
             Ok(SampleMethod::DpmPlusPlus2mSde)
@@ -429,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn enum_raw_values_use_the_ffi_binding_types() {
+    fn enum_raw_values_use_the_native_binding_types() {
         let weight_type: sys::sd_type_t = WeightType::Bf16.as_raw();
         assert_eq!(weight_type, sys::SD_TYPE_BF16);
         assert_eq!(VaeFormat::Auto.as_raw(), sys::SD_VAE_FORMAT_AUTO);

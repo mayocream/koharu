@@ -1,10 +1,10 @@
 'use client'
 
+import { getVersion } from '@tauri-apps/api/app'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { platform } from '@/lib/platform'
 import {
   Dialog,
   DialogContent,
@@ -28,8 +28,7 @@ export function AboutDialog({
   useEffect(() => {
     if (!open || version) return
     let active = true
-    void platform
-      .getVersion()
+    void getVersion()
       .then((current) => {
         if (active) setVersion(current)
       })

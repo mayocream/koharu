@@ -257,8 +257,8 @@ impl crate::Tensor {
         path: P,
     ) -> Result<(), TchError> {
         let mut zip = zip::ZipWriter::new(File::create(path.as_ref())?);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
+        let options =
+            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
         for (name, tensor) in ts.iter() {
             zip.start_file(format!("{}.npy", name.as_ref()), options)?;

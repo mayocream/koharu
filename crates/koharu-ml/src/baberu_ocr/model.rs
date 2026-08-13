@@ -809,7 +809,7 @@ impl BaberuAttention {
                 .to_kind(query.kind())
                 .matmul(&expanded_value)
         } else {
-            // Grouped-query attention avoids physically repeating K/V heads and lets CUDA
+            // Native GQA avoids physically repeating K/V heads and lets CUDA
             // select flash or memory-efficient SDPA kernels.
             Tensor::scaled_dot_product_attention(
                 &query,

@@ -9,10 +9,10 @@ hide:
 
 <!--
 THESIS: The Koharu homepage is a useful documentation entry point, not a custom product dashboard.
-OWN-WORLD: Stock Zensical typography, buttons, tabs, tables, admonitions, highlights, and scrollbars with only Koharu primary and accent tokens overridden.
+OWN-WORLD: Native Zensical typography, buttons, tabs, tables, admonitions, highlights, and scrollbars with only Koharu primary and accent tokens overridden.
 STORY: Understand what Koharu keeps editable, choose the guide that matches the current task, and start reading.
 FIRST VIEWPORT: A wide, direct introduction and two native actions lead into task-based documentation tabs.
-FORM: Stock Zensical reading page; user-pinned canonical direction; seed zensical-default-01.
+FORM: Native Zensical reading page; user-pinned canonical direction; seed zensical-native-01.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 -->
 

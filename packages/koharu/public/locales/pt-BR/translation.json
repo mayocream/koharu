@@ -505,7 +505,6 @@
   },
   "updater": {
     "available": {
-      "description": "O Koharu {{version}} está pronto para instalar.",
       "title": "Atualização disponível"
     },
     "close": "Fechar",

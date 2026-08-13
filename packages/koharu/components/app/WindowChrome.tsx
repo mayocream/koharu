@@ -1,26 +1,43 @@
 'use client'
 
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Copy, Minus, Square, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import { platform, subscribeWindowState } from '@/lib/platform'
 
 export function WindowControls() {
   const { t } = useTranslation()
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
-    return subscribeWindowState((state) => setMaximized(state.maximized))
+    const window = getCurrentWindow()
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    const synchronize = () => {
+      void window.isMaximized().then((value) => {
+        if (!disposed) setMaximized(value)
+      })
+    }
+    synchronize()
+    void window.onResized(synchronize).then((stop) => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
   }, [])
 
   const toggleMaximize = async () => {
-    setMaximized((await platform.toggleMaximize()).maximized)
+    const window = getCurrentWindow()
+    await window.toggleMaximize()
+    setMaximized(await window.isMaximized())
   }
 
   return (
     <div className='flex h-full shrink-0'>
-      <WindowButton label={t('window.minimize')} onClick={() => void platform.minimize()}>
+      <WindowButton label={t('window.minimize')} onClick={() => void getCurrentWindow().minimize()}>
         <Minus />
       </WindowButton>
       <WindowButton
@@ -32,7 +49,7 @@ export function WindowControls() {
       <WindowButton
         label={t('window.close')}
         className='hover:text-destructive-foreground hover:bg-destructive'
-        onClick={() => void platform.close()}
+        onClick={() => void getCurrentWindow().close()}
       >
         <X />
       </WindowButton>

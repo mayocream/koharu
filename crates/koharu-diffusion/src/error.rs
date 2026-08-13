@@ -19,8 +19,8 @@ pub enum Error {
     ImageDimensionsOverflow,
     #[error("image width, height, and channel count must all be non-zero")]
     ZeroImageDimension,
-    #[error("FFI image has {actual} channels; expected {expected}")]
-    UnexpectedFfiImageChannelCount { expected: u32, actual: u32 },
+    #[error("native image has {actual} channels; expected {expected}")]
+    UnexpectedNativeImageChannelCount { expected: u32, actual: u32 },
     #[error(
         "invalid audio buffer: {sample_count} samples across {channels} channels requires {expected} values, got {actual}"
     )]
@@ -32,7 +32,7 @@ pub enum Error {
     },
     #[error("audio dimensions overflow the addressable buffer size")]
     AudioDimensionsOverflow,
-    #[error("{field} has {len} entries, which exceeds the FFI limit")]
+    #[error("{field} has {len} entries, which exceeds the native API limit")]
     CountOverflow { field: &'static str, len: usize },
     #[error("invalid parameter {name}: {reason}")]
     InvalidParameter {
@@ -46,7 +46,7 @@ pub enum Error {
     #[error("stable-diffusion.cpp failed to generate video")]
     VideoGenerationFailed,
     #[error("stable-diffusion.cpp returned an invalid {kind} output")]
-    InvalidFfiOutput { kind: &'static str },
+    InvalidNativeOutput { kind: &'static str },
     #[error("stable-diffusion.cpp failed to create an upscaler context")]
     UpscalerCreationFailed,
     #[error("stable-diffusion.cpp failed to upscale the image")]
@@ -57,7 +57,7 @@ pub enum Error {
     PreprocessFailed,
     #[error("stable-diffusion.cpp failed to load the importance matrix")]
     ImatrixLoadFailed,
-    #[error("an FFI callback cannot be reconfigured from inside an FFI call or callback")]
+    #[error("a native callback cannot be reconfigured from inside a native call or callback")]
     ReentrantCallbackConfiguration,
     #[error("preview interval must be greater than zero")]
     InvalidPreviewInterval,

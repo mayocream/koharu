@@ -165,14 +165,14 @@ impl Default for ContextParams {
     }
 }
 
-pub(crate) struct FfiContextParams {
+pub(crate) struct NativeContextParams {
     pub(crate) raw: sys::sd_ctx_params_t,
     _strings: StringPool,
     _embeddings: Vec<sys::sd_embedding_t>,
 }
 
 impl ContextParams {
-    pub(crate) fn to_ffi(&self) -> Result<FfiContextParams> {
+    pub(crate) fn to_native(&self) -> Result<NativeContextParams> {
         if self.n_threads <= 0 {
             return Err(Error::InvalidParameter {
                 name: "n_threads",
@@ -278,7 +278,7 @@ impl ContextParams {
             rpc_servers,
             model_args,
         };
-        Ok(FfiContextParams {
+        Ok(NativeContextParams {
             raw,
             _strings: strings,
             _embeddings: embeddings,
@@ -381,21 +381,21 @@ impl Default for SampleParams {
     }
 }
 
-struct FfiSampleParams {
+struct NativeSampleParams {
     raw: sys::sd_sample_params_t,
     _layers: Vec<i32>,
     _sigmas: Vec<f32>,
 }
 
 impl SampleParams {
-    fn to_ffi(&self, strings: &mut StringPool) -> Result<FfiSampleParams> {
+    fn to_native(&self, strings: &mut StringPool) -> Result<NativeSampleParams> {
         let mut layers = self.guidance.skip_layer.layers.clone();
         let mut sigmas = self.custom_sigmas.clone();
         let layer_count = layers.len();
         let custom_sigmas_count = c_int_len(sigmas.len(), "custom sigmas")?;
         let extra_sample_args =
             strings.add_optional(self.extra_args.as_deref(), "extra_sample_args")?;
-        Ok(FfiSampleParams {
+        Ok(NativeSampleParams {
             raw: sys::sd_sample_params_t {
                 guidance: sys::sd_guidance_params_t {
                     txt_cfg: self.guidance.text_cfg,
@@ -477,7 +477,7 @@ impl Default for TilingParams {
 }
 
 impl TilingParams {
-    fn to_ffi(&self, strings: &mut StringPool) -> Result<sys::sd_tiling_params_t> {
+    fn to_native(&self, strings: &mut StringPool) -> Result<sys::sd_tiling_params_t> {
         Ok(sys::sd_tiling_params_t {
             enabled: self.enabled,
             temporal_tiling: self.temporal_tiling,
@@ -553,7 +553,7 @@ impl Default for CacheParams {
 }
 
 impl CacheParams {
-    fn to_ffi(&self, strings: &mut StringPool) -> Result<sys::sd_cache_params_t> {
+    fn to_native(&self, strings: &mut StringPool) -> Result<sys::sd_cache_params_t> {
         Ok(sys::sd_cache_params_t {
             mode: self.mode.as_raw(),
             reuse_threshold: self.reuse_threshold,
@@ -615,16 +615,16 @@ impl Default for HiresParams {
     }
 }
 
-struct FfiHiresParams {
+struct NativeHiresParams {
     raw: sys::sd_hires_params_t,
     _sigmas: Vec<f32>,
 }
 
 impl HiresParams {
-    fn to_ffi(&self, strings: &mut StringPool) -> Result<FfiHiresParams> {
+    fn to_native(&self, strings: &mut StringPool) -> Result<NativeHiresParams> {
         let mut sigmas = self.custom_sigmas.clone();
         let custom_sigmas_count = c_int_len(sigmas.len(), "high-resolution custom sigmas")?;
-        Ok(FfiHiresParams {
+        Ok(NativeHiresParams {
             raw: sys::sd_hires_params_t {
                 enabled: self.enabled,
                 upscaler: self.upscaler.as_raw(),
@@ -748,30 +748,30 @@ impl Default for ImageGenerationParams {
     }
 }
 
-pub(crate) struct FfiImageGenerationParams {
+pub(crate) struct NativeImageGenerationParams {
     pub(crate) raw: sys::sd_img_gen_params_t,
     _strings: StringPool,
     _loras: Vec<sys::sd_lora_t>,
     _reference_images: Vec<sys::sd_image_t>,
     _photo_maker_images: Vec<sys::sd_image_t>,
-    _sample: FfiSampleParams,
-    _hires: FfiHiresParams,
+    _sample: NativeSampleParams,
+    _hires: NativeHiresParams,
 }
 
 fn build_loras(loras: &[Lora], strings: &mut StringPool) -> Result<Vec<sys::sd_lora_t>> {
-    let mut ffi = Vec::with_capacity(loras.len());
+    let mut native = Vec::with_capacity(loras.len());
     for lora in loras {
-        ffi.push(sys::sd_lora_t {
+        native.push(sys::sd_lora_t {
             is_high_noise: lora.high_noise,
             multiplier: lora.multiplier,
             path: strings.add_path(&lora.path, "LoRA path")?,
         });
     }
-    Ok(ffi)
+    Ok(native)
 }
 
 impl ImageGenerationParams {
-    pub(crate) fn to_ffi(&self) -> Result<FfiImageGenerationParams> {
+    pub(crate) fn to_native(&self) -> Result<NativeImageGenerationParams> {
         if self.width <= 0 || self.height <= 0 {
             return Err(Error::InvalidParameter {
                 name: "image dimensions",
@@ -794,10 +794,10 @@ impl ImageGenerationParams {
         let mut photo_maker_images = raw_rgb_images(&self.photo_maker.id_images)?;
         let photo_maker_image_count =
             c_int_len(photo_maker_images.len(), "PhotoMaker identity images")?;
-        let sample = self.sample.to_ffi(&mut strings)?;
-        let vae_tiling = self.vae_tiling.to_ffi(&mut strings)?;
-        let cache = self.cache.to_ffi(&mut strings)?;
-        let hires = self.hires.to_ffi(&mut strings)?;
+        let sample = self.sample.to_native(&mut strings)?;
+        let vae_tiling = self.vae_tiling.to_native(&mut strings)?;
+        let cache = self.cache.to_native(&mut strings)?;
+        let hires = self.hires.to_native(&mut strings)?;
         let photo_maker_path = strings.add_optional_path(
             self.photo_maker.id_embedding_path.as_deref(),
             "PhotoMaker identity embedding path",
@@ -844,7 +844,7 @@ impl ImageGenerationParams {
             circular_x: self.circular_x,
             circular_y: self.circular_y,
         };
-        Ok(FfiImageGenerationParams {
+        Ok(NativeImageGenerationParams {
             raw,
             _strings: strings,
             _loras: loras,
@@ -947,18 +947,18 @@ impl Default for VideoGenerationParams {
     }
 }
 
-pub(crate) struct FfiVideoGenerationParams {
+pub(crate) struct NativeVideoGenerationParams {
     pub(crate) raw: sys::sd_vid_gen_params_t,
     _strings: StringPool,
     _loras: Vec<sys::sd_lora_t>,
     _control_frames: Vec<sys::sd_image_t>,
-    _sample: FfiSampleParams,
-    _high_noise_sample: FfiSampleParams,
-    _hires: FfiHiresParams,
+    _sample: NativeSampleParams,
+    _high_noise_sample: NativeSampleParams,
+    _hires: NativeHiresParams,
 }
 
 impl VideoGenerationParams {
-    pub(crate) fn to_ffi(&self) -> Result<FfiVideoGenerationParams> {
+    pub(crate) fn to_native(&self) -> Result<NativeVideoGenerationParams> {
         if self.width <= 0 || self.height <= 0 {
             return Err(Error::InvalidParameter {
                 name: "video dimensions",
@@ -984,11 +984,11 @@ impl VideoGenerationParams {
         let lora_count = u32_len(loras.len(), "LoRAs")?;
         let mut control_frames = raw_rgb_images(&self.control_frames)?;
         let control_frames_size = c_int_len(control_frames.len(), "control frames")?;
-        let sample = self.sample.to_ffi(&mut strings)?;
-        let high_noise_sample = self.high_noise_sample.to_ffi(&mut strings)?;
-        let vae_tiling = self.vae_tiling.to_ffi(&mut strings)?;
-        let cache = self.cache.to_ffi(&mut strings)?;
-        let hires = self.hires.to_ffi(&mut strings)?;
+        let sample = self.sample.to_native(&mut strings)?;
+        let high_noise_sample = self.high_noise_sample.to_native(&mut strings)?;
+        let vae_tiling = self.vae_tiling.to_native(&mut strings)?;
+        let cache = self.cache.to_native(&mut strings)?;
+        let hires = self.hires.to_native(&mut strings)?;
 
         let raw = sys::sd_vid_gen_params_t {
             loras: ptr_or_null(&loras),
@@ -1016,7 +1016,7 @@ impl VideoGenerationParams {
             circular_x: self.circular_x,
             circular_y: self.circular_y,
         };
-        Ok(FfiVideoGenerationParams {
+        Ok(NativeVideoGenerationParams {
             raw,
             _strings: strings,
             _loras: loras,
@@ -1055,7 +1055,7 @@ mod tests {
     }
 
     #[test]
-    fn image_parameters_preserve_ffi_pixel_formats() {
+    fn image_parameters_preserve_native_pixel_formats() {
         let init_image = RgbImage::from_raw(1, 1, vec![1, 2, 3]).unwrap();
         let mask_image = GrayImage::from_raw(1, 1, vec![255]).unwrap();
         let params = ImageGenerationParams {
@@ -1064,11 +1064,11 @@ mod tests {
             ..ImageGenerationParams::default()
         };
 
-        let ffi = params.to_ffi().unwrap();
-        assert_eq!(ffi.raw.init_image.channel, 3);
-        assert_eq!(ffi.raw.mask_image.channel, 1);
+        let native = params.to_native().unwrap();
+        assert_eq!(native.raw.init_image.channel, 3);
+        assert_eq!(native.raw.mask_image.channel, 1);
         assert_eq!(
-            ffi.raw.init_image.data,
+            native.raw.init_image.data,
             params
                 .init_image
                 .as_ref()
@@ -1078,7 +1078,7 @@ mod tests {
                 .cast_mut()
         );
         assert_eq!(
-            ffi.raw.mask_image.data,
+            native.raw.mask_image.data,
             params
                 .mask_image
                 .as_ref()

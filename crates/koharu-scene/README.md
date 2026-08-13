@@ -13,7 +13,7 @@ has three ownership layers:
   relation strings.
 
 `koharu-storage` only persists the latest opaque complete scene state and blob
-bytes. Scene operations exist for patching, change reporting, explicit rebase,
+bytes. Native operations exist for patching, change reporting, explicit rebase,
 and session-local undo; they are not a persistent file format.
 Rendering, ML execution, and desktop synchronization remain consumers of the
 scene rather than responsibilities of it.
@@ -55,7 +55,7 @@ Persistent maps and `Arc::make_mut` share untouched pages between immutable
 snapshots. Editing one page clones that page; moving a subtree between pages
 clones only the source and destination arenas.
 
-Hierarchy is first-class state, not a synthetic component. Scene operations include
+Hierarchy is native state, not a synthetic component. Scene operations include
 page and entity insertion, removal and movement, component replacement, and
 relation lifecycle changes. Every operation carries the exact inverse needed
 for in-memory undo and exact preconditions needed for explicit rebase.
@@ -63,7 +63,7 @@ for in-memory undo and exact preconditions needed for explicit rebase.
 ## Performance invariants
 
 - Ordinary edits never rebuild a project-wide index.
-- Patch construction mutates a private scene state and records scene operations.
+- Patch construction mutates a private scene state and records native ops.
 - Component decoding is cached in the immutable component record.
 - Component lookup and page-local membership queries use page indexes.
 - Subtree observation compares one page epoch; exact component observation

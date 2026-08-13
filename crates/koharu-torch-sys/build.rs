@@ -122,8 +122,7 @@ fn target_dir() -> Result<PathBuf> {
     let target = env::var_os("TARGET").context("Cargo did not provide TARGET")?;
 
     // An explicit --target inserts its triple between the target and profile directories.
-    // The desktop bundle stages this shim beside the executable (or in the
-    // macOS Frameworks directory) before sealing its manifest.
+    // Tauri's platform configs bundle the shim from the shared target/{debug,release} paths.
     if target_dir.file_name() == Some(target.as_os_str()) {
         target_dir
             .parent()

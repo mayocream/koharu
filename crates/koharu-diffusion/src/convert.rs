@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     Error, Result, RgbImage, WeightType,
-    ffi::{FfiCall, configure_ffi, optional_cstring, optional_path_cstring, path_cstring},
+    ffi::{NativeCall, configure_native, optional_cstring, optional_path_cstring, path_cstring},
     image::raw_rgb_image,
     sys,
 };
@@ -51,7 +51,7 @@ pub fn convert(params: &Conversion) -> Result<()> {
     let vae = optional_path_cstring(params.vae_path.as_deref(), "vae_path")?;
     let output = path_cstring(&params.output_path, "output_path")?;
     let rules = optional_cstring(params.tensor_type_rules.as_deref(), "tensor_type_rules")?;
-    let _call = FfiCall::enter();
+    let _call = NativeCall::enter();
     let succeeded = unsafe {
         sys::convert(
             input.as_ptr(),
@@ -115,7 +115,7 @@ pub fn convert_with_components(params: &ComponentConversion) -> Result<()> {
             .as_ref()
             .map_or(std::ptr::null(), |value| value.as_ptr())
     };
-    let _call = FfiCall::enter();
+    let _call = NativeCall::enter();
     let succeeded = unsafe {
         sys::convert_with_components(
             pointer(&model),
@@ -160,10 +160,10 @@ impl Default for CannyParams {
     }
 }
 
-/// Applies the Canny preprocessor in place.
+/// Applies the native Canny preprocessor in place.
 pub fn preprocess_canny(image: &mut RgbImage, params: CannyParams) -> Result<()> {
     let image = raw_rgb_image(image)?;
-    let _call = FfiCall::enter();
+    let _call = NativeCall::enter();
     let succeeded = unsafe {
         sys::preprocess_canny(
             image,
@@ -185,7 +185,7 @@ pub fn preprocess_canny(image: &mut RgbImage, params: CannyParams) -> Result<()>
 pub fn load_imatrix(path: impl Into<PathBuf>) -> Result<()> {
     let path = path.into();
     let path = path_cstring(&path, "imatrix_path")?;
-    let succeeded = configure_ffi(|| unsafe { sys::load_imatrix(path.as_ptr()) })?;
+    let succeeded = configure_native(|| unsafe { sys::load_imatrix(path.as_ptr()) })?;
     if succeeded {
         Ok(())
     } else {
@@ -198,7 +198,7 @@ static IMATRIX_COLLECTION_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Guard for process-wide importance-matrix collection.
 ///
 /// Dropping the guard disables collection. Collection replaces a custom graph
-/// evaluation callback in the loaded library.
+/// evaluation callback in the native library.
 #[derive(Debug)]
 pub struct ImatrixCollector {
     active: bool,
@@ -213,7 +213,7 @@ pub fn begin_imatrix_collection() -> Result<ImatrixCollector> {
     {
         return Err(Error::ImatrixCollectionAlreadyActive);
     }
-    if let Err(error) = configure_ffi(|| unsafe { sys::enable_imatrix_collection() }) {
+    if let Err(error) = configure_native(|| unsafe { sys::enable_imatrix_collection() }) {
         IMATRIX_COLLECTION_ACTIVE.store(false, Ordering::Release);
         return Err(error);
     }
@@ -228,7 +228,7 @@ impl ImatrixCollector {
     pub fn save(&self, path: impl Into<PathBuf>) -> Result<()> {
         let path = path.into();
         let path = path_cstring(&path, "imatrix_path")?;
-        configure_ffi(|| unsafe { sys::save_imatrix(path.as_ptr()) })
+        configure_native(|| unsafe { sys::save_imatrix(path.as_ptr()) })
     }
 
     /// Explicitly disables collection and reports reentrancy errors.
@@ -239,7 +239,7 @@ impl ImatrixCollector {
 
     fn disable(&mut self) -> Result<()> {
         if self.active {
-            configure_ffi(|| unsafe { sys::disable_imatrix_collection() })?;
+            configure_native(|| unsafe { sys::disable_imatrix_collection() })?;
             self.active = false;
             IMATRIX_COLLECTION_ACTIVE.store(false, Ordering::Release);
         }

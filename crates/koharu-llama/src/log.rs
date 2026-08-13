@@ -173,7 +173,7 @@ impl State {
                 .previous_level
                 .load(std::sync::atomic::Ordering::Acquire)
                 .try_into()
-                .expect("stored log level no longer fits the FFI enum type");
+                .expect("stored log level no longer fits the native enum type");
             tracing::warn!(
                 inferred_level = level,
                 text = text,
@@ -276,7 +276,7 @@ impl State {
             self.previous_level
                 .load(std::sync::atomic::Ordering::Relaxed)
                 .try_into()
-                .expect("stored log level no longer fits the FFI enum type")
+                .expect("stored log level no longer fits the native enum type")
         } else {
             level
         };

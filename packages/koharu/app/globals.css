@@ -97,8 +97,9 @@
     -webkit-app-region: no-drag;
   }
 
-  [data-koharu-drag-region] {
-    user-select: none;
+  [data-tauri-drag-region] {
+    /* Tauri drag region */
+    app-region: drag;
   }
 
   ::selection {

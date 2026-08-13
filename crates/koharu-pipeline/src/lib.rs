@@ -1,4 +1,4 @@
-//! In-process, scene-owned model orchestration for Koharu.
+//! In-process, scene-native model orchestration for Koharu.
 
 mod config;
 mod error;

@@ -505,7 +505,6 @@
   },
   "updater": {
     "available": {
-      "description": "Koharu {{version}} をインストールできます。",
       "title": "アップデートが利用可能"
     },
     "close": "閉じる",

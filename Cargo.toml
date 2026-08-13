@@ -19,10 +19,7 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
 [workspace.dependencies]
-koharu-app = { path = "crates/koharu-app" }
 koharu-bindgen = { path = "crates/koharu-bindgen" }
-koharu-desktop = { path = "crates/koharu-desktop" }
-koharu-protocol = { path = "crates/koharu-protocol" }
 koharu-config = { path = "crates/koharu-config" }
 koharu-storage = { path = "crates/koharu-storage" }
 koharu-scene = { path = "crates/koharu-scene" }
@@ -41,11 +38,8 @@ koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
 koharu-canvas = { path = "crates/koharu-canvas" }
 koharu-secrets = { path = "crates/koharu-secrets" }
-koharu-updater = { path = "crates/koharu-updater" }
 
 # external dependencies
-cef = { version = "=151.3.0", default-features = false }
-cef-dll-sys = { version = "=151.3.0", default-features = false }
 alphanumeric-sort = "1.5.8"
 arc-swap = "1.7"
 hf-hub = "0.5"
@@ -110,9 +104,6 @@ libloading = "0.8.9"
 nvml-wrapper = "0.12.1"
 num_cpus = "1.17"
 indicatif = "0.18"
-lazy_static = "1.3"
-ndarray = "0.16.1"
-rand = "0.8"
 minijinja = "2.19"
 minijinja-contrib = { version = "2.19", features = ["pycompat"] }
 windows = { version = "0.62", features = [
@@ -123,7 +114,6 @@ windows = { version = "0.62", features = [
 ] }
 windows-sys = { version = "0.61", features = ["Win32_System_LibraryLoader"] }
 winreg = "0.56"
-winresource = "0.1"
 skrifa = "0.42"
 harfrust = "0.10"
 hypher = "0.1.7"
@@ -133,17 +123,24 @@ icu_segmenter = "2.2"
 jieba-rs = "0.10"
 fontique = "0.11"
 pollster = "0.4"
-percent-encoding = "2.3"
-plist = "1.10"
-semver = "1"
-# Pinned fork adds AppImage library exclusions to tauri-bundler 2.9.4.
-tauri-bundler = { git = "https://github.com/mayocream/tauri", rev = "bb744aeefbc0f2951f07a169d5e6efdcb0d409f7" }
-# Pinned to Vello's upstream WGPU 30 migration until it is released. cef-rs's
-# accelerated OSR importer must share the presenter's exact WGPU device type.
-vello = { git = "https://github.com/linebender/vello", rev = "b9f820846810cff9e96bcd83aed5218a6ae79288" }
-wgpu = "=30.0.0"
-tauri-macos-sign = "=2.3.4"
+vello = "0.9"
 winit = "0.30.12"
+tauri = { version = "=2.11.5", features = [
+    "compression",
+    "dbus",
+    "dynamic-acl",
+    "macos-private-api",
+    "specta",
+    "wry",
+    "x11",
+] }
+tauri-build = "=2.6.3"
+tauri-plugin-opener = "=2.5.4"
+tauri-plugin-process = "=2.3.1"
+tauri-plugin-single-instance = "=2.4.3"
+tauri-plugin-updater = "=2.10.1"
+tauri-plugin-window-state = "=2.4.1"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
 atomicwrites = "0.4"

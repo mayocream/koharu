@@ -505,7 +505,6 @@
   },
   "updater": {
     "available": {
-      "description": "Koharu {{version}} yüklenmeye hazır.",
       "title": "Güncelleme mevcut"
     },
     "close": "Kapat",

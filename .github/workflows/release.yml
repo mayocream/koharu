@@ -8,199 +8,121 @@ on:
 permissions:
   contents: write
   id-token: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  prepare:
-    name: Create GitHub release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - name: Generate release notes
-        run: bun git-cliff --current --strip all > release-notes.md
-      - name: Create or update draft release
-        uses: softprops/action-gh-release@v3
-        with:
-          name: ${{ github.ref_name }}
-          body_path: release-notes.md
-          draft: true
-
   release:
-    name: ${{ matrix.platform }}
-    needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: linux
-            package: appimage
-            target: x86_64-unknown-linux-gnu
-            executable: target/x86_64-unknown-linux-gnu/release/koharu
-            libraries: target/release/libkoharu-torch.so
-            artifact: target/bundle/linux/bundle/appimage/*.AppImage
-          - os: windows-2022
-            platform: windows
-            package: nsis
-            target: x86_64-pc-windows-msvc
-            executable: target/x86_64-pc-windows-msvc/release/koharu.exe
-            libraries: target/release/koharu-torch.dll
-            artifact: target/bundle/windows/bundle/nsis/*.exe
-          - os: macos-latest
-            platform: macos
-            package: dmg
-            target: aarch64-apple-darwin
-            executable: target/aarch64-apple-darwin/release/koharu
-            libraries: target/release/libkoharu-torch.dylib
-            artifact: target/bundle/macos/bundle/dmg/*.dmg
-    runs-on: ${{ matrix.os }}
+          - platform: 'macos-latest' # for Arm based macs (M1 and above).
+            args: '--target aarch64-apple-darwin'
+          - platform: 'ubuntu-latest'
+            args: ''
+          - platform: 'windows-2022'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Install native build dependencies
-        if: matrix.platform == 'linux'
+      - uses: oven-sh/setup-bun@v2
+
+      - name: install dependencies (ubuntu only)
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libfontconfig-dev \
-            libgtk-3-dev \
-            librsvg2-dev \
-            libssl-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - uses: oven-sh/setup-bun@v2
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-${{ matrix.target }}
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.platform == 'windows'
-      - run: bun install --frozen-lockfile
+      - name: Install dependencies
+        run: bun install
 
-      - name: Validate release version
+      - name: Generate release changelog
+        id: release_notes
         shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release tag must be vMAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH, got $GITHUB_REF_NAME" >&2
-            exit 1
-          fi
-          printf 'APP_VERSION=%s\n' "$version" >> "$GITHUB_ENV"
-
-      - run: bun run --filter @koharu/app build
-      - name: Build desktop application
         env:
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        run: cargo build -p koharu --release --locked --target ${{ matrix.target }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo 'release_body<<EOF'
+            bun git-cliff --current --strip all
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Install Azure Trusted Signing client
-        if: matrix.platform == 'windows'
+      - name: Install trusted-signing-cli (windows only)
+        if: startsWith(matrix.platform, 'windows')
         shell: bash
         run: |
-          curl -fsSL 'https://github.com/Levminer/trusted-signing-cli/releases/download/0.8.0/trusted-signing-cli.exe' -o "$RUNNER_TEMP/trusted-signing-cli.exe"
+          curl -fsSL "https://github.com/Levminer/trusted-signing-cli/releases/download/0.8.0/trusted-signing-cli.exe" -o "$RUNNER_TEMP/trusted-signing-cli.exe"
           printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/trusted-signing-cli.exe" --version
-      - name: Sign Koharu Windows binaries
-        if: matrix.platform == 'windows'
-        shell: bash
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: |
-          for file in "${{ matrix.executable }}" "${{ matrix.libraries }}"; do
-            trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu "$file"
-          done
 
-      - name: Import Apple Developer certificate
-        if: matrix.platform == 'macos'
+      - name: Import Apple Developer Certificate
+        if: startsWith(matrix.platform, 'macos')
         env:
           APPLE_CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ""
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          security import "$RUNNER_TEMP/certificate.p12" -k build.keychain -P '' -T /usr/bin/codesign
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
-          identity=$(security find-identity -v -p codesigning build.keychain | sed -n 's/.*"\(Developer ID Application[^"]*\)".*/\1/p' | head -n 1)
-          test -n "$identity"
-          printf 'APPLE_SIGNING_IDENTITY=%s\n' "$identity" >> "$GITHUB_ENV"
+          security find-identity -v -p codesigning build.keychain
 
-      - name: Bundle native distribution
+      - name: Verify Certificate
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
+          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
+          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
+          echo "Certificate imported."
+
+      - uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM }}
-        run: >-
-          cargo run -p koharu-bundle --locked --
-          --package ${{ matrix.package }}
-          --target ${{ matrix.target }}
-          --executable "${{ matrix.executable }}"
-          --libraries "${{ matrix.libraries }}"
-          --ui packages/koharu/out
-          --license LICENSE
-          --output "target/bundle/${{ matrix.platform }}"
-          --version "${{ env.APP_VERSION }}"
-
-      - name: Sign Koharu Windows installer
-        if: matrix.platform == 'windows'
-        shell: bash
-        env:
+          APPLE_CERTIFICATE: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ""
+          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: |
-          for installer in target/bundle/windows/bundle/nsis/*.exe; do
-            trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu "$installer"
-          done
-
-      - name: Create macOS updater package
-        if: matrix.platform == 'macos'
-        shell: bash
-        run: >-
-          tar -czf
-          "target/bundle/macos/bundle/macos/Koharu_${APP_VERSION}_aarch64.app.tar.gz"
-          -C target/bundle/macos/bundle/macos
-          Koharu.app
-
-      - name: Upload release package
-        uses: softprops/action-gh-release@v3
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
-          files: ${{ matrix.artifact }}
-          draft: true
-          fail_on_unmatched_files: true
+          tauriScript: npx @tauri-apps/cli
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: ${{ steps.release_notes.outputs.release_body }}
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
 
-      - name: Upload macOS updater package
-        if: matrix.platform == 'macos'
-        uses: softprops/action-gh-release@v3
-        with:
-          files: target/bundle/macos/bundle/macos/*.app.tar.gz
-          draft: true
-          fail_on_unmatched_files: true
-
-  publish:
-    name: Publish GitHub release
+  winget:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - name: Publish draft release
-        uses: softprops/action-gh-release@v3
+      - uses: vedantmgoyal9/winget-releaser@main
         with:
-          draft: false
+          identifier: mayocream.koharu
+          version: ${{ github.ref_name }}
+          installers-regex: '(-setup\.exe|\.msi)$'
+          token: ${{ secrets.WINGET_TOKEN }}
