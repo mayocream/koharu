@@ -876,6 +876,29 @@ impl Project {
         }
     }
 
+    pub(crate) async fn commit_rebased(
+        &mut self,
+        patch: koharu_scene::Patch,
+    ) -> Result<Option<Commit>> {
+        let current = self.snapshot();
+        let patch = match patch.rebase_on(&current) {
+            Ok(patch) => patch,
+            Err(
+                error @ (koharu_scene::Error::PatchConflict(_)
+                | koharu_scene::Error::EntityNotFound(_)
+                | koharu_scene::Error::RelationNotFound(_)),
+            ) => {
+                tracing::debug!(%error, "pipeline output was superseded by a document edit");
+                return Ok(None);
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if patch.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(self.commit(patch).await?))
+    }
+
     async fn commit(&mut self, patch: koharu_scene::Patch) -> Result<Commit> {
         Ok(self.session.commit(patch).await?)
     }
@@ -1281,6 +1304,84 @@ fn rasterize_stroke(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn pipeline_commit_rebases_or_yields_to_the_manual_edit() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let pipeline_page = setup
+            .add_page(PageDraft::new("pipeline", 100.0, 100.0), At::End)
+            .unwrap();
+        let manual_page = setup
+            .add_page(PageDraft::new("manual", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let base = project.snapshot();
+        let pipeline = base
+            .patch(|edit| {
+                edit.set_page(
+                    pipeline_page,
+                    PageDraft::new("pipeline result", 100.0, 100.0),
+                )
+            })
+            .unwrap();
+        let manual = base
+            .patch(|edit| edit.set_page(manual_page, PageDraft::new("manual edit", 100.0, 100.0)))
+            .unwrap();
+        project.commit(manual).await.unwrap();
+
+        let commit = project.commit_rebased(pipeline).await.unwrap().unwrap();
+        assert_eq!(
+            commit
+                .snapshot
+                .page(pipeline_page)
+                .unwrap()
+                .page()
+                .unwrap()
+                .label,
+            "pipeline result"
+        );
+        assert_eq!(
+            commit
+                .snapshot
+                .page(manual_page)
+                .unwrap()
+                .page()
+                .unwrap()
+                .label,
+            "manual edit"
+        );
+
+        let base = project.snapshot();
+        let pipeline = base
+            .patch(|edit| {
+                edit.set_page(
+                    pipeline_page,
+                    PageDraft::new("stale pipeline", 100.0, 100.0),
+                )
+            })
+            .unwrap();
+        let manual = base
+            .patch(|edit| {
+                edit.set_page(pipeline_page, PageDraft::new("latest manual", 100.0, 100.0))
+            })
+            .unwrap();
+        project.commit(manual).await.unwrap();
+
+        assert!(project.commit_rebased(pipeline).await.unwrap().is_none());
+        assert_eq!(
+            project
+                .snapshot()
+                .page(pipeline_page)
+                .unwrap()
+                .page()
+                .unwrap()
+                .label,
+            "latest manual"
+        );
+    }
 
     #[test]
     fn raster_strokes_are_continuous_and_erasable() {

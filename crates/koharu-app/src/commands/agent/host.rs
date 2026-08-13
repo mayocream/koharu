@@ -466,7 +466,9 @@ impl Committer for AgentCommitter {
             let current = self.host.handle.state::<CurrentProject>();
             let mut current = current.project.lock().await;
             let project = current.as_mut().context("no project is open")?;
-            let commit = project.session.commit(output.patch).await?;
+            let Some(commit) = project.commit_rebased(output.patch).await? else {
+                return Ok(project.snapshot());
+            };
             project.record_commit(&commit);
             (commit, project.active_page())
         };

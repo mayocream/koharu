@@ -224,13 +224,12 @@ impl Desktop {
                 desktop.canvas_ref().frame().cloned(),
             )
         };
+        if revision.is_some_and(|revision| revision >= snapshot.revision()) {
+            return Ok(false);
+        }
         if current_page != page {
             self.show_page_locked(snapshot, page).await?;
             return Ok(true);
-        }
-
-        if revision == Some(snapshot.revision()) {
-            return Ok(false);
         }
 
         let Some(page) = page else {
