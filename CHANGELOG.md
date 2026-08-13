@@ -1,3 +1,10 @@
+## [0.66.2](https://github.com/mayocream/koharu/compare/0.66.1..0.66.2) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Bundle CEF correctly - ([10d2ae8](https://github.com/mayocream/koharu/commit/10d2ae8fd88fa32bd9818471e03f902b000e9989))
+
+
 ## [0.66.1](https://github.com/mayocream/koharu/compare/0.66.0..0.66.1) - 2026-08-13
 
 ### 🐛 Bug Fixes
