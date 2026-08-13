@@ -47,7 +47,7 @@ bun run --filter @koharu/ui typecheck
 Rust 命令签名与 Specta 类型是权威源：
 
 ```bash
-cargo run -p koharu --bin generate
+cargo run -p koharu-app --bin generate
 ```
 
 不要手工编辑 `packages/koharu/lib/protocol.ts`。

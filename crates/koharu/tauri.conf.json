@@ -15,6 +15,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "width": 1024,
         "height": 768,
         "minWidth": 900,
@@ -22,9 +23,8 @@
         "center": true,
         "title": "Koharu",
         "decorations": false,
-        "transparent": true,
-        "visible": false,
-        "backgroundColor": "#00000000"
+        "transparent": false,
+        "visible": false
       }
     ]
   },

@@ -55,7 +55,7 @@ Do not run end-to-end tests unless the task specifically requires them.
 Rust command signatures and Specta types are authoritative. Regenerate the TypeScript binding after changing them:
 
 ```bash
-cargo run -p koharu --bin generate
+cargo run -p koharu-app --bin generate
 ```
 
 Do not hand-edit `packages/koharu/lib/protocol.ts`.

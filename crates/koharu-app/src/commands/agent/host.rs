@@ -8,6 +8,7 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use koharu_agent::{Control, Host, Invocation, Tool, ToolCall};
+use koharu_desktop::{Desktop, Frame};
 use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput, StopToken};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
@@ -15,17 +16,14 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Cef, Manager as _};
 
-use crate::{
-    commands::{
-        ChannelExt as _,
-        canvas::{CanvasChannel, CanvasView, Frame, Point},
-        editing::{GeometryUpdate, TypographyUpdate},
-        output,
-        preferences::Preferences,
-        processing::{JobId, Processing},
-        project::{CurrentProject, Project, Typography},
-    },
-    desktop::Desktop,
+use crate::commands::{
+    ChannelExt as _,
+    canvas::{CanvasChannel, CanvasView, Point},
+    editing::{GeometryUpdate, TypographyUpdate},
+    output,
+    preferences::Preferences,
+    processing::{JobId, Processing},
+    project::{CurrentProject, Project, Typography},
 };
 
 #[derive(Clone)]

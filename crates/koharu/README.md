@@ -1,7 +1,7 @@
 # koharu
 
-`koharu` is Koharu's native Tauri application. It owns startup, diagnostics,
-commands, application state, pipeline policy, and desktop integration.
+`koharu` is Koharu's native composition package. It owns process startup,
+diagnostics, Tauri build integration, and application configuration.
 
 ## Application boundary
 
@@ -10,11 +10,13 @@ React
   | direct Tauri commands
   | typed IPC channels
   v
-koharu
+koharu-app
   | Tauri-managed project, canvas, pipeline, jobs, and channel state
   +-> koharu-scene
   +-> koharu-desktop -> koharu-canvas
   +-> koharu-renderer -> raster / koharu-psd
+
+koharu -> koharu-app + koharu-desktop
 ```
 
 Every operation has a named Tauri command. Commands that mutate a project take
@@ -35,13 +37,13 @@ protocol.
 Rust command signatures and data types are authoritative:
 
 ```powershell
-cargo run -p koharu --bin generate
+cargo run -p koharu-app --bin generate
 ```
 
 Focused validation:
 
 ```powershell
-cargo check -p koharu
+cargo check -p koharu -p koharu-app -p koharu-desktop
 bun x tsc --noEmit -p packages/koharu/tsconfig.json
 cd packages/koharu
 bun run test

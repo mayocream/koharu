@@ -10,7 +10,9 @@ Koharu 是单体桌面应用，不是连接独立服务器的 Web 客户端。
 ```mermaid
 flowchart TB
   frontend["packages/koharu<br/>(React + Next.js)"]
-  app["crates/koharu<br/>(应用状态、命令、启动、桌面集成)"]
+  entry["crates/koharu<br/>(启动、诊断、构建集成)"]
+  app["crates/koharu-app<br/>(应用状态、命令、生命周期)"]
+  desktop["crates/koharu-desktop<br/>(CEF + WGPU 合成)"]
   scene["koharu-scene"]
   storage["koharu-storage"]
   pipeline["koharu-pipeline"]
@@ -23,11 +25,13 @@ flowchart TB
   agent["koharu-agent"]
 
   frontend -->|"生成的 Tauri 命令<br/>与类型化通道"| app
+  entry --> app
+  entry --> desktop
+  app --> desktop
   app --> scene --> storage
   app --> pipeline --> ml --> native
   app --> translator
-  app --> renderer
-  renderer --> canvas
+  desktop --> renderer --> canvas
   renderer --> psd
   app --> agent
 ```
@@ -38,7 +42,7 @@ flowchart TB
 
 前端直接调用具名 Tauri 命令，不维护 HTTP 客户端，也不解析通用应用事件信封。
 
-`crates/koharu` 拥有启动、诊断、Tauri 状态、项目生命周期、命令串行化、处理任务、桌面同步和智能体宿主。独立类型化通道发布项目、画布、任务、下载、偏好和资源更新。`protocol.ts` 由 Rust 签名生成。
+`crates/koharu` 拥有进程启动、诊断、Tauri 配置和构建集成，并组合 `koharu-app` 与 `koharu-desktop`。`koharu-app` 拥有 Tauri 状态、项目生命周期、命令串行化、处理任务、桌面同步和智能体宿主。独立类型化通道发布项目、画布、任务、下载、偏好和资源更新。`protocol.ts` 由 Rust 签名生成。
 
 ## 领域、处理与渲染
 
@@ -46,6 +50,6 @@ flowchart TB
 
 `koharu-pipeline` 拥有固定页面工作流、模型生命周期、调度、进度、停止与阶段提交。`koharu-ml` 拥有模型和共享设备抽象，`koharu-translator` 拥有本地及托管翻译连接。
 
-`koharu-renderer` 把场景页解释为保留矢量内容，`koharu-canvas` 与 PNG/PSD 共用该帧。WebView 界面保持透明，原生 GPU 画布合成在同一窗口下方。
+`koharu-renderer` 把场景页解释为保留矢量内容，`koharu-canvas` 与 PNG/PSD 共用该帧。`koharu-desktop` 先绘制原生画布，再把离屏 CEF 界面叠加到同一个 WGPU 窗口表面。
 
 安全 Rust 包装层与 unsafe `-sys` 动态加载 crate 分离。

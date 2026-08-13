@@ -4,7 +4,7 @@ use std::{cmp::Reverse, sync::Arc};
 
 use anyhow::{Context as _, Result, bail};
 use koharu_canvas::{Canvas, CanvasGpu, PhysicalSize, ViewState};
-use tauri::{Runtime, WebviewWindow};
+use tauri::{CefOffscreenFrame, CefOffscreenSurface, Runtime, Window};
 use vello::wgpu;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -163,14 +163,16 @@ pub(crate) struct Presenter {
     config: wgpu::SurfaceConfiguration,
     surface_size: PhysicalSize,
     blitter: ViewportBlitter,
+    webview: WebviewLayer,
     canvas: Canvas,
     viewport: PhysicalRect,
 }
 
 impl Presenter {
     pub async fn new<R: Runtime>(
-        window: WebviewWindow<R>,
+        window: Window<R>,
         wake: Arc<dyn Fn() + Send + Sync>,
+        offscreen: CefOffscreenSurface,
     ) -> Result<Self> {
         let initial = window.inner_size()?;
         let surface_size = PhysicalSize::new(initial.width, initial.height);
@@ -192,6 +194,8 @@ impl Presenter {
         };
         surface.configure(&gpu.device, &config);
         let blitter = ViewportBlitter::new(&gpu.device, gpu.format);
+        let mut webview = WebviewLayer::new();
+        webview.set_surface(offscreen);
         let mut renderer = Self {
             device: gpu.device,
             queue: gpu.queue,
@@ -199,6 +203,7 @@ impl Presenter {
             config,
             surface_size,
             blitter,
+            webview,
             canvas: gpu.canvas,
             viewport: PhysicalRect::default(),
         };
@@ -294,6 +299,14 @@ impl Presenter {
             self.viewport,
             self.surface_size,
         );
+        self.webview.composite(
+            &self.blitter,
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &surface_view,
+            self.surface_size,
+        );
         self.queue.submit([encoder.finish()]);
         surface_texture.present();
         if suboptimal {
@@ -309,8 +322,169 @@ impl Presenter {
     }
 }
 
+struct UploadedFrame {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+    serial: u64,
+}
+
+struct WebviewLayer {
+    surface: Option<CefOffscreenSurface>,
+    view: Option<UploadedFrame>,
+    popup: Option<UploadedFrame>,
+    popup_rect: tauri::CefOffscreenRect,
+}
+
+impl WebviewLayer {
+    fn new() -> Self {
+        Self {
+            surface: None,
+            view: None,
+            popup: None,
+            popup_rect: tauri::CefOffscreenRect::default(),
+        }
+    }
+
+    fn set_surface(&mut self, surface: CefOffscreenSurface) {
+        self.surface = Some(surface);
+    }
+
+    fn composite(
+        &mut self,
+        blitter: &ViewportBlitter,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        surface_size: PhysicalSize,
+    ) {
+        let Some(surface) = &self.surface else {
+            return;
+        };
+        let snapshot = surface.snapshot();
+        upload_frame(
+            device,
+            queue,
+            &mut self.view,
+            snapshot.view.as_ref(),
+            "view",
+        );
+        upload_frame(
+            device,
+            queue,
+            &mut self.popup,
+            snapshot.popup.as_ref(),
+            "popup",
+        );
+        self.popup_rect = snapshot.popup_rect;
+
+        if let Some(view) = &self.view {
+            blitter.copy_alpha(
+                device,
+                encoder,
+                &view.view,
+                target,
+                PhysicalRect {
+                    x: 0,
+                    y: 0,
+                    width: surface_size.width,
+                    height: surface_size.height,
+                },
+                surface_size,
+            );
+        }
+        if snapshot.popup.is_some()
+            && let Some(popup) = &self.popup
+        {
+            blitter.copy_alpha(
+                device,
+                encoder,
+                &popup.view,
+                target,
+                PhysicalRect {
+                    x: self.popup_rect.x.max(0) as u32,
+                    y: self.popup_rect.y.max(0) as u32,
+                    width: self.popup_rect.width,
+                    height: self.popup_rect.height,
+                },
+                surface_size,
+            );
+        }
+    }
+}
+
+fn upload_frame(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    uploaded: &mut Option<UploadedFrame>,
+    frame: Option<&CefOffscreenFrame>,
+    label: &str,
+) {
+    let Some(frame) = frame else {
+        *uploaded = None;
+        return;
+    };
+    if uploaded
+        .as_ref()
+        .is_some_and(|uploaded| uploaded.serial == frame.serial)
+    {
+        return;
+    }
+    if uploaded
+        .as_ref()
+        .is_none_or(|uploaded| uploaded.width != frame.width || uploaded.height != frame.height)
+    {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(&format!("koharu CEF {label} texture")),
+            size: wgpu::Extent3d {
+                width: frame.width.max(1),
+                height: frame.height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        *uploaded = Some(UploadedFrame {
+            texture,
+            view,
+            width: frame.width,
+            height: frame.height,
+            serial: 0,
+        });
+    }
+    let uploaded = uploaded.as_mut().expect("CEF frame texture was created");
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &uploaded.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &frame.pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(frame.width * 4),
+            rows_per_image: Some(frame.height),
+        },
+        wgpu::Extent3d {
+            width: frame.width,
+            height: frame.height,
+            depth_or_array_layers: 1,
+        },
+    );
+    uploaded.serial = frame.serial;
+}
+
 struct ViewportBlitter {
     pipeline: wgpu::RenderPipeline,
+    alpha_pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
 }
@@ -385,33 +559,41 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
                 .into(),
             ),
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("koharu desktop viewport pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vertex"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fragment"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let create_pipeline = |label, blend| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vertex"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fragment"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = create_pipeline("koharu desktop viewport pipeline", None);
+        let alpha_pipeline = create_pipeline(
+            "koharu CEF premultiplied alpha pipeline",
+            Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+        );
         Self {
             pipeline,
+            alpha_pipeline,
             bind_group_layout,
             sampler,
         }
@@ -425,6 +607,51 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
         target: &wgpu::TextureView,
         viewport: PhysicalRect,
         surface: PhysicalSize,
+    ) {
+        self.copy_with(
+            device,
+            encoder,
+            source,
+            target,
+            viewport,
+            surface,
+            &self.pipeline,
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+        );
+    }
+
+    fn copy_alpha(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        source: &wgpu::TextureView,
+        target: &wgpu::TextureView,
+        viewport: PhysicalRect,
+        surface: PhysicalSize,
+    ) {
+        self.copy_with(
+            device,
+            encoder,
+            Some(source),
+            target,
+            viewport,
+            surface,
+            &self.alpha_pipeline,
+            wgpu::LoadOp::Load,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn copy_with(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        source: Option<&wgpu::TextureView>,
+        target: &wgpu::TextureView,
+        viewport: PhysicalRect,
+        surface: PhysicalSize,
+        pipeline: &wgpu::RenderPipeline,
+        load: wgpu::LoadOp<wgpu::Color>,
     ) {
         let bind_group = source.map(|source| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -449,7 +676,7 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    load,
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -469,7 +696,7 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
             return;
         }
         pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
     }

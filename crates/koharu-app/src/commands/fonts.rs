@@ -8,7 +8,7 @@ use specta::Type;
 use tauri::{State, ipc::IpcResponse};
 
 use super::Error;
-use crate::desktop::Desktop;
+use koharu_desktop::Desktop;
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct FontFamily {

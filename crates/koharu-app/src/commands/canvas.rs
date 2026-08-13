@@ -5,6 +5,7 @@ use std::sync::{
 
 use anyhow::Context as _;
 use koharu_canvas::{MaskOverlay, MaskTarget, PagePoint, PhysicalPoint};
+use koharu_desktop::{CanvasState, Desktop, Frame, PhysicalRect, TransformFrame};
 use koharu_scene::{EntityId, Revision};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -16,19 +17,8 @@ use super::{
     processing::{JobChannel, JobId, Processing},
     project::CurrentProject,
 };
-use crate::desktop::Desktop;
-
 const INPAINT_MASK: MaskTarget = MaskTarget::Scratch(0);
 const INPAINT_OVERLAY: MaskOverlay = MaskOverlay::new([168, 85, 247, 210], 0.55);
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
-pub struct Frame {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub angle_degrees: f32,
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, Type)]
 pub struct Point {
@@ -52,20 +42,6 @@ pub struct PaintBrush {
 pub struct LayerCommit {
     pub revision: Revision,
     pub layer: EntityId,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
-pub struct TransformFrame {
-    pub element: EntityId,
-    pub frame: Frame,
-}
-
-#[derive(Clone, Debug, Serialize, Type)]
-pub struct CanvasState {
-    pub zoom: f64,
-    pub translation: [f64; 2],
-    pub fitted: bool,
-    pub element_frames: Vec<TransformFrame>,
 }
 
 pub(crate) struct CanvasView {
@@ -422,21 +398,6 @@ pub(crate) async fn preview_opacity(
     Ok(())
 }
 
-impl From<TransformFrame> for koharu_canvas::ElementFrame {
-    fn from(element: TransformFrame) -> Self {
-        Self {
-            element: element.element,
-            frame: koharu_canvas::Frame {
-                x: element.frame.x,
-                y: element.frame.y,
-                width: element.frame.width,
-                height: element.frame.height,
-                angle_degrees: element.frame.angle_degrees,
-            },
-        }
-    }
-}
-
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn finish_transform(
@@ -599,7 +560,7 @@ pub(crate) async fn set_viewport(
     canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
-    let viewport = crate::desktop::PhysicalRect::from_logical(x, y, width, height, dpr)
+    let viewport = PhysicalRect::from_logical(x, y, width, height, dpr)
         .map_err(|error| anyhow::anyhow!(error))?;
     let size = if canvas_view.fitted.load(Ordering::Acquire) {
         let project = project.project.lock().await;

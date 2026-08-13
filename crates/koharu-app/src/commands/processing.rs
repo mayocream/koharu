@@ -18,7 +18,7 @@ use super::{
     canvas::{CanvasChannel, CanvasView},
     project::CurrentProject,
 };
-use crate::desktop::Desktop;
+use koharu_desktop::Desktop;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
 #[serde(transparent)]

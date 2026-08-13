@@ -45,7 +45,7 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
         .as_ref()
         .map(|project| (project.snapshot(), project.active_page()));
     let canvas_view = handle.state::<CanvasView>();
-    let desktop = handle.state::<crate::desktop::Desktop>();
+    let desktop = handle.state::<koharu_desktop::Desktop>();
     if let Some((snapshot, page)) = project {
         desktop.show_page(&snapshot, page).await?;
         canvas_view.fitted.store(true, Ordering::Release);
@@ -98,13 +98,22 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
             application.manage(Initialization::default());
 
             let handle = application.handle().clone();
-            application.manage(crate::desktop::Desktop::new(handle.clone())?);
+            application.manage(koharu_desktop::Desktop::new(handle.clone())?);
             application.manage(AgentState::new(handle.clone())?);
 
-            let window = application
-                .get_webview_window("main")
-                .context("the main Tauri webview window is unavailable")?;
-            tauri::async_runtime::block_on(crate::desktop::attach(window.clone()))
+            let window_config = application
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .context("the main Tauri window configuration is unavailable")?;
+            let offscreen = koharu_desktop::offscreen_surface(&handle);
+            let window = tauri::WebviewWindowBuilder::from_config(application, window_config)?
+                .offscreen(offscreen.clone())
+                .build()
+                .context("failed to create the off-screen CEF window")?;
+            tauri::async_runtime::block_on(koharu_desktop::attach(window.clone(), offscreen))
                 .context("failed to attach the desktop runtime")?;
             window.show().context("failed to show the main window")?;
             window

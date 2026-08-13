@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use anyhow::Context as _;
+use koharu_desktop::{CanvasState, Desktop};
 use koharu_scene::EntityId;
 use serde::Deserialize;
 use specta::Type;
@@ -11,14 +12,12 @@ use super::{
     canvas::{CanvasChannel, CanvasView, Point},
     project::{CurrentProject, Page, Project, Typography},
 };
-use crate::desktop::Desktop;
-
 async fn synchronize_canvas(
     desktop: &Desktop,
     canvas_view: &CanvasView,
     commit: &koharu_scene::Commit,
     page: Option<EntityId>,
-) -> anyhow::Result<super::canvas::CanvasState> {
+) -> anyhow::Result<CanvasState> {
     if desktop.synchronize(&commit.snapshot, page, commit).await? {
         canvas_view.fitted.store(true, Ordering::Release);
     }

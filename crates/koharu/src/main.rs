@@ -3,6 +3,7 @@
 use clap::Parser as _;
 use koharu::panic;
 use koharu::sentry;
+use koharu_app as app;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[derive(clap::Parser)]
@@ -23,6 +24,6 @@ async fn main() {
         .with(sentry::tracing_layer())
         .with(koharu::tracing::TimingLayer::new())
         .init();
-    tokio::task::block_in_place(|| koharu::run(tauri::generate_context!()))
+    tokio::task::block_in_place(|| app::run(tauri::generate_context!()))
         .expect("failed to run the desktop application");
 }

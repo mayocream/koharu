@@ -19,6 +19,7 @@ keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
 [workspace.dependencies]
+koharu-app = { path = "crates/koharu-app" }
 koharu-bindgen = { path = "crates/koharu-bindgen" }
 koharu-config = { path = "crates/koharu-config" }
 koharu-storage = { path = "crates/koharu-storage" }
@@ -37,6 +38,7 @@ koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
 koharu-canvas = { path = "crates/koharu-canvas" }
+koharu-desktop = { path = "crates/koharu-desktop" }
 koharu-secrets = { path = "crates/koharu-secrets" }
 
 # external dependencies
@@ -189,10 +191,10 @@ opt-level = 3
 opt-level = 3
 
 [patch.crates-io]
-tauri = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
-tauri-build = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
-tauri-codegen = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
-tauri-macros = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
-tauri-plugin = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
-tauri-runtime = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
-tauri-utils = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41" }
+tauri = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }
+tauri-build = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }
+tauri-codegen = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }
+tauri-macros = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }
+tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }
+tauri-runtime = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }
+tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "9b8ba87f75b62431c6464dfba6070217c6ad2164" }

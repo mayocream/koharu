@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
+use koharu_desktop::{CanvasState, Desktop};
 use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft};
 use parking_lot::Mutex;
 use rayon::prelude::*;
@@ -13,12 +14,10 @@ use specta::Type;
 use tauri::{AppHandle, Cef, Manager as _, State, WebviewWindow, ipc::Channel};
 use walkdir::WalkDir;
 
-use crate::desktop::Desktop;
-
 use super::{
     ChannelExt as _, Error,
     agent::AgentState,
-    canvas::{CanvasChannel, CanvasState, CanvasView},
+    canvas::{CanvasChannel, CanvasView},
     preferences::Preferences,
     processing::{Job, JobChannel, Processing},
     project::{

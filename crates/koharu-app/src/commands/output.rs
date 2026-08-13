@@ -8,7 +8,7 @@ use specta::Type;
 use tauri::{Cef, State, WebviewWindow, ipc::IpcResponse};
 
 use super::{Error, project::CurrentProject};
-use crate::desktop::Desktop;
+use koharu_desktop::Desktop;
 
 const THUMBNAIL_EDGE: u32 = 128;
 

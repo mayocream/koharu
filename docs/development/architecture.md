@@ -10,7 +10,9 @@ Koharu is one desktop application, not a web client attached to a separate serve
 ```mermaid
 flowchart TB
   frontend["packages/koharu<br/>(React + Next.js)"]
-  app["crates/koharu<br/>(application state, commands, startup, desktop integration)"]
+  entry["crates/koharu<br/>(startup, diagnostics, build integration)"]
+  app["crates/koharu-app<br/>(application state, commands, lifecycle)"]
+  desktop["crates/koharu-desktop<br/>(CEF + WGPU composition)"]
   scene["koharu-scene"]
   storage["koharu-storage"]
   pipeline["koharu-pipeline"]
@@ -23,11 +25,13 @@ flowchart TB
   agent["koharu-agent"]
 
   frontend -->|"generated direct Tauri commands<br/>and typed channels"| app
+  entry --> app
+  entry --> desktop
+  app --> desktop
   app --> scene --> storage
   app --> pipeline --> ml --> native
   app --> translator
-  app --> renderer
-  renderer --> canvas
+  desktop --> renderer --> canvas
   renderer --> psd
   app --> agent
 ```
@@ -40,7 +44,7 @@ The frontend invokes named Tauri commands directly. It does not maintain an HTTP
 
 ## Application
 
-`crates/koharu` owns startup, diagnostics, Tauri-managed state, project lifecycle, command serialization, processing jobs, desktop synchronization, and agent hosting. Independent typed channels publish project, canvas, job, download, preference, and resource updates.
+`crates/koharu` owns process startup, diagnostics, Tauri configuration, and build integration. It composes `koharu-app` with `koharu-desktop`. `koharu-app` owns Tauri-managed state, project lifecycle, command serialization, processing jobs, desktop synchronization, and agent hosting. Independent typed channels publish project, canvas, job, download, preference, and resource updates.
 
 Rust signatures generate `packages/koharu/lib/protocol.ts`; that file is derived output.
 
@@ -54,7 +58,7 @@ Rust signatures generate `packages/koharu/lib/protocol.ts`; that file is derived
 
 ## Rendering and desktop composition
 
-`koharu-renderer` interprets one scene page into retained vector content. `koharu-canvas` presents and interacts with that content. PNG and PSD start from the same retained frame. The desktop runtime composites native GPU canvas pixels beneath a transparent WebView that draws the interface.
+`koharu-renderer` interprets one scene page into retained vector content. `koharu-canvas` presents and interacts with that content. PNG and PSD start from the same retained frame. `koharu-desktop` composites the native canvas first and the off-screen CEF interface above it into one WGPU window surface.
 
 ## Native bindings
 

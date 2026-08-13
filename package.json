@@ -5,6 +5,7 @@
   "scripts": {
     "tauri": "cargo tauri",
     "postinstall": "cargo install --git https://github.com/tauri-apps/tauri --rev 4af26a3f7f8b692d62cca549bbacd93f5ce90b41 --locked tauri-cli",
+    "predev": "kill-port 3000",
     "dev": "cargo tauri dev",
     "build": "cargo tauri build --no-bundle",
     "docs:dev": "cd docs && uvx --from zensical==0.0.43 zensical serve",
@@ -18,6 +19,7 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "git-cliff": "^2.13.1",
+    "kill-port": "^2.0.1",
     "oxfmt": "^0.56.0",
     "sponsorkit": "^17.1.1",
     "typescript": "^6.0.3"

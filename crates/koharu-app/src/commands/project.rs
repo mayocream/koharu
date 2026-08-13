@@ -2,6 +2,7 @@ use std::{collections::HashSet, io::Cursor, path::PathBuf};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
+use koharu_desktop::Frame;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
     Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
@@ -15,7 +16,7 @@ use specta::Type;
 use tokio::sync::Mutex;
 
 use super::{
-    canvas::{Frame, Point},
+    canvas::Point,
     editing::{GeometryUpdate, TypographyUpdate},
 };
 

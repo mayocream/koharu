@@ -47,7 +47,7 @@ bun run --filter @koharu/ui typecheck
 Rust のコマンド署名と Specta 型が正本です。
 
 ```bash
-cargo run -p koharu --bin generate
+cargo run -p koharu-app --bin generate
 ```
 
 `packages/koharu/lib/protocol.ts` を手編集しないでください。

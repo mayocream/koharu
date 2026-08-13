@@ -1,3 +1,5 @@
+//! Native CEF and WGPU composition for Koharu's desktop window.
+
 use std::{
     sync::{
         Arc,
@@ -10,20 +12,59 @@ use anyhow::{Context as _, Result};
 use koharu_canvas::{Camera, Canvas, ViewState};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use parking_lot::{Mutex, MutexGuard};
-use tauri::{AppHandle, Cef, Manager as _, WebviewWindow};
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use tauri::{AppHandle, Cef, CefOffscreenSurface, Manager as _, WebviewWindow};
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 
 mod gpu;
 
-pub(crate) use gpu::PhysicalRect;
+pub use gpu::PhysicalRect;
 
 use self::gpu::Presenter;
-use crate::commands::canvas::{CanvasState, Frame, TransformFrame};
 
 const MAIN_WINDOW: &str = "main";
 const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
-pub(crate) struct Desktop {
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, Type)]
+pub struct Frame {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub angle_degrees: f32,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Type)]
+pub struct TransformFrame {
+    pub element: EntityId,
+    pub frame: Frame,
+}
+
+impl From<TransformFrame> for koharu_canvas::ElementFrame {
+    fn from(element: TransformFrame) -> Self {
+        Self {
+            element: element.element,
+            frame: koharu_canvas::Frame {
+                x: element.frame.x,
+                y: element.frame.y,
+                width: element.frame.width,
+                height: element.frame.height,
+                angle_degrees: element.frame.angle_degrees,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct CanvasState {
+    pub zoom: f64,
+    pub translation: [f64; 2],
+    pub fitted: bool,
+    pub element_frames: Vec<TransformFrame>,
+}
+
+pub struct Desktop {
     app: AppHandle<Cef>,
     renderer: koharu_renderer::Renderer,
     presenter: OnceCell<Mutex<Presenter>>,
@@ -32,7 +73,7 @@ pub(crate) struct Desktop {
 }
 
 impl Desktop {
-    pub(crate) fn new(app: AppHandle<Cef>) -> Result<Self> {
+    pub fn new(app: AppHandle<Cef>) -> Result<Self> {
         Ok(Self {
             app,
             renderer: koharu_renderer::Renderer::new()?,
@@ -98,7 +139,18 @@ impl Desktop {
     }
 }
 
-pub(crate) async fn attach(window: WebviewWindow<Cef>) -> Result<()> {
+pub fn offscreen_surface(app: &AppHandle<Cef>) -> CefOffscreenSurface {
+    let wake_app = app.clone();
+    CefOffscreenSurface::new(move || {
+        if let Some(desktop) = wake_app.try_state::<Desktop>()
+            && let Err(error) = desktop.request_frame()
+        {
+            tracing::error!(%error, "failed to schedule a CEF frame");
+        }
+    })
+}
+
+pub async fn attach(window: WebviewWindow<Cef>, offscreen: CefOffscreenSurface) -> Result<()> {
     let app = window.app_handle().clone();
     let wake_app = app.clone();
     let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
@@ -111,19 +163,23 @@ pub(crate) async fn attach(window: WebviewWindow<Cef>) -> Result<()> {
     let desktop = app.state::<Desktop>();
     desktop
         .presenter
-        .get_or_try_init(|| async { Presenter::new(window, wake).await.map(Mutex::new) })
+        .get_or_try_init(|| async {
+            Presenter::new(window.as_ref().window().clone(), wake, offscreen)
+                .await
+                .map(Mutex::new)
+        })
         .await?;
     Ok(())
 }
 
-pub(crate) struct DesktopGuard<'a> {
+pub struct DesktopGuard<'a> {
     desktop: &'a Desktop,
     presenter: MutexGuard<'a, Presenter>,
     redraw: bool,
 }
 
 impl Desktop {
-    pub(crate) fn lock(&self) -> DesktopGuard<'_> {
+    pub fn lock(&self) -> DesktopGuard<'_> {
         DesktopGuard {
             desktop: self,
             presenter: self
@@ -148,12 +204,12 @@ impl Drop for DesktopGuard<'_> {
 
 impl Desktop {
     #[must_use]
-    pub(crate) fn renderer(&self) -> koharu_renderer::Renderer {
+    pub fn renderer(&self) -> koharu_renderer::Renderer {
         self.renderer.clone()
     }
 
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn synchronize(
+    pub async fn synchronize(
         &self,
         snapshot: &Snapshot,
         page: Option<EntityId>,
@@ -197,16 +253,12 @@ impl Desktop {
     }
 
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn show_page(
-        &self,
-        snapshot: &Snapshot,
-        page: Option<EntityId>,
-    ) -> Result<()> {
+    pub async fn show_page(&self, snapshot: &Snapshot, page: Option<EntityId>) -> Result<()> {
         let _preparation = self.preparation.lock().await;
         self.show_page_locked(snapshot, page).await
     }
 
-    pub(crate) async fn clear(&self) {
+    pub async fn clear(&self) {
         let _preparation = self.preparation.lock().await;
         self.lock().canvas().clear();
         self.renderer.discard_retained_nodes();
