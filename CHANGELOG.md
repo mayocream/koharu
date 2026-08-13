@@ -1,3 +1,14 @@
+## [0.66.6](https://github.com/mayocream/koharu/compare/0.66.5..0.66.6) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Run CEF subprocesses before Tokio - ([b608c14](https://github.com/mayocream/koharu/commit/b608c14437f290b779028a8003ee38a9c8697198))
+
+### ⚙️ Miscellaneous Tasks
+
+- Prefer rust cache - ([93b3f50](https://github.com/mayocream/koharu/commit/93b3f50eafb497c0908e902ebd9eb6cb290cd89c))
+
+
 ## [0.66.5](https://github.com/mayocream/koharu/compare/0.66.4..0.66.5) - 2026-08-13
 
 ### 🐛 Bug Fixes
