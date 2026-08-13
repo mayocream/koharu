@@ -1,3 +1,10 @@
+## [0.66.9](https://github.com/mayocream/koharu/compare/0.66.8..0.66.9) - 2026-08-13
+
+### 🐛 Bug Fixes
+
+- Render IME preedit without yellow background - ([e81c0a1](https://github.com/mayocream/koharu/commit/e81c0a16210152b711d1e33aa6545e3876a183ce))
+
+
 ## [0.66.8](https://github.com/mayocream/koharu/compare/0.66.7..0.66.8) - 2026-08-13
 
 ### 🐛 Bug Fixes
