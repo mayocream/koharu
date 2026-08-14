@@ -96,6 +96,16 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => i18n.off('languageChanged', setLanguage)
   }, [])
 
+  useEffect(() => {
+    // CEF scales the page after an uncancelled Ctrl+wheel; keep the event for app handlers.
+    const preventViewportScaling = (event: WheelEvent) => {
+      if (event.ctrlKey) event.preventDefault()
+    }
+
+    window.addEventListener('wheel', preventViewportScaling, { capture: true, passive: false })
+    return () => window.removeEventListener('wheel', preventViewportScaling, { capture: true })
+  }, [])
+
   return (
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
