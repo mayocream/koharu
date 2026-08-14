@@ -8767,7 +8767,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 [[package]]
 name = "tauri"
 version = "2.11.5"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "anyhow",
  "bytes",
@@ -8818,7 +8818,7 @@ dependencies = [
 [[package]]
 name = "tauri-build"
 version = "2.6.3"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -8838,7 +8838,7 @@ dependencies = [
 [[package]]
 name = "tauri-codegen"
 version = "2.6.3"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "base64 0.22.1",
  "brotli",
@@ -8864,7 +8864,7 @@ dependencies = [
 [[package]]
 name = "tauri-macros"
 version = "2.6.3"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -8877,7 +8877,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin"
 version = "2.6.3"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "anyhow",
  "glob",
@@ -8982,7 +8982,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime"
 version = "2.11.3"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "cookie",
  "dpi",
@@ -9003,7 +9003,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -9033,13 +9033,14 @@ dependencies = [
  "url",
  "windows 0.61.3",
  "winit",
+ "winit-appkit",
  "x11-dl",
 ]
 
 [[package]]
 name = "tauri-runtime-wry"
 version = "2.11.4"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "gtk",
  "http 1.5.0",
@@ -9096,7 +9097,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "2.9.3"
-source = "git+https://github.com/mayocream/tauri?rev=023753b7dd8982cf0dbe71b788b2e0b60770e0af#023753b7dd8982cf0dbe71b788b2e0b60770e0af"
+source = "git+https://github.com/mayocream/tauri?rev=2908dbbbb7ea0c9aaf30a0e33c819a7eba092278#2908dbbbb7ea0c9aaf30a0e33c819a7eba092278"
 dependencies = [
  "anyhow",
  "brotli",
