@@ -541,6 +541,9 @@ impl Renderer {
             height,
             source_role: &source_role,
             font_families: &typesetting.font_families,
+            force_border_width: typesetting.force_border_width,
+            force_font_color: typesetting.force_font_color.clone(),
+            force_font_weight: typesetting.force_font_weight,
             balloon_flows: flow_plan.placements,
             layers: Vec::new(),
             dependencies: BTreeSet::from([
@@ -615,6 +618,9 @@ struct Traversal<'a> {
     height: u32,
     source_role: &'a AssetRole,
     font_families: &'a [String],
+    force_border_width: Option<f32>,
+    force_font_color: Option<String>,
+    force_font_weight: Option<u16>,
     balloon_flows: HashMap<EntityId, ResolvedPlacement>,
     layers: Vec<LayerDraft>,
     dependencies: BTreeSet<RenderDependency>,
@@ -842,6 +848,39 @@ impl Traversal<'_> {
             dependencies.insert(RenderDependency::Font(family.clone()));
         }
         let is_bubble = balloon_contour.is_some();
+        let mut foreground_color = typography
+            .as_ref()
+            .and_then(|value| value.color)
+            .unwrap_or([0, 0, 0, 255]);
+        if let Some(ref hex) = self.force_font_color {
+            if hex.len() == 7 && hex.starts_with('#') {
+                if let (Ok(r), Ok(g), Ok(b)) = (
+                    u8::from_str_radix(&hex[1..3], 16),
+                    u8::from_str_radix(&hex[3..5], 16),
+                    u8::from_str_radix(&hex[5..7], 16),
+                ) {
+                    foreground_color = [r, g, b, 255];
+                }
+            }
+        }
+        let mut stroke = resolve_stroke(typography.as_ref());
+        if let Some(forced_width) = self.force_border_width {
+            if let Some(ref mut existing_stroke) = stroke {
+                existing_stroke.width_px = forced_width;
+            } else if forced_width > 0.0 {
+                stroke = Some(StrokeOptions {
+                    color: typography
+                        .as_ref()
+                        .and_then(|t| t.stroke_color)
+                        .unwrap_or([255, 255, 255, 255]),
+                    width_px: forced_width,
+                });
+            }
+        }
+        let mut resolved_weight = typography.as_ref().and_then(|value| value.font_weight);
+        if let Some(fw) = self.force_font_weight {
+            resolved_weight = Some(fw);
+        }
         let descriptor = TextNodeDescriptor {
             entity,
             text: text.clone(),
@@ -852,7 +891,7 @@ impl Traversal<'_> {
             flow_contour,
             preferred_font,
             font_families,
-            font_weight: typography.as_ref().and_then(|value| value.font_weight),
+            font_weight: resolved_weight,
             font_style: typography
                 .as_ref()
                 .and_then(|value| value.font_style)
@@ -862,17 +901,15 @@ impl Traversal<'_> {
             auto_fit: typography.as_ref().is_none_or(|value| value.auto_fit),
             alignment,
             writing_mode,
-            foreground_color: typography
-                .as_ref()
-                .and_then(|value| value.color)
-                .unwrap_or([0, 0, 0, 255]),
-            stroke: resolve_stroke(typography.as_ref()),
+            foreground_color,
+            stroke,
             line_height: 1.2,
             letter_spacing: 0.0,
             word_spacing: 0.0,
             text_inset: [4.0; 4],
             point_text: !is_bubble && layout.kind == TextLayoutKind::Point,
         };
+
         Ok(Some(LayerDraft {
             entity,
             geometry,

@@ -497,6 +497,9 @@ export type TranslationConfig = {
 
 export type TypesettingConfig = {
 	font_families?: string[],
+  force_border_width?: number | null;
+  force_font_color?: string | null;
+  force_font_weight?: number | null;
 };
 
 export type Typography = {
