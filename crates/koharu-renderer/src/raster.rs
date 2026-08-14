@@ -69,7 +69,6 @@ impl Default for RasterOptions {
 }
 
 const MAX_SUPERSAMPLING_FACTOR: u32 = 4;
-const MAX_RASTER_TILE_DIMENSION: u32 = 4_096;
 
 #[derive(Debug)]
 pub struct Raster {
@@ -185,7 +184,7 @@ impl Rasterizer {
             };
             &scaled
         };
-        let pixels = self.readback_tiled(scene, raster_width, raster_height, background)?;
+        let pixels = self.readback(scene, raster_width, raster_height, background)?;
         let image = RgbaImage::from_raw(raster_width, raster_height, pixels)
             .context("WGPU returned an invalid RGBA buffer")?;
         if scale == 1 {
@@ -299,41 +298,6 @@ impl Rasterizer {
         const MAX_POOLED_TARGETS: usize = 4;
         if gpu.targets.len() < MAX_POOLED_TARGETS {
             gpu.targets.push(target);
-        }
-        Ok(pixels)
-    }
-
-    fn readback_tiled(
-        &self,
-        scene: &Scene,
-        width: u32,
-        height: u32,
-        background: [u8; 4],
-    ) -> Result<Vec<u8>> {
-        if width <= MAX_RASTER_TILE_DIMENSION && height <= MAX_RASTER_TILE_DIMENSION {
-            return self.readback(scene, width, height, background);
-        }
-
-        let row_bytes = width as usize * 4;
-        let mut pixels = vec![0; row_bytes * height as usize];
-        for top in (0..height).step_by(MAX_RASTER_TILE_DIMENSION as usize) {
-            let tile_height = (height - top).min(MAX_RASTER_TILE_DIMENSION);
-            for left in (0..width).step_by(MAX_RASTER_TILE_DIMENSION as usize) {
-                let tile_width = (width - left).min(MAX_RASTER_TILE_DIMENSION);
-                let mut tile_scene = Scene::new();
-                tile_scene.append(
-                    scene,
-                    Some(Affine::translate((-f64::from(left), -f64::from(top)))),
-                );
-                let tile = self.readback(&tile_scene, tile_width, tile_height, background)?;
-                let tile_row_bytes = tile_width as usize * 4;
-                for y in 0..tile_height as usize {
-                    let source = y * tile_row_bytes;
-                    let target = (top as usize + y) * row_bytes + left as usize * 4;
-                    pixels[target..target + tile_row_bytes]
-                        .copy_from_slice(&tile[source..source + tile_row_bytes]);
-                }
-            }
         }
         Ok(pixels)
     }

@@ -448,8 +448,7 @@ fn write_region<'a>(
         .then(|| infer_typography(image, detection))
         .flatten();
     let geometry = if detection.label == "bubble" {
-        mask_geometry(&detection.mask, detection.bbox)
-            .unwrap_or_else(|| rectangle_geometry(detection.bbox))
+        mask_geometry(&detection.mask).unwrap_or_else(|| rectangle_geometry(detection.bbox))
     } else if detection.label == "text" {
         inferred.map_or_else(
             || rectangle_geometry(detection.bbox),
@@ -1451,16 +1450,10 @@ fn rotated_rectangle_geometry(
     }
 }
 
-fn mask_geometry(mask: &KoharuLayoutMask, bounds: [f32; 4]) -> Option<Geometry> {
-    let [left, top, right, bottom] = mask_window(bounds, mask.width, mask.height)?;
-    if mask.pixels.len() != mask.width as usize * mask.height as usize {
-        return None;
-    }
-    let cropped = GrayImage::from_fn(right - left, bottom - top, |x, y| {
-        Luma([mask.pixels[(top + y) as usize * mask.width as usize + (left + x) as usize]])
-    });
-    let mut padded = GrayImage::new(cropped.width() + 2, cropped.height() + 2);
-    image::imageops::replace(&mut padded, &cropped, 1, 1);
+fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
+    let mask = GrayImage::from_raw(mask.width, mask.height, mask.pixels.clone())?;
+    let mut padded = GrayImage::new(mask.width() + 2, mask.height() + 2);
+    image::imageops::replace(&mut padded, &mask, 1, 1);
     let contours = find_contours_with_threshold::<i32>(&padded, 0);
     let contour = contours
         .iter()
@@ -1478,8 +1471,8 @@ fn mask_geometry(mask: &KoharuLayoutMask, bounds: [f32; 4]) -> Option<Geometry> 
     let points = approximate_polygon_dp(&contour.points, epsilon, true)
         .into_iter()
         .map(|point| Point {
-            x: f64::from(left) + f64::from(point.x - 1),
-            y: f64::from(top) + f64::from(point.y - 1),
+            x: f64::from(point.x - 1),
+            y: f64::from(point.y - 1),
         })
         .collect::<Vec<_>>();
     (points.len() >= 3).then_some(Geometry {
@@ -1527,12 +1520,14 @@ async fn write_mask(
     spec: MaskSpec,
     size: ImageSize,
 ) -> Result<()> {
-    let radius = (spec.dilate && size.width > 0 && size.height > 0).then(|| {
-        ((size.width.max(size.height) as f32 / 1024.0) * 6.0)
+    let mut mask = mask_for(detections, spec.label, size);
+    if spec.dilate && size.width > 0 && size.height > 0 {
+        let radius = ((size.width.max(size.height) as f32 / 1024.0) * 6.0)
             .round()
-            .clamp(1.0, 255.0) as u8
-    });
-    let mut mask = mask_for(detections, spec.label, size, radius);
+            .clamp(1.0, 255.0) as u8;
+        mask = dilate(&mask, Norm::L2, radius);
+        mask = close(&mask, Norm::L2, radius);
+    }
     if let Some(bounds) = input.region {
         preserve_mask_outside_region(input, page, spec.role, bounds, &mut mask).await?;
     }
@@ -1597,80 +1592,14 @@ fn region_kind(label: &str) -> Result<RegionKind> {
     .map_err(Into::into)
 }
 
-fn mask_for(
-    detections: &[KoharuLayoutDetection],
-    label: &str,
-    size: ImageSize,
-    radius: Option<u8>,
-) -> GrayImage {
+fn mask_for(detections: &[KoharuLayoutDetection], label: &str, size: ImageSize) -> GrayImage {
     let mut mask = GrayImage::new(size.width, size.height);
-    let margin = radius.map_or(0.0, |radius| f32::from(radius) * 2.0);
-    let detected = detections
-        .iter()
-        .filter(|detection| {
-            detection.label == label
-                && detection.mask.width == size.width
-                && detection.mask.height == size.height
-                && detection.mask.pixels.len() == size.width as usize * size.height as usize
-        })
-        .filter_map(|detection| {
-            let [left, top, right, bottom] = detection.bbox;
-            mask_window(
-                [left - margin, top - margin, right + margin, bottom + margin],
-                size.width,
-                size.height,
-            )
-            .map(|window| (detection, window))
-        })
-        .collect::<Vec<_>>();
-    // Windows whose two morphology radii can interact are processed together,
-    // preserving page-wide results without traversing unrelated page pixels.
-    let mut windows = Vec::<[u32; 4]>::new();
-    for (_, mut window) in detected.iter().copied() {
-        let mut index = 0;
-        while index < windows.len() {
-            let other = windows[index];
-            if window[0] <= other[2]
-                && window[2] >= other[0]
-                && window[1] <= other[3]
-                && window[3] >= other[1]
-            {
-                window = [
-                    window[0].min(other[0]),
-                    window[1].min(other[1]),
-                    window[2].max(other[2]),
-                    window[3].max(other[3]),
-                ];
-                windows.swap_remove(index);
-                index = 0;
-            } else {
-                index += 1;
+    for detection in detections.iter().filter(|value| value.label == label) {
+        for (target, source) in mask.as_mut().iter_mut().zip(&detection.mask.pixels) {
+            if *source != 0 {
+                *target = u8::MAX;
             }
         }
-        windows.push(window);
-    }
-
-    for [left, top, right, bottom] in windows {
-        let mut local = GrayImage::new(right - left, bottom - top);
-        for (detection, [mask_left, mask_top, mask_right, mask_bottom]) in &detected {
-            let overlap_left = left.max(*mask_left);
-            let overlap_top = top.max(*mask_top);
-            let overlap_right = right.min(*mask_right);
-            let overlap_bottom = bottom.min(*mask_bottom);
-            for y in overlap_top..overlap_bottom {
-                for x in overlap_left..overlap_right {
-                    let source = y as usize * size.width as usize + x as usize;
-                    if detection.mask.pixels[source] != 0 {
-                        local.put_pixel(x - left, y - top, Luma([u8::MAX]));
-                    }
-                }
-            }
-        }
-        if let Some(radius) = radius {
-            local = dilate(&local, Norm::L2, radius);
-            local = close(&local, Norm::L2, radius);
-        }
-        image::imageops::overlay(&mut mask, &local, i64::from(left), i64::from(top));
     }
     mask
 }
@@ -2049,14 +1978,11 @@ mod tests {
             }
         }
 
-        let geometry = mask_geometry(
-            &KoharuLayoutMask {
-                width: width as u32,
-                height: height as u32,
-                pixels,
-            },
-            [0.0, 0.0, width as f32, height as f32],
-        )
+        let geometry = mask_geometry(&KoharuLayoutMask {
+            width: width as u32,
+            height: height as u32,
+            pixels,
+        })
         .unwrap();
 
         assert!(geometry.points.len() >= 4);
@@ -2351,7 +2277,6 @@ mod tests {
                 width: 4,
                 height: 1,
             },
-            None,
         );
 
         assert_eq!(mask.as_raw(), &[0, 255, 0, 0]);
