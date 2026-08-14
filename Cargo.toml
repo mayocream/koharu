@@ -44,7 +44,6 @@ koharu-secrets = { path = "crates/koharu-secrets" }
 # external dependencies
 alphanumeric-sort = "1.5.8"
 arc-swap = "1.7"
-hf-hub = "0.5"
 image = "0.25"
 webp = { version = "0.3.1" }
 fast_image_resize = { version = "6.0", features = ["image", "rayon"] }
@@ -54,10 +53,8 @@ imageproc = "0.27"
 ab_glyph = "0.2"
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde_bytes = "0.11"
 serde_json = "1.0"
 specta = { version = "=2.0.0-rc.25", features = ["derive", "url", "uuid"] }
-specta-serde = "=0.0.12"
 specta-typescript = "=0.0.12"
 tokio = { version = "1.52", features = ["full"] }
 tracing = "0.1"
@@ -66,12 +63,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "regist
 console = "0.16"
 open = "5.3"
 rfd = "0.17"
-rmp-serde = "1"
 thiserror = "2.0"
 blake3 = "1.8"
 dunce = "1.0.5"
 rayon = "1.12"
-rust-embed = { version = "8.12", features = ["interpolate-folder-path"] }
 # disables `esaxx_fast` feature which is conflicting with `ort`
 tokenizers = { version = "0.23", features = ["onig"] }
 strum = { version = "0.28", features = ["derive"] }
@@ -87,11 +82,7 @@ secrecy = { version = "0.10", features = ["serde"] }
 reqwest-middleware = "0.5"
 reqwest-retry = "0.9"
 toml = "1.1"
-inventory = "0.3"
 url = { version = "2.5", features = ["serde"] }
-camino = { version = "1.1", features = ["serde1"] }
-indexmap = { version = "2.13", features = ["serde"] }
-indextree = "4.8.1"
 petgraph = "0.8.3"
 imbl = "7.0.1"
 hashbrown = "0.17.1"
@@ -99,13 +90,10 @@ slotmap = "1.1.1"
 smallvec = "1.15.2"
 revision = { version = "0.30.0", features = ["uuid"] }
 flate2 = "1.0"
-csv = "1.3"
 tempfile = "3.24"
 once_cell = "1.21"
 libloading = "0.8.9"
 nvml-wrapper = "0.12.1"
-num_cpus = "1.17"
-indicatif = "0.18"
 minijinja = "2.19"
 minijinja-contrib = { version = "2.19", features = ["pycompat"] }
 windows = { version = "0.62", features = [
@@ -114,8 +102,6 @@ windows = { version = "0.62", features = [
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
 ] }
-windows-sys = { version = "0.61", features = ["Win32_System_LibraryLoader"] }
-winreg = "0.56"
 skrifa = "0.42"
 harfrust = "0.10"
 hypher = "0.1.7"
@@ -126,7 +112,6 @@ jieba-rs = "0.10"
 fontique = "0.11"
 pollster = "0.4"
 vello = "0.9"
-winit = "0.30.12"
 tauri = { version = "=2.11.5", default-features = false, features = [
     "cef",
     "compression",
@@ -149,14 +134,12 @@ atomicwrites = "0.4"
 fs4 = "1"
 parking_lot = "0.12"
 walkdir = "2.5"
-proptest = "1.6"
 base64 = "0.22"
 unicode-bidi = "0.3"
 criterion = { version = "0.8", features = ["html_reports"] }
 keyring = { version = "4.1", features = ["linux-keyutils-keyring-store"] }
 keyring-core = "1.0"
 linux-keyutils-keyring-store = "1.0"
-lru = "0.18"
 llguidance = "1.7.5"
 sentry = { version = "0.48", features = ["tracing"] }
 fast-glob = "1.0"
@@ -169,11 +152,8 @@ prettyplease = "0.2"
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full"] }
-bytemuck = "1.25"
-half = { version = "2.7", features = ["bytemuck"] }
 libc = "0.2"
 memmap2 = "0.9"
-safetensors = "0.8"
 
 [profile.dev]
 debug = 1
