@@ -852,16 +852,16 @@ impl Traversal<'_> {
             .as_ref()
             .and_then(|value| value.color)
             .unwrap_or([0, 0, 0, 255]);
-        if let Some(ref hex) = self.force_font_color {
-            if hex.len() == 7 && hex.starts_with('#') {
-                if let (Ok(r), Ok(g), Ok(b)) = (
-                    u8::from_str_radix(&hex[1..3], 16),
-                    u8::from_str_radix(&hex[3..5], 16),
-                    u8::from_str_radix(&hex[5..7], 16),
-                ) {
-                    foreground_color = [r, g, b, 255];
-                }
-            }
+        if let Some(ref hex) = self.force_font_color
+            && hex.len() == 7
+            && hex.starts_with('#')
+            && let (Ok(r), Ok(g), Ok(b)) = (
+                u8::from_str_radix(&hex[1..3], 16),
+                u8::from_str_radix(&hex[3..5], 16),
+                u8::from_str_radix(&hex[5..7], 16),
+            )
+        {
+            foreground_color = [r, g, b, 255];
         }
         let mut stroke = resolve_stroke(typography.as_ref());
         if let Some(forced_width) = self.force_border_width {
