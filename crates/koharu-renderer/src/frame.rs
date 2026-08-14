@@ -1,9 +1,6 @@
 //! Immutable retained page output and synchronous vector access.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, OnceLock},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag, RelationId, Revision};
 use vello::{
@@ -32,7 +29,6 @@ pub(crate) struct FrameData {
     pub(crate) dependencies: Arc<[RenderDependency]>,
     pub(crate) diagnostics: Arc<[RenderDiagnostic]>,
     pub(crate) stats: RetentionStats,
-    pub(crate) scene: OnceLock<Arc<Scene>>,
 }
 
 impl std::fmt::Debug for Frame {
@@ -99,18 +95,6 @@ impl Frame {
         self.0.stats
     }
 
-    pub fn append_to(&self, scene: &mut Scene, transform: Option<Affine>) {
-        scene.append(self.scene(), transform);
-    }
-
-    fn assemble_layers(&self) -> Scene {
-        let mut scene = Scene::new();
-        for layer in self.layers() {
-            layer.append_to(&mut scene, Some(self.0.normalization));
-        }
-        scene
-    }
-
     /// Returns one entity normalized into a tightly cropped frame.
     ///
     /// The original layer retains authored presentation. The isolated copy is
@@ -175,19 +159,10 @@ impl Frame {
             dependencies: self.0.dependencies.clone(),
             diagnostics: self.0.diagnostics.clone(),
             stats: self.0.stats,
-            scene: OnceLock::new(),
         }))))
     }
 
-    pub(crate) fn scene(&self) -> &Arc<Scene> {
-        self.0
-            .scene
-            .get_or_init(|| Arc::new(self.assemble_layers()))
-    }
-
     pub(crate) fn at_revision(&self, revision: Revision, stats: RetentionStats) -> Self {
-        let scene = OnceLock::new();
-        let _ = scene.set(self.scene().clone());
         Self(Arc::new(FrameData {
             revision,
             page: self.0.page,
@@ -200,7 +175,6 @@ impl Frame {
             dependencies: self.0.dependencies.clone(),
             diagnostics: self.0.diagnostics.clone(),
             stats,
-            scene,
         }))
     }
 }
@@ -284,16 +258,25 @@ impl Layer {
         &self.0.dependencies
     }
 
-    pub fn append_to(&self, scene: &mut Scene, transform: Option<Affine>) {
-        self.append_with_presentation(scene, transform, self.0.presentation);
+    #[must_use]
+    pub fn raster_image(&self) -> Option<&RasterImage> {
+        self.0.node.image.as_ref()
     }
 
-    pub fn append_with_presentation(
+    #[must_use]
+    pub fn placement(&self) -> Affine {
+        self.0.placement
+    }
+
+    pub fn append_vector_with_presentation(
         &self,
         scene: &mut Scene,
         transform: Option<Affine>,
         presentation: Presentation,
     ) {
+        if self.raster_image().is_some() {
+            return;
+        }
         if !presentation.visible || !presentation.opacity.is_finite() || presentation.opacity <= 0.0
         {
             return;
@@ -346,6 +329,31 @@ pub enum ImageKind {
 pub struct ImageMetadata {
     pub name: Option<String>,
     pub kind: ImageKind,
+}
+
+#[derive(Clone)]
+pub struct RasterImage {
+    pub(crate) blob: BlobId,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) pixels: Arc<[u8]>,
+}
+
+impl RasterImage {
+    #[must_use]
+    pub fn blob(&self) -> BlobId {
+        self.blob
+    }
+
+    #[must_use]
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    #[must_use]
+    pub fn pixels(&self) -> &[u8] {
+        &self.pixels
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -437,6 +445,7 @@ pub(crate) struct RetainedNode {
     pub(crate) descriptor: NodeDescriptor,
     pub(crate) scene: Arc<Scene>,
     pub(crate) local_bounds: RenderBounds,
+    pub(crate) image: Option<RasterImage>,
     pub(crate) text: Option<LocalTextMetadata>,
     pub(crate) diagnostics: Arc<[RenderDiagnostic]>,
 }

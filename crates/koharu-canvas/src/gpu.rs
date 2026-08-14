@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use vello::{AaConfig, AaSupport, RenderParams, RendererOptions, Scene, wgpu};
+use koharu_renderer::{CompositionCommand, GpuCompositor};
+use vello::{AaSupport, RendererOptions, Scene, wgpu};
 
 use crate::{CanvasGpu, Color, Error, PhysicalSize, Result};
 
@@ -29,7 +30,8 @@ impl RenderTarget {
             format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -63,6 +65,7 @@ struct SampleSlot {
 pub(crate) struct GpuRenderer {
     gpu: CanvasGpu,
     vello: vello::Renderer,
+    compositor: GpuCompositor,
     target: RenderTarget,
     samples: Vec<SampleSlot>,
     wake: Arc<dyn Fn() + Send + Sync>,
@@ -83,6 +86,7 @@ impl GpuRenderer {
         )
         .map_err(|error| Error::Gpu(error.to_string()))?;
         let target = RenderTarget::new(&gpu.device, size);
+        let compositor = GpuCompositor::new(&gpu.device);
         let samples = (0..SAMPLE_RING_SIZE)
             .map(|_| SampleSlot {
                 buffer: gpu.device.create_buffer(&wgpu::BufferDescriptor {
@@ -101,6 +105,7 @@ impl GpuRenderer {
         Ok(Self {
             gpu,
             vello,
+            compositor,
             target,
             samples,
             wake,
@@ -112,27 +117,27 @@ impl GpuRenderer {
         self.target = RenderTarget::new(&self.gpu.device, size);
     }
 
-    pub fn render_content(&mut self, scene: &Scene, background: Color) -> Result<()> {
+    pub fn render_content(
+        &mut self,
+        commands: &[CompositionCommand],
+        erase_mask: Option<&Scene>,
+        background: Color,
+        clip: [u32; 4],
+    ) -> Result<()> {
         if self.target.requested.is_empty() {
             return Ok(());
         }
-        self.vello
-            .render_to_texture(
+        self.compositor
+            .render(
                 &self.gpu.device,
                 &self.gpu.queue,
-                scene,
+                &mut self.vello,
                 &self.target.view,
-                &RenderParams {
-                    base_color: vello::peniko::Color::from_rgba8(
-                        background[0],
-                        background[1],
-                        background[2],
-                        background[3],
-                    ),
-                    width: self.target.requested.width,
-                    height: self.target.requested.height,
-                    antialiasing_method: AaConfig::Area,
-                },
+                (self.target.requested.width, self.target.requested.height),
+                commands,
+                erase_mask,
+                background,
+                clip,
             )
             .map_err(|error| Error::Gpu(error.to_string()))
     }

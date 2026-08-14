@@ -3,12 +3,14 @@ use std::{
     sync::Arc,
 };
 
-use koharu_renderer::{Frame as RendererFrame, ImageKind, LayerKind, Presentation};
+use koharu_renderer::{
+    CompositionCommand, Frame as RendererFrame, ImageKind, LayerKind, Presentation, RasterDraw,
+};
 use koharu_scene::Revision;
 use vello::{
     Scene,
     kurbo::{Affine, Rect},
-    peniko::{Color as VelloColor, Compose, Fill, Mix},
+    peniko::{Fill, Mix},
 };
 
 use crate::{
@@ -39,6 +41,12 @@ struct LocalMask {
     overlay: MaskOverlay,
     state: MaskState,
     pending: Option<(u64, Revision)>,
+}
+
+struct CanvasComposition {
+    commands: Vec<CompositionCommand>,
+    erase_mask: Option<Scene>,
+    clip: [u32; 4],
 }
 
 enum ActiveEdit {
@@ -655,9 +663,13 @@ impl Canvas {
         }
         if self.damage.content_pending() {
             if !self.view.size.is_empty() {
-                let scene = self.build_scene();
-                self.gpu
-                    .render_content(&scene, self.options.workspace_color)?;
+                let composition = self.build_composition();
+                self.gpu.render_content(
+                    &composition.commands,
+                    composition.erase_mask.as_ref(),
+                    self.options.workspace_color,
+                    composition.clip,
+                )?;
                 self.generation = self.generation.wrapping_add(1).max(1);
             }
             self.damage.clear_content();
@@ -695,14 +707,26 @@ impl Canvas {
         })
     }
 
-    fn build_scene(&mut self) -> Scene {
-        let mut scene = Scene::new();
+    fn build_composition(&mut self) -> CanvasComposition {
+        let viewport_size = self.view.size;
         let Some(frame) = self.frame.as_ref() else {
-            return scene;
+            return CanvasComposition {
+                commands: Vec::new(),
+                erase_mask: None,
+                clip: [0, 0, viewport_size.width, viewport_size.height],
+            };
         };
-        let mut page_scene = Scene::new();
         let size = frame.size();
         let page_rect = Rect::new(0.0, 0.0, f64::from(size.0), f64::from(size.1));
+        let viewport_rect = Rect::new(
+            0.0,
+            0.0,
+            f64::from(viewport_size.width),
+            f64::from(viewport_size.height),
+        );
+        let camera = self.view.camera.affine();
+        let origin = frame.origin();
+        let normalize = Affine::translate((-f64::from(origin.0), -f64::from(origin.1)));
         let active_transform = self.edit.as_ref().and_then(ActiveEdit::transform);
         let erase = match self.edit.as_ref() {
             Some(ActiveEdit::Raster(stroke)) if stroke.edit().commit.mode == StrokeMode::Erase => {
@@ -710,63 +734,48 @@ impl Canvas {
             }
             _ => None,
         };
-        if active_transform.is_some() || !self.opacity_overrides.is_empty() || erase.is_some() {
-            let origin = frame.origin();
-            let normalize = Affine::translate((-f64::from(origin.0), -f64::from(origin.1)));
-            for layer in frame.layers() {
-                let transform = normalize
-                    * active_transform
-                        .and_then(|transform| transform.affine(layer.entity()))
-                        .unwrap_or(Affine::IDENTITY);
-                let mut presentation = layer.presentation();
-                if let Some(opacity) = self.opacity_overrides.get(&layer.entity()) {
-                    presentation = Presentation {
-                        opacity: *opacity,
-                        ..presentation
-                    };
-                }
-                if erase.and_then(|edit| edit.commit.layer) == Some(layer.entity()) {
-                    let mut erased_layer = Scene::new();
-                    // Vello luminance masks must be isolated before a scene is
-                    // presented to a surface that does not preserve alpha.
-                    erased_layer.push_layer(
-                        Fill::NonZero,
-                        Compose::SrcOver,
-                        1.0,
-                        Affine::IDENTITY,
-                        &page_rect,
-                    );
-                    layer.append_with_presentation(
-                        &mut erased_layer,
-                        Some(transform),
-                        presentation,
-                    );
-                    erased_layer.push_luminance_mask_layer(
-                        Fill::NonZero,
-                        1.0,
-                        Affine::IDENTITY,
-                        &page_rect,
-                    );
-                    erased_layer.fill(
-                        Fill::NonZero,
-                        Affine::IDENTITY,
-                        VelloColor::from_rgba8(255, 255, 255, 255),
-                        None,
-                        &page_rect,
-                    );
-                    erased_layer.append(
-                        &erase.expect("erase edit exists in this branch").preview,
-                        None,
-                    );
-                    erased_layer.pop_layer();
-                    erased_layer.pop_layer();
-                    page_scene.append(&erased_layer, None);
-                } else {
-                    layer.append_with_presentation(&mut page_scene, Some(transform), presentation);
-                }
+
+        let mut commands = Vec::new();
+        let mut vectors = Scene::new();
+        let mut vectors_pending = false;
+        for layer in frame.layers() {
+            let transform = normalize
+                * active_transform
+                    .and_then(|transform| transform.affine(layer.entity()))
+                    .unwrap_or(Affine::IDENTITY);
+            let mut presentation = layer.presentation();
+            if let Some(opacity) = self.opacity_overrides.get(&layer.entity()) {
+                presentation = Presentation {
+                    opacity: *opacity,
+                    ..presentation
+                };
             }
-        } else {
-            frame.append_to(&mut page_scene, None);
+            if let Some(image) = layer.raster_image() {
+                flush_vectors(
+                    &mut commands,
+                    &mut vectors,
+                    &mut vectors_pending,
+                    camera,
+                    page_rect,
+                    viewport_rect,
+                );
+                if presentation.visible
+                    && presentation.opacity.is_finite()
+                    && presentation.opacity > 0.0
+                {
+                    commands.push(CompositionCommand::Raster(RasterDraw {
+                        image: image.clone(),
+                        transform: camera * transform * layer.placement(),
+                        opacity: presentation.opacity.clamp(0.0, 1.0),
+                        erase: erase.and_then(|edit| edit.commit.layer) == Some(layer.entity()),
+                    }));
+                }
+            } else {
+                layer.append_vector_with_presentation(&mut vectors, Some(transform), presentation);
+                vectors_pending |= presentation.visible
+                    && presentation.opacity.is_finite()
+                    && presentation.opacity > 0.0;
+            }
         }
 
         if let Some(ActiveEdit::Raster(stroke)) = self.edit.as_ref()
@@ -776,7 +785,7 @@ impl Canvas {
             if opacity > 0.0 {
                 if opacity < 1.0 {
                     let size = frame.size();
-                    page_scene.push_layer(
+                    vectors.push_layer(
                         Fill::NonZero,
                         Mix::Normal,
                         opacity,
@@ -784,33 +793,86 @@ impl Canvas {
                         &Rect::new(0.0, 0.0, f64::from(size.0), f64::from(size.1)),
                     );
                 }
-                page_scene.append(&stroke.edit().preview, None);
+                vectors.append(&stroke.edit().preview, None);
                 if opacity < 1.0 {
-                    page_scene.pop_layer();
+                    vectors.pop_layer();
                 }
+                vectors_pending = true;
             }
         }
         for mask in self.masks.values_mut() {
             mask.state
                 .for_each_tinted_tile(mask.overlay, |x, y, image| {
-                    page_scene.draw_image(image, Affine::translate((f64::from(x), f64::from(y))));
+                    vectors.draw_image(image, Affine::translate((f64::from(x), f64::from(y))));
+                    vectors_pending = true;
                 });
         }
-
-        let viewport_rect = Rect::new(
-            0.0,
-            0.0,
-            f64::from(self.view.size.width),
-            f64::from(self.view.size.height),
+        flush_vectors(
+            &mut commands,
+            &mut vectors,
+            &mut vectors_pending,
+            camera,
+            page_rect,
+            viewport_rect,
         );
-        let camera = self.view.camera.affine();
-        scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &viewport_rect);
-        scene.push_clip_layer(Fill::NonZero, camera, &page_rect);
-        scene.append(&page_scene, Some(camera));
-        scene.pop_layer();
-        scene.pop_layer();
-        scene
+        let erase_mask =
+            erase.map(|edit| viewport_scene(&edit.preview, camera, page_rect, viewport_rect));
+        CanvasComposition {
+            commands,
+            erase_mask,
+            clip: page_clip(self.view.camera, size, viewport_size),
+        }
     }
+}
+
+fn flush_vectors(
+    commands: &mut Vec<CompositionCommand>,
+    vectors: &mut Scene,
+    pending: &mut bool,
+    camera: Affine,
+    page_rect: Rect,
+    viewport_rect: Rect,
+) {
+    if !*pending {
+        return;
+    }
+    let page_scene = std::mem::replace(vectors, Scene::new());
+    commands.push(CompositionCommand::Vector(viewport_scene(
+        &page_scene,
+        camera,
+        page_rect,
+        viewport_rect,
+    )));
+    *pending = false;
+}
+
+fn viewport_scene(page: &Scene, camera: Affine, page_rect: Rect, viewport_rect: Rect) -> Scene {
+    let mut scene = Scene::new();
+    scene.push_clip_layer(Fill::NonZero, Affine::IDENTITY, &viewport_rect);
+    scene.push_clip_layer(Fill::NonZero, camera, &page_rect);
+    scene.append(page, Some(camera));
+    scene.pop_layer();
+    scene.pop_layer();
+    scene
+}
+
+fn page_clip(camera: crate::Camera, page: (u32, u32), viewport: PhysicalSize) -> [u32; 4] {
+    let [translate_x, translate_y] = camera.translation();
+    let zoom = camera.zoom();
+    let left = translate_x.floor().clamp(0.0, f64::from(viewport.width)) as u32;
+    let top = translate_y.floor().clamp(0.0, f64::from(viewport.height)) as u32;
+    let right = (translate_x + f64::from(page.0) * zoom)
+        .ceil()
+        .clamp(0.0, f64::from(viewport.width)) as u32;
+    let bottom = (translate_y + f64::from(page.1) * zoom)
+        .ceil()
+        .clamp(0.0, f64::from(viewport.height)) as u32;
+    [
+        left,
+        top,
+        right.saturating_sub(left),
+        bottom.saturating_sub(top),
+    ]
 }
 
 fn validate_brush(brush: Brush) -> Result<()> {

@@ -81,6 +81,7 @@ struct GpuState {
     context: RenderContext,
     device_id: usize,
     renderer: vello::Renderer,
+    compositor: crate::GpuCompositor,
     targets: Vec<RenderTarget>,
 }
 
@@ -119,12 +120,14 @@ impl Rasterizer {
             },
         )
         .map_err(|error| anyhow!("failed to create Vello renderer: {error:?}"))?;
+        let compositor = crate::GpuCompositor::new(&context.devices[device_id].device);
 
         Ok(Self {
             gpu: Mutex::new(GpuState {
                 context,
                 device_id,
                 renderer,
+                compositor,
                 targets: Vec::new(),
             }),
         })
@@ -138,9 +141,31 @@ impl Rasterizer {
         let (width, height) = frame.size();
         let (left, top) = frame.origin();
         let image = self
-            .rasterize_scene_inner(frame.scene(), width, height, [0, 0, 0, 0], options)
+            .rasterize_frame_inner(frame, width, height, options)
             .map_err(crate::Error::Backend)?;
         Ok(Raster { image, left, top })
+    }
+
+    fn rasterize_frame_inner(
+        &self,
+        frame: &crate::Frame,
+        width: u32,
+        height: u32,
+        raster: RasterOptions,
+    ) -> Result<RgbaImage> {
+        if width == 0 || height == 0 {
+            bail!("invalid render surface {width}x{height}");
+        }
+        let scale = raster.scale();
+        let raster_width = width
+            .checked_mul(scale)
+            .context("supersampled render surface width overflow")?;
+        let raster_height = height
+            .checked_mul(scale)
+            .context("supersampled render surface height overflow")?;
+        let commands = frame_commands(frame, scale);
+        let pixels = self.readback_commands(&commands, raster_width, raster_height)?;
+        finish_raster(pixels, raster_width, raster_height, width, height, raster)
     }
 
     pub(crate) fn rasterize_scene(
@@ -185,19 +210,76 @@ impl Rasterizer {
             &scaled
         };
         let pixels = self.readback(scene, raster_width, raster_height, background)?;
-        let image = RgbaImage::from_raw(raster_width, raster_height, pixels)
-            .context("WGPU returned an invalid RGBA buffer")?;
-        if scale == 1 {
-            return Ok(image);
-        }
-        let mut downsampled = RgbaImage::new(width, height);
-        let resize_options = ResizeOptions::new()
-            .resize_alg(raster.downsample_filter.into())
-            .use_alpha(true);
-        Resizer::new()
-            .resize(&image, &mut downsampled, &resize_options)
-            .context("failed to downsample WGPU render")?;
-        Ok(downsampled)
+        finish_raster(pixels, raster_width, raster_height, width, height, raster)
+    }
+
+    fn readback_commands(
+        &self,
+        commands: &[crate::CompositionCommand],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u8>> {
+        let size = Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let (device, submission, target) = {
+            let mut gpu = self.gpu.lock();
+            let GpuState {
+                context,
+                device_id,
+                renderer,
+                compositor,
+                targets,
+            } = &mut *gpu;
+            let device = context.devices[*device_id].device.clone();
+            let queue = &context.devices[*device_id].queue;
+            let limits = device.limits();
+            if width > limits.max_texture_dimension_2d || height > limits.max_texture_dimension_2d {
+                bail!(
+                    "render surface {width}x{height} exceeds the device limit {}",
+                    limits.max_texture_dimension_2d
+                );
+            }
+            let target = targets
+                .iter()
+                .position(|target| target.width == width && target.height == height)
+                .map(|position| targets.swap_remove(position))
+                .map_or_else(|| RenderTarget::new(&device, width, height), Ok)?;
+            compositor
+                .render(
+                    &device,
+                    queue,
+                    renderer,
+                    &target.view,
+                    (width, height),
+                    commands,
+                    None,
+                    [0, 0, 0, 0],
+                    [0, 0, width, height],
+                )
+                .map_err(|error| anyhow!(error.to_string()))?;
+
+            let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("koharu frame readback encoder"),
+            });
+            encoder.copy_texture_to_buffer(
+                target.texture.as_image_copy(),
+                TexelCopyBufferInfo {
+                    buffer: &target.readback,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(target.padded_width),
+                        rows_per_image: None,
+                    },
+                },
+                size,
+            );
+            let submission = queue.submit([encoder.finish()]);
+            (device, submission, target)
+        };
+        self.finish_readback(device, submission, target)
     }
 
     fn readback(
@@ -218,6 +300,7 @@ impl Rasterizer {
                 context,
                 device_id,
                 renderer,
+                compositor: _,
                 targets,
             } = &mut *gpu;
             let device = context.devices[*device_id].device.clone();
@@ -267,6 +350,17 @@ impl Rasterizer {
             let submission = queue.submit([encoder.finish()]);
             (device, submission, target)
         };
+        self.finish_readback(device, submission, target)
+    }
+
+    fn finish_readback(
+        &self,
+        device: wgpu::Device,
+        submission: wgpu::SubmissionIndex,
+        target: RenderTarget,
+    ) -> Result<Vec<u8>> {
+        let width = target.width;
+        let height = target.height;
         let slice = target.readback.slice(..);
         let (sender, receiver) = mpsc::sync_channel(1);
         slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -317,7 +411,10 @@ impl RenderTarget {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::STORAGE_BINDING | TextureUsages::COPY_SRC,
+            usage: TextureUsages::STORAGE_BINDING
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -343,6 +440,68 @@ impl RenderTarget {
             readback,
         })
     }
+}
+
+fn frame_commands(frame: &crate::Frame, scale: u32) -> Vec<crate::CompositionCommand> {
+    let outer = Affine::scale(f64::from(scale)) * frame.0.normalization;
+    let mut commands = Vec::new();
+    let mut vectors = Scene::new();
+    let mut vectors_pending = false;
+    for layer in frame.layers() {
+        let presentation = layer.presentation();
+        if let Some(image) = layer.raster_image() {
+            if vectors_pending {
+                commands.push(crate::CompositionCommand::Vector(std::mem::replace(
+                    &mut vectors,
+                    Scene::new(),
+                )));
+                vectors_pending = false;
+            }
+            if presentation.visible
+                && presentation.opacity.is_finite()
+                && presentation.opacity > 0.0
+            {
+                commands.push(crate::CompositionCommand::Raster(crate::RasterDraw {
+                    image: image.clone(),
+                    transform: outer * layer.placement(),
+                    opacity: presentation.opacity.clamp(0.0, 1.0),
+                    erase: false,
+                }));
+            }
+        } else {
+            layer.append_vector_with_presentation(&mut vectors, Some(outer), presentation);
+            vectors_pending |= presentation.visible
+                && presentation.opacity.is_finite()
+                && presentation.opacity > 0.0;
+        }
+    }
+    if vectors_pending {
+        commands.push(crate::CompositionCommand::Vector(vectors));
+    }
+    commands
+}
+
+fn finish_raster(
+    pixels: Vec<u8>,
+    raster_width: u32,
+    raster_height: u32,
+    width: u32,
+    height: u32,
+    raster: RasterOptions,
+) -> Result<RgbaImage> {
+    let image = RgbaImage::from_raw(raster_width, raster_height, pixels)
+        .context("WGPU returned an invalid RGBA buffer")?;
+    if raster.scale() == 1 {
+        return Ok(image);
+    }
+    let mut downsampled = RgbaImage::new(width, height);
+    let resize_options = ResizeOptions::new()
+        .resize_alg(raster.downsample_filter.into())
+        .use_alpha(true);
+    Resizer::new()
+        .resize(&image, &mut downsampled, &resize_options)
+        .context("failed to downsample WGPU render")?;
+    Ok(downsampled)
 }
 
 pub(crate) fn rgba([r, g, b, a]: [u8; 4]) -> Color {

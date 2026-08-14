@@ -26,6 +26,7 @@ koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-translator = { workspace = true }
 reqwest = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }
 strum = { workspace = true }

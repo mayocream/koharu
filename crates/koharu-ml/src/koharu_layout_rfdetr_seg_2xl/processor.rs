@@ -139,38 +139,75 @@ impl KoharuLayoutRFDetrImageProcessor {
 
         // Gathering before interpolation is output-equivalent to upstream and
         // avoids allocating resized masks for candidates rejected by threshold.
-        let masks = output
-            .pred_masks
-            .i(0)
-            .index_select(0, &query_indexes)
-            .unsqueeze(1)
-            .upsample_bilinear2d(
-                [i64::from(image_height), i64::from(image_width)],
-                false,
-                None,
-                None,
-            )
-            .gt(0.0)
-            .to_kind(Kind::Uint8)
-            * 255;
+        let masks = output.pred_masks.i(0).index_select(0, &query_indexes);
 
-        // Keep reductions on the accelerator and coalesce the compact outputs
-        // before crossing the device boundary. The masks themselves remain a
-        // caller-facing CPU byte buffer, but their areas no longer require a
-        // second full-image scan on the CPU.
-        let areas = masks.count_nonzero_dim_intlist(&[1i64, 2, 3][..]);
         let floats = Tensor::cat(&[scores.unsqueeze(1), boxes], 1);
-        let integers = Tensor::cat(&[labels.unsqueeze(1), areas.unsqueeze(1)], 1);
         let floats = tensor_to_vec_f32(&floats)?;
-        let integers = tensor_to_vec_i64(&integers)?;
-        let mask_size = image_width as usize * image_height as usize;
-        let mask_values = tensor_to_vec_u8(&masks)?;
+        let labels = tensor_to_vec_i64(&labels)?;
 
-        let mut detections = Vec::with_capacity(integers.len() / 2);
-        for index in 0..integers.len() / 2 {
-            let label_id = integers[index * 2] as usize;
-            let pixels = mask_values[index * mask_size..(index + 1) * mask_size].to_vec();
-            let area = integers[index * 2 + 1].clamp(0, i64::from(u32::MAX)) as u32;
+        let mut detections = Vec::with_capacity(labels.len());
+        for (index, label) in labels.into_iter().enumerate() {
+            // RF-DETR defines masks by bilinearly projecting each native mask to
+            // the source image and thresholding at zero. Resolve one mask at a
+            // time to preserve that exact contract without retaining an
+            // N-by-page tensor, then keep only its non-zero page-space extent.
+            let mask = masks
+                .i(index as i64)
+                .unsqueeze(0)
+                .unsqueeze(0)
+                .upsample_bilinear2d(
+                    [i64::from(image_height), i64::from(image_width)],
+                    false,
+                    None,
+                    None,
+                )
+                .gt(0.0)
+                .to_kind(Kind::Uint8);
+            let rows = mask
+                .count_nonzero_dim_intlist(&[0i64, 1, 3][..])
+                .gt(0)
+                .to_kind(Kind::Int64);
+            let columns = mask
+                .count_nonzero_dim_intlist(&[0i64, 1, 2][..])
+                .gt(0)
+                .to_kind(Kind::Int64);
+            let occupied = Tensor::stack(
+                &[
+                    mask.count_nonzero(None),
+                    columns.argmax(None, false),
+                    rows.argmax(None, false),
+                    i64::from(image_width) - columns.flip([0]).argmax(None, false),
+                    i64::from(image_height) - rows.flip([0]).argmax(None, false),
+                ],
+                0,
+            );
+            let occupied = tensor_to_vec_i64(&occupied)?;
+            let area = occupied[0].clamp(0, i64::from(u32::MAX)) as u32;
+            let (x, y, right, bottom) = if area == 0 {
+                (0, 0, 0, 0)
+            } else {
+                (
+                    occupied[1] as u32,
+                    occupied[2] as u32,
+                    occupied[3] as u32,
+                    occupied[4] as u32,
+                )
+            };
+            let width = right.saturating_sub(x);
+            let height = bottom.saturating_sub(y);
+            let pixels = if width == 0 || height == 0 {
+                Vec::new()
+            } else {
+                tensor_to_vec_u8(
+                    &(mask.i((
+                        0,
+                        0,
+                        i64::from(y)..i64::from(bottom),
+                        i64::from(x)..i64::from(right),
+                    )) * 255),
+                )?
+            };
+            let label_id = label as usize;
             detections.push(KoharuLayoutDetection {
                 label_id,
                 label: self
@@ -182,8 +219,10 @@ impl KoharuLayoutRFDetrImageProcessor {
                 bbox: floats[index * 5 + 1..index * 5 + 5].try_into().unwrap(),
                 area,
                 mask: KoharuLayoutMask {
-                    width: image_width,
-                    height: image_height,
+                    x,
+                    y,
+                    width,
+                    height,
                     pixels,
                 },
             });
@@ -232,9 +271,29 @@ pub struct KoharuLayoutDetection {
 
 #[derive(Debug, Clone)]
 pub struct KoharuLayoutMask {
+    pub x: u32,
+    pub y: u32,
     pub width: u32,
     pub height: u32,
     pub pixels: Vec<u8>,
+}
+
+impl KoharuLayoutMask {
+    #[must_use]
+    pub fn contains(&self, x: u32, y: u32) -> bool {
+        let Some(local_x) = x.checked_sub(self.x) else {
+            return false;
+        };
+        let Some(local_y) = y.checked_sub(self.y) else {
+            return false;
+        };
+        if local_x >= self.width || local_y >= self.height {
+            return false;
+        }
+        self.pixels
+            .get(local_y as usize * self.width as usize + local_x as usize)
+            .is_some_and(|value| *value != 0)
+    }
 }
 
 fn tensor_to_vec_f32(tensor: &Tensor) -> Result<Vec<f32>> {

@@ -7,7 +7,10 @@ use std::{
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
-use image::{DynamicImage, GrayImage, ImageFormat, Luma, RgbImage};
+use image::{
+    DynamicImage, ExtendedColorType, GrayImage, ImageEncoder as _, Luma, RgbImage,
+    codecs::png::{CompressionType, FilterType, PngEncoder},
+};
 use imageproc::{
     contours::{BorderType, find_contours_with_threshold},
     distance_transform::{Norm, distance_transform},
@@ -24,6 +27,7 @@ use koharu_scene::{
     Point, Presents, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy, TextLayout,
     TextLayoutKind, TextRegion, TextRole, Typography, WritingMode,
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -399,6 +403,14 @@ fn write_regions<'a>(
     text_reuse: &mut TextReuse,
 ) -> Result<PageRegions<'a>> {
     let mut regions = PageRegions::default();
+    let inferred = detections
+        .par_iter()
+        .map(|detection| {
+            (detection.label == "text")
+                .then(|| infer_typography(image, detection))
+                .flatten()
+        })
+        .collect::<Vec<_>>();
     let text_group = snapshot.page(page)?.text_group()?;
     let managed_text_group = if let Some(group) = text_group {
         snapshot
@@ -408,9 +420,9 @@ fn write_regions<'a>(
     } else {
         None
     };
-    for (index, detection) in detections.iter().enumerate() {
+    for (index, (detection, inferred)) in detections.iter().zip(inferred).enumerate() {
         match write_region(
-            snapshot, edit, page, image, detection, generation, text_reuse,
+            snapshot, edit, page, detection, inferred, generation, text_reuse,
         )
         .with_context(|| format!("failed to write {} detection {index}", detection.label))?
         {
@@ -432,8 +444,8 @@ fn write_region<'a>(
     snapshot: &koharu_scene::Snapshot,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
-    image: &RgbImage,
     detection: &'a KoharuLayoutDetection,
+    inferred: Option<InferredTypography>,
     generation: &Generation,
     text_reuse: &mut TextReuse,
 ) -> Result<RegionOutput<'a>> {
@@ -444,9 +456,6 @@ fn write_region<'a>(
         .add_entity(page, At::End)
         .context("failed to create a detected region")?;
     let kind = region_kind(&detection.label)?;
-    let inferred = (detection.label == "text")
-        .then(|| infer_typography(image, detection))
-        .flatten();
     let geometry = if detection.label == "bubble" {
         mask_geometry(&detection.mask).unwrap_or_else(|| rectangle_geometry(detection.bbox))
     } else if detection.label == "text" {
@@ -671,8 +680,8 @@ fn infer_typography(
     detection: &KoharuLayoutDetection,
 ) -> Option<InferredTypography> {
     let mask = &detection.mask;
-    let width = image.width().min(mask.width);
-    let height = image.height().min(mask.height);
+    let width = image.width();
+    let height = image.height();
     let [bbox_left, bbox_top, bbox_right, bbox_bottom] = detection.bbox;
     let [left, top, right, bottom] = mask_window(
         [
@@ -691,12 +700,11 @@ fn infer_typography(
     let mut pixels = Vec::new();
     let mut background = Vec::new();
     for y in top..bottom {
-        let row = y as usize * mask.width as usize;
         for x in left..right {
             let local_x = x - left + 1;
             let local_y = y - top + 1;
             let color = image.get_pixel(x, y).0;
-            let inside_mask = mask.pixels.get(row + x as usize).copied().unwrap_or(0) != 0;
+            let inside_mask = mask.contains(x, y);
             pixels.push(MaskPixel {
                 x: local_x,
                 y: local_y,
@@ -755,16 +763,27 @@ fn mask_window([left, top, right, bottom]: [f32; 4], width: u32, height: u32) ->
 }
 
 fn mask_angle(points: &[MaskPoint], [left, top, right, bottom]: [f32; 4]) -> (f32, bool) {
+    let first = points[0];
+    let bounds = points[1..].iter().fold(
+        [first.x, first.y, first.x, first.y],
+        |[left, top, right, bottom], point| {
+            [
+                left.min(point.x),
+                top.min(point.y),
+                right.max(point.x),
+                bottom.max(point.y),
+            ]
+        },
+    );
     let mut horizontal = (f64::NEG_INFINITY, 0.0);
     let mut vertical = (f64::NEG_INFINITY, 0.0);
     for step in -ANGLE_SEARCH_HALF_STEPS..=ANGLE_SEARCH_HALF_STEPS {
         let angle_degrees = f64::from(step) * ANGLE_SEARCH_STEP_DEGREES;
         let (sin, cos) = angle_degrees.to_radians().sin_cos();
-        let horizontal_score = projection_score(points, -sin, cos);
+        let (horizontal_score, vertical_score) = projection_scores(points, bounds, sin, cos);
         if horizontal_score > horizontal.0 {
             horizontal = (horizontal_score, angle_degrees);
         }
-        let vertical_score = projection_score(points, cos, sin);
         if vertical_score > vertical.0 {
             vertical = (vertical_score, angle_degrees);
         }
@@ -787,25 +806,45 @@ fn mask_angle(points: &[MaskPoint], [left, top, right, bottom]: [f32; 4]) -> (f3
     (angle, is_vertical)
 }
 
-fn projection_score(points: &[MaskPoint], axis_x: f64, axis_y: f64) -> f64 {
-    let mut minimum = f64::INFINITY;
-    let mut maximum = f64::NEG_INFINITY;
+fn projection_scores(points: &[MaskPoint], bounds: [f64; 4], sin: f64, cos: f64) -> (f64, f64) {
+    let (horizontal_origin, horizontal_length) = projection_extent(bounds, -sin, cos);
+    let (vertical_origin, vertical_length) = projection_extent(bounds, cos, sin);
+    let mut horizontal = vec![0.0; horizontal_length];
+    let mut vertical = vec![0.0; vertical_length];
     for point in points {
-        let projection = point.x * axis_x + point.y * axis_y;
-        minimum = minimum.min(projection);
-        maximum = maximum.max(projection);
+        let horizontal_projection = point.y * cos - point.x * sin - horizontal_origin;
+        let horizontal_index = horizontal_projection.floor() as usize;
+        let horizontal_fraction = horizontal_projection - horizontal_index as f64;
+        horizontal[horizontal_index] += 1.0 - horizontal_fraction;
+        horizontal[horizontal_index + 1] += horizontal_fraction;
+
+        let vertical_projection = point.x * cos + point.y * sin - vertical_origin;
+        let vertical_index = vertical_projection.floor() as usize;
+        let vertical_fraction = vertical_projection - vertical_index as f64;
+        vertical[vertical_index] += 1.0 - vertical_fraction;
+        vertical[vertical_index + 1] += vertical_fraction;
     }
+    let count = points.len() as f64;
+    (
+        horizontal.iter().map(|value| value * value).sum::<f64>() / count,
+        vertical.iter().map(|value| value * value).sum::<f64>() / count,
+    )
+}
+
+fn projection_extent(
+    [left, top, right, bottom]: [f64; 4],
+    axis_x: f64,
+    axis_y: f64,
+) -> (f64, usize) {
+    let minimum_x = if axis_x >= 0.0 { left } else { right };
+    let minimum_y = if axis_y >= 0.0 { top } else { bottom };
+    let maximum_x = if axis_x >= 0.0 { right } else { left };
+    let maximum_y = if axis_y >= 0.0 { bottom } else { top };
+    let minimum = minimum_x * axis_x + minimum_y * axis_y;
+    let maximum = maximum_x * axis_x + maximum_y * axis_y;
     let origin = minimum.floor();
     let length = (maximum.ceil() - origin).max(0.0) as usize + 2;
-    let mut profile = vec![0.0; length];
-    for point in points {
-        let projection = point.x * axis_x + point.y * axis_y - origin;
-        let index = projection.floor() as usize;
-        let fraction = projection - index as f64;
-        profile[index] += 1.0 - fraction;
-        profile[index + 1] += fraction;
-    }
-    profile.iter().map(|value| value * value).sum::<f64>() / points.len() as f64
+    (origin, length)
 }
 
 fn histogram_value_at(histogram: &[u32; 256], mut rank: usize) -> u8 {
@@ -1451,6 +1490,7 @@ fn rotated_rectangle_geometry(
 }
 
 fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
+    let origin = (mask.x, mask.y);
     let mask = GrayImage::from_raw(mask.width, mask.height, mask.pixels.clone())?;
     let mut padded = GrayImage::new(mask.width() + 2, mask.height() + 2);
     image::imageops::replace(&mut padded, &mask, 1, 1);
@@ -1471,8 +1511,8 @@ fn mask_geometry(mask: &KoharuLayoutMask) -> Option<Geometry> {
     let points = approximate_polygon_dp(&contour.points, epsilon, true)
         .into_iter()
         .map(|point| Point {
-            x: f64::from(point.x - 1),
-            y: f64::from(point.y - 1),
+            x: f64::from(point.x - 1) + f64::from(origin.0),
+            y: f64::from(point.y - 1) + f64::from(origin.1),
         })
         .collect::<Vec<_>>();
     (points.len() >= 3).then_some(Geometry {
@@ -1488,28 +1528,9 @@ async fn write_masks(
     detections: &[KoharuLayoutDetection],
     size: ImageSize,
 ) -> Result<()> {
-    for spec in [
-        MaskSpec {
-            role: "text-mask",
-            label: "text",
-            dilate: true,
-        },
-        MaskSpec {
-            role: "bubble-mask",
-            label: "bubble",
-            dilate: false,
-        },
-    ] {
-        write_mask(input, edit, page, detections, spec, size).await?;
-    }
+    write_mask(input, edit, page, detections, size).await?;
+    edit.remove_asset(page, &AssetRole::new("bubble-mask")?)?;
     Ok(())
-}
-
-#[derive(Clone, Copy)]
-struct MaskSpec {
-    role: &'static str,
-    label: &'static str,
-    dilate: bool,
 }
 
 async fn write_mask(
@@ -1517,26 +1538,30 @@ async fn write_mask(
     edit: &mut koharu_scene::Edit,
     page: EntityId,
     detections: &[KoharuLayoutDetection],
-    spec: MaskSpec,
     size: ImageSize,
 ) -> Result<()> {
-    let mut mask = mask_for(detections, spec.label, size);
-    if spec.dilate && size.width > 0 && size.height > 0 {
+    let mut mask = if size.width > 0 && size.height > 0 {
         let radius = ((size.width.max(size.height) as f32 / 1024.0) * 6.0)
             .round()
             .clamp(1.0, 255.0) as u8;
-        mask = dilate(&mask, Norm::L2, radius);
-        mask = close(&mask, Norm::L2, radius);
-    }
+        closed_mask_for(detections, "text", size, radius)
+    } else {
+        mask_for(detections, "text", size)
+    };
     if let Some(bounds) = input.region {
-        preserve_mask_outside_region(input, page, spec.role, bounds, &mut mask).await?;
+        preserve_mask_outside_region(input, page, "text-mask", bounds, &mut mask).await?;
     }
-
     let mut bytes = Cursor::new(Vec::new());
-    DynamicImage::ImageLuma8(mask).write_to(&mut bytes, ImageFormat::Png)?;
+    PngEncoder::new_with_quality(&mut bytes, CompressionType::Fast, FilterType::NoFilter)
+        .write_image(
+            mask.as_raw(),
+            mask.width(),
+            mask.height(),
+            ExtendedColorType::L8,
+        )?;
     edit.set_asset(
         page,
-        &AssetRole::new(spec.role)?,
+        &AssetRole::new("text-mask")?,
         AssetInput::new(
             Arc::<[u8]>::from(bytes.into_inner()),
             "image/png",
@@ -1595,13 +1620,167 @@ fn region_kind(label: &str) -> Result<RegionKind> {
 fn mask_for(detections: &[KoharuLayoutDetection], label: &str, size: ImageSize) -> GrayImage {
     let mut mask = GrayImage::new(size.width, size.height);
     for detection in detections.iter().filter(|value| value.label == label) {
-        for (target, source) in mask.as_mut().iter_mut().zip(&detection.mask.pixels) {
-            if *source != 0 {
-                *target = u8::MAX;
+        stamp_mask(&mut mask, &detection.mask, 0, 0);
+    }
+    mask
+}
+
+fn closed_mask_for(
+    detections: &[KoharuLayoutDetection],
+    label: &str,
+    size: ImageSize,
+    radius: u8,
+) -> GrayImage {
+    let masks = detections
+        .iter()
+        .filter(|detection| detection.label == label)
+        .map(|detection| &detection.mask)
+        .filter(|mask| valid_mask(mask) && mask.width > 0 && mask.height > 0)
+        .collect::<Vec<_>>();
+    let mut output = GrayImage::new(size.width, size.height);
+    if masks.is_empty() {
+        return output;
+    }
+
+    // Two dilations can make instances interact before the final erosion.
+    // Conservatively group their expanded bounds, then retain a third-radius
+    // halo so the local erosion observes the same zero/page-edge neighborhood
+    // as a full-page operation.
+    let interaction_radius = u32::from(radius) * 2;
+    let mut parents = (0..masks.len()).collect::<Vec<_>>();
+    for left in 0..masks.len() {
+        for right in left + 1..masks.len() {
+            if rectangles_touch(
+                expand_mask_bounds(masks[left], interaction_radius, size),
+                expand_mask_bounds(masks[right], interaction_radius, size),
+            ) {
+                union(&mut parents, left, right);
             }
         }
     }
-    mask
+
+    let mut groups = BTreeMap::<usize, Vec<usize>>::new();
+    for index in 0..masks.len() {
+        let root = find(&mut parents, index);
+        groups.entry(root).or_default().push(index);
+    }
+    let local_masks = groups
+        .into_values()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .filter_map(|group| {
+            let mut bounds = mask_bounds(masks[group[0]], size);
+            for &index in &group[1..] {
+                bounds = union_bounds(bounds, mask_bounds(masks[index], size));
+            }
+            bounds = expand_bounds(bounds, u32::from(radius) * 3, size);
+            let [left, top, right, bottom] = bounds;
+            if left >= right || top >= bottom {
+                return None;
+            }
+            let mut local = GrayImage::new(right - left, bottom - top);
+            for &index in &group {
+                stamp_mask(&mut local, masks[index], left, top);
+            }
+            let local = close(&dilate(&local, Norm::L2, radius), Norm::L2, radius);
+            Some((left, top, local))
+        })
+        .collect::<Vec<_>>();
+    for (left, top, local) in local_masks {
+        for (x, y, pixel) in local.enumerate_pixels() {
+            if pixel.0[0] != 0 {
+                output.put_pixel(left + x, top + y, Luma([u8::MAX]));
+            }
+        }
+    }
+    output
+}
+
+fn valid_mask(mask: &KoharuLayoutMask) -> bool {
+    mask.width
+        .checked_mul(mask.height)
+        .and_then(|count| usize::try_from(count).ok())
+        == Some(mask.pixels.len())
+}
+
+fn stamp_mask(target: &mut GrayImage, mask: &KoharuLayoutMask, origin_x: u32, origin_y: u32) {
+    if !valid_mask(mask) {
+        return;
+    }
+    for local_y in 0..mask.height {
+        let Some(page_y) = mask.y.checked_add(local_y) else {
+            continue;
+        };
+        let Some(target_y) = page_y.checked_sub(origin_y) else {
+            continue;
+        };
+        if target_y >= target.height() {
+            continue;
+        }
+        let row = local_y as usize * mask.width as usize;
+        for local_x in 0..mask.width {
+            let Some(page_x) = mask.x.checked_add(local_x) else {
+                continue;
+            };
+            let Some(target_x) = page_x.checked_sub(origin_x) else {
+                continue;
+            };
+            if target_x < target.width() && mask.pixels[row + local_x as usize] != 0 {
+                target.put_pixel(target_x, target_y, Luma([u8::MAX]));
+            }
+        }
+    }
+}
+
+fn mask_bounds(mask: &KoharuLayoutMask, size: ImageSize) -> [u32; 4] {
+    [
+        mask.x.min(size.width),
+        mask.y.min(size.height),
+        mask.x.saturating_add(mask.width).min(size.width),
+        mask.y.saturating_add(mask.height).min(size.height),
+    ]
+}
+
+fn expand_mask_bounds(mask: &KoharuLayoutMask, radius: u32, size: ImageSize) -> [u32; 4] {
+    expand_bounds(mask_bounds(mask, size), radius, size)
+}
+
+fn expand_bounds([left, top, right, bottom]: [u32; 4], radius: u32, size: ImageSize) -> [u32; 4] {
+    [
+        left.saturating_sub(radius),
+        top.saturating_sub(radius),
+        right.saturating_add(radius).min(size.width),
+        bottom.saturating_add(radius).min(size.height),
+    ]
+}
+
+fn union_bounds(left: [u32; 4], right: [u32; 4]) -> [u32; 4] {
+    [
+        left[0].min(right[0]),
+        left[1].min(right[1]),
+        left[2].max(right[2]),
+        left[3].max(right[3]),
+    ]
+}
+
+fn rectangles_touch(left: [u32; 4], right: [u32; 4]) -> bool {
+    left[0] <= right[2] && right[0] <= left[2] && left[1] <= right[3] && right[1] <= left[3]
+}
+
+fn find(parents: &mut [usize], mut index: usize) -> usize {
+    while parents[index] != index {
+        parents[index] = parents[parents[index]];
+        index = parents[index];
+    }
+    index
+}
+
+fn union(parents: &mut [usize], left: usize, right: usize) {
+    let left = find(parents, left);
+    let right = find(parents, right);
+    if left != right {
+        parents[right] = left;
+    }
 }
 
 fn intersects([left, top, right, bottom]: [f32; 4], region: crate::Bounds) -> bool {
@@ -1757,44 +1936,41 @@ fn mask_containment(
     value: &KoharuLayoutMask,
     bounds: [f32; 4],
 ) -> f32 {
-    if container.width != value.width || container.height != value.height {
-        return 0.0;
-    }
-
-    let Some(pixel_count) = container
-        .width
-        .checked_mul(container.height)
-        .and_then(|count| usize::try_from(count).ok())
-    else {
-        return 0.0;
-    };
-    if container.pixels.len() != pixel_count || value.pixels.len() != pixel_count {
+    if !valid_mask(container) || !valid_mask(value) {
         return 0.0;
     }
 
     if !bounds.iter().all(|value| value.is_finite()) {
         return 0.0;
     }
-    let left = bounds[0].floor().clamp(0.0, value.width as f32) as usize;
-    let top = bounds[1].floor().clamp(0.0, value.height as f32) as usize;
-    let right = bounds[2].ceil().clamp(0.0, value.width as f32) as usize;
-    let bottom = bounds[3].ceil().clamp(0.0, value.height as f32) as usize;
+    let value_right = value.x.saturating_add(value.width);
+    let value_bottom = value.y.saturating_add(value.height);
+    let left = bounds[0]
+        .floor()
+        .max(value.x as f32)
+        .min(value_right as f32) as u32;
+    let top = bounds[1]
+        .floor()
+        .max(value.y as f32)
+        .min(value_bottom as f32) as u32;
+    let right = bounds[2].ceil().max(value.x as f32).min(value_right as f32) as u32;
+    let bottom = bounds[3]
+        .ceil()
+        .max(value.y as f32)
+        .min(value_bottom as f32) as u32;
     if left >= right || top >= bottom {
         return 0.0;
     }
 
     let mut value_area = 0usize;
     let mut intersection = 0usize;
-    let width = value.width as usize;
     for y in top..bottom {
-        let row = y * width;
         for x in left..right {
-            let index = row + x;
-            if value.pixels[index] == 0 {
+            if !value.contains(x, y) {
                 continue;
             }
             value_area += 1;
-            intersection += usize::from(container.pixels[index] != 0);
+            intersection += usize::from(container.contains(x, y));
         }
     }
     if value_area == 0 {
@@ -1835,6 +2011,10 @@ fn area(bounds: [f32; 4]) -> f32 {
 #[cfg(test)]
 mod tests {
     use image::{Rgb, RgbImage};
+    use imageproc::{
+        distance_transform::Norm,
+        morphology::{close, dilate},
+    };
     use koharu_ml::koharu_layout_rfdetr_seg_2xl::{KoharuLayoutDetection, KoharuLayoutMask};
     use koharu_scene::{
         At, BubbleRegion, FitsTo, FlowsIn, Geometry, Inside, Origin, PageDraft, Session,
@@ -1844,7 +2024,7 @@ mod tests {
     use super::{
         DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, DetectionModel,
         ImageSize, KoharuLayoutRFDetrSeg2XLConfig, MaskPixel, PageRegions, Processor, RegionOutput,
-        TextReuse, color_palette, generation, infer_typography, layout_order,
+        TextReuse, closed_mask_for, color_palette, generation, infer_typography, layout_order,
         link_dialogue_regions, mask_containment, mask_for, mask_geometry, non_maximum_suppression,
         normalize_text_color, write_region,
     };
@@ -1870,6 +2050,8 @@ mod tests {
     async fn joined_text_uses_balloon_flow_semantics() {
         let mut session = Session::memory().await.unwrap();
         let bubble_mask = KoharuLayoutMask {
+            x: 0,
+            y: 0,
             width: 1,
             height: 1,
             pixels: vec![u8::MAX],
@@ -1958,6 +2140,8 @@ mod tests {
             bbox,
             area: 0,
             mask: KoharuLayoutMask {
+                x: 0,
+                y: 0,
                 width: 1,
                 height: 1,
                 pixels: vec![0],
@@ -1979,6 +2163,8 @@ mod tests {
         }
 
         let geometry = mask_geometry(&KoharuLayoutMask {
+            x: 10,
+            y: 20,
             width: width as u32,
             height: height as u32,
             pixels,
@@ -1990,13 +2176,13 @@ mod tests {
             geometry
                 .points
                 .iter()
-                .all(|point| !(point.x == 0.0 && point.y == 0.0))
+                .all(|point| !(point.x == 10.0 && point.y == 20.0))
         );
         assert!(
             geometry
                 .points
                 .iter()
-                .any(|point| point.x == 4.0 && point.y == 0.0)
+                .any(|point| point.x == 14.0 && point.y == 20.0)
         );
     }
 
@@ -2034,6 +2220,8 @@ mod tests {
                 bbox: [0.0, 0.0, width as f32, height as f32],
                 area: pixels.iter().filter(|value| **value != 0).count() as u32,
                 mask: KoharuLayoutMask {
+                    x: 0,
+                    y: 0,
                     width,
                     height,
                     pixels,
@@ -2080,6 +2268,8 @@ mod tests {
                 bbox: [left as f32, top as f32, right as f32, bottom as f32],
                 area: pixels.iter().filter(|value| **value != 0).count() as u32,
                 mask: KoharuLayoutMask {
+                    x: 0,
+                    y: 0,
                     width,
                     height,
                     pixels,
@@ -2115,6 +2305,8 @@ mod tests {
                 bbox: [left as f32, top as f32, right as f32, bottom as f32],
                 area: pixels.iter().filter(|value| **value != 0).count() as u32,
                 mask: KoharuLayoutMask {
+                    x: 0,
+                    y: 0,
                     width,
                     height,
                     pixels,
@@ -2166,6 +2358,8 @@ mod tests {
                 bbox: [left as f32, top as f32, right as f32, bottom as f32],
                 area: pixels.iter().filter(|value| **value != 0).count() as u32,
                 mask: KoharuLayoutMask {
+                    x: 0,
+                    y: 0,
                     width,
                     height,
                     pixels,
@@ -2188,6 +2382,7 @@ mod tests {
         let snapshot = session.commit(create).await.unwrap().snapshot;
         let page = page.unwrap();
         let (image, detection) = outlined_text(3, [0, 0, 0], [255, 255, 255]);
+        let inferred = infer_typography(&image, &detection);
         let generation = generation(super::PRODUCER, super::MODEL_ID).unwrap();
         let mut layer = None;
         let mut text_reuse = TextReuse {
@@ -2200,8 +2395,8 @@ mod tests {
                     &snapshot,
                     edit,
                     page,
-                    &image,
                     &detection,
+                    inferred,
                     &generation,
                     &mut text_reuse,
                 )
@@ -2251,23 +2446,25 @@ mod tests {
 
     #[test]
     fn text_mask_excludes_onomatopoeia() {
-        let detection = |label: &str, bbox: [f32; 4], pixels: [u8; 4]| KoharuLayoutDetection {
+        let detection = |label: &str, x: u32, value: u8| KoharuLayoutDetection {
             label_id: 0,
             label: label.to_owned(),
             score: 1.0,
-            bbox,
-            area: pixels.iter().filter(|value| **value != 0).count() as u32,
+            bbox: [x as f32, 0.0, x as f32 + 1.0, 1.0],
+            area: u32::from(value != 0),
             mask: KoharuLayoutMask {
-                width: 4,
+                x,
+                y: 0,
+                width: 1,
                 height: 1,
-                pixels: pixels.to_vec(),
+                pixels: vec![value],
             },
         };
         let detections = vec![
-            detection("bubble", [0.0, 0.0, 3.0, 1.0], [0, 0, 0, 0]),
-            detection("onomatopoeia", [0.0, 0.0, 1.0, 1.0], [255, 0, 0, 0]),
-            detection("text", [1.0, 0.0, 2.0, 1.0], [0, 255, 0, 0]),
-            detection("onomatopoeia", [3.0, 0.0, 4.0, 1.0], [0, 0, 0, 255]),
+            detection("bubble", 0, 0),
+            detection("onomatopoeia", 0, 255),
+            detection("text", 1, 255),
+            detection("onomatopoeia", 3, 255),
         ];
 
         let mask = mask_for(
@@ -2285,6 +2482,8 @@ mod tests {
     #[test]
     fn bubble_membership_uses_detected_ink_instead_of_text_box_corners() {
         let mask = |pixels| KoharuLayoutMask {
+            x: 0,
+            y: 0,
             width: 5,
             height: 5,
             pixels,
@@ -2317,26 +2516,112 @@ mod tests {
     }
 
     #[test]
-    fn mask_containment_rejects_incompatible_masks() {
+    fn mask_containment_accepts_independent_local_extents() {
         let valid = KoharuLayoutMask {
+            x: 5,
+            y: 5,
             width: 2,
             height: 2,
             pixels: vec![1; 4],
         };
         let malformed = KoharuLayoutMask {
+            x: 5,
+            y: 5,
             width: 2,
             height: 2,
             pixels: vec![1; 3],
         };
         let different_size = KoharuLayoutMask {
+            x: 5,
+            y: 5,
             width: 1,
             height: 1,
             pixels: vec![1],
         };
 
-        let bounds = [0.0, 0.0, 2.0, 2.0];
+        let bounds = [5.0, 5.0, 7.0, 7.0];
         assert_eq!(mask_containment(&valid, &malformed, bounds), 0.0);
-        assert_eq!(mask_containment(&valid, &different_size, bounds), 0.0);
+        assert_eq!(mask_containment(&valid, &different_size, bounds), 1.0);
+    }
+
+    #[test]
+    fn local_mask_morphology_matches_the_full_page_operation() {
+        let size = ImageSize {
+            width: 64,
+            height: 48,
+        };
+        let local = |x, y, width, height, pixels: Vec<u8>| KoharuLayoutDetection {
+            label_id: 0,
+            label: "text".to_owned(),
+            score: 1.0,
+            bbox: [x as f32, y as f32, (x + width) as f32, (y + height) as f32],
+            area: pixels.iter().filter(|value| **value != 0).count() as u32,
+            mask: KoharuLayoutMask {
+                x,
+                y,
+                width,
+                height,
+                pixels,
+            },
+        };
+        let detections = vec![
+            local(0, 0, 4, 4, vec![255; 16]),
+            local(10, 8, 4, 4, vec![255; 16]),
+            local(19, 10, 3, 5, vec![255; 15]),
+            local(52, 40, 4, 3, vec![255; 12]),
+        ];
+        let radius = 3;
+        let page = mask_for(&detections, "text", size);
+        let expected = close(&dilate(&page, Norm::L2, radius), Norm::L2, radius);
+
+        assert_eq!(closed_mask_for(&detections, "text", size, radius), expected);
+    }
+
+    #[test]
+    fn local_mask_morphology_matches_varied_sparse_instances() {
+        let size = ImageSize {
+            width: 64,
+            height: 48,
+        };
+        let mut state = 0x7f4a_7c15_u32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for case in 0..24 {
+            let mut detections = Vec::new();
+            for _ in 0..8 {
+                let width = next() % 8 + 1;
+                let height = next() % 8 + 1;
+                let x = next() % (size.width - width + 1);
+                let y = next() % (size.height - height + 1);
+                let pixels = (0..width * height)
+                    .map(|_| if next() % 3 == 0 { 0 } else { u8::MAX })
+                    .collect::<Vec<_>>();
+                detections.push(KoharuLayoutDetection {
+                    label_id: 0,
+                    label: "text".to_owned(),
+                    score: 1.0,
+                    bbox: [x as f32, y as f32, (x + width) as f32, (y + height) as f32],
+                    area: pixels.iter().filter(|pixel| **pixel != 0).count() as u32,
+                    mask: KoharuLayoutMask {
+                        x,
+                        y,
+                        width,
+                        height,
+                        pixels,
+                    },
+                });
+            }
+            let radius = (case % 5 + 1) as u8;
+            let page = mask_for(&detections, "text", size);
+            let expected = close(&dilate(&page, Norm::L2, radius), Norm::L2, radius);
+            assert_eq!(
+                closed_mask_for(&detections, "text", size, radius),
+                expected,
+                "case {case}, radius {radius}"
+            );
+        }
     }
 
     #[test]
@@ -2435,6 +2720,8 @@ mod tests {
             bbox: [0.0, 0.0, width as f32, height as f32],
             area: pixels.iter().filter(|value| **value != 0).count() as u32,
             mask: KoharuLayoutMask {
+                x: 0,
+                y: 0,
                 width,
                 height,
                 pixels,

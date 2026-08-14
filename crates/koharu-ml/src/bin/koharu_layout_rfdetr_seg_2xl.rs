@@ -115,8 +115,20 @@ fn draw_detections(
             continue;
         }
         let color = colors[detection.label_id.min(colors.len() - 1)];
-        for (pixel, &mask) in image.pixels_mut().zip(&detection.mask.pixels) {
-            if mask != 0 {
+        for y in 0..detection.mask.height {
+            for x in 0..detection.mask.width {
+                let index = y as usize * detection.mask.width as usize + x as usize;
+                let Some(&mask) = detection.mask.pixels.get(index) else {
+                    continue;
+                };
+                let Some(pixel) =
+                    image.get_pixel_mut_checked(detection.mask.x + x, detection.mask.y + y)
+                else {
+                    continue;
+                };
+                if mask == 0 {
+                    continue;
+                }
                 for channel in 0..3 {
                     pixel[channel] =
                         ((u16::from(pixel[channel]) * 2 + u16::from(color[channel])) / 3) as u8;

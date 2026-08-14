@@ -1,6 +1,7 @@
 //! Retained rendering of one semantic Koharu page.
 
 mod bubble;
+mod compositor;
 mod config;
 mod error;
 mod fonts;
@@ -15,10 +16,12 @@ mod shape;
 mod text_renderer;
 mod types;
 
+#[doc(hidden)]
+pub use compositor::{CompositionCommand, GpuCompositor, RasterDraw};
 pub use config::TypesettingConfig;
 pub use error::{Error, Result};
 pub use frame::{
-    Frame, ImageKind, ImageMetadata, Layer, LayerKind, Presentation, RenderBounds,
+    Frame, ImageKind, ImageMetadata, Layer, LayerKind, Presentation, RasterImage, RenderBounds,
     RenderDependency, RenderDiagnostic, RetentionStats, TextMetadata,
 };
 pub use layout::WritingMode;

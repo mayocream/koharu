@@ -25,12 +25,12 @@ use tokio::sync::OnceCell;
 use vello::{
     Scene,
     kurbo::{Affine, BezPath, Rect, Vec2},
-    peniko::{Blob, Fill, ImageAlphaType, ImageData, ImageFormat},
+    peniko::Fill,
 };
 
 use crate::{
     Error, FontFamily, FontStyle, Frame, ImageKind, ImageMetadata, Layer, LayerKind, Presentation,
-    Raster, RasterOptions, RenderBounds, RenderDependency, RenderDiagnostic, Result,
+    Raster, RasterImage, RasterOptions, RenderBounds, RenderDependency, RenderDiagnostic, Result,
     RetentionStats, TextAlign, TextMetadata, TypesettingConfig, WritingMode,
     bubble::{GeometryFrame, LayoutBox, contour, flow_cells, geometry_bounds, geometry_frame},
     fonts::{FontPreview, FontRequest, Fonts},
@@ -357,11 +357,7 @@ impl Renderer {
         };
         let workers = self.workers()?;
         tokio::task::spawn_blocking(move || {
-            workers.install(|| {
-                let frame = assemble_frame(compiled, nodes, stats)?;
-                let _ = frame.scene();
-                Ok(frame)
-            })
+            workers.install(|| assemble_frame(compiled, nodes, stats))
         })
         .await
         .map_err(|source| Error::Backend(anyhow!(source)))?
@@ -1157,26 +1153,22 @@ fn build_node(
                     image.blob, decoded.width, decoded.height, image.require_size
                 )));
             }
-            let pixels: Arc<dyn AsRef<[u8]> + Send + Sync> =
-                Arc::new(ImageBytes(decoded.pixels.clone()));
-            let data = ImageData {
-                data: Blob::new(pixels),
-                format: ImageFormat::Rgba8,
-                alpha_type: ImageAlphaType::Alpha,
+            let raster = RasterImage {
+                blob: image.blob,
                 width: decoded.width,
                 height: decoded.height,
+                pixels: decoded.pixels.clone(),
             };
-            let mut scene = Scene::new();
-            scene.draw_image(&data, Affine::IDENTITY);
             Ok(RetainedNode {
                 descriptor,
-                scene: Arc::new(scene),
+                scene: Arc::new(Scene::new()),
                 local_bounds: RenderBounds {
                     x: 0.0,
                     y: 0.0,
                     width: decoded.width as f32,
                     height: decoded.height as f32,
                 },
+                image: Some(raster),
                 text: None,
                 diagnostics: Arc::from([]),
             })
@@ -1187,6 +1179,7 @@ fn build_node(
                 descriptor,
                 scene: rendered.scene,
                 local_bounds: rendered.local_bounds,
+                image: None,
                 text: Some(LocalTextMetadata {
                     rendered_bounds: rendered.metadata.rendered_bounds,
                     layout_bounds: rendered.metadata.layout_bounds,
@@ -1273,7 +1266,6 @@ fn assemble_frame(
         dependencies: compiled.dependencies,
         diagnostics: diagnostics.into(),
         stats,
-        scene: OnceLock::new(),
     })))
 }
 
@@ -1618,14 +1610,6 @@ impl AffectedDependencies {
                     .is_some_and(|kinds| kinds.contains(kind)),
                 RenderDependency::Blob(_) | RenderDependency::Font(_) => false,
             })
-    }
-}
-
-struct ImageBytes(Arc<[u8]>);
-
-impl AsRef<[u8]> for ImageBytes {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
     }
 }
 

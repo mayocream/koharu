@@ -5,7 +5,6 @@ use koharu_renderer::{RasterOptions, Renderer};
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Change, Geometry, PageDraft, Session, Snapshot,
 };
-use vello::Scene;
 
 struct Fixture {
     renderer: Renderer,
@@ -128,16 +127,6 @@ fn rendering_benchmark(c: &mut Criterion) {
                 &fixture.change,
             )))
             .unwrap();
-        });
-    });
-
-    c.bench_function("frame/append_cached_512x768_2_layers", |b| {
-        let mut scene = Scene::new();
-        fixture.frame.append_to(&mut scene, None);
-        b.iter(|| {
-            let mut output = Scene::new();
-            fixture.frame.append_to(&mut output, None);
-            black_box(output);
         });
     });
 
