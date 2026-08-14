@@ -5,7 +5,11 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FontPicker } from '@/components/controls/FontPicker'
-import { PreferencePage } from '@/components/preferences/PreferenceFields'
+import {
+  PreferencePage,
+  PreferenceRow,
+  PreferenceSection,
+} from '@/components/preferences/PreferenceFields'
 import type { TypesettingConfig } from '@/lib/protocol'
 import { useFonts } from '@/lib/queries'
 import { Button } from '@koharu/ui/components/button'
@@ -133,6 +137,121 @@ export function TypesettingPreferences({
           </p>
         )}
       </section>
+
+      {/* Grouped Overrides Section */}
+      <PreferenceSection
+        title="Global Overrides"
+        description="Force specific typography settings across all text layers."
+      >
+        <PreferenceRow
+          title="Font Color"
+          description="Override the typography color with solid black."
+        >
+          <Button
+            type='button'
+            variant={value.force_font_color ? 'default' : 'outline'}
+            className='h-8 text-[11px]'
+            onClick={() =>
+              onChange({
+                ...value,
+                force_font_color: value.force_font_color === '#000000' ? undefined : '#000000',
+              })
+            }
+          >
+            {value.force_font_color ? 'Revert to Auto' : 'Force Black'}
+          </Button>
+        </PreferenceRow>
+
+        <PreferenceRow
+          title="Font Border Width"
+          description="Override the automatically detected stroke width."
+        >
+          <div className='flex items-center gap-2'>
+            {value.force_border_width !== undefined && value.force_border_width !== null && (
+              <div className='flex items-center gap-1.5'>
+                <input
+                  type='number'
+                  min='0'
+                  step='0.1'
+                  className='h-8 w-16 rounded-md border border-input bg-transparent px-2 py-1 text-right text-[11px] tabular-nums shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                  value={value.force_border_width}
+                  onChange={(e) => {
+                    const num = parseFloat(e.target.value)
+                    onChange({ ...value, force_border_width: isNaN(num) ? 0 : num })
+                  }}
+                />
+                <span className='select-none text-[11px] text-muted-foreground'>px</span>
+              </div>
+            )}
+            <Button
+              type='button'
+              variant={
+                value.force_border_width !== undefined && value.force_border_width !== null
+                  ? 'default'
+                  : 'outline'
+              }
+              className='h-8 text-[11px]'
+              onClick={() =>
+                onChange({
+                  ...value,
+                  force_border_width:
+                    value.force_border_width !== undefined && value.force_border_width !== null
+                      ? undefined
+                      : 0.5,
+                })
+              }
+            >
+              {value.force_border_width !== undefined && value.force_border_width !== null
+                ? 'Revert'
+                : 'Override'}
+            </Button>
+          </div>
+        </PreferenceRow>
+
+        <PreferenceRow
+          title="Font Weight"
+          description="Override the font thickness globally"
+        >
+          <div className='flex items-center gap-2'>
+            {value.force_font_weight !== undefined && value.force_font_weight !== null && (
+              <input
+                type='number'
+                min='100'
+                max='900'
+                step='100'
+                className='h-8 w-16 rounded-md border border-input bg-transparent px-2 py-1 text-right text-[11px] tabular-nums shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                value={value.force_font_weight}
+                onChange={(e) => {
+                  const num = parseInt(e.target.value, 10)
+                  onChange({ ...value, force_font_weight: isNaN(num) ? 400 : num })
+                }}
+              />
+            )}
+            <Button
+              type='button'
+              variant={
+                value.force_font_weight !== undefined && value.force_font_weight !== null
+                  ? 'default'
+                  : 'outline'
+              }
+              className='h-8 text-[11px]'
+              onClick={() =>
+                onChange({
+                  ...value,
+                  force_font_weight:
+                    value.force_font_weight !== undefined && value.force_font_weight !== null
+                      ? undefined
+                      : 400,
+                })
+              }
+            >
+              {value.force_font_weight !== undefined && value.force_font_weight !== null
+                ? 'Revert'
+                : 'Override'}
+            </Button>
+          </div>
+        </PreferenceRow>
+      </PreferenceSection>
     </PreferencePage>
   )
 }
