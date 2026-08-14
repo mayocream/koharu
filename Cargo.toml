@@ -7,7 +7,7 @@ resolver = "3"
 version = "0.66.9"
 edition = "2024"
 description = "Manga translation tools"
-license = "GPL-3.0-only"
+license = "MIT OR Apache-2.0"
 authors = [
     "Mayo Takanashi <mayo@linux.com>",
     "Wangchong Zhou <fffonion@gmail.com>",

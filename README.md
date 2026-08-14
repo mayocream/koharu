@@ -205,4 +205,5 @@ Thanks to all the contributors who have helped make Koharu better!
 
 Copyright 2025-2026 Mayo Takanashi and Koharu contributors.
 
-Koharu is licensed under the [GNU General Public License version 3 only](LICENSE) (`GPL-3.0-only`).
+Koharu is dual-licensed under the [MIT License](LICENSE-MIT) or the
+[Apache License, Version 2.0](LICENSE-APACHE), at your option.
