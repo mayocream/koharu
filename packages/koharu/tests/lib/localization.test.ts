@@ -44,6 +44,14 @@ describe('editor localization', () => {
     }
   })
 
+  it('describes the available update and emphasizes its version in every locale', () => {
+    for (const [locale, resource] of Object.entries(resources)) {
+      expect(resource.translation.updater.available.description, locale).toContain(
+        '<strong>{{version}}</strong>',
+      )
+    }
+  })
+
   it('distinguishes a font origin from source text', () => {
     for (const [locale, resource] of Object.entries(resources)) {
       expect(resource.translation.fontPicker.source, locale).not.toBe(

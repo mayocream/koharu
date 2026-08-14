@@ -505,6 +505,7 @@
   },
   "updater": {
     "available": {
+      "description": "코하루 <strong>{{version}}</strong>을(를) 설치할 수 있습니다",
       "title": "업데이트 사용 가능"
     },
     "close": "닫기",

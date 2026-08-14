@@ -89,7 +89,7 @@ export function Updater() {
       }}
     >
       <AlertDialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden'>
-        <AlertDialogHeader className='shrink-0'>
+        <AlertDialogHeader className='flex shrink-0 flex-col items-start text-left'>
           <AlertDialogMedia>
             {state.kind === 'error' ? (
               <RefreshCw className='size-5' />

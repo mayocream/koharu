@@ -505,6 +505,7 @@
   },
   "updater": {
     "available": {
+      "description": "Koharu <strong>{{version}}</strong> 已準備好安裝",
       "title": "有可用更新"
     },
     "close": "關閉",
