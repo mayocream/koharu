@@ -97,24 +97,29 @@ async fn discarded_image_nodes_are_rebuilt_for_a_reopened_presentation() {
 
 #[tokio::test]
 async fn rasterized_png_contains_source_and_cleanup_pixels() {
+    let width = 4_000;
+    let height = 5_000;
+    let source_color = [10, 20, 200, 255];
+    let cleanup_color = [240, 30, 20, 255];
     let mut session = Session::memory().await.unwrap();
     let source = AssetRole::new("source").unwrap();
-    let mut cleanup = image::RgbaImage::new(4, 4);
-    cleanup.put_pixel(2, 1, image::Rgba([240, 30, 20, 255]));
+    let mut cleanup = image::RgbaImage::new(width, height);
+    cleanup.put_pixel(width - 2, height - 2, image::Rgba(cleanup_color));
     let mut page = None;
     let patch = session
         .snapshot()
         .patch(|edit| {
-            let created = edit.add_page(PageDraft::new("page", 4.0, 4.0), At::End)?;
+            let created =
+                edit.add_page(PageDraft::new("page", width as f64, height as f64), At::End)?;
             edit.set_asset(
                 created,
                 &source,
                 AssetInput::new(
-                    png(4, 4, [10, 20, 200, 255]),
+                    png(width, height, source_color),
                     "image/png",
                     AssetMetadata {
-                        width: Some(4),
-                        height: Some(4),
+                        width: Some(width),
+                        height: Some(height),
                         attributes: BTreeMap::new(),
                     },
                 ),
@@ -135,8 +140,8 @@ async fn rasterized_png_contains_source_and_cleanup_pixels() {
                     png_image(cleanup),
                     "image/png",
                     AssetMetadata {
-                        width: Some(4),
-                        height: Some(4),
+                        width: Some(width),
+                        height: Some(height),
                         attributes: BTreeMap::new(),
                     },
                 ),
@@ -161,8 +166,15 @@ async fn rasterized_png_contains_source_and_cleanup_pixels() {
         layer.kind(),
         LayerKind::Image(metadata) if metadata.kind == ImageKind::Cleanup
     )));
-    assert_eq!(raster.image.get_pixel(0, 0).0, [10, 20, 200, 255]);
-    assert_eq!(raster.image.get_pixel(2, 1).0, [240, 30, 20, 255]);
+    assert_eq!(raster.image.get_pixel(0, 0).0, source_color);
+    assert_eq!(
+        raster.image.get_pixel(width - 1, height - 1).0,
+        source_color
+    );
+    assert_eq!(
+        raster.image.get_pixel(width - 2, height - 2).0,
+        cleanup_color
+    );
 }
 
 #[test]

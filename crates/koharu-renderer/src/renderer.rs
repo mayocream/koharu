@@ -45,6 +45,9 @@ use crate::{
 
 const MAX_SURFACE_DIMENSION: u32 = 32_768;
 const MAX_SURFACE_PIXELS: u64 = 268_435_456;
+const MAX_DIRECT_IMAGE_DIMENSION: u32 = 4_096;
+const IMAGE_TILE_SIZE: u32 = 1_024;
+const IMAGE_TILE_PADDING: u32 = 2;
 const DEFAULT_RETAINED_NODES: usize = 2_048;
 const MAX_RESOURCE_READS: usize = 8;
 const ASSETS_KIND: &str = "dev.koharu.assets";
@@ -1157,17 +1160,8 @@ fn build_node(
                     image.blob, decoded.width, decoded.height, image.require_size
                 )));
             }
-            let pixels: Arc<dyn AsRef<[u8]> + Send + Sync> =
-                Arc::new(ImageBytes(decoded.pixels.clone()));
-            let data = ImageData {
-                data: Blob::new(pixels),
-                format: ImageFormat::Rgba8,
-                alpha_type: ImageAlphaType::Alpha,
-                width: decoded.width,
-                height: decoded.height,
-            };
             let mut scene = Scene::new();
-            scene.draw_image(&data, Affine::IDENTITY);
+            draw_decoded_image(&mut scene, decoded);
             Ok(RetainedNode {
                 descriptor,
                 scene: Arc::new(scene),
@@ -1627,6 +1621,92 @@ impl AsRef<[u8]> for ImageBytes {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
+}
+
+fn draw_decoded_image(scene: &mut Scene, image: &DecodedImage) {
+    if image.width <= MAX_DIRECT_IMAGE_DIMENSION && image.height <= MAX_DIRECT_IMAGE_DIMENSION {
+        draw_image_data(
+            scene,
+            image.pixels.clone(),
+            image.width,
+            image.height,
+            Affine::IDENTITY,
+        );
+        return;
+    }
+
+    for core_y in (0..image.height).step_by(IMAGE_TILE_SIZE as usize) {
+        let core_bottom = (core_y + IMAGE_TILE_SIZE).min(image.height);
+        for core_x in (0..image.width).step_by(IMAGE_TILE_SIZE as usize) {
+            let core_right = (core_x + IMAGE_TILE_SIZE).min(image.width);
+            if tile_is_transparent(image, core_x, core_y, core_right, core_bottom) {
+                continue;
+            }
+
+            let left = core_x.saturating_sub(IMAGE_TILE_PADDING);
+            let top = core_y.saturating_sub(IMAGE_TILE_PADDING);
+            let right = (core_right + IMAGE_TILE_PADDING).min(image.width);
+            let bottom = (core_bottom + IMAGE_TILE_PADDING).min(image.height);
+            let tile_width = right - left;
+            let tile_height = bottom - top;
+            let source_stride = image.width as usize * 4;
+            let row_bytes = tile_width as usize * 4;
+            let mut pixels = Vec::with_capacity(row_bytes * tile_height as usize);
+            for y in top..bottom {
+                let start = y as usize * source_stride + left as usize * 4;
+                pixels.extend_from_slice(&image.pixels[start..start + row_bytes]);
+            }
+
+            scene.push_clip_layer(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                &Rect::new(
+                    f64::from(core_x),
+                    f64::from(core_y),
+                    f64::from(core_right),
+                    f64::from(core_bottom),
+                ),
+            );
+            draw_image_data(
+                scene,
+                Arc::from(pixels),
+                tile_width,
+                tile_height,
+                Affine::translate((f64::from(left), f64::from(top))),
+            );
+            scene.pop_layer();
+        }
+    }
+}
+
+fn draw_image_data(
+    scene: &mut Scene,
+    pixels: Arc<[u8]>,
+    width: u32,
+    height: u32,
+    transform: Affine,
+) {
+    let pixels: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(ImageBytes(pixels));
+    scene.draw_image(
+        &ImageData {
+            data: Blob::new(pixels),
+            format: ImageFormat::Rgba8,
+            alpha_type: ImageAlphaType::Alpha,
+            width,
+            height,
+        },
+        transform,
+    );
+}
+
+fn tile_is_transparent(image: &DecodedImage, left: u32, top: u32, right: u32, bottom: u32) -> bool {
+    let stride = image.width as usize * 4;
+    (top..bottom).all(|y| {
+        let start = y as usize * stride + left as usize * 4;
+        image.pixels[start..start + (right - left) as usize * 4]
+            .chunks_exact(4)
+            .all(|pixel| pixel[3] == 0)
+    })
 }
 
 fn draw_font_preview(scene: &mut Scene, layout: &crate::LayoutRun<'_>) -> anyhow::Result<()> {
