@@ -6,7 +6,7 @@ on:
       ref:
         description: stable-diffusion.cpp branch or tag to build
         required: true
-        default: master-769-cc73429
+        default: master-820-de298c2
   push:
     branches: ['main']
     paths:
@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REF: ${{ github.event.inputs.ref || 'master-769-cc73429' }}
+  REF: ${{ github.event.inputs.ref || 'master-820-de298c2' }}
 
 jobs:
   build:
