@@ -99,6 +99,20 @@ export function TextField({
   )
 }
 
+/**
+ * `min` and `max` on a number input are validation hints the browser never
+ * enforces on typed text, so bounds are applied here before the value reaches
+ * the stored configuration.
+ */
+function parseBounded(raw: string, min?: number, max?: number) {
+  if (raw === '') return null
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return null
+  if (min !== undefined && value < min) return min
+  if (max !== undefined && value > max) return max
+  return value
+}
+
 export function NumberField({
   label,
   value,
@@ -128,9 +142,7 @@ export function NumberField({
         step={step}
         placeholder={t('model.default')}
         className='h-8 text-[12px] text-foreground'
-        onChange={(event) =>
-          onChange(event.currentTarget.value === '' ? null : Number(event.currentTarget.value))
-        }
+        onChange={(event) => onChange(parseBounded(event.currentTarget.value, min, max))}
       />
     </label>
   )
