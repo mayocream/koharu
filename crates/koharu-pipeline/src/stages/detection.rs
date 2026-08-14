@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
 use image::{DynamicImage, GrayImage, ImageFormat, Luma, RgbImage};
 use imageproc::{
@@ -61,26 +61,32 @@ pub(super) struct Processor {
 }
 
 impl Processor {
-    pub(super) fn new(config: DetectionModel, device: koharu_ml::Device) -> Result<Self> {
-        let DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) = &config;
+    pub(super) fn new(mut config: DetectionModel, device: koharu_ml::Device) -> Self {
+        let DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) = &mut config;
         for (name, value) in [
-            ("text", settings.text_threshold),
-            ("bubble", settings.bubble_threshold),
-            ("panel", settings.panel_threshold),
+            ("text", &mut settings.text_threshold),
+            ("bubble", &mut settings.bubble_threshold),
+            ("panel", &mut settings.panel_threshold),
         ] {
-            if let Some(value) = value {
-                ensure!(
-                    value.is_finite() && (0.0..=1.0).contains(&value),
-                    "{name} confidence threshold must be finite and between zero and one"
+            // A stored threshold is only a preference; refusing to start over one
+            // leaves the application unusable until the file is edited by hand.
+            if let Some(threshold) = *value
+                && !(threshold.is_finite() && (0.0..=1.0).contains(&threshold))
+            {
+                tracing::warn!(
+                    label = name,
+                    threshold = %threshold,
+                    "confidence threshold is not between zero and one; using the model default"
                 );
+                *value = None;
             }
         }
 
-        Ok(Self {
+        Self {
             config,
             device,
             model: ModelCell::new(),
-        })
+        }
     }
 }
 
@@ -1836,11 +1842,29 @@ mod tests {
     };
 
     use super::{
-        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, ImageSize, MaskPixel,
-        PageRegions, RegionOutput, TextReuse, color_palette, generation, infer_typography,
-        layout_order, link_dialogue_regions, mask_containment, mask_for, mask_geometry,
-        non_maximum_suppression, normalize_text_color, write_region,
+        DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, DetectionModel,
+        ImageSize, KoharuLayoutRFDetrSeg2XLConfig, MaskPixel, PageRegions, Processor, RegionOutput,
+        TextReuse, color_palette, generation, infer_typography, layout_order,
+        link_dialogue_regions, mask_containment, mask_for, mask_geometry, non_maximum_suppression,
+        normalize_text_color, write_region,
     };
+
+    #[test]
+    fn out_of_range_thresholds_fall_back_to_the_model_defaults() {
+        let processor = Processor::new(
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(KoharuLayoutRFDetrSeg2XLConfig {
+                text_threshold: Some(15.0),
+                bubble_threshold: Some(f32::NAN),
+                panel_threshold: Some(0.55),
+            }),
+            koharu_ml::Device::cpu(),
+        );
+
+        let DetectionModel::KoharuLayoutRFDetrSeg2XL(settings) = &processor.config;
+        assert_eq!(settings.text_threshold, None);
+        assert_eq!(settings.bubble_threshold, None);
+        assert_eq!(settings.panel_threshold, Some(0.55));
+    }
 
     #[tokio::test]
     async fn joined_text_uses_balloon_flow_semantics() {

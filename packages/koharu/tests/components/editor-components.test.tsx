@@ -774,6 +774,33 @@ describe('greenfield editor', () => {
     expect(screen.getByLabelText('Target language')).toHaveTextContent('English')
   })
 
+  it('clamps a threshold typed past its bounds before saving it', async () => {
+    installProject()
+    useKoharuStore.setState({ settingsOpen: true })
+    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(preferences)
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsPage />
+      </ThemeProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pipeline' }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Text threshold' }), {
+      target: { value: '15' },
+    })
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processor: expect.objectContaining({
+            'koharu-layout-rfdetr-seg-2xl': expect.objectContaining({ text_threshold: 1 }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+  })
+
   it('saves a newer OpenRouter selection after an in-flight provider save', async () => {
     installProject()
     const user = userEvent.setup()
