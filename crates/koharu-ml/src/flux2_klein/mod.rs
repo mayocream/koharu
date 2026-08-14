@@ -104,7 +104,7 @@ impl Flux2Klein {
             width: i32::try_from(width)?,
             height: i32::try_from(height)?,
             reference_images: condition_images,
-            auto_resize_reference_images: false,
+            reference_image_args: Some("resize_before_vae=0".into()),
             sample: SampleParams {
                 guidance: GuidanceParams {
                     text_cfg: 1.0,
@@ -263,7 +263,7 @@ impl Flux2KleinInpaint {
                 height: i32::try_from(height)?,
                 init_image: Some(init_image),
                 reference_images,
-                auto_resize_reference_images: false,
+                reference_image_args: Some("resize_before_vae=0".into()),
                 mask_image: Some(native_mask),
                 sample: SampleParams {
                     guidance: GuidanceParams {

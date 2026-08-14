@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use self::model::Model;
 
+pub use koharu_llama::model::params::LlamaLoadMode;
+
 const DEFAULT_GPU_LAYERS: u32 = 1000;
 const DEFAULT_MAX_TOKENS: usize = 512;
 const DEFAULT_SEED: u32 = 299_792_458;
@@ -130,8 +132,8 @@ impl Llm {
 pub struct LoadOptions {
     /// Number of model layers to offload when an accelerator is selected.
     pub gpu_layers: u32,
-    pub use_mmap: bool,
-    pub use_mlock: bool,
+    /// Controls how llama.cpp reads and retains model data.
+    pub load_mode: LlamaLoadMode,
     /// Overrides an incorrect end-of-sequence token advertised by a GGUF file.
     pub eos_token_id: Option<i32>,
     /// Optional multimodal projector configuration.
@@ -142,8 +144,7 @@ impl Default for LoadOptions {
     fn default() -> Self {
         Self {
             gpu_layers: DEFAULT_GPU_LAYERS,
-            use_mmap: true,
-            use_mlock: false,
+            load_mode: LlamaLoadMode::Auto,
             eos_token_id: None,
             mtmd: None,
         }
@@ -250,7 +251,7 @@ pub struct GenerationOptions {
     pub min_p: Option<f32>,
     pub seed: u32,
     pub repeat_penalty: f32,
-    /// `-1` applies the repeat penalty to the full history.
+    /// Number of recent tokens to penalize; `0` disables repeat penalties.
     pub repeat_last_n: i32,
     pub frequency_penalty: f32,
     pub presence_penalty: f32,

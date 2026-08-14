@@ -1,8 +1,8 @@
 use std::{ffi::CString, fmt, os::raw::c_char, path::PathBuf, ptr};
 
 use crate::{
-    CacheMode, Error, GrayImage, HiresUpscaler, LoraApplyMode, Prediction, Result, RgbImage,
-    RngType, SampleMethod, Scheduler, VaeFormat, WeightType,
+    Audio, CacheMode, Error, GrayImage, HiresUpscaler, LoraApplyMode, Prediction, Result, RgbImage,
+    RngType, SampleMethod, Scheduler, VaeFormat, Video, WeightType,
     ffi::{c_int_len, cstring, path_cstring, u32_len},
     image::{optional_raw_gray_image, optional_raw_rgb_image, raw_rgb_images},
     sys,
@@ -87,6 +87,8 @@ pub struct ContextParams {
     pub audio_vae_path: Option<PathBuf>,
     pub taesd_path: Option<PathBuf>,
     pub control_net_path: Option<PathBuf>,
+    pub ip_adapter_path: Option<PathBuf>,
+    pub motion_module_path: Option<PathBuf>,
     pub embeddings: Vec<Embedding>,
     pub photo_maker_path: Option<PathBuf>,
     pub pulid_weights_path: Option<PathBuf>,
@@ -134,6 +136,8 @@ impl Default for ContextParams {
             audio_vae_path: None,
             taesd_path: None,
             control_net_path: None,
+            ip_adapter_path: None,
+            motion_module_path: None,
             embeddings: Vec::new(),
             photo_maker_path: None,
             pulid_weights_path: None,
@@ -209,6 +213,10 @@ impl ContextParams {
         let taesd_path = strings.add_optional_path(self.taesd_path.as_deref(), "taesd_path")?;
         let control_net_path =
             strings.add_optional_path(self.control_net_path.as_deref(), "control_net_path")?;
+        let ip_adapter_path =
+            strings.add_optional_path(self.ip_adapter_path.as_deref(), "ip_adapter_path")?;
+        let motion_module_path =
+            strings.add_optional_path(self.motion_module_path.as_deref(), "motion_module_path")?;
 
         let mut embeddings = Vec::with_capacity(self.embeddings.len());
         for embedding in &self.embeddings {
@@ -249,6 +257,8 @@ impl ContextParams {
             audio_vae_path,
             taesd_path,
             control_net_path,
+            ip_adapter_path,
+            motion_module_path,
             embeddings: ptr_or_null(&embeddings),
             embedding_count,
             photo_maker_path,
@@ -695,8 +705,7 @@ pub struct ImageGenerationParams {
     pub clip_skip: i32,
     pub init_image: Option<RgbImage>,
     pub reference_images: Vec<RgbImage>,
-    pub auto_resize_reference_images: bool,
-    pub increase_reference_index: bool,
+    pub reference_image_args: Option<String>,
     pub mask_image: Option<GrayImage>,
     pub width: i32,
     pub height: i32,
@@ -706,6 +715,8 @@ pub struct ImageGenerationParams {
     pub batch_count: i32,
     pub control_image: Option<RgbImage>,
     pub control_strength: f32,
+    pub ip_adapter_image: Option<RgbImage>,
+    pub ip_adapter_strength: f32,
     pub photo_maker: PhotoMakerParams,
     pub pulid: PulidParams,
     pub vae_tiling: TilingParams,
@@ -725,8 +736,7 @@ impl Default for ImageGenerationParams {
             clip_skip: -1,
             init_image: None,
             reference_images: Vec::new(),
-            auto_resize_reference_images: false,
-            increase_reference_index: false,
+            reference_image_args: None,
             mask_image: None,
             width: 512,
             height: 512,
@@ -736,6 +746,8 @@ impl Default for ImageGenerationParams {
             batch_count: 1,
             control_image: None,
             control_strength: 0.9,
+            ip_adapter_image: None,
+            ip_adapter_strength: 1.0,
             photo_maker: PhotoMakerParams::default(),
             pulid: PulidParams::default(),
             vae_tiling: TilingParams::default(),
@@ -791,6 +803,10 @@ impl ImageGenerationParams {
         let lora_count = u32_len(loras.len(), "LoRAs")?;
         let mut reference_images = raw_rgb_images(&self.reference_images)?;
         let reference_image_count = c_int_len(reference_images.len(), "reference images")?;
+        let reference_image_args = strings.add_optional(
+            self.reference_image_args.as_deref(),
+            "reference image arguments",
+        )?;
         let mut photo_maker_images = raw_rgb_images(&self.photo_maker.id_images)?;
         let photo_maker_image_count =
             c_int_len(photo_maker_images.len(), "PhotoMaker identity images")?;
@@ -816,8 +832,7 @@ impl ImageGenerationParams {
             init_image: optional_raw_rgb_image(self.init_image.as_ref())?,
             ref_images: mut_ptr_or_null(&mut reference_images),
             ref_images_count: reference_image_count,
-            auto_resize_ref_image: self.auto_resize_reference_images,
-            increase_ref_index: self.increase_reference_index,
+            ref_image_args: reference_image_args,
             mask_image: optional_raw_gray_image(self.mask_image.as_ref())?,
             width: self.width,
             height: self.height,
@@ -827,6 +842,8 @@ impl ImageGenerationParams {
             batch_count: self.batch_count,
             control_image: optional_raw_rgb_image(self.control_image.as_ref())?,
             control_strength: self.control_strength,
+            ip_adapter_image: optional_raw_rgb_image(self.ip_adapter_image.as_ref())?,
+            ip_adapter_strength: self.ip_adapter_strength,
             pm_params: sys::sd_pm_params_t {
                 id_images: mut_ptr_or_null(&mut photo_maker_images),
                 id_images_count: photo_maker_image_count,
@@ -896,6 +913,9 @@ pub struct VideoGenerationParams {
     pub clip_skip: i32,
     pub init_image: Option<RgbImage>,
     pub end_image: Option<RgbImage>,
+    pub reference_images: Vec<RgbImage>,
+    pub reference_videos: Vec<Video>,
+    pub reference_audios: Vec<Audio>,
     pub control_frames: Vec<RgbImage>,
     pub width: i32,
     pub height: i32,
@@ -927,6 +947,9 @@ impl Default for VideoGenerationParams {
             clip_skip: 0,
             init_image: None,
             end_image: None,
+            reference_images: Vec::new(),
+            reference_videos: Vec::new(),
+            reference_audios: Vec::new(),
             control_frames: Vec::new(),
             width: 512,
             height: 512,
@@ -951,6 +974,10 @@ pub(crate) struct NativeVideoGenerationParams {
     pub(crate) raw: sys::sd_vid_gen_params_t,
     _strings: StringPool,
     _loras: Vec<sys::sd_lora_t>,
+    _reference_images: Vec<sys::sd_image_t>,
+    _reference_video_frames: Vec<Vec<sys::sd_image_t>>,
+    _reference_videos: Vec<sys::sd_ref_video_t>,
+    _reference_audios: Vec<sys::sd_audio_t>,
     _control_frames: Vec<sys::sd_image_t>,
     _sample: NativeSampleParams,
     _high_noise_sample: NativeSampleParams,
@@ -982,6 +1009,60 @@ impl VideoGenerationParams {
         let negative_prompt = strings.add(&self.negative_prompt, "negative_prompt")?;
         let loras = build_loras(&self.loras, &mut strings)?;
         let lora_count = u32_len(loras.len(), "LoRAs")?;
+        let mut reference_images = raw_rgb_images(&self.reference_images)?;
+        let reference_images_count = c_int_len(reference_images.len(), "reference images")?;
+        let mut reference_video_frames = self
+            .reference_videos
+            .iter()
+            .map(|video| raw_rgb_images(&video.frames))
+            .collect::<Result<Vec<_>>>()?;
+        let mut reference_videos = Vec::with_capacity(self.reference_videos.len());
+        for (video, frames) in self
+            .reference_videos
+            .iter()
+            .zip(&mut reference_video_frames)
+        {
+            if frames.is_empty() || video.fps == 0 {
+                return Err(Error::InvalidParameter {
+                    name: "reference video",
+                    reason: "must contain frames and have a positive frame rate",
+                });
+            }
+            reference_videos.push(sys::sd_ref_video_t {
+                frames: mut_ptr_or_null(frames),
+                frame_count: c_int_len(frames.len(), "reference video frames")?,
+                fps: i32::try_from(video.fps).map_err(|_| Error::InvalidParameter {
+                    name: "reference video fps",
+                    reason: "must fit in a signed 32-bit integer",
+                })?,
+                audio: video.audio.as_ref().map_or_else(
+                    || sys::sd_audio_t {
+                        sample_rate: 0,
+                        channels: 0,
+                        sample_count: 0,
+                        data: ptr::null_mut(),
+                    },
+                    |audio| sys::sd_audio_t {
+                        sample_rate: audio.sample_rate(),
+                        channels: audio.channels(),
+                        sample_count: audio.sample_count(),
+                        data: audio.data().as_ptr().cast_mut(),
+                    },
+                ),
+            });
+        }
+        let reference_videos_count = c_int_len(reference_videos.len(), "reference videos")?;
+        let mut reference_audios = self
+            .reference_audios
+            .iter()
+            .map(|audio| sys::sd_audio_t {
+                sample_rate: audio.sample_rate(),
+                channels: audio.channels(),
+                sample_count: audio.sample_count(),
+                data: audio.data().as_ptr().cast_mut(),
+            })
+            .collect::<Vec<_>>();
+        let reference_audios_count = c_int_len(reference_audios.len(), "reference audios")?;
         let mut control_frames = raw_rgb_images(&self.control_frames)?;
         let control_frames_size = c_int_len(control_frames.len(), "control frames")?;
         let sample = self.sample.to_native(&mut strings)?;
@@ -998,6 +1079,12 @@ impl VideoGenerationParams {
             clip_skip: self.clip_skip,
             init_image: optional_raw_rgb_image(self.init_image.as_ref())?,
             end_image: optional_raw_rgb_image(self.end_image.as_ref())?,
+            ref_images: mut_ptr_or_null(&mut reference_images),
+            ref_images_count: reference_images_count,
+            ref_videos: mut_ptr_or_null(&mut reference_videos),
+            ref_videos_count: reference_videos_count,
+            ref_audios: mut_ptr_or_null(&mut reference_audios),
+            ref_audios_count: reference_audios_count,
             control_frames: mut_ptr_or_null(&mut control_frames),
             control_frames_size,
             width: self.width,
@@ -1020,6 +1107,10 @@ impl VideoGenerationParams {
             raw,
             _strings: strings,
             _loras: loras,
+            _reference_images: reference_images,
+            _reference_video_frames: reference_video_frames,
+            _reference_videos: reference_videos,
+            _reference_audios: reference_audios,
             _control_frames: control_frames,
             _sample: sample,
             _high_noise_sample: high_noise_sample,

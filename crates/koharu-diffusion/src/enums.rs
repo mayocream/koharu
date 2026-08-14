@@ -248,6 +248,7 @@ named_ffi_enum! {
         EulerGe = sys::EULER_GE_SAMPLE_METHOD => "euler_ge",
         DpmPlusPlus2mSde = sys::DPMPP2M_SDE_SAMPLE_METHOD => "dpm++2m_sde",
         DpmPlusPlus2mSdeBt = sys::DPMPP2M_SDE_BT_SAMPLE_METHOD => "dpm++2m_sde_bt",
+        Lms = sys::LMS_SAMPLE_METHOD => "lms",
         Auto = sys::SAMPLE_METHOD_COUNT => "auto"
     }
 }
@@ -365,7 +366,8 @@ ffi_enum! {
         Auto = sys::SD_VAE_FORMAT_AUTO => "auto",
         Flux = sys::SD_VAE_FORMAT_FLUX => "flux",
         Sd3 = sys::SD_VAE_FORMAT_SD3 => "sd3",
-        Flux2 = sys::SD_VAE_FORMAT_FLUX2 => "flux2"
+        Flux2 = sys::SD_VAE_FORMAT_FLUX2 => "flux2",
+        Wan = sys::SD_VAE_FORMAT_WAN => "wan"
     }
 }
 

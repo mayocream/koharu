@@ -508,6 +508,7 @@ impl Model {
         let has_presence = options.presence_penalty.abs() >= f32::EPSILON;
         if has_repeat || has_frequency || has_presence {
             let mut penalties = LlamaSampler::penalties(
+                &self.model,
                 options.repeat_last_n,
                 if has_repeat {
                     options.repeat_penalty
@@ -580,8 +581,7 @@ fn model_params(
     };
     let mut params = LlamaModelParams::default()
         .with_n_gpu_layers(gpu_layers)
-        .with_use_mmap(options.use_mmap)
-        .with_use_mlock(options.use_mlock);
+        .with_load_mode(options.load_mode);
     if gpu_layers > 0 {
         params = params
             .with_devices(&[device.index])
@@ -693,8 +693,8 @@ fn validate_generation_options(options: &GenerationOptions) -> Result<()> {
         "presence_penalty must be finite"
     );
     ensure!(
-        options.repeat_last_n >= -1,
-        "repeat_last_n must be -1 or non-negative"
+        options.repeat_last_n >= 0,
+        "repeat_last_n must be non-negative"
     );
     if let Some(n_threads) = options.n_threads {
         ensure!(n_threads > 0, "n_threads must be positive");

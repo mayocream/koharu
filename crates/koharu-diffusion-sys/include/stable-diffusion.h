@@ -56,6 +56,7 @@ enum sample_method_t {
     EULER_GE_SAMPLE_METHOD,
     DPMPP2M_SDE_SAMPLE_METHOD,
     DPMPP2M_SDE_BT_SAMPLE_METHOD,
+    LMS_SAMPLE_METHOD,
     SAMPLE_METHOD_COUNT
 };
 
@@ -180,6 +181,7 @@ enum sd_vae_format_t {
     SD_VAE_FORMAT_FLUX,
     SD_VAE_FORMAT_SD3,
     SD_VAE_FORMAT_FLUX2,
+    SD_VAE_FORMAT_WAN,
     SD_VAE_FORMAT_COUNT,
 };
 
@@ -199,6 +201,8 @@ typedef struct {
     const char* audio_vae_path;
     const char* taesd_path;
     const char* control_net_path;
+    const char* ip_adapter_path;
+    const char* motion_module_path;
     const sd_embedding_t* embeddings;
     uint32_t embedding_count;
     const char* photo_maker_path;
@@ -242,6 +246,13 @@ typedef struct {
     uint32_t channel;
     uint8_t* data;
 } sd_image_t;
+
+typedef struct {
+    sd_image_t* frames;
+    int frame_count;
+    int fps;
+    sd_audio_t audio;
+} sd_ref_video_t;
 
 typedef struct {
     int* layers;
@@ -363,8 +374,7 @@ typedef struct {
     sd_image_t init_image;
     sd_image_t* ref_images;
     int ref_images_count;
-    bool auto_resize_ref_image;
-    bool increase_ref_index;
+    const char* ref_image_args;
     sd_image_t mask_image;
     int width;
     int height;
@@ -374,6 +384,8 @@ typedef struct {
     int batch_count;
     sd_image_t control_image;
     float control_strength;
+    sd_image_t ip_adapter_image;
+    float ip_adapter_strength;
     sd_pm_params_t pm_params;
     sd_pulid_params_t pulid_params;
     sd_tiling_params_t vae_tiling_params;
@@ -392,6 +404,12 @@ typedef struct {
     int clip_skip;
     sd_image_t init_image;
     sd_image_t end_image;
+    sd_image_t* ref_images;
+    int ref_images_count;
+    sd_ref_video_t* ref_videos;
+    int ref_videos_count;
+    sd_audio_t* ref_audios;
+    int ref_audios_count;
     sd_image_t* control_frames;
     int control_frames_size;
     int width;
@@ -427,6 +445,11 @@ SD_API int32_t sd_get_num_physical_cores();
 SD_API const char* sd_get_system_info();
 SD_API bool sd_ctx_supports_image_generation(const sd_ctx_t* sd_ctx);
 SD_API bool sd_ctx_supports_video_generation(const sd_ctx_t* sd_ctx);
+
+// ControlNet hot-swap APIs are not safe to call while generation is in flight.
+SD_API bool sd_ctx_load_control_net(sd_ctx_t* sd_ctx, const char* path);
+SD_API bool sd_ctx_unload_control_net(sd_ctx_t* sd_ctx);
+SD_API bool sd_ctx_has_control_net(const sd_ctx_t* sd_ctx);
 
 SD_API const char* sd_type_name(enum sd_type_t type);
 SD_API enum sd_type_t str_to_sd_type(const char* str);
@@ -503,6 +526,27 @@ SD_API bool upscale(upscaler_ctx_t* upscaler_ctx,
                     int* num_images_out);
 
 SD_API int get_upscale_factor(upscaler_ctx_t* upscaler_ctx);
+
+typedef struct adetailer_ctx_t adetailer_ctx_t;
+
+typedef struct {
+    const char* prompt;
+    const char* negative_prompt;
+    const char* extra_ad_args;
+} sd_adetailer_params_t;
+
+SD_API adetailer_ctx_t* new_adetailer_ctx(const char* detector_path,
+                                          int n_threads,
+                                          const char* backend,
+                                          const char* params_backend);
+SD_API void free_adetailer_ctx(adetailer_ctx_t* adetailer_ctx);
+SD_API bool adetail_image(adetailer_ctx_t* adetailer_ctx,
+                          sd_ctx_t* sd_ctx,
+                          sd_image_t input_image,
+                          const sd_adetailer_params_t* adetailer_params,
+                          const sd_img_gen_params_t* inpaint_params,
+                          sd_image_t** images_out,
+                          int* num_images_out);
 
 SD_API bool convert(const char* input_path,
                     const char* vae_path,

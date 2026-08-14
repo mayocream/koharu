@@ -142,6 +142,8 @@ static mut LLG_SAMPLER_I: koharu_llama_sys::llama_sampler_i = koharu_llama_sys::
     backend_accept: None,
     backend_apply: None,
     backend_set_input: None,
+    backend_reset: None,
+    copy_state: None,
 };
 
 /// Create an llguidance-based constrained decoding sampler.

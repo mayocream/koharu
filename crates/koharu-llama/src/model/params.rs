@@ -115,6 +115,51 @@ impl Default for LlamaSplitMode {
     }
 }
 
+/// Controls how llama.cpp loads model data.
+#[repr(i32)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum LlamaLoadMode {
+    /// Select the best supported mode for the active device.
+    #[default]
+    Auto = koharu_llama_sys::LLAMA_LOAD_MODE_AUTO,
+    /// Read model data without memory mapping or locking.
+    None = koharu_llama_sys::LLAMA_LOAD_MODE_NONE,
+    /// Memory-map model data.
+    Mmap = koharu_llama_sys::LLAMA_LOAD_MODE_MMAP,
+    /// Keep model data resident in RAM without memory mapping it.
+    Mlock = koharu_llama_sys::LLAMA_LOAD_MODE_MLOCK,
+    /// Memory-map model data and keep it resident in RAM.
+    MmapMlock = koharu_llama_sys::LLAMA_LOAD_MODE_MMAP_MLOCK,
+    /// Use direct I/O where supported.
+    DirectIo = koharu_llama_sys::LLAMA_LOAD_MODE_DIRECT_IO,
+}
+
+/// An error returned when llama.cpp reports an unknown model load mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LlamaLoadModeParseError(pub i32);
+
+impl TryFrom<i32> for LlamaLoadMode {
+    type Error = LlamaLoadModeParseError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            koharu_llama_sys::LLAMA_LOAD_MODE_AUTO => Ok(Self::Auto),
+            koharu_llama_sys::LLAMA_LOAD_MODE_NONE => Ok(Self::None),
+            koharu_llama_sys::LLAMA_LOAD_MODE_MMAP => Ok(Self::Mmap),
+            koharu_llama_sys::LLAMA_LOAD_MODE_MLOCK => Ok(Self::Mlock),
+            koharu_llama_sys::LLAMA_LOAD_MODE_MMAP_MLOCK => Ok(Self::MmapMlock),
+            koharu_llama_sys::LLAMA_LOAD_MODE_DIRECT_IO => Ok(Self::DirectIo),
+            _ => Err(LlamaLoadModeParseError(value)),
+        }
+    }
+}
+
+impl From<LlamaLoadMode> for i32 {
+    fn from(value: LlamaLoadMode) -> Self {
+        value as i32
+    }
+}
+
 /// The maximum number of devices supported.
 ///
 /// The real maximum number of devices is the lesser one of this value and the value returned by
@@ -137,8 +182,7 @@ impl Debug for LlamaModelParams {
             .field("n_gpu_layers", &self.params.n_gpu_layers)
             .field("main_gpu", &self.params.main_gpu)
             .field("vocab_only", &self.params.vocab_only)
-            .field("use_mmap", &self.params.use_mmap)
-            .field("use_mlock", &self.params.use_mlock)
+            .field("load_mode", &self.load_mode())
             .field("split_mode", &self.split_mode())
             .field("devices", &self.devices)
             .field("kv_overrides", &"vec of kv_overrides")
@@ -309,16 +353,12 @@ impl LlamaModelParams {
         self.params.vocab_only
     }
 
-    /// use mmap if possible
-    #[must_use]
-    pub fn use_mmap(&self) -> bool {
-        self.params.use_mmap
-    }
-
-    /// force system to keep model in RAM
-    #[must_use]
-    pub fn use_mlock(&self) -> bool {
-        self.params.use_mlock
+    /// Gets how llama.cpp loads model data.
+    ///
+    /// # Errors
+    /// Returns [`LlamaLoadModeParseError`] if llama.cpp reports an unknown mode.
+    pub fn load_mode(&self) -> Result<LlamaLoadMode, LlamaLoadModeParseError> {
+        LlamaLoadMode::try_from(self.params.load_mode)
     }
 
     /// get the split mode
@@ -385,17 +425,10 @@ impl LlamaModelParams {
         self
     }
 
-    /// sets `use_mmap`
+    /// Sets how llama.cpp loads model data.
     #[must_use]
-    pub fn with_use_mmap(mut self, use_mmap: bool) -> Self {
-        self.params.use_mmap = use_mmap;
-        self
-    }
-
-    /// sets `use_mlock`
-    #[must_use]
-    pub fn with_use_mlock(mut self, use_mlock: bool) -> Self {
-        self.params.use_mlock = use_mlock;
+    pub fn with_load_mode(mut self, load_mode: LlamaLoadMode) -> Self {
+        self.params.load_mode = load_mode.into();
         self
     }
 
@@ -444,13 +477,9 @@ impl LlamaModelParams {
     ///
     /// If this parameter is true, don't allocate memory for the tensor data
     ///
-    /// You can't use `no_alloc` with `use_mmap`, so this also sets `use_mmap` to false.
     #[must_use]
     pub fn with_no_alloc(mut self, no_alloc: bool) -> Self {
         self.params.no_alloc = no_alloc;
-        if no_alloc {
-            self = self.with_use_mmap(false);
-        }
         self
     }
 
@@ -486,13 +515,12 @@ impl LlamaModelParams {
 /// Default parameters for `LlamaModel`. (as defined in llama.cpp by `llama_model_default_params`)
 /// ```no_run
 /// # use koharu_llama::model::params::LlamaModelParams;
-/// use koharu_llama::model::params::LlamaSplitMode;
+/// use koharu_llama::model::params::{LlamaLoadMode, LlamaSplitMode};
 /// let params = LlamaModelParams::default();
 /// assert_eq!(params.n_gpu_layers(), -1, "n_gpu_layers should be -1");
 /// assert_eq!(params.main_gpu(), 0, "main_gpu should be 0");
 /// assert_eq!(params.vocab_only(), false, "vocab_only should be false");
-/// assert_eq!(params.use_mmap(), true, "use_mmap should be true");
-/// assert_eq!(params.use_mlock(), false, "use_mlock should be false");
+/// assert_eq!(params.load_mode(), Ok(LlamaLoadMode::Auto), "load_mode should be AUTO");
 /// assert_eq!(params.split_mode(), Ok(LlamaSplitMode::Layer), "split_mode should be LAYER");
 /// assert_eq!(params.devices().len(), 0, "devices should be empty");
 /// assert_eq!(params.no_alloc(), false, "no_alloc should be false");
