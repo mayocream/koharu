@@ -32,5 +32,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = ["Win32_System_Console"] }
+
 [build-dependencies]
 tauri-build = { workspace = true }

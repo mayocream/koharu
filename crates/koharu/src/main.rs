@@ -13,6 +13,16 @@ struct Cli {}
 #[tokio::main]
 #[tauri::cef_entry_point]
 async fn main() {
+    #[cfg(target_os = "windows")]
+    {
+        // SAFETY: This only requests the existing parent console. It does not allocate one.
+        let _ = unsafe {
+            windows::Win32::System::Console::AttachConsole(
+                windows::Win32::System::Console::ATTACH_PARENT_PROCESS,
+            )
+        };
+    }
+
     let _cli = Cli::parse();
     let _guard = sentry::initialize();
     panic::install();
