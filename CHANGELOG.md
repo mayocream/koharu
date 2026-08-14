@@ -1,3 +1,13 @@
+## [0.66.10](https://github.com/mayocream/koharu/compare/0.66.9..0.66.10) - 2026-08-14
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Restore macOS keyboard input - ([2f178c1](https://github.com/mayocream/koharu/commit/2f178c1a9f3964f583ef1ce000e538dc62f9dde0))
+- *(renderer)* Support tiled large images and mask geometry - ([7ac6e09](https://github.com/mayocream/koharu/commit/7ac6e0912b406a22885bac503b53e3f44efb632d))
+- *(windows)* Attach to the parent console on startup - ([a8f649f](https://github.com/mayocream/koharu/commit/a8f649f7977db6d60fe1df5e177f2be6f823c554))
+- Recover from an out-of-range detection threshold ([#912](https://github.com/mayocream/koharu/issues/912)) - ([dceb848](https://github.com/mayocream/koharu/commit/dceb8485471a8acaaa564e0160b599cc35de8de3))
+
+
 ## [0.66.9](https://github.com/mayocream/koharu/compare/0.66.8..0.66.9) - 2026-08-13
 
 ### 🐛 Bug Fixes
