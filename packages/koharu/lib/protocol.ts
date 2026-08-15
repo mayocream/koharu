@@ -352,7 +352,7 @@ export type Page = {
 	regions: AnalysisRegion[],
 };
 
-export type PageImportSource = "files" | "folder";
+export type PageImportSource = { kind: "files" } | { kind: "folder" } | { kind: "paths"; paths: string[] };
 
 export type PageSize = {
 	width: number,

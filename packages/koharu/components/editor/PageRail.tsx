@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import {
   FilePlus2,
   FolderOpen,
@@ -11,8 +12,9 @@ import {
   Search,
   Settings,
   Trash2,
+  UploadCloud,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
@@ -60,6 +62,10 @@ export function PageRail() {
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
+  const importDroppedPages = useCallback(
+    (paths: string[]) => importPages({ kind: 'paths', paths }),
+    [importPages],
+  )
   const anchor = useRef<number | null>(null)
   const [dragged, setDragged] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -189,6 +195,11 @@ export function PageRail() {
             <p className='mt-1 text-[10px] leading-4 text-muted-foreground'>
               {t('navigator.emptyDescription')}
             </p>
+            <PageDropZone
+              importing={importing}
+              onDrop={importDroppedPages}
+              onBrowse={() => importPages({ kind: 'files' })}
+            />
             <div className='mt-3'>
               <PageImportMenu importing={importing} onImport={importPages} />
             </div>
@@ -339,7 +350,7 @@ function PageImportMenu({
         <DropdownMenuItem
           disabled={importing}
           className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-          onClick={() => onImport('files')}
+          onClick={() => onImport({ kind: 'files' })}
         >
           <ImagePlus />
           {t('navigator.importFiles')}
@@ -347,13 +358,94 @@ function PageImportMenu({
         <DropdownMenuItem
           disabled={importing}
           className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
-          onClick={() => onImport('folder')}
+          onClick={() => onImport({ kind: 'folder' })}
         >
           <FolderOpen />
           {t('navigator.importFolder')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function PageDropZone({
+  importing,
+  onDrop,
+  onBrowse,
+}: {
+  importing: boolean
+  onDrop: (paths: string[]) => void
+  onBrowse: () => void
+}) {
+  const { t } = useTranslation()
+  const zone = useRef<HTMLButtonElement>(null)
+  const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    const contains = (position: { x: number; y: number }) => {
+      const bounds = zone.current?.getBoundingClientRect()
+      if (!bounds) return false
+      const scale = window.devicePixelRatio || 1
+      const x = position.x / scale
+      const y = position.y / scale
+      return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom
+    }
+
+    void getCurrentWebview()
+      .onDragDropEvent(({ payload }) => {
+        if (payload.type === 'leave') {
+          setDragging(false)
+          return
+        }
+        const overZone = contains(payload.position)
+        if (payload.type === 'drop') {
+          setDragging(false)
+          if (overZone && !importing && payload.paths.length > 0) onDrop(payload.paths)
+          return
+        }
+        setDragging(overZone)
+      })
+      .then((stop) => {
+        if (disposed) stop()
+        else unlisten = stop
+      })
+      .catch(() => undefined)
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [importing, onDrop])
+
+  return (
+    <button
+      ref={zone}
+      type='button'
+      disabled={importing}
+      aria-label={t('navigator.dropAriaLabel')}
+      data-dragging={dragging}
+      className={cn(
+        'mt-4 flex w-full max-w-48 flex-col items-center rounded-xl border border-dashed border-border/70 bg-background/30 px-3 py-4 text-center transition-colors',
+        'hover:border-primary/50 hover:bg-primary/[0.04] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:outline-none',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        dragging && 'border-primary bg-primary/[0.08] text-primary',
+      )}
+      onClick={onBrowse}
+    >
+      {importing ? (
+        <LoaderCircle className='size-5 animate-spin' aria-hidden='true' />
+      ) : (
+        <UploadCloud className='size-5' aria-hidden='true' />
+      )}
+      <span className='mt-2 text-[10px] font-medium'>
+        {dragging ? t('navigator.dropActive') : t('navigator.dropTitle')}
+      </span>
+      <span className='mt-1 text-[9px] leading-3.5 text-muted-foreground'>
+        {t('navigator.dropDescription')}
+      </span>
+    </button>
   )
 }
 
