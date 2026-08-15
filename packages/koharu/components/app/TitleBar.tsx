@@ -21,7 +21,13 @@ import {
   useProject,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
-import { commands, type Operation, type Scope, type Stage } from '@koharu/bridge/protocol'
+import {
+  commands,
+  type ExportRequest,
+  type Operation,
+  type Scope,
+  type Stage,
+} from '@koharu/bridge/protocol'
 import {
   Menubar,
   MenubarContent as UiMenubarContent,
@@ -53,6 +59,9 @@ export function TitleBar() {
 
   const run = (scope: Scope, operation: Operation = { operation: 'full' }) =>
     void call(commands.process, scope, operation).catch(() => undefined)
+
+  const exportPages = (request: ExportRequest) =>
+    void call(commands.exportPages, request).catch(() => undefined)
 
   const closeProject = () => void call(commands.closeProject).catch(() => undefined)
 
@@ -97,22 +106,56 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'png')
-                }
-              >
-                {t('menu.exportPng')}
-              </MenubarItem>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'psd')
-                }
-              >
-                {t('menu.exportPsd')}
-              </MenubarItem>
+              <MenubarSub>
+                <MenubarSubTrigger disabled={!project || pages.length === 0}>
+                  {t('menu.exportPng')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-40 p-1'>
+                  <MenubarItem
+                    disabled={!page}
+                    onClick={() =>
+                      page && exportPages({ kind: 'current_page', page: page.id, format: 'png' })
+                    }
+                  >
+                    {t('menu.currentPage')}
+                  </MenubarItem>
+                  <MenubarSub>
+                    <MenubarSubTrigger>{t('menu.entireProject')}</MenubarSubTrigger>
+                    <MenubarSubContent className='min-w-40 p-1'>
+                      <MenubarItem
+                        onClick={() => exportPages({ kind: 'entire_project', format: 'png' })}
+                      >
+                        {t('menu.pngImages')}
+                      </MenubarItem>
+                      <MenubarItem
+                        onClick={() => exportPages({ kind: 'entire_project', format: 'cbz' })}
+                      >
+                        {t('menu.cbzArchive')}
+                      </MenubarItem>
+                    </MenubarSubContent>
+                  </MenubarSub>
+                </MenubarSubContent>
+              </MenubarSub>
+              <MenubarSub>
+                <MenubarSubTrigger disabled={!project || pages.length === 0}>
+                  {t('menu.exportPsd')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-40 p-1'>
+                  <MenubarItem
+                    disabled={!page}
+                    onClick={() =>
+                      page && exportPages({ kind: 'current_page', page: page.id, format: 'psd' })
+                    }
+                  >
+                    {t('menu.currentPage')}
+                  </MenubarItem>
+                  <MenubarItem
+                    onClick={() => exportPages({ kind: 'entire_project', format: 'psd' })}
+                  >
+                    {t('menu.entireProjectAction')}
+                  </MenubarItem>
+                </MenubarSubContent>
+              </MenubarSub>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={closeProject}>
                 {t('menu.closeProject')}
@@ -267,11 +310,6 @@ export function TitleBar() {
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>
   )
-}
-
-function exportSelection(selected: string[], active?: string): string[] {
-  if (selected.length) return selected
-  return active ? [active] : []
 }
 
 function MenubarTrigger({ className, ...props }: ComponentProps<typeof UiMenubarTrigger>) {
