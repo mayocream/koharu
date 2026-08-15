@@ -21,12 +21,10 @@ image = { workspace = true }
 imageproc = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-config = { workspace = true }
-koharu-runtime = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rasterizer = { workspace = true }
+koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-scene = { workspace = true }
 koharu-translator = { workspace = true }
-reqwest = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 specta = { workspace = true }

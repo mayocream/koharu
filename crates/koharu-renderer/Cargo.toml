@@ -16,7 +16,7 @@ anyhow = { workspace = true }
 arc-swap = { workspace = true }
 image = { workspace = true }
 koharu-config = { workspace = true }
-koharu-rasterizer = { workspace = true }
+koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-scene = { workspace = true }
 koharu-runtime = { workspace = true }
 skrifa = { workspace = true }
@@ -41,7 +41,6 @@ webp = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-once_cell = { workspace = true }
 
 [[bench]]
 name = "rendering"

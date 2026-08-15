@@ -12,7 +12,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-koharu-rasterizer = { workspace = true }
+koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-renderer = { workspace = true }
 koharu-scene = { workspace = true }
 parking_lot = { workspace = true }

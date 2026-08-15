@@ -14,7 +14,7 @@ publish.workspace = true
 [dependencies]
 image = { workspace = true }
 koharu-renderer = { workspace = true }
-koharu-rasterizer = { workspace = true }
+koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-scene = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

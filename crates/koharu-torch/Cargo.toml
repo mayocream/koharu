@@ -13,19 +13,16 @@ categories = ["api-bindings", "science"]
 publish = true
 
 [dependencies]
-lazy_static = "1.3.0"
-libc = "0.2.0"
-ndarray = "0.16.1"
-rand = "0.8"
-thiserror = "1"
+half = { workspace = true }
+image = { workspace = true, optional = true }
 koharu-torch-sys = { workspace = true }
-zip = "0.6"
-half = "2"
-safetensors = "0.3.0"
-image = { version = "0.24.5", optional = true }
-
-[dev-dependencies]
-anyhow = "^1.0.60"
+lazy_static = { workspace = true }
+libc = { workspace = true }
+ndarray = { workspace = true }
+rand = { workspace = true }
+safetensors = { workspace = true }
+thiserror = { workspace = true }
+zip = { workspace = true }
 
 [features]
 cuda-tests = []
