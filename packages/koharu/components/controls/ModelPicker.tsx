@@ -4,8 +4,8 @@ import { Check, ChevronLeft, LoaderCircle, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { Model, ModelSelection, ProviderPreference } from '@/lib/protocol'
 import { modelKey, providerName } from '@/lib/translation'
+import type { Model, ModelSelection, ProviderPreference } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   InputGroup,

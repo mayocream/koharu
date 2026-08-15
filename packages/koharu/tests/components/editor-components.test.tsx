@@ -14,9 +14,23 @@ import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
 import { SettingsPage } from '@/components/preferences/SettingsPage'
-import { commands, type Layer, type Preferences } from '@/lib/protocol'
-import { fontsKey, pageKey, pagesKey, projectKey, queryClient } from '@/lib/queries'
+import {
+  fontsKey,
+  pageKey,
+  pagesKey,
+  preparedPageKey,
+  projectKey,
+  queryClient,
+} from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import * as canvasRuntime from '@koharu/bridge/canvas'
+import {
+  commands,
+  type Layer,
+  type PageSummary,
+  type Preferences,
+  type ProjectInfo,
+} from '@koharu/bridge/protocol'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
 type NativeDragDropHandler = (event: {
@@ -314,6 +328,193 @@ describe('greenfield editor', () => {
     expect(screen.queryByText('01')).not.toBeInTheDocument()
   })
 
+  it('keeps rapid page switches on the latest native selection', async () => {
+    installProject()
+    const pages = [
+      { id: 'page', label: 'Page 1', size: { width: 1000, height: 1500 }, layers: [], regions: [] },
+      {
+        id: 'page-2',
+        label: 'Page 2',
+        size: { width: 1000, height: 1500 },
+        layers: [],
+        regions: [],
+      },
+      {
+        id: 'page-3',
+        label: 'Page 3',
+        size: { width: 1000, height: 1500 },
+        layers: [],
+        regions: [],
+      },
+    ]
+    queryClient.setQueryData(
+      pagesKey,
+      pages.map((page) => ({
+        id: page.id,
+        label: page.label,
+        size: page.size,
+        source_asset: null,
+        layer_count: 0,
+      })),
+    )
+    vi.spyOn(canvasRuntime, 'showCanvasPage').mockReturnValue(false)
+    const pending = new Map<
+      string,
+      (selection: Awaited<ReturnType<typeof commands.selectPage>>) => void
+    >()
+    const selectPage = vi.spyOn(commands, 'selectPage').mockImplementation(
+      (page) =>
+        new Promise((resolve) => {
+          pending.set(page, resolve)
+        }),
+    )
+    render(<PageRail />)
+
+    fireEvent.click(screen.getByText('Page 2').closest('article')!)
+    expect(selectPage).toHaveBeenLastCalledWith('page-2')
+
+    fireEvent.click(screen.getByText('Page 3').closest('article')!)
+    expect(selectPage).toHaveBeenLastCalledWith('page-3')
+
+    await act(async () => {
+      pending.get('page-3')!({
+        project: {
+          name: 'Book',
+          revision: 1,
+          active_page: 'page-3',
+          can_undo: true,
+          can_redo: false,
+        },
+        page: pages[2]!,
+      })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      pending.get('page-2')!({
+        project: {
+          name: 'Book',
+          revision: 1,
+          active_page: 'page-2',
+          can_undo: true,
+          can_redo: false,
+        },
+        page: pages[1]!,
+      })
+      await Promise.resolve()
+    })
+
+    expect(queryClient.getQueryData<{ active_page: string }>(projectKey)?.active_page).toBe(
+      'page-3',
+    )
+    expect(queryClient.getQueryData<{ id: string }>(pageKey)?.id).toBe('page-3')
+  })
+
+  it('lets a cached canvas frame paint before synchronizing native page state', async () => {
+    installProject()
+    queryClient.setQueryData(pagesKey, [
+      ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
+      {
+        id: 'page-2',
+        label: 'Page 2',
+        size: { width: 1000, height: 1500 },
+        source_asset: null,
+        layer_count: 0,
+      },
+    ])
+    vi.spyOn(canvasRuntime, 'showCanvasPage').mockReturnValue(true)
+    const selectPage = vi.spyOn(commands, 'selectPage')
+    let paint: FrameRequestCallback | undefined
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      paint = callback
+      return 1
+    })
+    render(<PageRail />)
+
+    fireEvent.click(screen.getByText('Page 2').closest('article')!)
+
+    expect(selectPage).not.toHaveBeenCalled()
+    await act(async () => {
+      paint?.(performance.now())
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(selectPage).toHaveBeenCalledWith('page-2')
+  })
+
+  it('prefetches an inactive page on pointer intent and caches its preparation', async () => {
+    installProject()
+    const page = {
+      id: 'page-2',
+      label: 'Page 2',
+      size: { width: 1000, height: 1500 },
+      layers: [],
+      regions: [],
+    }
+    queryClient.setQueryData(pagesKey, [
+      ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
+      {
+        id: page.id,
+        label: page.label,
+        size: page.size,
+        source_asset: null,
+        layer_count: 0,
+      },
+    ])
+    const prepared = { revision: 1, page }
+    const prefetch = vi.spyOn(canvasRuntime, 'prefetchCanvasPages').mockResolvedValue([prepared])
+    const selectPage = vi.spyOn(commands, 'selectPage')
+    render(<PageRail />)
+
+    fireEvent.pointerEnter(screen.getByText('Page 2').closest('article')!)
+
+    await waitFor(() => expect(prefetch).toHaveBeenCalledWith(['page-2']))
+    await waitFor(() =>
+      expect(queryClient.getQueryData(preparedPageKey('page-2'))).toEqual(prepared),
+    )
+    expect(selectPage).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates page intent within a project revision and retries on a newer revision', async () => {
+    installProject()
+    const page = {
+      id: 'page-2',
+      label: 'Page 2',
+      size: { width: 1000, height: 1500 },
+      layers: [],
+      regions: [],
+    }
+    queryClient.setQueryData(pagesKey, [
+      ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
+      {
+        id: page.id,
+        label: page.label,
+        size: page.size,
+        source_asset: null,
+        layer_count: 0,
+      },
+    ])
+    const prefetch = vi
+      .spyOn(canvasRuntime, 'prefetchCanvasPages')
+      .mockResolvedValueOnce([{ revision: 1, page }])
+      .mockResolvedValueOnce([{ revision: 2, page }])
+    render(<PageRail />)
+    const item = screen.getByText('Page 2').closest('article')!
+
+    fireEvent.pointerEnter(item)
+    fireEvent.focus(screen.getByRole('button', { name: 'Actions for Page 2' }))
+    await waitFor(() => expect(prefetch).toHaveBeenCalledTimes(1))
+    fireEvent.pointerEnter(item)
+    expect(prefetch).toHaveBeenCalledTimes(1)
+
+    queryClient.setQueryData(projectKey, {
+      ...queryClient.getQueryData<ProjectInfo>(projectKey)!,
+      revision: 2,
+    })
+    fireEvent.focus(item)
+
+    await waitFor(() => expect(prefetch).toHaveBeenCalledTimes(2))
+    expect(prefetch).toHaveBeenLastCalledWith(['page-2'])
+  })
+
   it('switches tools and applies typography from the contextual inspector', async () => {
     const user = userEvent.setup()
     installProject()
@@ -571,7 +772,7 @@ describe('greenfield editor', () => {
   it('shows zoom before page size without a fit control', () => {
     installProject()
     useKoharuStore.setState({ camera: { zoom: 1.25, translation: [0, 0], fitted: false } })
-    render(<StatusBar />)
+    render(<StatusBar onZoomChange={vi.fn()} />)
 
     const zoom = screen.getByText('125%')
     const size = screen.getByText('1000 × 1500 px')

@@ -1,3 +1,36 @@
+## [0.67.0](https://github.com/mayocream/koharu/compare/stable-diffusion.cpp-master-820-de298c2..0.67.0) - 2026-08-15
+
+### ⛰️  Features
+
+- Update diffusion and ggml FFI bindings - ([6959411](https://github.com/mayocream/koharu/commit/6959411c7ccabab694683bb95d155f92ef90ccd6))
+
+### 🐛 Bug Fixes
+
+- Correct updater dialog presentation - ([6a9a3d8](https://github.com/mayocream/koharu/commit/6a9a3d8f9ebc35a17e4250910379154f85d07724))
+- Disable viewport scaling - ([4cfebec](https://github.com/mayocream/koharu/commit/4cfebec4bf76400575b1d7a8fe26a1a7eac4858b))
+
+### 🚜 Refactor
+
+- WebGPU/WASM-based canvas - ([6ebec47](https://github.com/mayocream/koharu/commit/6ebec470c29200e2120309ce92b59f460b8037cc))
+- Restructure application components - ([b87b93b](https://github.com/mayocream/koharu/commit/b87b93b28886d9e4ab71980edf0eea0c8eca3741))
+
+### 🧪 Testing
+
+- *(koharu)* Mock canvas WASM module in Vitest - ([1d35a33](https://github.com/mayocream/koharu/commit/1d35a33522a1c722100c4a0331596352ac94b47e))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update sponsors ([#927](https://github.com/mayocream/koharu/issues/927)) - ([106a99c](https://github.com/mayocream/koharu/commit/106a99cccc656168742b53f304c6abbd4cf28cf9))
+
+
+## [stable-diffusion.cpp-master-820-de298c2](https://github.com/mayocream/koharu/compare/0.66.10..stable-diffusion.cpp-master-820-de298c2) - 2026-08-14
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump llama.cpp and sd.cpp - ([c4fddad](https://github.com/mayocream/koharu/commit/c4fddad24c77e345353788fae5c795bc329108bc))
+- Remove unused workspace dependencies - ([cac8f75](https://github.com/mayocream/koharu/commit/cac8f75718ad2585bd449c9e85d725deba777529))
+
+
 ## [0.66.10](https://github.com/mayocream/koharu/compare/0.66.9..0.66.10) - 2026-08-14
 
 ### 🐛 Bug Fixes

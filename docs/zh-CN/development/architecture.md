@@ -10,9 +10,10 @@ Koharu 是单体桌面应用，不是连接独立服务器的 Web 客户端。
 ```mermaid
 flowchart TB
   frontend["packages/koharu<br/>(React + Next.js)"]
+  bridge["packages/bridge<br/>(生成协议 + 浏览器 WASM)"]
   entry["crates/koharu<br/>(启动、诊断、构建集成)"]
   app["crates/koharu-app<br/>(应用状态、命令、生命周期)"]
-  desktop["crates/koharu-desktop<br/>(CEF + WGPU 合成)"]
+  desktop["crates/koharu-desktop<br/>(页面准备与同步)"]
   scene["koharu-scene"]
   storage["koharu-storage"]
   pipeline["koharu-pipeline"]
@@ -21,24 +22,28 @@ flowchart TB
   translator["koharu-translator"]
   renderer["koharu-renderer"]
   canvas["koharu-canvas"]
+  rasterizer["koharu-rasterizer"]
   psd["koharu-psd"]
   agent["koharu-agent"]
 
-  frontend -->|"生成的 Tauri 命令<br/>与类型化通道"| app
+  frontend --> bridge
+  bridge -->|"生成的 Tauri 命令<br/>与类型化通道"| app
   entry --> app
   entry --> desktop
   app --> desktop
   app --> scene --> storage
   app --> pipeline --> ml --> native
   app --> translator
-  desktop --> renderer --> canvas
+  desktop --> renderer --> rasterizer
+  bridge --> canvas --> rasterizer
   renderer --> psd
+  rasterizer --> psd
   app --> agent
 ```
 
 ## 前端与应用
 
-`packages/koharu` 拥有项目浏览器、页面栏、画布控制、检查器、设置、活动中心和智能体面板。`packages/ui` 拥有可复用 React 组件与样式。
+`packages/koharu` 拥有项目浏览器、页面栏、画布控制、检查器、设置、活动中心和智能体面板。`packages/ui` 拥有可复用 React 组件与样式。`packages/bridge` 拥有生成的 Tauri 协议、浏览器画布适配器和派生的 `koharu-canvas` WASM 包。
 
 前端直接调用具名 Tauri 命令，不维护 HTTP 客户端，也不解析通用应用事件信封。
 
@@ -50,6 +55,6 @@ flowchart TB
 
 `koharu-pipeline` 拥有固定页面工作流、模型生命周期、调度、进度、停止与阶段提交。`koharu-ml` 拥有模型和共享设备抽象，`koharu-translator` 拥有本地及托管翻译连接。
 
-`koharu-renderer` 把场景页解释为保留矢量内容，`koharu-canvas` 与 PNG/PSD 共用该帧。`koharu-desktop` 先绘制原生画布，再把离屏 CEF 界面叠加到同一个 WGPU 窗口表面。
+`koharu-renderer` 将场景页面转换为由 `koharu-rasterizer` 所有的可移植预备帧。`koharu-canvas` 在 WASM 中编译该帧，并通过 Tauri WebView 内的 WebGPU 画布呈现。PNG/PSD 与原生预览通过光栅器的原生回读路径使用同一帧。`koharu-desktop` 负责页面准备和帧代次协调，不再拥有原生窗口合成器。
 
 安全 Rust 包装层与 unsafe `-sys` 动态加载 crate 分离。

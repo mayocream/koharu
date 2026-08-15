@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "Selecione uma página para começar.",
     "fit": "Ajustar à janela",
-    "surface": "Tela do Koharu"
+    "surface": "Tela do Koharu",
+    "unavailable": "A tela WebGPU não está disponível"
   },
   "colorPicker": {
     "brushColor": "Cor do pincel",

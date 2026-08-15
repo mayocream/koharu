@@ -8,9 +8,8 @@ import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
 import { WindowControls } from '@/components/app/WindowChrome'
-import { call, dispatch } from '@/lib/backend'
+import { call } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
-import { commands, type Operation, type Scope, type Stage } from '@/lib/protocol'
 import {
   pageKey,
   pagesKey,
@@ -22,6 +21,7 @@ import {
   useProject,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { commands, type Operation, type Scope, type Stage } from '@koharu/bridge/protocol'
 import {
   Menubar,
   MenubarContent as UiMenubarContent,
@@ -48,6 +48,7 @@ export function TitleBar() {
   const selectedLayers = useKoharuStore((state) => state.selectedLayers)
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
+  const requestCanvasFit = useKoharuStore((state) => state.requestCanvasFit)
   const { importPages, importing } = useImportPages()
 
   const run = (scope: Scope, operation: Operation = { operation: 'full' }) =>
@@ -218,7 +219,7 @@ export function TitleBar() {
           <MenubarMenu>
             <MenubarTrigger>{t('menu.view')}</MenubarTrigger>
             <MenubarContent>
-              <MenubarItem disabled={!page} onClick={() => dispatch(commands.fitCanvas)}>
+              <MenubarItem disabled={!page} onClick={requestCanvasFit}>
                 {t('menu.fit')}
               </MenubarItem>
             </MenubarContent>

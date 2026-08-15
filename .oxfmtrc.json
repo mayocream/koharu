@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["packages/koharu/lib/protocol.ts"],
+  "ignorePatterns": ["packages/bridge/src/protocol.ts"],
   "semi": false,
   "singleQuote": true,
   "jsxSingleQuote": true,

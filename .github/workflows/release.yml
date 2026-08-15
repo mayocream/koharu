@@ -41,15 +41,20 @@ jobs:
           cache-workspace-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Install macOS CEF helper targets
-        if: startsWith(matrix.platform, 'macos')
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
       - name: install dependencies (ubuntu only)
         if: startsWith(matrix.platform, 'ubuntu')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt update
+          sudo apt install --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: Install dependencies
         run: bun install
@@ -116,7 +121,7 @@ jobs:
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
-          tauriScript: cargo tauri
+          tauriScript: npx @tauri-apps/cli
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseBody: ${{ steps.release_notes.outputs.release_body }}

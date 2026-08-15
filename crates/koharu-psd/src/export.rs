@@ -10,8 +10,10 @@
 //! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-export.c#L2252-L2378
 
 use image::RgbaImage;
-use koharu_renderer::{Frame, RasterOptions, Renderer};
+use koharu_rasterizer::{RasterOptions, Rasterizer};
+use koharu_renderer::Frame;
 use koharu_scene::Snapshot;
+use std::sync::Arc;
 
 use crate::{
     descriptor::{
@@ -26,14 +28,19 @@ use crate::{
 
 #[tracing::instrument(skip_all)]
 pub async fn export_page(
-    renderer: &Renderer,
+    rasterizer: Arc<Rasterizer>,
     snapshot: &Snapshot,
     frame: &Frame,
     options: &PsdExportOptions,
 ) -> Result<Vec<u8>, PsdExportError> {
-    let document =
-        crate::document::build(snapshot, frame, renderer, RasterOptions::default(), options)
-            .await?;
+    let document = crate::document::build(
+        snapshot,
+        frame,
+        rasterizer,
+        RasterOptions::default(),
+        options,
+    )
+    .await?;
     tokio::task::spawn_blocking(move || serialize(&document))
         .await
         .map_err(|error| PsdExportError::Task(error.to_string()))?

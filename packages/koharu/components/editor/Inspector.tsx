@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next'
 import { ColorWell } from '@/components/controls/ColorWell'
 import { CommitTextarea } from '@/components/controls/CommitTextarea'
 import { FontPicker } from '@/components/controls/FontPicker'
-import { call, dispatch } from '@/lib/backend'
+import { call } from '@/lib/backend'
 import {
   expandLayerSelection,
   isGroupLayer,
@@ -35,6 +35,9 @@ import {
   isTextLayer,
   layerChildren,
 } from '@/lib/document'
+import { pageKey, projectKey, queryClient, refresh, useFonts, usePage } from '@/lib/queries'
+import { useKoharuStore } from '@/lib/store'
+import { previewCanvasOpacity } from '@koharu/bridge/canvas'
 import {
   commands,
   type EntityId,
@@ -44,9 +47,7 @@ import {
   type TextAlignment,
   type Typography,
   type WritingMode,
-} from '@/lib/protocol'
-import { pageKey, projectKey, queryClient, refresh, useFonts, usePage } from '@/lib/queries'
-import { useKoharuStore } from '@/lib/store'
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   DropdownMenu,
@@ -750,13 +751,13 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
       .then(() => refresh(projectKey, pageKey))
       .catch(() => {
         setOpacity(layer.visibility.opacity * 100)
-        dispatch(commands.previewOpacity, layer.id, null)
+        previewCanvasOpacity(layer.id, null)
       })
   }
 
   const previewOpacity = (next: number) => {
     setOpacity(next)
-    dispatch(commands.previewOpacity, layer.id, next / 100)
+    previewCanvasOpacity(layer.id, next / 100)
   }
 
   const resetTextFrame = () => {

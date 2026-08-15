@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    fmt,
-    sync::{Arc, atomic::Ordering},
-};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use anyhow::{Context as _, Result};
 use koharu_pipeline::{Committer, Progress, RunStatus, StageOutput, StopToken};
@@ -10,14 +6,10 @@ use koharu_scene::Snapshot;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
+use tauri::{AppHandle, Manager as _, State, Wry, ipc::Channel};
 use uuid::Uuid;
 
-use super::{
-    ChannelExt as _, Error,
-    canvas::{CanvasChannel, CanvasView},
-    project::CurrentProject,
-};
+use super::{ChannelExt as _, Error, canvas::CanvasChannel, project::CurrentProject};
 use koharu_desktop::Desktop;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
@@ -82,7 +74,7 @@ pub(crate) struct JobChannel {
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn process(
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
     scope: koharu_pipeline::Scope,
     operation: koharu_pipeline::Operation,
     project: State<'_, CurrentProject>,
@@ -176,7 +168,7 @@ pub(crate) async fn process(
         }));
 
         struct PipelineCommitter {
-            handle: AppHandle<Cef>,
+            handle: AppHandle<Wry>,
         }
 
         #[async_trait::async_trait]
@@ -194,14 +186,9 @@ pub(crate) async fn process(
                     (commit, page)
                 };
                 let snapshot = commit.snapshot.clone();
-                let canvas_view = self.handle.state::<CanvasView>();
                 let desktop = self.handle.state::<Desktop>();
-                if desktop.synchronize(&commit.snapshot, page, &commit).await? {
-                    canvas_view.fitted.store(true, Ordering::Release);
-                }
-                let canvas = desktop
-                    .lock()
-                    .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
+                desktop.synchronize(&commit.snapshot, page, &commit).await?;
+                let canvas = desktop.canvas_state();
                 self.handle.state::<CanvasChannel>().channel.publish(canvas);
                 Ok(snapshot)
             }

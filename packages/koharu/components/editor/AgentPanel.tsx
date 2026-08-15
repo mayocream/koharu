@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
+import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
 import {
   commands,
   type AgentStatus,
@@ -14,8 +15,7 @@ import {
   type LoginEvent,
   type Reasoning,
   type RunId,
-} from '@/lib/protocol'
-import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
+} from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Button } from '@koharu/ui/components/button'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'

@@ -18,7 +18,7 @@ export const commands = {
 	active_page: EntityId | null,
 	can_undo: boolean,
 	can_redo: boolean,
-} | null>) => __TAURI_INVOKE<StartupState>("subscribe", { onCanvas: mapChannel(onCanvas, (v) => ({...v,translation:v.translation.map(i=>i)})), onJob, onDownload, onResources: mapChannel(onResources, (v) => ({...v,devices:v.devices.map(i=>({...i,memory_budget:i.memory_budget==null?i.memory_budget:i.memory_budget,memory_used:i.memory_used==null?i.memory_used:i.memory_used,utilization:i.utilization==null?i.utilization:i.utilization}))})), onProject }).then((v) => (({...v,preferences:({...v.preferences,pipeline:({...v.preferences.pipeline,translation:({...v.preferences.pipeline.translation,generation:({...v.preferences.pipeline.translation.generation,temperature:v.preferences.pipeline.translation.generation.temperature==null?v.preferences.pipeline.translation.generation.temperature:v.preferences.pipeline.translation.generation.temperature,top_p:v.preferences.pipeline.translation.generation.top_p==null?v.preferences.pipeline.translation.generation.top_p:v.preferences.pipeline.translation.generation.top_p,min_p:v.preferences.pipeline.translation.generation.min_p==null?v.preferences.pipeline.translation.generation.min_p:v.preferences.pipeline.translation.generation.min_p,repeat_penalty:v.preferences.pipeline.translation.generation.repeat_penalty==null?v.preferences.pipeline.translation.generation.repeat_penalty:v.preferences.pipeline.translation.generation.repeat_penalty,frequency_penalty:v.preferences.pipeline.translation.generation.frequency_penalty==null?v.preferences.pipeline.translation.generation.frequency_penalty:v.preferences.pipeline.translation.generation.frequency_penalty,presence_penalty:v.preferences.pipeline.translation.generation.presence_penalty==null?v.preferences.pipeline.translation.generation.presence_penalty:v.preferences.pipeline.translation.generation.presence_penalty})}),processor:({...v.preferences.pipeline.processor,"koharu-layout-rfdetr-seg-2xl":v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]:({...v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"],text_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold,bubble_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold,panel_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold})})})}),jobs:v.jobs.map(i=>i),canvas:({...v.canvas,translation:v.canvas.translation.map(i=>i)})}) as typeof v)),
+} | null>) => __TAURI_INVOKE<StartupState>("subscribe", { onCanvas: mapChannel(onCanvas, (v) => ({...v,revision:v.revision==null?v.revision:v.revision})), onJob, onDownload, onResources: mapChannel(onResources, (v) => ({...v,devices:v.devices.map(i=>({...i,memory_budget:i.memory_budget==null?i.memory_budget:i.memory_budget,memory_used:i.memory_used==null?i.memory_used:i.memory_used,utilization:i.utilization==null?i.utilization:i.utilization}))})), onProject }).then((v) => (({...v,preferences:({...v.preferences,pipeline:({...v.preferences.pipeline,translation:({...v.preferences.pipeline.translation,generation:({...v.preferences.pipeline.translation.generation,temperature:v.preferences.pipeline.translation.generation.temperature==null?v.preferences.pipeline.translation.generation.temperature:v.preferences.pipeline.translation.generation.temperature,top_p:v.preferences.pipeline.translation.generation.top_p==null?v.preferences.pipeline.translation.generation.top_p:v.preferences.pipeline.translation.generation.top_p,min_p:v.preferences.pipeline.translation.generation.min_p==null?v.preferences.pipeline.translation.generation.min_p:v.preferences.pipeline.translation.generation.min_p,repeat_penalty:v.preferences.pipeline.translation.generation.repeat_penalty==null?v.preferences.pipeline.translation.generation.repeat_penalty:v.preferences.pipeline.translation.generation.repeat_penalty,frequency_penalty:v.preferences.pipeline.translation.generation.frequency_penalty==null?v.preferences.pipeline.translation.generation.frequency_penalty:v.preferences.pipeline.translation.generation.frequency_penalty,presence_penalty:v.preferences.pipeline.translation.generation.presence_penalty==null?v.preferences.pipeline.translation.generation.presence_penalty:v.preferences.pipeline.translation.generation.presence_penalty})}),processor:({...v.preferences.pipeline.processor,"koharu-layout-rfdetr-seg-2xl":v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]:({...v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"],text_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold,bubble_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold,panel_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold==null?v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold:v.preferences.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold})})})}),jobs:v.jobs.map(i=>i),canvas:({...v.canvas,revision:v.canvas.revision==null?v.canvas.revision:v.canvas.revision})}) as typeof v)),
 	getProject: () => __TAURI_INVOKE<{
 	name: string,
 	revision: Revision,
@@ -40,7 +40,7 @@ export const commands = {
 	deleteProject: (name: string) => __TAURI_INVOKE<null>("delete_project", { name }),
 	closeProject: () => __TAURI_INVOKE<null>("close_project"),
 	importPages: (source: PageImportSource) => __TAURI_INVOKE<null>("import_pages", { source }),
-	selectPage: (page: EntityId) => __TAURI_INVOKE<null>("select_page", { page }),
+	selectPage: (page: EntityId) => __TAURI_INVOKE<PageSelection>("select_page", { page }).then((v) => (({...v,page:({...v.page,regions:v.page.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))})}) as typeof v)),
 	renamePage: (page: EntityId, label: string) => __TAURI_INVOKE<null>("rename_page", { page, label }),
 	deletePages: (pages: EntityId[]) => __TAURI_INVOKE<null>("delete_pages", { pages }),
 	movePage: (page: EntityId, index: number) => __TAURI_INVOKE<null>("move_page", { page, index }),
@@ -62,30 +62,20 @@ export const commands = {
 	savePreferences: (pipeline: PipelineConfig, providers: ProviderPreferences, typesetting: TypesettingConfig) => __TAURI_INVOKE<Preferences>("save_preferences", { pipeline: ({...pipeline,translation:({...pipeline.translation,generation:({...pipeline.translation.generation,temperature:pipeline.translation.generation.temperature==null?pipeline.translation.generation.temperature:pipeline.translation.generation.temperature,top_p:pipeline.translation.generation.top_p==null?pipeline.translation.generation.top_p:pipeline.translation.generation.top_p,min_p:pipeline.translation.generation.min_p==null?pipeline.translation.generation.min_p:pipeline.translation.generation.min_p,repeat_penalty:pipeline.translation.generation.repeat_penalty==null?pipeline.translation.generation.repeat_penalty:pipeline.translation.generation.repeat_penalty,frequency_penalty:pipeline.translation.generation.frequency_penalty==null?pipeline.translation.generation.frequency_penalty:pipeline.translation.generation.frequency_penalty,presence_penalty:pipeline.translation.generation.presence_penalty==null?pipeline.translation.generation.presence_penalty:pipeline.translation.generation.presence_penalty})}),processor:({...pipeline.processor,"koharu-layout-rfdetr-seg-2xl":pipeline.processor["koharu-layout-rfdetr-seg-2xl"]==null?pipeline.processor["koharu-layout-rfdetr-seg-2xl"]:({...pipeline.processor["koharu-layout-rfdetr-seg-2xl"],text_threshold:pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold==null?pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold:pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold,bubble_threshold:pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold==null?pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold:pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold,panel_threshold:pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold==null?pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold:pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold})})}), providers, typesetting }).then((v) => (({...v,pipeline:({...v.pipeline,translation:({...v.pipeline.translation,generation:({...v.pipeline.translation.generation,temperature:v.pipeline.translation.generation.temperature==null?v.pipeline.translation.generation.temperature:v.pipeline.translation.generation.temperature,top_p:v.pipeline.translation.generation.top_p==null?v.pipeline.translation.generation.top_p:v.pipeline.translation.generation.top_p,min_p:v.pipeline.translation.generation.min_p==null?v.pipeline.translation.generation.min_p:v.pipeline.translation.generation.min_p,repeat_penalty:v.pipeline.translation.generation.repeat_penalty==null?v.pipeline.translation.generation.repeat_penalty:v.pipeline.translation.generation.repeat_penalty,frequency_penalty:v.pipeline.translation.generation.frequency_penalty==null?v.pipeline.translation.generation.frequency_penalty:v.pipeline.translation.generation.frequency_penalty,presence_penalty:v.pipeline.translation.generation.presence_penalty==null?v.pipeline.translation.generation.presence_penalty:v.pipeline.translation.generation.presence_penalty})}),processor:({...v.pipeline.processor,"koharu-layout-rfdetr-seg-2xl":v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]:({...v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"],text_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold,bubble_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold,panel_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold})})})}) as typeof v)),
 	getPreferences: () => __TAURI_INVOKE<Preferences>("get_preferences").then((v) => (({...v,pipeline:({...v.pipeline,translation:({...v.pipeline.translation,generation:({...v.pipeline.translation.generation,temperature:v.pipeline.translation.generation.temperature==null?v.pipeline.translation.generation.temperature:v.pipeline.translation.generation.temperature,top_p:v.pipeline.translation.generation.top_p==null?v.pipeline.translation.generation.top_p:v.pipeline.translation.generation.top_p,min_p:v.pipeline.translation.generation.min_p==null?v.pipeline.translation.generation.min_p:v.pipeline.translation.generation.min_p,repeat_penalty:v.pipeline.translation.generation.repeat_penalty==null?v.pipeline.translation.generation.repeat_penalty:v.pipeline.translation.generation.repeat_penalty,frequency_penalty:v.pipeline.translation.generation.frequency_penalty==null?v.pipeline.translation.generation.frequency_penalty:v.pipeline.translation.generation.frequency_penalty,presence_penalty:v.pipeline.translation.generation.presence_penalty==null?v.pipeline.translation.generation.presence_penalty:v.pipeline.translation.generation.presence_penalty})}),processor:({...v.pipeline.processor,"koharu-layout-rfdetr-seg-2xl":v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"]:({...v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"],text_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].text_threshold,bubble_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].bubble_threshold,panel_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold==null?v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold:v.pipeline.processor["koharu-layout-rfdetr-seg-2xl"].panel_threshold})})})}) as typeof v)),
 	getTranslationModels: () => __TAURI_INVOKE<Model[]>("get_translation_models"),
-	setZoom: (zoom: number) => __TAURI_INVOKE<null>("set_zoom", { zoom }),
-	setCanvasView: (zoom: number, translation: [number, number]) => __TAURI_INVOKE<null>("set_canvas_view", { zoom, translation: translation.map(i=>i) }),
-	fitCanvas: () => __TAURI_INVOKE<null>("fit_canvas"),
+	getCanvasManifest: (generation: CanvasGeneration) => __TAURI_INVOKE<CanvasBytes>("get_canvas_manifest", { generation }),
+	getCanvasResource: (generation: CanvasGeneration, resource: string) => __TAURI_INVOKE<CanvasBytes>("get_canvas_resource", { generation, resource }),
+	prepareCanvasPage: (page: EntityId) => __TAURI_INVOKE<{
+	revision: Revision,
+	page: Page,
+} | null>("prepare_canvas_page", { page }).then((v) => (v==null?v:({...v,page:({...v.page,regions:v.page.regions.map(i=>({...i,geometry:({...i.geometry,points:i.geometry.points.map(i=>i)})}))})}) as typeof v)),
+	getCanvasPageManifest: (page: EntityId, revision: Revision) => __TAURI_INVOKE<CanvasBytes>("get_canvas_page_manifest", { page, revision }),
+	getCanvasPageResource: (page: EntityId, revision: Revision, resource: string) => __TAURI_INVOKE<CanvasBytes>("get_canvas_page_resource", { page, revision, resource }),
 	addPointText: (point: Point) => __TAURI_INVOKE<LayerCommit>("add_point_text", { point }),
 	addTextBox: (frame: Frame) => __TAURI_INVOKE<LayerCommit>("add_text_box", { frame }),
-	beginPaint: (layer: string | null, point: Point, brush: PaintBrush) => __TAURI_INVOKE<null>("begin_paint", { layer, point, brush }),
-	extendPaint: (points: Point[]) => __TAURI_INVOKE<null>("extend_paint", { points: points.map(i=>i) }),
-	finishPaint: () => __TAURI_INVOKE<LayerCommit>("finish_paint"),
-	cancelPaint: () => __TAURI_INVOKE<null>("cancel_paint"),
-	beginErase: (layer: EntityId, point: Point, diameter: number) => __TAURI_INVOKE<null>("begin_erase", { layer, point, diameter }),
-	extendErase: (points: Point[]) => __TAURI_INVOKE<null>("extend_erase", { points: points.map(i=>i) }),
-	finishErase: () => __TAURI_INVOKE<LayerCommit>("finish_erase"),
-	cancelErase: () => __TAURI_INVOKE<null>("cancel_erase"),
-	beginTransform: (elements: TransformFrame[]) => __TAURI_INVOKE<null>("begin_transform", { elements }),
-	updateTransform: (frame: number, elements: TransformFrame[]) => __TAURI_INVOKE<null>("update_transform", { frame, elements }),
-	previewOpacity: (element: EntityId, opacity: number | null) => __TAURI_INVOKE<null>("preview_opacity", { element, opacity: opacity==null?opacity:opacity }),
-	finishTransform: () => __TAURI_INVOKE<number | null>("finish_transform").then((v) => (v==null?v:v as typeof v)),
-	cancelTransform: () => __TAURI_INVOKE<null>("cancel_transform"),
-	beginInpaint: (point: Point, diameter: number) => __TAURI_INVOKE<null>("begin_inpaint", { point, diameter }),
-	extendInpaint: (points: Point[]) => __TAURI_INVOKE<null>("extend_inpaint", { points: points.map(i=>i) }),
-	finishInpaint: () => __TAURI_INVOKE<string | null>("finish_inpaint"),
-	cancelInpaint: () => __TAURI_INVOKE<null>("cancel_inpaint"),
-	sampleColor: (point: Point) => __TAURI_INVOKE<[number, number, number, number]>("sample_color", { point }),
-	setViewport: (x: number, y: number, width: number, height: number, dpr: number, background: [number, number, number]) => __TAURI_INVOKE<null>("set_viewport", { x, y, width, height, dpr, background }),
+	commitPaint: (expectedRevision: Revision, layer: string | null, points: Point[], brush: PaintBrush) => __TAURI_INVOKE<LayerCommit>("commit_paint", { expectedRevision, layer, points: points.map(i=>i), brush }),
+	commitErase: (expectedRevision: Revision, layer: EntityId, points: Point[], diameter: number) => __TAURI_INVOKE<LayerCommit>("commit_erase", { expectedRevision, layer, points: points.map(i=>i), diameter }),
+	commitTransform: (expectedRevision: Revision, elements: TransformFrame[]) => __TAURI_INVOKE<number | null>("commit_transform", { expectedRevision, elements }).then((v) => (v==null?v:v as typeof v)),
+	commitInpaint: (expectedRevision: Revision, points: Point[], diameter: number) => __TAURI_INVOKE<string | null>("commit_inpaint", { expectedRevision, points: points.map(i=>i), diameter }),
 };
 
 /* Types */
@@ -121,10 +111,20 @@ export type Bounds = {
 
 export type CaiyunConfig = Record<string, never>;
 
+export type CanvasBytes = number[];
+
+export type CanvasGeneration = number;
+
+export type CanvasPagePreparation = {
+	revision: Revision,
+	page: Page,
+};
+
 export type CanvasState = {
-	zoom: number,
-	translation: [number, number],
-	fitted: boolean,
+	page: EntityId | null,
+	revision: Revision | null,
+	generation: number,
+	size: [number, number],
 	element_frames: TransformFrame[],
 };
 
@@ -353,6 +353,11 @@ export type Page = {
 };
 
 export type PageImportSource = { kind: "files" } | { kind: "folder" } | { kind: "paths"; paths: string[] };
+
+export type PageSelection = {
+	project: ProjectInfo,
+	page: Page,
+};
 
 export type PageSize = {
 	width: number,

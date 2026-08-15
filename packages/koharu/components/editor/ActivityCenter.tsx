@@ -4,8 +4,8 @@ import { CircleAlert, Download, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
-import { commands, type Download as DownloadState, type Job } from '@/lib/protocol'
 import { useKoharuStore } from '@/lib/store'
+import { commands, type Download as DownloadState, type Job } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 export function ActivityCenter() {

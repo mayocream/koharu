@@ -1,11 +1,13 @@
 use anyhow::{Context as _, Result};
 use futures::{StreamExt as _, TryStreamExt as _, stream};
 use koharu_psd::{PsdExportOptions, export_page};
-use koharu_renderer::{RasterOptions, Renderer};
+use koharu_rasterizer::{Raster, RasterOptions, Rasterizer};
+use koharu_renderer::{Frame, Renderer};
 use koharu_scene::{AssetRole, EntityId, Snapshot};
 use serde::Deserialize;
 use specta::Type;
-use tauri::{Cef, State, WebviewWindow, ipc::IpcResponse};
+use std::sync::Arc;
+use tauri::{State, WebviewWindow, Wry, ipc::IpcResponse};
 
 use super::{Error, project::CurrentProject};
 use koharu_desktop::Desktop;
@@ -32,7 +34,7 @@ pub enum ExportFormat {
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn export_pages(
-    window: WebviewWindow<Cef>,
+    window: WebviewWindow<Wry>,
     pages: Vec<EntityId>,
     format: ExportFormat,
     project: State<'_, CurrentProject>,
@@ -60,6 +62,7 @@ pub(crate) async fn export_pages(
         return Err(anyhow::anyhow!("there are no pages to export").into());
     }
     let renderer = desktop.renderer();
+    let rasterizer = desktop.rasterizer().await?;
     let jobs = pages
         .into_iter()
         .enumerate()
@@ -94,16 +97,17 @@ pub(crate) async fn export_pages(
     stream::iter(jobs)
         .map(|(page_id, stem)| {
             let renderer = renderer.clone();
+            let rasterizer = Arc::clone(&rasterizer);
             let snapshot = snapshot.clone();
             let directory = directory.clone();
             async move {
                 let frame = renderer.render(&snapshot, page_id).await?;
                 match format {
                     ExportFormat::Png => {
-                        let image = renderer
-                            .rasterize(&frame, RasterOptions::default())
-                            .await?
-                            .image;
+                        let image =
+                            rasterize(Arc::clone(&rasterizer), &frame, RasterOptions::default())
+                                .await?
+                                .image;
                         tokio::task::spawn_blocking(move || {
                             image.save(directory.join(format!("{stem}.png")))
                         })
@@ -111,9 +115,13 @@ pub(crate) async fn export_pages(
                         .context("PNG export worker stopped unexpectedly")??;
                     }
                     ExportFormat::Psd => {
-                        let bytes =
-                            export_page(&renderer, &snapshot, &frame, &PsdExportOptions::default())
-                                .await?;
+                        let bytes = export_page(
+                            Arc::clone(&rasterizer),
+                            &snapshot,
+                            &frame,
+                            &PsdExportOptions::default(),
+                        )
+                        .await?;
                         tokio::fs::write(directory.join(format!("{stem}.psd")), bytes).await?;
                     }
                 }
@@ -161,13 +169,13 @@ pub(crate) async fn get_thumbnail(
 
 pub(crate) async fn rendered_preview(
     renderer: &Renderer,
+    rasterizer: Arc<Rasterizer>,
     snapshot: &Snapshot,
     page: EntityId,
 ) -> Result<Vec<u8>> {
     snapshot.page(page)?;
     let frame = renderer.render(snapshot, page).await?;
-    let image = renderer
-        .rasterize(&frame, RasterOptions::default())
+    let image = rasterize(rasterizer, &frame, RasterOptions::default())
         .await?
         .image;
     tokio::task::spawn_blocking(move || {
@@ -179,4 +187,16 @@ pub(crate) async fn rendered_preview(
     })
     .await
     .context("preview encode worker stopped unexpectedly")?
+}
+
+async fn rasterize(
+    rasterizer: Arc<Rasterizer>,
+    frame: &Frame,
+    options: RasterOptions,
+) -> Result<Raster> {
+    let frame = frame.raster_frame()?;
+    tokio::task::spawn_blocking(move || rasterizer.rasterize(&frame, options))
+        .await
+        .context("rasterizer worker stopped unexpectedly")?
+        .map_err(Into::into)
 }

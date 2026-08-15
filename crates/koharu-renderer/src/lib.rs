@@ -1,14 +1,12 @@
 //! Retained rendering of one semantic Koharu page.
 
 mod bubble;
-mod compositor;
 mod config;
 mod error;
 mod fonts;
 mod frame;
 mod images;
 mod layout;
-mod raster;
 mod renderer;
 mod script;
 mod segment;
@@ -16,8 +14,6 @@ mod shape;
 mod text_renderer;
 mod types;
 
-#[doc(hidden)]
-pub use compositor::{CompositionCommand, GpuCompositor, RasterDraw};
 pub use config::TypesettingConfig;
 pub use error::{Error, Result};
 pub use frame::{
@@ -25,7 +21,6 @@ pub use frame::{
     RenderDependency, RenderDiagnostic, RetentionStats, TextMetadata,
 };
 pub use layout::WritingMode;
-pub use raster::{DownsampleFilter, Raster, RasterOptions};
 pub use renderer::Renderer;
 pub use types::{FontFace, FontFamily, FontMetadata, FontRange, FontSource, FontStyle, TextAlign};
 

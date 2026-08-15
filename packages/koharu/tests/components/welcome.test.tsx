@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { StartView } from '@/components/start/StartView'
-import { commands } from '@/lib/protocol'
 import { queryClient, useProject } from '@/lib/queries'
+import { commands } from '@koharu/bridge/protocol'
 
 function ProjectFlow() {
   const project = useProject().data

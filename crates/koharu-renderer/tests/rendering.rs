@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, io::Cursor, sync::Arc};
 
-use koharu_renderer::{ImageKind, LayerKind, RasterOptions, Renderer};
+use koharu_rasterizer::{PREPARED_RASTER_TILE_DIMENSION, RasterOptions, Rasterizer};
+use koharu_renderer::{ImageKind, LayerKind, Renderer};
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Origin, PageDraft, RasterLayer, RasterLayerKind,
     Session,
@@ -53,6 +54,60 @@ async fn public_renderer_returns_a_complete_immutable_frame() {
 }
 
 #[tokio::test]
+async fn native_rasterization_preserves_pixels_across_prepared_tile_edges() {
+    let width = PREPARED_RASTER_TILE_DIMENSION + 1;
+    let red = [230, 20, 30, 255];
+    let blue = [10, 40, 220, 255];
+    let mut source_image = image::RgbaImage::from_pixel(width, 1, image::Rgba(red));
+    source_image.put_pixel(width - 1, 0, image::Rgba(blue));
+    let source = AssetRole::new("source").unwrap();
+    let mut session = Session::memory().await.unwrap();
+    let mut page = None;
+    let patch = session
+        .snapshot()
+        .patch(|edit| {
+            let created = edit.add_page(PageDraft::new("page", width as f64, 1.0), At::End)?;
+            edit.set_asset(
+                created,
+                &source,
+                AssetInput::new(
+                    png_image(source_image),
+                    "image/png",
+                    AssetMetadata {
+                        width: Some(width),
+                        height: Some(1),
+                        attributes: BTreeMap::new(),
+                    },
+                ),
+            )?;
+            page = Some(created);
+            Ok(())
+        })
+        .unwrap();
+    let snapshot = session.commit(patch).await.unwrap().snapshot;
+    let frame = Renderer::new()
+        .unwrap()
+        .render(&snapshot, page.unwrap())
+        .await
+        .unwrap();
+    let manifest = frame.prepared().manifest().unwrap();
+    assert_eq!(manifest.resources.len(), 1);
+    let koharu_rasterizer::PreparedContent::Raster(prepared) = &manifest.frame.layers[0].content
+    else {
+        panic!("source layer must remain raster");
+    };
+    assert_eq!(prepared.tiles.len(), 2);
+
+    let raster = Rasterizer::new()
+        .unwrap()
+        .rasterize(&frame.raster_frame().unwrap(), RasterOptions::default())
+        .unwrap();
+
+    assert_eq!(raster.image.get_pixel(width - 2, 0).0, red);
+    assert_eq!(raster.image.get_pixel(width - 1, 0).0, blue);
+}
+
+#[tokio::test]
 async fn discarded_image_nodes_are_rebuilt_for_a_reopened_presentation() {
     let mut session = Session::memory().await.unwrap();
     let source = AssetRole::new("source").unwrap();
@@ -86,9 +141,9 @@ async fn discarded_image_nodes_are_rebuilt_for_a_reopened_presentation() {
     renderer.render(&snapshot, page).await.unwrap();
     renderer.discard_retained_nodes();
     let reopened = renderer.render(&snapshot, page).await.unwrap();
-    let raster = renderer
-        .rasterize(&reopened, RasterOptions::default())
-        .await
+    let raster = Rasterizer::new()
+        .unwrap()
+        .rasterize(&reopened.raster_frame().unwrap(), RasterOptions::default())
         .unwrap();
 
     assert_eq!(reopened.stats().rebuilt_layers, 1);
@@ -148,9 +203,9 @@ async fn rasterized_png_contains_source_and_cleanup_pixels() {
     let snapshot = session.commit(patch).await.unwrap().snapshot;
     let renderer = Renderer::new().unwrap();
     let frame = renderer.render(&snapshot, page.unwrap()).await.unwrap();
-    let raster = renderer
-        .rasterize(&frame, RasterOptions::default())
-        .await
+    let raster = Rasterizer::new()
+        .unwrap()
+        .rasterize(&frame.raster_frame().unwrap(), RasterOptions::default())
         .unwrap();
 
     assert!(frame.layers().iter().any(|layer| matches!(

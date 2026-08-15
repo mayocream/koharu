@@ -19,16 +19,15 @@ dirs = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
 koharu-agent = { workspace = true }
-koharu-canvas = { workspace = true }
 koharu-desktop = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }
+koharu-rasterizer = { workspace = true, features = ["native"] }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-secrets = { workspace = true }
-koharu-torch-sys = { workspace = true }
 koharu-translator = { workspace = true }
 open = { workspace = true }
 parking_lot = { workspace = true }
@@ -46,7 +45,6 @@ tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-updater = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
 tauri-specta = { workspace = true }
-thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }

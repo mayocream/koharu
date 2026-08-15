@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "Select a page to begin.",
     "fit": "Fit Window",
-    "surface": "Koharu canvas"
+    "surface": "Koharu canvas",
+    "unavailable": "WebGPU canvas unavailable"
   },
   "colorPicker": {
     "brushColor": "Brush color",

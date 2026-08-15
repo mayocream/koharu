@@ -5,9 +5,9 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { call } from '@/lib/backend'
-import { commands, type ProjectSummary } from '@/lib/protocol'
 import { pageKey, pagesKey, projectKey, refresh } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { commands, type ProjectSummary } from '@koharu/bridge/protocol'
 import {
   AlertDialog,
   AlertDialogAction,

@@ -11,7 +11,6 @@ use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _
 struct Cli {}
 
 #[tokio::main]
-#[tauri::cef_entry_point]
 async fn main() {
     #[cfg(target_os = "windows")]
     {

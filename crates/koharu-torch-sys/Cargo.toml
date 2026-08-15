@@ -29,4 +29,12 @@ koharu-runtime = { workspace = true }
 tokio = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["libloading"]
+ignored = [
+    "anyhow",
+    "cmake",
+    "koharu-bindgen",
+    "koharu-runtime",
+    "libc",
+    "libloading",
+    "tokio",
+]

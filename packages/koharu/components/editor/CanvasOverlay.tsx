@@ -5,7 +5,14 @@ import { useMemo, useRef } from 'react'
 import { SelectionControls } from '@/components/editor/SelectionControls'
 import { effectiveLayerVisibility, expandLayerSelection, isTextLayer } from '@/lib/document'
 import { controlFrame, cssFrame, selectableLayer, type Camera } from '@/lib/geometry'
-import type { EntityId, Frame, Geometry, Page, Point, TransformFrame } from '@/lib/protocol'
+import type {
+  EntityId,
+  Frame,
+  Geometry,
+  Page,
+  Point,
+  TransformFrame,
+} from '@koharu/bridge/protocol'
 
 interface CanvasOverlayProps {
   page: Page

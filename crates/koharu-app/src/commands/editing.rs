@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use anyhow::Context as _;
 use koharu_desktop::{CanvasState, Desktop};
 use koharu_scene::EntityId;
@@ -9,21 +7,16 @@ use tauri::State;
 
 use super::{
     ChannelExt as _, Error,
-    canvas::{CanvasChannel, CanvasView, Point},
+    canvas::{CanvasChannel, Point},
     project::{CurrentProject, Page, Project, Typography},
 };
 async fn synchronize_canvas(
     desktop: &Desktop,
-    canvas_view: &CanvasView,
     commit: &koharu_scene::Commit,
     page: Option<EntityId>,
 ) -> anyhow::Result<CanvasState> {
-    if desktop.synchronize(&commit.snapshot, page, commit).await? {
-        canvas_view.fitted.store(true, Ordering::Release);
-    }
-    Ok(desktop
-        .lock()
-        .canvas_state(canvas_view.fitted.load(Ordering::Acquire)))
+    desktop.synchronize(&commit.snapshot, page, commit).await?;
+    Ok(desktop.canvas_state())
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
@@ -45,7 +38,6 @@ pub(crate) async fn rename_page(
     label: String,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -55,7 +47,7 @@ pub(crate) async fn rename_page(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -66,7 +58,6 @@ pub(crate) async fn delete_pages(
     pages: Vec<EntityId>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -77,7 +68,7 @@ pub(crate) async fn delete_pages(
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -89,7 +80,6 @@ pub(crate) async fn move_page(
     index: u32,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -99,7 +89,7 @@ pub(crate) async fn move_page(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -111,7 +101,6 @@ pub(crate) async fn set_source_text(
     text: String,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -121,7 +110,7 @@ pub(crate) async fn set_source_text(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -133,7 +122,6 @@ pub(crate) async fn set_translation(
     text: Option<String>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -143,7 +131,7 @@ pub(crate) async fn set_translation(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -154,7 +142,6 @@ pub(crate) async fn set_typography(
     updates: Vec<TypographyUpdate>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -164,7 +151,7 @@ pub(crate) async fn set_typography(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -175,7 +162,6 @@ pub(crate) async fn set_geometry(
     updates: Vec<GeometryUpdate>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -185,7 +171,7 @@ pub(crate) async fn set_geometry(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -198,7 +184,6 @@ pub(crate) async fn set_visibility(
     opacity: Option<f32>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -208,7 +193,7 @@ pub(crate) async fn set_visibility(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -219,7 +204,6 @@ pub(crate) async fn delete_layers(
     layers: Vec<EntityId>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -229,7 +213,7 @@ pub(crate) async fn delete_layers(
         project.record_commit(&commit);
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -242,6 +226,7 @@ pub(crate) async fn move_layer(
     index: u32,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<Page, Error> {
     let (commit, page, view) = {
         let mut project = project.project.lock().await;
@@ -255,6 +240,7 @@ pub(crate) async fn move_layer(
     desktop
         .synchronize(&commit.snapshot, Some(page), &commit)
         .await?;
+    canvas_channel.channel.publish(desktop.canvas_state());
     Ok(view)
 }
 
@@ -263,7 +249,6 @@ pub(crate) async fn move_layer(
 pub(crate) async fn undo(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -273,7 +258,7 @@ pub(crate) async fn undo(
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -283,7 +268,6 @@ pub(crate) async fn undo(
 pub(crate) async fn redo(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<(), Error> {
     let (commit, page) = {
@@ -293,7 +277,7 @@ pub(crate) async fn redo(
         project.reconcile_page();
         (commit, project.active_page())
     };
-    let canvas = synchronize_canvas(&desktop, &canvas_view, &commit, page).await?;
+    let canvas = synchronize_canvas(&desktop, &commit, page).await?;
     canvas_channel.channel.publish(canvas);
     Ok(())
 }

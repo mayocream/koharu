@@ -1,8 +1,4 @@
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::{OnceLock, atomic::Ordering},
-};
+use std::{future::Future, pin::Pin, sync::OnceLock};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -14,11 +10,11 @@ use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tauri::{AppHandle, Cef, Manager as _};
+use tauri::{AppHandle, Manager as _, Wry};
 
 use crate::commands::{
     ChannelExt as _,
-    canvas::{CanvasChannel, CanvasView, Point},
+    canvas::{CanvasChannel, Point},
     editing::{GeometryUpdate, TypographyUpdate},
     output,
     preferences::Preferences,
@@ -28,11 +24,11 @@ use crate::commands::{
 
 #[derive(Clone)]
 pub(super) struct KoharuHost {
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
 }
 
 impl KoharuHost {
-    pub(super) fn new(handle: AppHandle<Cef>) -> Self {
+    pub(super) fn new(handle: AppHandle<Wry>) -> Self {
         Self { handle }
     }
 
@@ -112,14 +108,9 @@ impl KoharuHost {
     }
 
     async fn synchronize(&self, commit: Commit, page: Option<EntityId>) -> Result<()> {
-        let canvas_view = self.handle.state::<CanvasView>();
         let desktop = self.handle.state::<Desktop>();
-        if desktop.synchronize(&commit.snapshot, page, &commit).await? {
-            canvas_view.fitted.store(true, Ordering::Release);
-        }
-        let canvas = desktop
-            .lock()
-            .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
+        desktop.synchronize(&commit.snapshot, page, &commit).await?;
+        let canvas = desktop.canvas_state();
         self.handle.state::<CanvasChannel>().channel.publish(canvas);
         Ok(())
     }
@@ -255,8 +246,11 @@ impl Host for KoharuHost {
                     let label = snapshot.page(page)?.page()?.label;
                     (label, snapshot)
                 };
-                let renderer = self.handle.state::<Desktop>().renderer();
-                let bytes = output::rendered_preview(&renderer, &snapshot, page).await?;
+                let desktop = self.handle.state::<Desktop>();
+                let renderer = desktop.renderer();
+                let rasterizer = desktop.rasterizer().await?;
+                let bytes =
+                    output::rendered_preview(&renderer, rasterizer, &snapshot, page).await?;
                 Ok(
                     Invocation::read(json!({ "page": page, "label": label }))?.with_image(
                         format!("Rendered page {label} ({page})"),

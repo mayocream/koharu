@@ -3,7 +3,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fmt,
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, OnceLock},
 };
 
 use anyhow::{Context, Result, bail};
@@ -65,6 +65,7 @@ fn symbol_fallback_families() -> &'static [String] {
 #[derive(Clone)]
 pub struct Font {
     data: Blob<u8>,
+    bytes: Arc<OnceLock<Arc<[u8]>>>,
     index: u32,
     family_name: String,
     font_name: String,
@@ -135,6 +136,7 @@ impl Font {
 
         Ok(Self {
             data: font.blob,
+            bytes: Arc::new(OnceLock::new()),
             index: font.index,
             family_name,
             font_name,
@@ -148,8 +150,18 @@ impl Font {
         })
     }
 
-    pub(crate) fn vello_data(&self) -> vello::peniko::FontData {
-        vello::peniko::FontData::new(self.data.clone(), self.index)
+    pub(crate) fn bytes(&self) -> &[u8] {
+        self.bytes
+            .get_or_init(|| Arc::from(self.data.as_ref()))
+            .as_ref()
+    }
+
+    pub(crate) fn shared_bytes(&self) -> Arc<[u8]> {
+        Arc::clone(self.bytes.get_or_init(|| Arc::from(self.data.as_ref())))
+    }
+
+    pub(crate) const fn index(&self) -> u32 {
+        self.index
     }
 
     pub(crate) fn normalized_coords(&self) -> &[vello::NormalizedCoord] {

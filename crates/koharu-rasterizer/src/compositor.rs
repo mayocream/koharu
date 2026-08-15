@@ -1,9 +1,10 @@
-//! Ordered GPU composition for decoded raster images and Vello vector batches.
+//! Ordered GPU composition for RGBA8 images and Vello vector batches.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
-use anyhow::anyhow;
-use koharu_scene::BlobId;
 use vello::{
     AaConfig, RenderParams, Scene,
     kurbo::Affine,
@@ -11,7 +12,11 @@ use vello::{
     wgpu::{self, util::DeviceExt as _},
 };
 
-use crate::{Error, RasterImage, Result};
+#[cfg(target_arch = "wasm32")]
+use crate::PreparedRasterTile;
+use crate::{Error, RasterImage, ResourceId, Result};
+
+pub const DEFAULT_RASTER_CACHE_BUDGET_BYTES: u64 = 256 * 1024 * 1024;
 
 const SHADER: &str = r#"
 struct DrawUniforms {
@@ -19,6 +24,7 @@ struct DrawUniforms {
     translation_source: vec4<f32>,
     target_options: vec4<f32>,
     format_options: vec4<f32>,
+    sampling_options: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -27,24 +33,16 @@ struct VertexOutput {
     @location(1) screen_uv: vec2<f32>,
 }
 
-@group(0) @binding(0)
-var source_texture: texture_2d<f32>;
-@group(0) @binding(1)
-var erase_texture: texture_2d<f32>;
-@group(0) @binding(2)
-var texture_sampler: sampler;
-@group(0) @binding(3)
-var<uniform> uniforms: DrawUniforms;
+@group(0) @binding(0) var source_texture: texture_2d<f32>;
+@group(0) @binding(1) var erase_texture: texture_2d<f32>;
+@group(0) @binding(2) var texture_sampler: sampler;
+@group(0) @binding(3) var<uniform> uniforms: DrawUniforms;
 
 @vertex
 fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
     let coordinates = array<vec2<f32>, 6>(
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 0.0),
-        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
     );
     let uv = coordinates[index];
     let source = uv * uniforms.translation_source.zw;
@@ -60,7 +58,8 @@ fn vertex(@builtin(vertex_index) index: u32) -> VertexOutput {
         0.0,
         1.0,
     );
-    output.uv = uv;
+    output.uv = (uniforms.sampling_options.xy + uv * uniforms.translation_source.zw)
+        / uniforms.sampling_options.zw;
     output.screen_uv = screen / target_size;
     return output;
 }
@@ -83,17 +82,13 @@ fn fragment(input: VertexOutput) -> @location(0) vec4<f32> {
     if uniforms.target_options.w > 0.0 {
         erase = textureSample(erase_texture, texture_sampler, input.screen_uv).a;
     }
-    if uniforms.format_options.x == 0.0 {
-        color = vec4<f32>(color.rgb * color.a, color.a);
-    }
-    let opacity = uniforms.target_options.z;
-    return color * (opacity * (1.0 - erase * uniforms.target_options.w));
+    return color * (uniforms.target_options.z * (1.0 - erase * uniforms.target_options.w));
 }
 "#;
 
 pub enum CompositionCommand {
     Raster(RasterDraw),
-    Vector(Scene),
+    Vector(Box<Scene>),
 }
 
 pub struct RasterDraw {
@@ -104,10 +99,11 @@ pub struct RasterDraw {
 }
 
 struct CachedTexture {
-    width: u32,
-    height: u32,
-    _texture: wgpu::Texture,
+    source: Option<ResourceId>,
+    texture: wgpu::Texture,
     view: wgpu::TextureView,
+    byte_len: u64,
+    last_used: u64,
 }
 
 struct ScratchTarget {
@@ -148,12 +144,20 @@ pub struct GpuCompositor {
     empty_mask: CachedTexture,
     overlay: Option<ScratchTarget>,
     erase: Option<ScratchTarget>,
-    images: HashMap<BlobId, CachedTexture>,
+    images: HashMap<ResourceId, CachedTexture>,
+    image_bytes: u64,
+    image_budget: u64,
+    image_clock: u64,
 }
 
 impl GpuCompositor {
     #[must_use]
     pub fn new(device: &wgpu::Device) -> Self {
+        Self::with_cache_budget(device, DEFAULT_RASTER_CACHE_BUDGET_BYTES)
+    }
+
+    #[must_use]
+    pub fn with_cache_budget(device: &wgpu::Device, image_budget: u64) -> Self {
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("koharu raster compositor sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -220,18 +224,168 @@ impl GpuCompositor {
             multiview_mask: None,
             cache: None,
         });
-        let empty_mask = create_texture(device, "koharu empty erase mask", 1, 1);
         Self {
             pipeline,
             bind_group_layout,
             sampler,
-            empty_mask,
+            empty_mask: create_texture(device, "koharu empty erase mask", 1, 1, None),
             overlay: None,
             erase: None,
             images: HashMap::new(),
+            image_bytes: 0,
+            image_budget,
+            image_clock: 0,
         }
     }
 
+    #[must_use]
+    pub const fn cache_budget(&self) -> u64 {
+        self.image_budget
+    }
+
+    pub fn set_cache_budget(&mut self, budget: u64) {
+        self.image_budget = budget;
+        self.trim_cache();
+    }
+
+    #[must_use]
+    pub const fn cached_resource_bytes(&self) -> u64 {
+        self.image_bytes
+    }
+
+    #[must_use]
+    pub fn cached_resource_count(&self) -> usize {
+        self.images.len()
+    }
+
+    #[must_use]
+    pub fn is_tile_cached(&self, id: ResourceId) -> bool {
+        self.images.contains_key(&id)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn cache_external_raster(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        source: ResourceId,
+        source_size: (u32, u32),
+        image: &wgpu::ExternalImageSource,
+        tiles: &[PreparedRasterTile],
+    ) -> Result<()> {
+        if (image.width(), image.height()) != source_size {
+            return Err(Error::invalid(format!(
+                "encoded raster {source} decoded as {}x{}, expected {}x{}",
+                image.width(),
+                image.height(),
+                source_size.0,
+                source_size.1
+            )));
+        }
+        let limit = device.limits().max_texture_dimension_2d;
+        for tile in tiles {
+            let id = tile.id(source);
+            let (width, height) = tile.resource_size();
+            let (x, y) = tile.source_origin();
+            if width > limit || height > limit {
+                return Err(Error::invalid(format!(
+                    "raster tile {width}x{height} exceeds the device limit {limit}"
+                )));
+            }
+            if x.saturating_add(width) > source_size.0 || y.saturating_add(height) > source_size.1 {
+                return Err(Error::invalid(
+                    "raster tile crop exceeds its encoded source",
+                ));
+            }
+            self.image_clock = self.image_clock.wrapping_add(1);
+            if let Some(cached) = self.images.get_mut(&id) {
+                cached.last_used = self.image_clock;
+                continue;
+            }
+            let mut texture = create_texture(
+                device,
+                "koharu decoded browser raster tile",
+                width,
+                height,
+                Some(source),
+            );
+            queue.copy_external_image_to_texture(
+                &wgpu::CopyExternalImageSourceInfo {
+                    source: image.clone(),
+                    origin: wgpu::Origin2d { x, y },
+                    flip_y: false,
+                },
+                wgpu::CopyExternalImageDestInfo {
+                    texture: &texture.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                    color_space: wgpu::PredefinedColorSpace::Srgb,
+                    premultiplied_alpha: true,
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            texture.last_used = self.image_clock;
+            if let Some(previous) = self.images.insert(id, texture) {
+                self.image_bytes = self.image_bytes.saturating_sub(previous.byte_len);
+            }
+            self.image_bytes = self
+                .image_bytes
+                .saturating_add(u64::from(width) * u64::from(height) * 4);
+        }
+        Ok(())
+    }
+
+    fn evict_tile(&mut self, id: ResourceId) -> bool {
+        let Some(removed) = self.images.remove(&id) else {
+            return false;
+        };
+        self.image_bytes = self.image_bytes.saturating_sub(removed.byte_len);
+        true
+    }
+
+    pub fn evict_source(&mut self, source: ResourceId) -> bool {
+        let previous = self.images.len();
+        self.images.retain(|_, texture| {
+            if texture.source == Some(source) {
+                self.image_bytes = self.image_bytes.saturating_sub(texture.byte_len);
+                false
+            } else {
+                true
+            }
+        });
+        self.images.len() != previous
+    }
+
+    pub fn clear_resources(&mut self) {
+        self.images.clear();
+        self.image_bytes = 0;
+    }
+
+    pub fn trim_cache(&mut self) {
+        self.trim_cache_protected(&HashSet::new());
+    }
+
+    fn trim_cache_protected(&mut self, protected: &HashSet<ResourceId>) {
+        while self.image_bytes > self.image_budget {
+            let Some(id) = self
+                .images
+                .iter()
+                .filter(|(id, _)| !protected.contains(id))
+                .min_by_key(|(id, texture)| (texture.last_used, **id))
+                .map(|(id, _)| *id)
+            else {
+                break;
+            };
+            self.evict_tile(id);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
         device: &wgpu::Device,
@@ -262,18 +416,21 @@ impl GpuCompositor {
         }
         let active = commands
             .iter()
-            .filter_map(|command| match command {
-                CompositionCommand::Raster(draw) => Some(draw.image.blob()),
-                CompositionCommand::Vector(_) => None,
+            .flat_map(|command| match command {
+                CompositionCommand::Raster(draw) => draw
+                    .image
+                    .tiles()
+                    .iter()
+                    .map(|tile| tile.id())
+                    .collect::<Vec<_>>(),
+                CompositionCommand::Vector(_) => Vec::new(),
             })
             .collect::<HashSet<_>>();
-        self.images.retain(|blob, _| active.contains(blob));
         for command in commands {
             if let CompositionCommand::Raster(draw) = command {
                 self.upload(device, queue, &draw.image)?;
             }
         }
-
         if let Some(mask) = erase_mask {
             render_vello(
                 vello,
@@ -291,12 +448,12 @@ impl GpuCompositor {
         clear_target(device, queue, target, background);
         let clip = clipped_rect(clip, size);
         if clip[2] == 0 || clip[3] == 0 {
+            self.trim_cache_protected(&active);
             return Ok(());
         }
         for command in commands {
             match command {
                 CompositionCommand::Raster(draw) => {
-                    let source = &self.images[&draw.image.blob()].view;
                     let erase = if draw.erase && erase_mask.is_some() {
                         &self
                             .erase
@@ -306,20 +463,27 @@ impl GpuCompositor {
                     } else {
                         &self.empty_mask.view
                     };
-                    self.draw(
-                        device,
-                        queue,
-                        source,
-                        erase,
-                        target,
-                        draw.transform,
-                        draw.image.size(),
-                        size,
-                        draw.opacity.clamp(0.0, 1.0),
-                        draw.erase && erase_mask.is_some(),
-                        false,
-                        clip,
-                    );
+                    for tile in draw.image.tiles() {
+                        let source = &self.images[&tile.id()].view;
+                        let origin = tile.origin();
+                        let gutter = tile.gutter();
+                        self.draw(
+                            device,
+                            queue,
+                            source,
+                            erase,
+                            target,
+                            draw.transform
+                                * Affine::translate((f64::from(origin.0), f64::from(origin.1))),
+                            tile.size(),
+                            (gutter[0], gutter[1]),
+                            tile.resource_size(),
+                            size,
+                            draw.opacity.clamp(0.0, 1.0),
+                            draw.erase && erase_mask.is_some(),
+                            clip,
+                        );
+                    }
                 }
                 CompositionCommand::Vector(scene) => {
                     let overlay = &self
@@ -336,15 +500,20 @@ impl GpuCompositor {
                         target,
                         Affine::IDENTITY,
                         size,
+                        (0, 0),
+                        size,
                         size,
                         1.0,
                         false,
-                        true,
                         clip,
                     );
                 }
             }
         }
+        // The budget is soft for the current frame: inactive least-recently-used
+        // textures are victims, while every texture referenced by this render
+        // remains resident even when the active working set exceeds the budget.
+        self.trim_cache_protected(&active);
         Ok(())
     }
 
@@ -354,40 +523,76 @@ impl GpuCompositor {
         queue: &wgpu::Queue,
         image: &RasterImage,
     ) -> Result<()> {
-        let (width, height) = image.size();
-        let expected = usize::try_from(u64::from(width) * u64::from(height) * 4)
+        for tile in image.tiles() {
+            self.image_clock = self.image_clock.wrapping_add(1);
+            if let Some(cached) = self.images.get_mut(&tile.id()) {
+                cached.last_used = self.image_clock;
+                continue;
+            }
+            let pixels = image.pixels().ok_or_else(|| {
+                Error::invalid(format!(
+                    "raster tile {} is not resident on the GPU",
+                    tile.id()
+                ))
+            })?;
+            self.upload_native_tile(device, queue, image, tile, pixels)?;
+        }
+        Ok(())
+    }
+
+    fn upload_native_tile(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        image: &RasterImage,
+        tile: &crate::RasterTile,
+        pixels: &[u8],
+    ) -> Result<()> {
+        let (image_width, image_height) = image.size();
+        let expected = usize::try_from(u64::from(image_width) * u64::from(image_height) * 4)
             .map_err(|_| Error::invalid("raster image byte length exceeds usize"))?;
-        if width == 0 || height == 0 || image.pixels().len() != expected {
+        if pixels.len() != expected {
             return Err(Error::invalid(format!(
                 "raster image {} has invalid dimensions or byte length",
-                image.blob()
+                image.source()
             )));
         }
+        let id = tile.id();
+        let (width, height) = tile.resource_size();
         let limit = device.limits().max_texture_dimension_2d;
         if width > limit || height > limit {
             return Err(Error::invalid(format!(
                 "raster image {width}x{height} exceeds the device limit {limit}"
             )));
         }
-        if self
-            .images
-            .get(&image.blob())
-            .is_some_and(|cached| cached.width == width && cached.height == height)
-        {
-            return Ok(());
-        }
-        let texture = create_texture(device, "koharu decoded raster image", width, height);
+        let mut texture = create_texture(
+            device,
+            "koharu decoded native raster tile",
+            width,
+            height,
+            Some(image.source()),
+        );
+        // Every raster layer kind uses straight RGBA resources through this upload
+        // boundary. Premultiply before linear filtering so transparent texels cannot
+        // contribute dark RGB at source, cleanup, paint, or embedded layer edges.
+        let (pixels, bytes_per_row) = premultiply_raster_tile_rgba8(
+            pixels,
+            image_width,
+            image_height,
+            tile.source_origin(),
+            (width, height),
+        )?;
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
-                texture: &texture._texture,
+                texture: &texture.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            image.pixels(),
+            &pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(width * 4),
+                bytes_per_row: Some(bytes_per_row),
                 rows_per_image: Some(height),
             },
             wgpu::Extent3d {
@@ -396,7 +601,14 @@ impl GpuCompositor {
                 depth_or_array_layers: 1,
             },
         );
-        self.images.insert(image.blob(), texture);
+        texture.byte_len = u64::try_from(expected).unwrap_or(u64::MAX);
+        texture.last_used = self.image_clock;
+        if let Some(previous) = self.images.insert(id, texture) {
+            self.image_bytes = self.image_bytes.saturating_sub(previous.byte_len);
+        }
+        self.image_bytes = self
+            .image_bytes
+            .saturating_add(u64::try_from(expected).unwrap_or(u64::MAX));
         Ok(())
     }
 
@@ -410,10 +622,11 @@ impl GpuCompositor {
         target: &wgpu::TextureView,
         transform: Affine,
         source_size: (u32, u32),
+        sample_origin: (u32, u32),
+        resource_size: (u32, u32),
         target_size: (u32, u32),
         opacity: f32,
         use_erase: bool,
-        premultiplied: bool,
         clip: [u32; 4],
     ) {
         let [a, b, c, d, e, f] = transform.as_coeffs();
@@ -432,10 +645,14 @@ impl GpuCompositor {
             target_size.1 as f32,
             opacity,
             f32::from(use_erase),
-            f32::from(premultiplied),
+            0.0,
             f32::from(pixel_aligned),
             0.0,
             0.0,
+            sample_origin.0 as f32,
+            sample_origin.1 as f32,
+            resource_size.0 as f32,
+            resource_size.1 as f32,
         ];
         let bytes = values
             .iter()
@@ -510,7 +727,13 @@ fn texture_layout(binding: u32) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-fn create_texture(device: &wgpu::Device, label: &str, width: u32, height: u32) -> CachedTexture {
+fn create_texture(
+    device: &wgpu::Device,
+    label: &str,
+    width: u32,
+    height: u32,
+    source: Option<ResourceId>,
+) -> CachedTexture {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
@@ -522,16 +745,75 @@ fn create_texture(device: &wgpu::Device, label: &str, width: u32, height: u32) -
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::RENDER_ATTACHMENT,
         view_formats: &[],
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     CachedTexture {
-        width,
-        height,
-        _texture: texture,
+        source,
+        texture,
         view,
+        byte_len: u64::from(width) * u64::from(height) * 4,
+        last_used: 0,
     }
+}
+
+fn premultiply_raster_tile_rgba8(
+    pixels: &[u8],
+    image_width: u32,
+    image_height: u32,
+    origin: (u32, u32),
+    size: (u32, u32),
+) -> Result<(Cow<'_, [u8]>, u32)> {
+    if size.0 == 0
+        || size.1 == 0
+        || origin.0.saturating_add(size.0) > image_width
+        || origin.1.saturating_add(size.1) > image_height
+    {
+        return Err(Error::invalid("native raster tile crop is invalid"));
+    }
+    let row_bytes = image_width * 4;
+    let tile_row_bytes = size.0 * 4;
+    let start =
+        usize::try_from(u64::from(origin.1) * u64::from(row_bytes) + u64::from(origin.0) * 4)
+            .map_err(|_| Error::invalid("native raster tile offset exceeds usize"))?;
+    let end = start
+        .checked_add(
+            usize::try_from(
+                u64::from(size.1 - 1) * u64::from(row_bytes) + u64::from(tile_row_bytes),
+            )
+            .map_err(|_| Error::invalid("native raster tile byte length exceeds usize"))?,
+        )
+        .ok_or_else(|| Error::invalid("native raster tile byte range exceeds usize"))?;
+    let pixels = pixels
+        .get(start..end)
+        .ok_or_else(|| Error::invalid("native raster pixels are truncated"))?;
+    let row_bytes = row_bytes as usize;
+    let tile_row_bytes = tile_row_bytes as usize;
+    let opaque = (0..size.1 as usize).all(|row| {
+        let start = row * row_bytes;
+        pixels[start..start + tile_row_bytes]
+            .chunks_exact(4)
+            .all(|pixel| pixel[3] == u8::MAX)
+    });
+    if opaque {
+        return Ok((Cow::Borrowed(pixels), row_bytes as u32));
+    }
+    let mut premultiplied = Vec::with_capacity(tile_row_bytes * size.1 as usize);
+    for row in 0..size.1 as usize {
+        let source = row * row_bytes;
+        let destination = premultiplied.len();
+        premultiplied.extend_from_slice(&pixels[source..source + tile_row_bytes]);
+        for pixel in premultiplied[destination..].chunks_exact_mut(4) {
+            let alpha = u16::from(pixel[3]);
+            for channel in &mut pixel[..3] {
+                *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
+            }
+        }
+    }
+    Ok((Cow::Owned(premultiplied), tile_row_bytes as u32))
 }
 
 fn render_vello(
@@ -555,7 +837,7 @@ fn render_vello(
                 antialiasing_method: AaConfig::Area,
             },
         )
-        .map_err(|error| Error::Backend(anyhow!("Vello rendering failed: {error:?}")))
+        .map_err(Error::backend)
 }
 
 fn clear_target(

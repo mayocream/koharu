@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "시작할 페이지를 선택하세요.",
     "fit": "창에 맞춤",
-    "surface": "Koharu 캔버스"
+    "surface": "Koharu 캔버스",
+    "unavailable": "WebGPU 캔버스를 사용할 수 없습니다"
   },
   "colorPicker": {
     "brushColor": "브러시 색상",

@@ -1,7 +1,8 @@
 use std::{collections::BTreeMap, hint::black_box, io::Cursor, sync::Arc};
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use koharu_renderer::{RasterOptions, Renderer};
+use koharu_rasterizer::{RasterOptions, Rasterizer};
+use koharu_renderer::Renderer;
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, Change, Geometry, PageDraft, Session, Snapshot,
 };
@@ -130,24 +131,12 @@ fn rendering_benchmark(c: &mut Criterion) {
         });
     });
 
-    if runtime
-        .block_on(
-            fixture
-                .renderer
-                .rasterize(&fixture.frame, RasterOptions::default()),
-        )
-        .is_ok()
-    {
+    let rasterizer = Rasterizer::new();
+    let raster_frame = fixture.frame.raster_frame();
+    if let (Ok(rasterizer), Ok(raster_frame)) = (rasterizer, raster_frame) {
         c.bench_function("renderer/rasterize_warm_512x768_2_layers", |b| {
             b.iter(|| {
-                black_box(
-                    runtime.block_on(
-                        fixture
-                            .renderer
-                            .rasterize(&fixture.frame, RasterOptions::default()),
-                    ),
-                )
-                .unwrap();
+                black_box(rasterizer.rasterize(&raster_frame, RasterOptions::default())).unwrap();
             });
         });
     }

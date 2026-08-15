@@ -11,14 +11,14 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
+import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
 import type {
   LanguageChoice,
   Model,
   ProviderConfig,
   ProviderPreference,
   TranslationConfig as TranslationSettings,
-} from '@/lib/protocol'
-import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
+} from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import {

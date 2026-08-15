@@ -2,7 +2,7 @@ use std::{
     fs,
     io::{Cursor, Read},
     path::{Path, PathBuf},
-    sync::{Arc, atomic::Ordering},
+    sync::Arc,
 };
 
 use anyhow::{Context as _, Result};
@@ -12,13 +12,13 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Cef, Manager as _, State, WebviewWindow, ipc::Channel};
+use tauri::{AppHandle, Manager as _, State, WebviewWindow, Wry, ipc::Channel};
 use walkdir::WalkDir;
 
 use super::{
     ChannelExt as _, Error,
     agent::AgentState,
-    canvas::{CanvasChannel, CanvasView},
+    canvas::CanvasChannel,
     preferences::Preferences,
     processing::{Job, JobChannel, Processing},
     project::{
@@ -31,6 +31,12 @@ pub struct StartupState {
     pub preferences: Preferences,
     pub jobs: Vec<Job>,
     pub canvas: CanvasState,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct PageSelection {
+    pub project: ProjectInfo,
+    pub page: Page,
 }
 
 #[derive(Clone, Debug, Deserialize, Type)]
@@ -163,7 +169,7 @@ impl From<koharu_pipeline::ResourceSnapshot> for ModelResources {
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn subscribe(
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
     on_canvas: Channel<CanvasState>,
     on_job: Channel<Job>,
     on_download: Channel<Download>,
@@ -178,10 +184,7 @@ pub(crate) async fn subscribe(
     *handle.state::<ResourceChannel>().channel.lock() = Some(on_resources);
     *handle.state::<ProjectChannel>().channel.lock() = Some(on_project);
 
-    let canvas = handle
-        .state::<Desktop>()
-        .lock()
-        .canvas_state(handle.state::<CanvasView>().fitted.load(Ordering::Acquire));
+    let canvas = handle.state::<Desktop>().canvas_state();
     let preferences = Preferences::load()?;
     Ok(StartupState {
         preferences,
@@ -196,7 +199,7 @@ pub(crate) async fn subscribe(
     })
 }
 
-async fn replace_project(handle: &AppHandle<Cef>, opened: Project) -> Result<()> {
+async fn replace_project(handle: &AppHandle<Wry>, opened: Project) -> Result<()> {
     let snapshot = opened.snapshot();
     let page = opened.active_page();
     let info = opened.info();
@@ -215,13 +218,9 @@ async fn replace_project(handle: &AppHandle<Cef>, opened: Project) -> Result<()>
         current.replace(opened)
     };
 
-    handle
-        .state::<CanvasView>()
-        .fitted
-        .store(true, Ordering::Release);
     let desktop = handle.state::<Desktop>();
     desktop.show_page(&snapshot, page).await?;
-    let canvas = desktop.lock().canvas_state(true);
+    let canvas = desktop.canvas_state();
     drop(previous);
     handle.state::<CanvasChannel>().channel.publish(canvas);
     handle.state::<ProjectChannel>().channel.publish(Some(info));
@@ -280,7 +279,7 @@ pub(crate) async fn list_projects(
 #[specta::specta]
 pub(crate) async fn create_project(
     name: String,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
 ) -> std::result::Result<(), Error> {
     let library = handle.state::<ProjectLibrary>().inner().clone();
     let opened = library.create(&name).await?;
@@ -292,7 +291,7 @@ pub(crate) async fn create_project(
 #[specta::specta]
 pub(crate) async fn open_project(
     name: String,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
 ) -> std::result::Result<(), Error> {
     let library = handle.state::<ProjectLibrary>().inner().clone();
     let opened = library.open(&name).await?;
@@ -302,7 +301,7 @@ pub(crate) async fn open_project(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn close_project(handle: AppHandle<Cef>) -> std::result::Result<(), Error> {
+pub(crate) async fn close_project(handle: AppHandle<Wry>) -> std::result::Result<(), Error> {
     close_current_project(&handle).await?;
     Ok(())
 }
@@ -311,7 +310,7 @@ pub(crate) async fn close_project(handle: AppHandle<Cef>) -> std::result::Result
 #[specta::specta]
 pub(crate) async fn delete_project(
     name: String,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
 ) -> std::result::Result<(), Error> {
     let active = handle
         .state::<CurrentProject>()
@@ -330,7 +329,7 @@ pub(crate) async fn delete_project(
     Ok(())
 }
 
-async fn close_current_project(handle: &AppHandle<Cef>) -> Result<()> {
+async fn close_current_project(handle: &AppHandle<Wry>) -> Result<()> {
     handle.state::<AgentState>().reset().await;
     let processing = handle.state::<Processing>();
     for stop in processing.stops.lock().values() {
@@ -343,13 +342,9 @@ async fn close_current_project(handle: &AppHandle<Cef>) -> Result<()> {
         let mut current = current.project.lock().await;
         current.take()
     };
-    handle
-        .state::<CanvasView>()
-        .fitted
-        .store(true, Ordering::Release);
     let desktop = handle.state::<Desktop>();
     desktop.clear().await;
-    let result = desktop.lock().canvas_state(true);
+    let result = desktop.canvas_state();
     drop(previous);
     handle.state::<CanvasChannel>().channel.publish(result);
     handle.state::<ProjectChannel>().channel.publish(None);
@@ -360,10 +355,9 @@ async fn close_current_project(handle: &AppHandle<Cef>) -> Result<()> {
 #[specta::specta]
 pub(crate) async fn import_pages(
     source: PageImportSource,
-    window: WebviewWindow<Cef>,
+    window: WebviewWindow<Wry>,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     processing: State<'_, Processing>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> std::result::Result<(), Error> {
@@ -432,12 +426,8 @@ pub(crate) async fn import_pages(
         let page = project.active_page();
         (commit, page)
     };
-    if desktop.synchronize(&commit.snapshot, page, &commit).await? {
-        canvas_view.fitted.store(true, Ordering::Release);
-    }
-    let canvas = desktop
-        .lock()
-        .canvas_state(canvas_view.fitted.load(Ordering::Acquire));
+    desktop.synchronize(&commit.snapshot, page, &commit).await?;
+    let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
     Ok(())
 }
@@ -648,18 +638,23 @@ pub(crate) async fn select_page(
     desktop: State<'_, Desktop>,
     page: koharu_scene::EntityId,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
-) -> std::result::Result<(), Error> {
-    let snapshot = {
+) -> std::result::Result<PageSelection, Error> {
+    let (snapshot, project_info, selected_page) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         project.select_page(page)?;
-        project.snapshot()
+        let snapshot = project.snapshot();
+        let project_info = project.info();
+        let selected_page = Project::page(&snapshot, page)?;
+        (snapshot, project_info, selected_page)
     };
-    desktop.show_page(&snapshot, Some(page)).await?;
-    canvas_view.fitted.store(true, Ordering::Release);
-    let canvas = desktop.lock().canvas_state(true);
-    canvas_channel.channel.publish(canvas);
-    Ok(())
+    if desktop.show_page(&snapshot, Some(page)).await? {
+        let canvas = desktop.canvas_state();
+        canvas_channel.channel.publish(canvas);
+    }
+    Ok(PageSelection {
+        project: project_info,
+        page: selected_page,
+    })
 }

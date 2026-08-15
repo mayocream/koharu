@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "Выберите страницу, чтобы начать.",
     "fit": "Вписать в окно",
-    "surface": "Холст Koharu"
+    "surface": "Холст Koharu",
+    "unavailable": "Холст WebGPU недоступен"
   },
   "colorPicker": {
     "brushColor": "Цвет кисти",

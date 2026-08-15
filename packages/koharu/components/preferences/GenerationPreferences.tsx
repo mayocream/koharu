@@ -7,7 +7,7 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import type { GenerationConfig } from '@/lib/protocol'
+import type { GenerationConfig } from '@koharu/bridge/protocol'
 import { Switch } from '@koharu/ui/components/switch'
 
 export function GenerationPreferences({

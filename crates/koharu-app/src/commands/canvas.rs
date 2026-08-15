@@ -1,35 +1,28 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
 
-use anyhow::Context as _;
-use koharu_canvas::{MaskOverlay, MaskTarget, PagePoint, PhysicalPoint};
-use koharu_desktop::{CanvasState, Desktop, Frame, PhysicalRect, TransformFrame};
+use anyhow::{Context as _, anyhow, bail};
+use image::{GrayImage, ImageEncoder as _, codecs::png::PngEncoder};
+use koharu_desktop::{CanvasState, Desktop, Frame, TransformFrame};
+use koharu_rasterizer::ResourceId;
 use koharu_scene::{EntityId, Revision};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
+use tauri::{
+    AppHandle, Manager as _, State, Wry,
+    ipc::{Channel, IpcResponse},
+};
 
 use super::{
     ChannelExt as _, Error, processing,
     processing::{JobChannel, JobId, Processing},
-    project::CurrentProject,
+    project::{CurrentProject, Page, Project, RasterStrokeMode},
 };
-const INPAINT_MASK: MaskTarget = MaskTarget::Scratch(0);
-const INPAINT_OVERLAY: MaskOverlay = MaskOverlay::new([168, 85, 247, 210], 0.55);
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, Type)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
-}
-
-impl From<Point> for PagePoint {
-    fn from(value: Point) -> Self {
-        Self::new(value.x, value.y)
-    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Type)]
@@ -44,8 +37,24 @@ pub struct LayerCommit {
     pub layer: EntityId,
 }
 
-pub(crate) struct CanvasView {
-    pub(crate) fitted: AtomicBool,
+#[derive(Type)]
+#[specta(transparent)]
+pub(crate) struct CanvasBytes(#[specta(type = Vec<u8>)] Vec<u8>);
+
+#[derive(Clone, Copy, Deserialize, Type)]
+#[specta(transparent)]
+pub(crate) struct CanvasGeneration(#[specta(type = f64)] u64);
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct CanvasPagePreparation {
+    pub revision: Revision,
+    pub page: Page,
+}
+
+impl IpcResponse for CanvasBytes {
+    fn body(self) -> tauri::Result<tauri::ipc::InvokeResponseBody> {
+        Ok(self.0.into())
+    }
 }
 
 #[derive(Default)]
@@ -55,78 +64,76 @@ pub(crate) struct CanvasChannel {
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn set_zoom(
+pub(crate) async fn get_canvas_manifest(
+    generation: CanvasGeneration,
     desktop: State<'_, Desktop>,
-    zoom: f32,
-    canvas_view: State<'_, CanvasView>,
-    canvas_channel: State<'_, CanvasChannel>,
-) -> Result<(), Error> {
-    if !zoom.is_finite() || !(0.02..=16.0).contains(&zoom) {
-        return Err(anyhow::anyhow!("camera zoom must be between 2% and 1600%").into());
-    }
-    let canvas = {
-        let mut desktop = desktop.lock();
-        let mut camera = desktop.view().camera;
-        let center = PhysicalPoint::new(
-            f64::from(desktop.viewport().size().width) * 0.5,
-            f64::from(desktop.viewport().size().height) * 0.5,
-        );
-        camera.zoom_around(center, f64::from(zoom))?;
-        desktop.set_camera(camera);
-        canvas_view.fitted.store(false, Ordering::Release);
-        desktop.canvas_state(false)
-    };
-    canvas_channel.channel.publish(canvas);
-    Ok(())
+) -> Result<CanvasBytes, Error> {
+    Ok(CanvasBytes(desktop.frame_manifest_bytes(generation.0)?))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn set_canvas_view(
+pub(crate) async fn get_canvas_resource(
+    generation: CanvasGeneration,
+    resource: String,
     desktop: State<'_, Desktop>,
-    zoom: f64,
-    translation: [f64; 2],
-    canvas_view: State<'_, CanvasView>,
-) -> Result<(), Error> {
-    if !(0.02..=16.0).contains(&zoom) {
-        return Err(anyhow::anyhow!("camera zoom must be between 2% and 1600%").into());
-    }
-    desktop
-        .lock()
-        .set_camera(koharu_canvas::Camera::new(zoom, translation)?);
-    canvas_view.fitted.store(false, Ordering::Release);
-    Ok(())
+) -> Result<CanvasBytes, Error> {
+    let resource = resource
+        .parse::<ResourceId>()
+        .context("canvas resource id is invalid")?;
+    Ok(CanvasBytes(
+        desktop.frame_resource_bytes(generation.0, resource)?,
+    ))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn fit_canvas(
+pub(crate) async fn prepare_canvas_page(
+    page: EntityId,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
-    canvas_channel: State<'_, CanvasChannel>,
-) -> Result<(), Error> {
-    let size = {
+) -> Result<Option<CanvasPagePreparation>, Error> {
+    let (snapshot, prepared_page) = {
         let project = project.project.lock().await;
         let project = project.as_ref().context("no project is open")?;
-        let page = project
-            .active_page()
-            .context("the project has no active page")?;
         let snapshot = project.snapshot();
-        let page = snapshot.page(page)?.page()?;
-        koharu_canvas::PhysicalSize::new(page.width.ceil() as u32, page.height.ceil() as u32)
+        let prepared_page = Project::page(&snapshot, page)?;
+        (snapshot, prepared_page)
     };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.set_camera(koharu_canvas::Camera::contain(
-            desktop.viewport().size(),
-            size,
-        ));
-        canvas_view.fitted.store(true, Ordering::Release);
-        desktop.canvas_state(true)
-    };
-    canvas_channel.channel.publish(canvas);
-    Ok(())
+    let revision = snapshot.revision();
+    Ok(desktop
+        .prepare_page(&snapshot, page)
+        .await?
+        .then_some(CanvasPagePreparation {
+            revision,
+            page: prepared_page,
+        }))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn get_canvas_page_manifest(
+    page: EntityId,
+    revision: Revision,
+    desktop: State<'_, Desktop>,
+) -> Result<CanvasBytes, Error> {
+    Ok(CanvasBytes(desktop.page_manifest_bytes(page, revision)?))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn get_canvas_page_resource(
+    page: EntityId,
+    revision: Revision,
+    resource: String,
+    desktop: State<'_, Desktop>,
+) -> Result<CanvasBytes, Error> {
+    let resource = resource
+        .parse::<ResourceId>()
+        .context("canvas resource id is invalid")?;
+    Ok(CanvasBytes(
+        desktop.page_resource_bytes(page, revision, resource)?,
+    ))
 }
 
 #[tauri::command]
@@ -135,6 +142,7 @@ pub(crate) async fn add_point_text(
     point: Point,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<LayerCommit, Error> {
     let (commit, page, layer) = {
         let mut project = project.project.lock().await;
@@ -147,6 +155,7 @@ pub(crate) async fn add_point_text(
         (commit, project.active_page(), layer)
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
+    canvas_channel.channel.publish(desktop.canvas_state());
     Ok(LayerCommit {
         revision: commit.revision,
         layer,
@@ -159,6 +168,7 @@ pub(crate) async fn add_text_box(
     frame: Frame,
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<LayerCommit, Error> {
     let (commit, page, layer) = {
         let mut project = project.project.lock().await;
@@ -171,6 +181,7 @@ pub(crate) async fn add_text_box(
         (commit, project.active_page(), layer)
     };
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
+    canvas_channel.channel.publish(desktop.canvas_state());
     Ok(LayerCommit {
         revision: commit.revision,
         layer,
@@ -179,145 +190,81 @@ pub(crate) async fn add_text_box(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn begin_paint(
+pub(crate) async fn commit_paint(
+    expected_revision: Revision,
     layer: Option<EntityId>,
-    point: Point,
+    points: Vec<Point>,
     brush: PaintBrush,
     desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().begin_raster_stroke(
-        layer,
-        koharu_canvas::Brush {
-            diameter: brush.diameter,
-            color: brush.color,
-            mode: koharu_canvas::StrokeMode::Paint,
-        },
-        point.into(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn extend_paint(
-    points: Vec<Point>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop
-        .lock()
-        .canvas()
-        .extend_raster_stroke(&points.into_iter().map(PagePoint::from).collect::<Vec<_>>())?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn finish_paint(
-    desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<LayerCommit, Error> {
-    let stroke = desktop.lock().canvas().finish_raster_stroke()?;
-    let result: anyhow::Result<_> = async {
-        let mut project = project.project.lock().await;
-        let project = project.as_mut().context("no project is open")?;
-        let (commit, element) = project
-            .apply_raster_stroke(
-                stroke.page,
-                stroke.layer,
-                stroke.mode,
-                stroke.color,
-                stroke.diameter,
-                stroke
-                    .points
-                    .into_iter()
-                    .map(|point| koharu_scene::Point {
-                        x: point.x,
-                        y: point.y,
-                    })
-                    .collect(),
-            )
-            .await?;
-        project.record_commit(&commit);
-        Ok((commit, project.active_page(), element))
-    }
-    .await;
-    let (commit, page, element) = match result {
-        Ok(result) => result,
-        Err(error) => {
-            desktop.lock().canvas().cancel_raster_stroke();
-            return Err(error.into());
-        }
-    };
-    desktop
-        .lock()
-        .canvas()
-        .acknowledge_raster_commit(stroke.page, commit.revision)?;
-    desktop.synchronize(&commit.snapshot, page, &commit).await?;
-    Ok(LayerCommit {
-        revision: commit.revision,
-        layer: element,
-    })
+    commit_raster_stroke(
+        expected_revision,
+        layer,
+        points,
+        brush.diameter,
+        brush.color,
+        RasterStrokeMode::Paint,
+        &desktop,
+        &project,
+        &canvas_channel,
+    )
+    .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn cancel_paint(desktop: State<'_, Desktop>) -> Result<(), Error> {
-    desktop.lock().canvas().cancel_raster_stroke();
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn begin_erase(
+pub(crate) async fn commit_erase(
+    expected_revision: Revision,
     layer: EntityId,
-    point: Point,
+    points: Vec<Point>,
     diameter: f32,
     desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().begin_raster_stroke(
-        Some(layer),
-        koharu_canvas::Brush {
-            diameter,
-            color: [0, 0, 0, 0],
-            mode: koharu_canvas::StrokeMode::Erase,
-        },
-        point.into(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn extend_erase(
-    points: Vec<Point>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop
-        .lock()
-        .canvas()
-        .extend_raster_stroke(&points.into_iter().map(PagePoint::from).collect::<Vec<_>>())?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn finish_erase(
-    desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
+    canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<LayerCommit, Error> {
-    let stroke = desktop.lock().canvas().finish_raster_stroke()?;
-    let result: anyhow::Result<_> = async {
+    commit_raster_stroke(
+        expected_revision,
+        Some(layer),
+        points,
+        diameter,
+        [0; 4],
+        RasterStrokeMode::Erase,
+        &desktop,
+        &project,
+        &canvas_channel,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn commit_raster_stroke(
+    expected_revision: Revision,
+    layer: Option<EntityId>,
+    points: Vec<Point>,
+    diameter: f32,
+    color: [u8; 4],
+    mode: RasterStrokeMode,
+    desktop: &Desktop,
+    project: &CurrentProject,
+    canvas_channel: &CanvasChannel,
+) -> Result<LayerCommit, Error> {
+    let (commit, page, element) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
+        ensure_revision(project.snapshot().revision(), expected_revision)?;
+        let page = project
+            .active_page()
+            .context("the project has no active page")?;
         let (commit, element) = project
             .apply_raster_stroke(
-                stroke.page,
-                stroke.layer,
-                stroke.mode,
-                stroke.color,
-                stroke.diameter,
-                stroke
-                    .points
+                page,
+                layer,
+                mode,
+                color,
+                diameter,
+                points
                     .into_iter()
                     .map(|point| koharu_scene::Point {
                         x: point.x,
@@ -327,21 +274,10 @@ pub(crate) async fn finish_erase(
             )
             .await?;
         project.record_commit(&commit);
-        Ok((commit, project.active_page(), element))
-    }
-    .await;
-    let (commit, page, element) = match result {
-        Ok(result) => result,
-        Err(error) => {
-            desktop.lock().canvas().cancel_raster_stroke();
-            return Err(error.into());
-        }
+        (commit, project.active_page(), element)
     };
-    desktop
-        .lock()
-        .canvas()
-        .acknowledge_raster_commit(stroke.page, commit.revision)?;
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
+    canvas_channel.channel.publish(desktop.canvas_state());
     Ok(LayerCommit {
         revision: commit.revision,
         layer: element,
@@ -350,167 +286,78 @@ pub(crate) async fn finish_erase(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn cancel_erase(desktop: State<'_, Desktop>) -> Result<(), Error> {
-    desktop.lock().canvas().cancel_raster_stroke();
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn begin_transform(
+pub(crate) async fn commit_transform(
+    expected_revision: Revision,
     elements: Vec<TransformFrame>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().begin_transform(
-        &elements
-            .into_iter()
-            .map(koharu_canvas::ElementFrame::from)
-            .collect::<Vec<_>>(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn update_transform(
-    frame: u32,
-    elements: Vec<TransformFrame>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().update_transform(
-        u64::from(frame),
-        &elements
-            .into_iter()
-            .map(koharu_canvas::ElementFrame::from)
-            .collect::<Vec<_>>(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn preview_opacity(
-    element: EntityId,
-    opacity: Option<f32>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().preview_opacity(element, opacity)?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn finish_transform(
     desktop: State<'_, Desktop>,
     project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
     canvas_channel: State<'_, CanvasChannel>,
 ) -> Result<Option<Revision>, Error> {
-    let Some(transform) = desktop.lock().canvas().finish_transform()? else {
+    let geometries = desktop.transform_geometries(expected_revision, &elements)?;
+    if geometries.is_empty() {
         return Ok(None);
-    };
-    let project_result: Result<_, Error> = async {
+    }
+    let (commit, page) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
-        let commit = project
-            .set_geometries(
-                transform
-                    .elements
-                    .into_iter()
-                    .map(|element| (element.element, element.geometry)),
-            )
-            .await?;
+        ensure_revision(project.snapshot().revision(), expected_revision)?;
+        let commit = project.set_geometries(geometries).await?;
         project.record_commit(&commit);
-        Ok((commit, project.active_page()))
-    }
-    .await;
-    let (commit, page) = match project_result {
-        Ok(result) => result,
-        Err(error) => {
-            desktop.lock().canvas().cancel_transform();
-            return Err(error);
-        }
+        (commit, project.active_page())
     };
-    desktop
-        .lock()
-        .canvas()
-        .acknowledge_transform_commit(transform.page, commit.revision)?;
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
-    canvas_channel.channel.publish(canvas);
+    canvas_channel.channel.publish(desktop.canvas_state());
     Ok(Some(commit.revision))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn cancel_transform(desktop: State<'_, Desktop>) -> Result<(), Error> {
-    desktop.lock().canvas().cancel_transform();
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn begin_inpaint(
-    point: Point,
-    diameter: f32,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().begin_mask_stroke(
-        INPAINT_MASK,
-        INPAINT_OVERLAY,
-        koharu_canvas::Brush {
-            diameter,
-            color: [0, 0, 0, 255],
-            mode: koharu_canvas::StrokeMode::Paint,
-        },
-        point.into(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn extend_inpaint(
+pub(crate) async fn commit_inpaint(
+    expected_revision: Revision,
     points: Vec<Point>,
-    desktop: State<'_, Desktop>,
-) -> Result<(), Error> {
-    desktop.lock().canvas().extend_mask_stroke(
-        INPAINT_MASK,
-        &points.into_iter().map(PagePoint::from).collect::<Vec<_>>(),
-    )?;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn finish_inpaint(
-    handle: AppHandle<Cef>,
-    desktop: State<'_, Desktop>,
+    diameter: f32,
+    handle: AppHandle<Wry>,
+    project: State<'_, CurrentProject>,
 ) -> Result<Option<JobId>, Error> {
-    let Some(mask) = desktop.lock().canvas().finish_mask_stroke(INPAINT_MASK)? else {
-        return Ok(None);
+    if !diameter.is_finite() || diameter <= 0.0 || points.is_empty() {
+        return Err(anyhow!(
+            "an inpaint stroke requires a positive diameter and at least one point"
+        )
+        .into());
+    }
+    if points
+        .iter()
+        .any(|point| !point.x.is_finite() || !point.y.is_finite())
+    {
+        return Err(anyhow!("inpaint stroke points must be finite").into());
+    }
+    let (page, width, height) = {
+        let project = project.project.lock().await;
+        let project = project.as_ref().context("no project is open")?;
+        let snapshot = project.snapshot();
+        ensure_revision(snapshot.revision(), expected_revision)?;
+        let page = project
+            .active_page()
+            .context("the project has no active page")?;
+        let page_value = snapshot.page(page)?.page()?;
+        (
+            page,
+            page_value.width.round() as u32,
+            page_value.height.round() as u32,
+        )
     };
-    let page = mask.page;
+    let (png, bounds) =
+        tokio::task::spawn_blocking(move || encode_mask(width, height, &points, diameter))
+            .await
+            .context("inpaint mask worker stopped unexpectedly")??;
     *handle.state::<Processing>().inpainting_mask.lock() = Some(koharu_pipeline::InpaintingMask {
         page,
-        png: Arc::from(mask.encode_png()?),
+        png: Arc::from(png),
     });
-    desktop.lock().canvas().clear_mask(INPAINT_MASK);
     Ok(Some(
         processing::process(
             handle.clone(),
-            koharu_pipeline::Scope::Region {
-                page,
-                bounds: koharu_pipeline::Bounds {
-                    x: f64::from(mask.dirty.x),
-                    y: f64::from(mask.dirty.y),
-                    width: f64::from(mask.dirty.width),
-                    height: f64::from(mask.dirty.height),
-                },
-            },
+            koharu_pipeline::Scope::Region { page, bounds },
             koharu_pipeline::Operation::Only {
                 stage: koharu_pipeline::Stage::Inpainting,
             },
@@ -522,70 +369,83 @@ pub(crate) async fn finish_inpaint(
     ))
 }
 
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn cancel_inpaint(desktop: State<'_, Desktop>) -> Result<(), Error> {
-    desktop.lock().canvas().cancel_mask_stroke(INPAINT_MASK)?;
+fn ensure_revision(actual: Revision, expected: Revision) -> anyhow::Result<()> {
+    if actual != expected {
+        bail!("canvas edit expected revision {expected}, but the project is at {actual}");
+    }
     Ok(())
 }
 
-#[tauri::command]
-#[specta::specta]
-pub(crate) async fn sample_color(
-    point: Point,
-    desktop: State<'_, Desktop>,
-) -> Result<[u8; 4], Error> {
-    let (complete, sample) = tokio::sync::oneshot::channel();
-    desktop
-        .lock()
-        .canvas()
-        .sample_color(PhysicalPoint::new(point.x, point.y), move |result| {
-            let _ = complete.send(result);
-        })?;
-    Ok(sample.await.context("color sample was cancelled")??)
-}
-
-#[tauri::command]
-#[specta::specta]
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn set_viewport(
-    desktop: State<'_, Desktop>,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    dpr: f64,
-    background: [u8; 3],
-    project: State<'_, CurrentProject>,
-    canvas_view: State<'_, CanvasView>,
-    canvas_channel: State<'_, CanvasChannel>,
-) -> Result<(), Error> {
-    let viewport = PhysicalRect::from_logical(x, y, width, height, dpr)
-        .map_err(|error| anyhow::anyhow!(error))?;
-    let size = if canvas_view.fitted.load(Ordering::Acquire) {
-        let project = project.project.lock().await;
-        project.as_ref().and_then(|project| {
-            let page = project.active_page()?;
-            let snapshot = project.snapshot();
-            let page = snapshot.page(page).ok()?.page().ok()?;
-            Some(koharu_canvas::PhysicalSize::new(
-                page.width.ceil() as u32,
-                page.height.ceil() as u32,
-            ))
-        })
-    } else {
-        None
-    };
-    let canvas = {
-        let mut desktop = desktop.lock();
-        desktop.set_viewport(viewport, background);
-        if let Some(size) = size {
-            let mut view = desktop.view().clone();
-            view.camera = koharu_canvas::Camera::contain(desktop.viewport().size(), size);
-            desktop.set_view(view);
+fn encode_mask(
+    width: u32,
+    height: u32,
+    points: &[Point],
+    diameter: f32,
+) -> anyhow::Result<(Vec<u8>, koharu_pipeline::Bounds)> {
+    if width == 0 || height == 0 {
+        bail!("page dimensions must be positive");
+    }
+    let mut image = GrayImage::new(width, height);
+    let radius = f64::from(diameter) * 0.5;
+    let mut dirty = None::<[u32; 4]>;
+    for (start, end) in points
+        .iter()
+        .zip(points.iter().skip(1))
+        .chain(points.last().map(|point| (point, point)))
+    {
+        let left = (start.x.min(end.x) - radius - 0.5).floor().max(0.0) as u32;
+        let top = (start.y.min(end.y) - radius - 0.5).floor().max(0.0) as u32;
+        let right = (start.x.max(end.x) + radius + 0.5)
+            .ceil()
+            .min(f64::from(width)) as u32;
+        let bottom = (start.y.max(end.y) + radius + 0.5)
+            .ceil()
+            .min(f64::from(height)) as u32;
+        let dx = end.x - start.x;
+        let dy = end.y - start.y;
+        let length_squared = dx.mul_add(dx, dy * dy);
+        for y in top..bottom {
+            for x in left..right {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let progress = if length_squared <= f64::EPSILON {
+                    0.0
+                } else {
+                    (((px - start.x) * dx + (py - start.y) * dy) / length_squared).clamp(0.0, 1.0)
+                };
+                let nearest_x = start.x + progress * dx;
+                let nearest_y = start.y + progress * dy;
+                let distance = (px - nearest_x).hypot(py - nearest_y);
+                let coverage = ((radius + 0.5 - distance).clamp(0.0, 1.0) * 255.0).round() as u8;
+                if coverage == 0 {
+                    continue;
+                }
+                let pixel = image.get_pixel_mut(x, y);
+                pixel.0[0] = pixel.0[0].max(coverage);
+                dirty = Some(match dirty {
+                    Some([min_x, min_y, max_x, max_y]) => {
+                        [min_x.min(x), min_y.min(y), max_x.max(x), max_y.max(y)]
+                    }
+                    None => [x, y, x, y],
+                });
+            }
         }
-        desktop.canvas_state(canvas_view.fitted.load(Ordering::Acquire))
-    };
-    canvas_channel.channel.publish(canvas);
-    Ok(())
+    }
+    let [left, top, right, bottom] = dirty.context("inpaint stroke does not intersect the page")?;
+    let mut png = Vec::new();
+    PngEncoder::new(&mut png).write_image(
+        image.as_raw(),
+        width,
+        height,
+        image::ExtendedColorType::L8,
+    )?;
+    Ok((
+        png,
+        koharu_pipeline::Bounds {
+            x: f64::from(left),
+            y: f64::from(top),
+            width: f64::from(right - left + 1),
+            height: f64::from(bottom - top + 1),
+        },
+    ))
 }

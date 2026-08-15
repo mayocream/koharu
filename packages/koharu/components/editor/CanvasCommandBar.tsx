@@ -6,9 +6,9 @@ import {
   type PipelineScope,
 } from '@/components/editor/InferenceControl'
 import { call } from '@/lib/backend'
-import { commands, type Scope, type Stage } from '@/lib/protocol'
 import { usePage } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { commands, type Scope, type Stage } from '@koharu/bridge/protocol'
 
 export function CanvasCommandBar() {
   const page = usePage().data

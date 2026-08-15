@@ -50,11 +50,11 @@ Document only durable, repository-specific constraints here. Do not record curre
 
 - The default Windows debugging setup must define `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=4000` before launching Koharu. Treat `http://127.0.0.1:4000` as the default local CDP endpoint.
 - Connect `chrome-devtools-mcp` with `--browser-url=http://127.0.0.1:4000` and prefer its tools for WebView inspection and automation. Use semantic targets and observable conditions instead of coordinate-only actions or fixed delays.
-- Use a lower-level CDP client only when `chrome-devtools-mcp` does not expose a required protocol operation. Use native window capture when CDP cannot observe the composited desktop output.
+- Use a lower-level CDP client only when `chrome-devtools-mcp` does not expose a required protocol operation. Use native window capture when CDP cannot observe the final WebGPU output.
 
 ## Desktop Rendering
 
-- Koharu composites native WGPU-rendered canvas pixels beneath a transparent WebView. Preserve WebView transparency wherever native output must remain visible, keep interface rendering in the WebView and canvas rendering in WGPU, and validate their final composition through the desktop window rather than either layer alone.
+- Koharu presents canvas pixels through the `koharu-canvas` WASM module and WebGPU inside the standard Tauri webview. Keep durable scene preparation and export native, keep transient canvas interaction in the browser, and validate WebGPU presentation through the final desktop window.
 
 ## Documentation
 

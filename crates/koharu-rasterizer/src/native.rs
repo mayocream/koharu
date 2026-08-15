@@ -1,19 +1,25 @@
-//! Reusable Vello rasterization into CPU-readable images.
+//! Reusable native WGPU readback and export supersampling.
 
 use std::sync::mpsc;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result as AnyResult, anyhow, bail};
 use fast_image_resize::{FilterType, ResizeAlg, ResizeOptions, Resizer};
 use image::RgbaImage;
 use parking_lot::Mutex;
-use vello::wgpu::{
-    self, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
-    TexelCopyBufferInfo, Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
-};
 use vello::{
-    AaConfig, AaSupport, RenderParams, RendererOptions, Scene, kurbo::Affine, peniko::Color,
+    AaConfig, AaSupport, RenderParams, RendererOptions, Scene,
+    kurbo::Affine,
+    peniko::Color,
     util::RenderContext,
+    wgpu::{
+        self, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d,
+        TexelCopyBufferInfo, Texture, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
+    },
 };
+
+use crate::{CompositionCommand, Error, Frame, GpuCompositor, RasterDraw, Result};
+
+const MAX_SUPERSAMPLING_FACTOR: u32 = 4;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DownsampleFilter {
@@ -60,15 +66,11 @@ impl RasterOptions {
 impl Default for RasterOptions {
     fn default() -> Self {
         Self {
-            // Vello already uses area anti-aliasing. Supersampling remains available for
-            // exports, but should not multiply every interactive render by four by default.
             supersampling_factor: 1,
             downsample_filter: DownsampleFilter::Lanczos3,
         }
     }
 }
-
-const MAX_SUPERSAMPLING_FACTOR: u32 = 4;
 
 #[derive(Debug)]
 pub struct Raster {
@@ -81,7 +83,7 @@ struct GpuState {
     context: RenderContext,
     device_id: usize,
     renderer: vello::Renderer,
-    compositor: crate::GpuCompositor,
+    compositor: GpuCompositor,
     targets: Vec<RenderTarget>,
 }
 
@@ -94,21 +96,17 @@ struct RenderTarget {
     readback: Buffer,
 }
 
-/// A reusable, headless Vello rasterizer.
-///
-/// GPU setup, Vello's glyph caches, and a small target pool live for the lifetime of this value.
-/// Command encoding is serialized because Vello mutates its caches, but GPU completion and
-/// readback happen after releasing the lock so independent callers can overlap that work.
-pub(crate) struct Rasterizer {
+/// Reusable headless Vello renderer with a bounded readback-target pool.
+pub struct Rasterizer {
     gpu: Mutex<GpuState>,
 }
 
 impl Rasterizer {
-    pub(crate) fn new() -> crate::Result<Self> {
-        Self::try_new().map_err(crate::Error::Backend)
+    pub fn new() -> Result<Self> {
+        Self::try_new().map_err(Error::backend)
     }
 
-    fn try_new() -> Result<Self> {
+    fn try_new() -> AnyResult<Self> {
         let mut context = RenderContext::new();
         let device_id = pollster::block_on(context.device(None))
             .context("no WGPU adapter supports Vello's required features")?;
@@ -120,8 +118,7 @@ impl Rasterizer {
             },
         )
         .map_err(|error| anyhow!("failed to create Vello renderer: {error:?}"))?;
-        let compositor = crate::GpuCompositor::new(&context.devices[device_id].device);
-
+        let compositor = GpuCompositor::new(&context.devices[device_id].device);
         Ok(Self {
             gpu: Mutex::new(GpuState {
                 context,
@@ -133,51 +130,98 @@ impl Rasterizer {
         })
     }
 
-    pub(crate) fn rasterize(
-        &self,
-        frame: &crate::Frame,
-        options: RasterOptions,
-    ) -> crate::Result<Raster> {
+    pub fn rasterize(&self, frame: &Frame, options: RasterOptions) -> Result<Raster> {
         let (width, height) = frame.size();
         let (left, top) = frame.origin();
         let image = self
             .rasterize_frame_inner(frame, width, height, options)
-            .map_err(crate::Error::Backend)?;
+            .map_err(Error::backend)?;
         Ok(Raster { image, left, top })
     }
 
     fn rasterize_frame_inner(
         &self,
-        frame: &crate::Frame,
+        frame: &Frame,
         width: u32,
         height: u32,
-        raster: RasterOptions,
-    ) -> Result<RgbaImage> {
-        if width == 0 || height == 0 {
-            bail!("invalid render surface {width}x{height}");
-        }
-        let scale = raster.scale();
+        options: RasterOptions,
+    ) -> AnyResult<RgbaImage> {
+        checked_surface(width, height)?;
+        let scale = options.scale();
         let raster_width = width
             .checked_mul(scale)
             .context("supersampled render surface width overflow")?;
         let raster_height = height
             .checked_mul(scale)
             .context("supersampled render surface height overflow")?;
-        let commands = frame_commands(frame, scale);
+        let commands = frame.composition_commands(scale);
         let pixels = self.readback_commands(&commands, raster_width, raster_height)?;
-        finish_raster(pixels, raster_width, raster_height, width, height, raster)
+        finish_raster(pixels, raster_width, raster_height, width, height, options)
     }
 
-    pub(crate) fn rasterize_scene(
+    pub fn rasterize_commands(
+        &self,
+        commands: &[CompositionCommand],
+        width: u32,
+        height: u32,
+        options: RasterOptions,
+    ) -> Result<RgbaImage> {
+        self.rasterize_commands_inner(commands, width, height, options)
+            .map_err(Error::backend)
+    }
+
+    fn rasterize_commands_inner(
+        &self,
+        commands: &[CompositionCommand],
+        width: u32,
+        height: u32,
+        options: RasterOptions,
+    ) -> AnyResult<RgbaImage> {
+        checked_surface(width, height)?;
+        let scale = options.scale();
+        let raster_width = width
+            .checked_mul(scale)
+            .context("supersampled render surface width overflow")?;
+        let raster_height = height
+            .checked_mul(scale)
+            .context("supersampled render surface height overflow")?;
+        let scaled;
+        let commands = if scale == 1 {
+            commands
+        } else {
+            let transform = Affine::scale(f64::from(scale));
+            scaled = commands
+                .iter()
+                .map(|command| match command {
+                    CompositionCommand::Raster(draw) => CompositionCommand::Raster(RasterDraw {
+                        image: draw.image.clone(),
+                        transform: transform * draw.transform,
+                        opacity: draw.opacity,
+                        erase: draw.erase,
+                    }),
+                    CompositionCommand::Vector(scene) => {
+                        let mut scaled = Scene::new();
+                        scaled.append(scene, Some(transform));
+                        CompositionCommand::Vector(Box::new(scaled))
+                    }
+                })
+                .collect::<Vec<_>>();
+            &scaled
+        };
+        let pixels = self.readback_commands(commands, raster_width, raster_height)?;
+        finish_raster(pixels, raster_width, raster_height, width, height, options)
+    }
+
+    pub fn rasterize_scene(
         &self,
         scene: &Scene,
         width: u32,
         height: u32,
         background: [u8; 4],
         options: RasterOptions,
-    ) -> crate::Result<RgbaImage> {
+    ) -> Result<RgbaImage> {
         self.rasterize_scene_inner(scene, width, height, background, options)
-            .map_err(crate::Error::Backend)
+            .map_err(Error::backend)
     }
 
     fn rasterize_scene_inner(
@@ -186,12 +230,10 @@ impl Rasterizer {
         width: u32,
         height: u32,
         background: [u8; 4],
-        raster: RasterOptions,
-    ) -> Result<RgbaImage> {
-        if width == 0 || height == 0 {
-            bail!("invalid render surface {width}x{height}");
-        }
-        let scale = raster.scale();
+        options: RasterOptions,
+    ) -> AnyResult<RgbaImage> {
+        checked_surface(width, height)?;
+        let scale = options.scale();
         let raster_width = width
             .checked_mul(scale)
             .context("supersampled render surface width overflow")?;
@@ -204,21 +246,21 @@ impl Rasterizer {
         } else {
             scaled = {
                 let mut scaled = Scene::new();
-                scaled.append(scene, Some(Affine::scale(scale as f64)));
+                scaled.append(scene, Some(Affine::scale(f64::from(scale))));
                 scaled
             };
             &scaled
         };
-        let pixels = self.readback(scene, raster_width, raster_height, background)?;
-        finish_raster(pixels, raster_width, raster_height, width, height, raster)
+        let pixels = self.readback_scene(scene, raster_width, raster_height, background)?;
+        finish_raster(pixels, raster_width, raster_height, width, height, options)
     }
 
     fn readback_commands(
         &self,
-        commands: &[crate::CompositionCommand],
+        commands: &[CompositionCommand],
         width: u32,
         height: u32,
-    ) -> Result<Vec<u8>> {
+    ) -> AnyResult<Vec<u8>> {
         let size = Extent3d {
             width,
             height,
@@ -235,18 +277,8 @@ impl Rasterizer {
             } = &mut *gpu;
             let device = context.devices[*device_id].device.clone();
             let queue = &context.devices[*device_id].queue;
-            let limits = device.limits();
-            if width > limits.max_texture_dimension_2d || height > limits.max_texture_dimension_2d {
-                bail!(
-                    "render surface {width}x{height} exceeds the device limit {}",
-                    limits.max_texture_dimension_2d
-                );
-            }
-            let target = targets
-                .iter()
-                .position(|target| target.width == width && target.height == height)
-                .map(|position| targets.swap_remove(position))
-                .map_or_else(|| RenderTarget::new(&device, width, height), Ok)?;
+            check_device_limit(&device, width, height)?;
+            let target = take_target(targets, &device, width, height)?;
             compositor
                 .render(
                     &device,
@@ -260,7 +292,6 @@ impl Rasterizer {
                     [0, 0, width, height],
                 )
                 .map_err(|error| anyhow!(error.to_string()))?;
-
             let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("koharu frame readback encoder"),
             });
@@ -282,13 +313,13 @@ impl Rasterizer {
         self.finish_readback(device, submission, target)
     }
 
-    fn readback(
+    fn readback_scene(
         &self,
         scene: &Scene,
         width: u32,
         height: u32,
         background: [u8; 4],
-    ) -> Result<Vec<u8>> {
+    ) -> AnyResult<Vec<u8>> {
         let size = Extent3d {
             width,
             height,
@@ -305,18 +336,8 @@ impl Rasterizer {
             } = &mut *gpu;
             let device = context.devices[*device_id].device.clone();
             let queue = &context.devices[*device_id].queue;
-            let limits = device.limits();
-            if width > limits.max_texture_dimension_2d || height > limits.max_texture_dimension_2d {
-                bail!(
-                    "render surface {width}x{height} exceeds the device limit {}",
-                    limits.max_texture_dimension_2d
-                );
-            }
-            let target = targets
-                .iter()
-                .position(|target| target.width == width && target.height == height)
-                .map(|position| targets.swap_remove(position))
-                .map_or_else(|| RenderTarget::new(&device, width, height), Ok)?;
+            check_device_limit(&device, width, height)?;
+            let target = take_target(targets, &device, width, height)?;
             renderer
                 .render_to_texture(
                     &device,
@@ -331,9 +352,8 @@ impl Rasterizer {
                     },
                 )
                 .map_err(|error| anyhow!("Vello rendering failed: {error:?}"))?;
-
             let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("koharu text readback encoder"),
+                label: Some("koharu scene readback encoder"),
             });
             encoder.copy_texture_to_buffer(
                 target.texture.as_image_copy(),
@@ -358,7 +378,7 @@ impl Rasterizer {
         device: wgpu::Device,
         submission: wgpu::SubmissionIndex,
         target: RenderTarget,
-    ) -> Result<Vec<u8>> {
+    ) -> AnyResult<Vec<u8>> {
         let width = target.width;
         let height = target.height;
         let slice = target.readback.slice(..);
@@ -376,7 +396,6 @@ impl Rasterizer {
             .recv()
             .context("WGPU closed the readback channel")?
             .context("failed to map WGPU readback buffer")?;
-
         let mapped = slice.get_mapped_range();
         let row_len = (width * 4) as usize;
         let mut pixels = Vec::with_capacity(row_len * height as usize);
@@ -389,23 +408,50 @@ impl Rasterizer {
         drop(mapped);
         target.readback.unmap();
         let mut gpu = self.gpu.lock();
-        const MAX_POOLED_TARGETS: usize = 4;
-        if gpu.targets.len() < MAX_POOLED_TARGETS {
+        if gpu.targets.len() < 4 {
             gpu.targets.push(target);
         }
         Ok(pixels)
     }
 }
 
+fn checked_surface(width: u32, height: u32) -> AnyResult<()> {
+    if width == 0 || height == 0 {
+        bail!("invalid render surface {width}x{height}");
+    }
+    Ok(())
+}
+
+fn check_device_limit(device: &wgpu::Device, width: u32, height: u32) -> AnyResult<()> {
+    let limit = device.limits().max_texture_dimension_2d;
+    if width > limit || height > limit {
+        bail!("render surface {width}x{height} exceeds the device limit {limit}");
+    }
+    Ok(())
+}
+
+fn take_target(
+    targets: &mut Vec<RenderTarget>,
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+) -> AnyResult<RenderTarget> {
+    targets
+        .iter()
+        .position(|target| target.width == width && target.height == height)
+        .map(|position| targets.swap_remove(position))
+        .map_or_else(|| RenderTarget::new(device, width, height), Ok)
+}
+
 impl RenderTarget {
-    fn new(device: &wgpu::Device, width: u32, height: u32) -> Result<Self> {
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> AnyResult<Self> {
         let size = Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
         let texture = device.create_texture(&TextureDescriptor {
-            label: Some("koharu text target"),
+            label: Some("koharu rasterizer target"),
             size,
             mip_level_count: 1,
             sample_count: 1,
@@ -426,7 +472,7 @@ impl RenderTarget {
             .checked_mul(u64::from(height))
             .context("render target buffer size overflow")?;
         let readback = device.create_buffer(&BufferDescriptor {
-            label: Some("koharu text readback"),
+            label: Some("koharu rasterizer readback"),
             size: buffer_size,
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -442,61 +488,22 @@ impl RenderTarget {
     }
 }
 
-fn frame_commands(frame: &crate::Frame, scale: u32) -> Vec<crate::CompositionCommand> {
-    let outer = Affine::scale(f64::from(scale)) * frame.0.normalization;
-    let mut commands = Vec::new();
-    let mut vectors = Scene::new();
-    let mut vectors_pending = false;
-    for layer in frame.layers() {
-        let presentation = layer.presentation();
-        if let Some(image) = layer.raster_image() {
-            if vectors_pending {
-                commands.push(crate::CompositionCommand::Vector(std::mem::replace(
-                    &mut vectors,
-                    Scene::new(),
-                )));
-                vectors_pending = false;
-            }
-            if presentation.visible
-                && presentation.opacity.is_finite()
-                && presentation.opacity > 0.0
-            {
-                commands.push(crate::CompositionCommand::Raster(crate::RasterDraw {
-                    image: image.clone(),
-                    transform: outer * layer.placement(),
-                    opacity: presentation.opacity.clamp(0.0, 1.0),
-                    erase: false,
-                }));
-            }
-        } else {
-            layer.append_vector_with_presentation(&mut vectors, Some(outer), presentation);
-            vectors_pending |= presentation.visible
-                && presentation.opacity.is_finite()
-                && presentation.opacity > 0.0;
-        }
-    }
-    if vectors_pending {
-        commands.push(crate::CompositionCommand::Vector(vectors));
-    }
-    commands
-}
-
 fn finish_raster(
     pixels: Vec<u8>,
     raster_width: u32,
     raster_height: u32,
     width: u32,
     height: u32,
-    raster: RasterOptions,
-) -> Result<RgbaImage> {
+    options: RasterOptions,
+) -> AnyResult<RgbaImage> {
     let image = RgbaImage::from_raw(raster_width, raster_height, pixels)
         .context("WGPU returned an invalid RGBA buffer")?;
-    if raster.scale() == 1 {
+    if options.scale() == 1 {
         return Ok(image);
     }
     let mut downsampled = RgbaImage::new(width, height);
     let resize_options = ResizeOptions::new()
-        .resize_alg(raster.downsample_filter.into())
+        .resize_alg(options.downsample_filter.into())
         .use_alpha(true);
     Resizer::new()
         .resize(&image, &mut downsampled, &resize_options)
@@ -504,6 +511,6 @@ fn finish_raster(
     Ok(downsampled)
 }
 
-pub(crate) fn rgba([r, g, b, a]: [u8; 4]) -> Color {
+fn rgba([r, g, b, a]: [u8; 4]) -> Color {
     Color::from_rgba8(r, g, b, a)
 }
