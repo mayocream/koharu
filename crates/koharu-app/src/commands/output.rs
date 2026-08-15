@@ -13,7 +13,7 @@ use std::{
     path::PathBuf,
     sync::Arc,
 };
-use tauri::{State, WebviewWindow, Wry, ipc::IpcResponse};
+use tauri::{Cef, State, WebviewWindow, ipc::IpcResponse};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::{Error, project::CurrentProject};
@@ -66,7 +66,7 @@ struct ExportPage {
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn export_pages(
-    window: WebviewWindow<Wry>,
+    window: WebviewWindow<Cef>,
     request: ExportRequest,
     project: State<'_, CurrentProject>,
     desktop: State<'_, Desktop>,
