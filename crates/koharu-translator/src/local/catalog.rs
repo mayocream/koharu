@@ -639,6 +639,34 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
         target_languages: SupportedLanguages::All,
     },
     LocalModelDescriptor {
+        id: "qwen3.8-27b",
+        name: "Qwen 3.8 27B",
+        quantizations: &[
+            QuantizationDefinition::new("Q4_K_XL", "Q4_K XL", "Qwen3.8-27B-UD-Q4_K_XL.gguf"),
+            QuantizationDefinition::new("IQ2_M", "IQ2 M", "Qwen3.8-27B-UD-IQ2_M.gguf"),
+            QuantizationDefinition::new("IQ2_XXS", "IQ2 XXS", "Qwen3.8-27B-UD-IQ2_XXS.gguf"),
+            QuantizationDefinition::new("IQ3_XXS", "IQ3 XXS", "Qwen3.8-27B-UD-IQ3_XXS.gguf"),
+            QuantizationDefinition::new("Q2_K_XL", "Q2_K XL", "Qwen3.8-27B-UD-Q2_K_XL.gguf"),
+            QuantizationDefinition::new("Q3_K_XL", "Q3_K XL", "Qwen3.8-27B-UD-Q3_K_XL.gguf"),
+            QuantizationDefinition::new("Q5_K_XL", "Q5_K XL", "Qwen3.8-27B-UD-Q5_K_XL.gguf"),
+            QuantizationDefinition::new("Q6_K_XL", "Q6_K XL", "Qwen3.8-27B-UD-Q6_K_XL.gguf"),
+            QuantizationDefinition::new("Q8_K_XL", "Q8_K XL", "Qwen3.8-27B-UD-Q8_K_XL.gguf"),
+        ],
+        generation: ModelGeneration {
+            temperature: Some(0.7),
+            top_k: Some(20),
+            top_p: Some(0.8),
+            min_p: Some(0.0),
+            max_tokens: Some(1000),
+            repeat_penalty: Some(1.0),
+            frequency_penalty: None,
+            presence_penalty: Some(1.5),
+        },
+        repository: "unsloth/Qwen3.8-27B-GGUF",
+        projector: Some("mmproj-F16.gguf"),
+        target_languages: SupportedLanguages::All,
+    },
+    LocalModelDescriptor {
         id: "qwen3.5-2b-uncensored",
         name: "Qwen 3.5 2B Uncensored",
         quantizations: &[
@@ -941,7 +969,7 @@ mod tests {
 
     #[test]
     fn local_catalog_has_unique_complete_entries() {
-        assert_eq!(MODELS.len(), 25);
+        assert_eq!(MODELS.len(), 26);
         for (index, model) in MODELS.iter().enumerate() {
             let id = model.id;
             assert!(!model.repository.is_empty());
