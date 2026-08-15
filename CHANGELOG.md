@@ -1,3 +1,14 @@
+## [0.69.0](https://github.com/mayocream/koharu/compare/0.68.0..0.69.0) - 2026-08-15
+
+### ⛰️  Features
+
+- *(translator)* Add Qwen 3.8 27B model - ([c17d7a0](https://github.com/mayocream/koharu/commit/c17d7a075c866f30eba1464975f5b34ae4ca5141))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Align updater header content - ([d80649d](https://github.com/mayocream/koharu/commit/d80649d0a803b2b06db2d966b631d8a4d4f6e383))
+
+
 ## [0.68.0](https://github.com/mayocream/koharu/compare/0.67.3..0.68.0) - 2026-08-15
 
 ### ⛰️  Features
