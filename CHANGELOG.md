@@ -1,3 +1,10 @@
+## [0.67.2](https://github.com/mayocream/koharu/compare/0.67.1..0.67.2) - 2026-08-15
+
+### 🚜 Refactor
+
+- Use Tauri with CEF - ([a6c71bd](https://github.com/mayocream/koharu/commit/a6c71bd06673bbc428cb878987fa135968dc879f))
+
+
 ## [0.67.1](https://github.com/mayocream/koharu/compare/0.67.0..0.67.1) - 2026-08-15
 
 ### 🐛 Bug Fixes
