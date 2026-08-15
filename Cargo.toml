@@ -110,7 +110,7 @@ icu_properties = "2.2"
 icu_segmenter = "2.2"
 jieba-rs = "0.10"
 fontique = "0.11"
-pollster = "0.4"
+pollster = "1.0"
 vello = "0.9"
 tauri = { git = "https://github.com/tauri-apps/tauri", rev = "4af26a3f7f8b692d62cca549bbacd93f5ce90b41", default-features = false, features = [
     "cef",
