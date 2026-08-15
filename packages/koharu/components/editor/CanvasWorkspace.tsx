@@ -323,6 +323,10 @@ export function CanvasWorkspace() {
 
     const down = (event: KeyboardEvent) => {
       if (editable(event.target)) return
+      if (event.key === 'Alt') {
+        event.preventDefault()
+        return
+      }
       const state = useKoharuStore.getState()
       if (event.code === 'Space') {
         spaceHeld.current = true
@@ -369,6 +373,7 @@ export function CanvasWorkspace() {
     }
 
     const up = (event: KeyboardEvent) => {
+      if (event.key === 'Alt') event.preventDefault()
       if (event.code === 'Space') spaceHeld.current = false
     }
     const blur = () => {
