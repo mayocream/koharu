@@ -1,3 +1,14 @@
+## [0.68.0](https://github.com/mayocream/koharu/compare/0.67.3..0.68.0) - 2026-08-15
+
+### ⛰️  Features
+
+- *(i18n)* Detect preferred language - ([a6defc2](https://github.com/mayocream/koharu/commit/a6defc2cb98c2a145a4f6ed7ae8e3b593c8f5c68))
+
+### 🐛 Bug Fixes
+
+- *(ui)* Keep translation controls usable while saving - ([a0df79a](https://github.com/mayocream/koharu/commit/a0df79a1b04a2d416bfb46ebe30d95db78246cc7))
+
+
 ## [0.67.3](https://github.com/mayocream/koharu/compare/0.67.2..0.67.3) - 2026-08-15
 
 ### 🐛 Bug Fixes
