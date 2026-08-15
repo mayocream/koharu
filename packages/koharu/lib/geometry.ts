@@ -1,5 +1,6 @@
+import type { EntityId, Frame, Layer, Point, TransformFrame } from '@koharu/bridge/protocol'
+
 import { effectiveLayerVisibility, isTextLayer } from './document'
-import type { EntityId, Frame, Layer, Point, TransformFrame } from './protocol'
 
 const minimumFrameSize = 1e-6
 

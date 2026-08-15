@@ -20,6 +20,12 @@ use super::{
     editing::{GeometryUpdate, TypographyUpdate},
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RasterStrokeMode {
+    Paint,
+    Erase,
+}
+
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct ProjectInfo {
     pub name: String,
@@ -719,7 +725,7 @@ impl Project {
         &mut self,
         page: EntityId,
         layer: Option<EntityId>,
-        mode: koharu_canvas::StrokeMode,
+        mode: RasterStrokeMode,
         color: [u8; 4],
         diameter: f32,
         points: Vec<ScenePoint>,
@@ -762,7 +768,7 @@ impl Project {
                 None => RgbaImage::new(width, height),
             }
         } else {
-            if mode == koharu_canvas::StrokeMode::Erase {
+            if mode == RasterStrokeMode::Erase {
                 bail!("eraser requires a raster layer target");
             }
             RgbaImage::new(width, height)
@@ -1236,7 +1242,7 @@ fn validate_project_name(name: &str) -> Result<String> {
 
 fn rasterize_stroke(
     image: &mut RgbaImage,
-    mode: koharu_canvas::StrokeMode,
+    mode: RasterStrokeMode,
     color: [u8; 4],
     diameter: f32,
     points: &[ScenePoint],
@@ -1275,7 +1281,7 @@ fn rasterize_stroke(
                 }
                 let pixel = image.get_pixel_mut(x, y);
                 match mode {
-                    koharu_canvas::StrokeMode::Paint => {
+                    RasterStrokeMode::Paint => {
                         let source_alpha = f32::from(color[3]) / 255.0 * coverage;
                         let destination_alpha = f32::from(pixel[3]) / 255.0;
                         let output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
@@ -1292,7 +1298,7 @@ fn rasterize_stroke(
                         }
                         pixel[3] = (output_alpha * 255.0).round() as u8;
                     }
-                    koharu_canvas::StrokeMode::Erase => {
+                    RasterStrokeMode::Erase => {
                         pixel[3] = (f32::from(pixel[3]) * (1.0 - coverage)).round() as u8;
                     }
                 }
@@ -1392,7 +1398,7 @@ mod tests {
         ];
         rasterize_stroke(
             &mut image,
-            koharu_canvas::StrokeMode::Paint,
+            RasterStrokeMode::Paint,
             [210, 40, 20, 255],
             5.0,
             &points,
@@ -1403,7 +1409,7 @@ mod tests {
 
         rasterize_stroke(
             &mut image,
-            koharu_canvas::StrokeMode::Erase,
+            RasterStrokeMode::Erase,
             [0, 0, 0, 0],
             5.0,
             &[ScenePoint { x: 16.0, y: 8.0 }],
@@ -1414,7 +1420,7 @@ mod tests {
         let mut white = RgbaImage::new(4, 4);
         rasterize_stroke(
             &mut white,
-            koharu_canvas::StrokeMode::Paint,
+            RasterStrokeMode::Paint,
             [255, 255, 255, 255],
             3.0,
             &[ScenePoint { x: 2.0, y: 2.0 }],

@@ -2,7 +2,7 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  transpilePackages: ['@koharu/ui'],
+  transpilePackages: ['@koharu/bridge', '@koharu/ui'],
   output: 'export',
   images: {
     unoptimized: true,

@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "ページを選択して開始します。",
     "fit": "ウィンドウに合わせる",
-    "surface": "Koharu キャンバス"
+    "surface": "Koharu キャンバス",
+    "unavailable": "WebGPU キャンバスを利用できません"
   },
   "colorPicker": {
     "brushColor": "ブラシカラー",

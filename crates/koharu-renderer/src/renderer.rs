@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, anyhow};
 use arc_swap::ArcSwap;
+use koharu_rasterizer::{RasterOptions, Rasterizer};
 use koharu_scene::{
     Asset, AssetRole, BlobId, Change, Component, ComponentOwner, EntityChange, EntityId, FitsTo,
     FlowsIn, Geometry, Group, OcrAnalysis, Origin, Page, Presents, RasterLayer, RasterLayerKind,
@@ -21,7 +22,6 @@ use skrifa::{
     instance::Size,
     outline::{DrawSettings, OutlinePen},
 };
-use tokio::sync::OnceCell;
 use vello::{
     Scene,
     kurbo::{Affine, BezPath, Rect, Vec2},
@@ -30,15 +30,15 @@ use vello::{
 
 use crate::{
     Error, FontFamily, FontStyle, Frame, ImageKind, ImageMetadata, Layer, LayerKind, Presentation,
-    Raster, RasterImage, RasterOptions, RenderBounds, RenderDependency, RenderDiagnostic, Result,
-    RetentionStats, TextAlign, TextMetadata, TypesettingConfig, WritingMode,
+    RasterImage, RenderBounds, RenderDependency, RenderDiagnostic, Result, RetentionStats,
+    TextAlign, TextMetadata, TypesettingConfig, WritingMode,
     bubble::{GeometryFrame, LayoutBox, contour, flow_cells, geometry_bounds, geometry_frame},
     fonts::{FontPreview, FontRequest, Fonts},
     frame::{
         FrameData, ImageNodeDescriptor, LayerData, LocalTextMetadata, NodeDescriptor, RetainedNode,
+        prepare_frame,
     },
     images::{DecodedImage, ImageCache, decode},
-    raster::{Rasterizer, rgba},
     script::{is_chinese_or_japanese_text, shaping_direction_for_text},
     text_renderer::{StrokeOptions, TextNodeDescriptor, TextRenderer},
 };
@@ -62,7 +62,6 @@ struct RendererInner {
     image_loads: Mutex<HashMap<BlobId, Weak<ImageLoad>>>,
     nodes: Mutex<NodeCache>,
     workers: OnceLock<Arc<rayon::ThreadPool>>,
-    rasterizer: OnceCell<Arc<Rasterizer>>,
 }
 
 impl std::fmt::Debug for Renderer {
@@ -106,7 +105,6 @@ impl Renderer {
                 image_loads: Mutex::new(HashMap::new()),
                 nodes: Mutex::new(NodeCache::new(DEFAULT_RETAINED_NODES)),
                 workers: OnceLock::new(),
-                rasterizer: OnceCell::new(),
             }),
         }
     }
@@ -154,16 +152,6 @@ impl Renderer {
             .await
     }
 
-    /// Produces CPU-readable pixels from the exact retained vector frame.
-    #[tracing::instrument(level = "info", skip_all, fields(page = %frame.page(), revision = %frame.revision()))]
-    pub async fn rasterize(&self, frame: &Frame, options: RasterOptions) -> Result<Raster> {
-        let rasterizer = self.rasterizer().await?;
-        let frame = frame.clone();
-        tokio::task::spawn_blocking(move || rasterizer.rasterize(&frame, options))
-            .await
-            .map_err(|source| Error::Backend(anyhow!(source)))?
-    }
-
     pub async fn available_fonts(&self) -> Result<Vec<FontFamily>> {
         self.inner
             .fonts
@@ -172,7 +160,11 @@ impl Renderer {
             .map_err(Error::FontResource)
     }
 
-    pub async fn font_preview(&self, family_name: &str) -> Result<Vec<u8>> {
+    pub async fn font_preview(
+        &self,
+        family_name: &str,
+        rasterizer: Arc<Rasterizer>,
+    ) -> Result<Vec<u8>> {
         const FONT_SIZE: f32 = 24.0;
         const PREVIEW_HEIGHT: u32 = 96;
 
@@ -221,7 +213,6 @@ impl Renderer {
         .context("font preview worker stopped unexpectedly")
         .and_then(|result| result)
         .map_err(Error::FontResource)?;
-        let rasterizer = self.rasterizer().await?;
         tokio::task::spawn_blocking(move || {
             let image = rasterizer
                 .rasterize_scene(
@@ -247,19 +238,6 @@ impl Renderer {
     /// Discards retained Vello nodes after their presentation resource lifetime ends.
     pub fn discard_retained_nodes(&self) {
         self.inner.nodes.lock().entries.clear();
-    }
-
-    async fn rasterizer(&self) -> Result<Arc<Rasterizer>> {
-        self.inner
-            .rasterizer
-            .get_or_try_init(|| async {
-                tokio::task::spawn_blocking(Rasterizer::new)
-                    .await
-                    .map_err(|source| Error::Backend(anyhow!(source)))?
-                    .map(Arc::new)
-            })
-            .await
-            .cloned()
     }
 
     async fn finish(
@@ -449,12 +427,12 @@ impl Renderer {
         }
         let result = async {
             let bytes = snapshot.read_blob(id).await?;
+            let bytes: Arc<[u8]> = Arc::from(bytes.as_ref());
             let workers = self.workers()?;
-            let (id, image) = tokio::task::spawn_blocking(move || {
-                workers.install(|| decode(id, bytes.as_ref(), None))
-            })
-            .await
-            .map_err(|source| Error::Backend(anyhow!(source)))??;
+            let (id, image) =
+                tokio::task::spawn_blocking(move || workers.install(|| decode(id, bytes, None)))
+                    .await
+                    .map_err(|source| Error::Backend(anyhow!(source)))??;
             self.inner.images.lock().insert(id, image.clone());
             *load.image.lock() = Arc::downgrade(&image);
             Ok((id, image))
@@ -1091,6 +1069,7 @@ impl ImageNodeDescriptor {
     fn from_asset(asset: Asset, require_size: Option<(u32, u32)>) -> Self {
         Self {
             blob: asset.blob,
+            media_type: asset.media_type,
             expected_size: asset.metadata.width.zip(asset.metadata.height),
             require_size,
         }
@@ -1155,13 +1134,22 @@ fn build_node(
             }
             let raster = RasterImage {
                 blob: image.blob,
+                source: koharu_rasterizer::ResourceId::for_encoded_raster(
+                    decoded.width,
+                    decoded.height,
+                    &image.media_type,
+                    &decoded.encoded,
+                ),
                 width: decoded.width,
                 height: decoded.height,
+                media_type: image.media_type.clone(),
+                encoded: decoded.encoded.clone(),
                 pixels: decoded.pixels.clone(),
             };
             Ok(RetainedNode {
                 descriptor,
-                scene: Arc::new(Scene::new()),
+                scene: Arc::new(koharu_rasterizer::PreparedScene::default()),
+                resources: Arc::from([]),
                 local_bounds: RenderBounds {
                     x: 0.0,
                     y: 0.0,
@@ -1178,6 +1166,7 @@ fn build_node(
             Ok(RetainedNode {
                 descriptor,
                 scene: rendered.scene,
+                resources: rendered.resources,
                 local_bounds: rendered.local_bounds,
                 image: None,
                 text: Some(LocalTextMetadata {
@@ -1254,6 +1243,15 @@ fn assemble_frame(
         .enumerate()
         .map(|(index, layer)| (layer.entity(), index))
         .collect();
+    let prepared = prepare_frame(
+        compiled.revision,
+        compiled.page,
+        compiled.width,
+        compiled.height,
+        (0, 0),
+        Affine::IDENTITY,
+        &layers,
+    )?;
     Ok(Frame(Arc::new(FrameData {
         revision: compiled.revision,
         page: compiled.page,
@@ -1266,6 +1264,7 @@ fn assemble_frame(
         dependencies: compiled.dependencies,
         diagnostics: diagnostics.into(),
         stats,
+        prepared: Arc::new(prepared),
     })))
 }
 
@@ -1614,7 +1613,7 @@ impl AffectedDependencies {
 }
 
 fn draw_font_preview(scene: &mut Scene, layout: &crate::LayoutRun<'_>) -> anyhow::Result<()> {
-    let brush = rgba([0, 0, 0, 255]);
+    let brush = vello::peniko::Color::from_rgba8(0, 0, 0, 255);
     for line in &layout.lines {
         let (baseline_x, baseline_y) = line.baseline;
         let mut pen_x = 0.0;
@@ -1730,7 +1729,6 @@ mod tests {
         assert!(Arc::ptr_eq(&renderer.inner, &cloned.inner));
         assert!(!renderer.inner.fonts.is_system_initialized());
         assert!(renderer.inner.workers.get().is_none());
-        assert!(renderer.inner.rasterizer.get().is_none());
     }
 
     #[tokio::test]

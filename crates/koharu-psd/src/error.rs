@@ -39,6 +39,8 @@ pub enum PsdExportError {
     #[error(transparent)]
     Renderer(#[from] koharu_renderer::Error),
     #[error(transparent)]
+    Rasterizer(#[from] koharu_rasterizer::Error),
+    #[error(transparent)]
     Image(#[from] image::ImageError),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),

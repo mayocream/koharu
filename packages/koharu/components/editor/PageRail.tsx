@@ -17,17 +17,27 @@ import { useTranslation } from 'react-i18next'
 
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
 import { call } from '@/lib/backend'
-import { commands, type PageImportSource, type PageSummary } from '@/lib/protocol'
 import {
   pageKey,
   pagesKey,
+  preparedPageKey,
   projectKey,
+  queryClient,
   refresh,
   useImportPages,
   usePage,
   usePages,
 } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
+import { prefetchCanvasPages, showCanvasPage } from '@koharu/bridge/canvas'
+import {
+  commands,
+  type CanvasPagePreparation,
+  type Page,
+  type PageImportSource,
+  type PageSummary,
+  type ProjectInfo,
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   Dialog,
@@ -51,6 +61,12 @@ import { cn } from '@koharu/ui/lib/utils'
 
 const emptyPages: PageSummary[] = []
 
+interface IntentPrefetchState {
+  project: string
+  revision: number
+  pages: Set<string>
+}
+
 export function PageRail() {
   const { t } = useTranslation()
   const pages = usePages().data ?? emptyPages
@@ -61,6 +77,8 @@ export function PageRail() {
   const setSettingsOpen = useKoharuStore((state) => state.setSettingsOpen)
   const { importPages, importing } = useImportPages()
   const anchor = useRef<number | null>(null)
+  const selectionRequest = useRef(0)
+  const intentPrefetch = useRef<IntentPrefetchState | null>(null)
   const [dragged, setDragged] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [renaming, setRenaming] = useState<PageSummary | null>(null)
@@ -88,6 +106,13 @@ export function PageRail() {
       ),
   })
 
+  useEffect(
+    () => () => {
+      selectionRequest.current += 1
+    },
+    [],
+  )
+
   const select = (index: number, additive: boolean, range: boolean) => {
     const page = pages[index]
     if (!page) return
@@ -106,11 +131,70 @@ export function PageRail() {
       next = [page.id]
       anchor.current = index
     }
-    selectPages(next)
-    selectLayers([])
-    void call(commands.selectPage, page.id)
-      .then(() => refresh(projectKey, pageKey))
-      .catch(() => undefined)
+    const previousProject = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+    const previousPage = queryClient.getQueryData<Page | null>(pageKey)
+    const prepared = queryClient.getQueryData<CanvasPagePreparation>(preparedPageKey(page.id))
+    const activated = showCanvasPage(page.id, previousProject?.revision ?? null)
+    const request = ++selectionRequest.current
+    const synchronize = () => {
+      if (selectionRequest.current !== request) return
+      if (activated && previousProject && prepared?.revision === previousProject.revision) {
+        queryClient.setQueryData(projectKey, { ...previousProject, active_page: page.id })
+        queryClient.setQueryData(pageKey, prepared.page)
+      }
+      selectPages(next)
+      selectLayers([])
+      void call(commands.selectPage, page.id)
+        .then((selection) => {
+          if (selectionRequest.current !== request) return
+          queryClient.setQueryData(projectKey, selection.project)
+          queryClient.setQueryData(pageKey, selection.page)
+        })
+        .catch(() => {
+          if (selectionRequest.current !== request) return
+          if (queryClient.getQueryData<ProjectInfo | null>(projectKey)?.active_page === page.id) {
+            queryClient.setQueryData(projectKey, previousProject)
+            queryClient.setQueryData(pageKey, previousPage)
+          }
+        })
+    }
+    if (activated) {
+      requestAnimationFrame(() => window.setTimeout(synchronize, 0))
+    } else {
+      synchronize()
+    }
+  }
+
+  const prefetchOnIntent = (page: string) => {
+    const project = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+    if (!project || project.active_page === page) return
+    let state = intentPrefetch.current
+    if (!state || state.project !== project.name || state.revision !== project.revision) {
+      state = { project: project.name, revision: project.revision, pages: new Set() }
+      intentPrefetch.current = state
+    }
+    const prepared = queryClient.getQueryData<CanvasPagePreparation>(preparedPageKey(page))
+    if (prepared?.revision === project.revision || state.pages.has(page)) return
+    state.pages.add(page)
+    void prefetchCanvasPages([page])
+      .then((pages) => {
+        const current = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+        const preparedPage = pages.find(
+          (candidate) => candidate.page.id === page && candidate.revision === project.revision,
+        )
+        if (
+          preparedPage &&
+          current?.name === project.name &&
+          current.revision === preparedPage.revision
+        ) {
+          queryClient.setQueryData(preparedPageKey(page), preparedPage)
+          return
+        }
+        if (intentPrefetch.current === state) state.pages.delete(page)
+      })
+      .catch(() => {
+        if (intentPrefetch.current === state) state.pages.delete(page)
+      })
   }
 
   const deletePage = (page: string) =>
@@ -220,6 +304,7 @@ export function PageRail() {
                       active={active === page.id}
                       selected={selected.includes(page.id)}
                       dragged={dragged === page.id}
+                      onIntent={active === page.id ? undefined : () => prefetchOnIntent(page.id)}
                       onSelect={(additive, range) => select(index, additive, range)}
                       onDragStart={() => setDragged(page.id)}
                       onDragEnd={() => setDragged(null)}
@@ -362,6 +447,7 @@ function PageItem({
   active,
   selected,
   dragged,
+  onIntent,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -373,6 +459,7 @@ function PageItem({
   active: boolean
   selected: boolean
   dragged: boolean
+  onIntent?: () => void
   onSelect: (additive: boolean, range: boolean) => void
   onDragStart: () => void
   onDragEnd: () => void
@@ -396,6 +483,8 @@ function PageItem({
             : 'hover:bg-foreground/[0.045]',
         dragged && 'opacity-50',
       )}
+      onPointerEnter={onIntent}
+      onFocus={onIntent}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest('button,[role="menuitem"]')) return
         onSelect(event.ctrlKey || event.metaKey, event.shiftKey)

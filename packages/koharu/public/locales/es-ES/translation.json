@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "Selecciona una página para empezar.",
     "fit": "Ajustar a la ventana",
-    "surface": "Lienzo de Koharu"
+    "surface": "Lienzo de Koharu",
+    "unavailable": "El lienzo WebGPU no está disponible"
   },
   "colorPicker": {
     "brushColor": "Color del pincel",

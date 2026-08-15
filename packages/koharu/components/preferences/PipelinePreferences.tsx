@@ -20,7 +20,7 @@ import {
   PreferenceSection,
   TextField,
 } from '@/components/preferences/PreferenceFields'
-import type { PipelineConfig } from '@/lib/protocol'
+import type { PipelineConfig } from '@koharu/bridge/protocol'
 import {
   Select,
   SelectContent,

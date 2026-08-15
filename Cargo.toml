@@ -37,6 +37,7 @@ koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }
 koharu-renderer = { path = "crates/koharu-renderer" }
+koharu-rasterizer = { path = "crates/koharu-rasterizer" }
 koharu-canvas = { path = "crates/koharu-canvas" }
 koharu-desktop = { path = "crates/koharu-desktop" }
 koharu-secrets = { path = "crates/koharu-secrets" }
@@ -113,26 +114,27 @@ fontique = "0.11"
 pollster = "0.4"
 vello = "0.9"
 tauri = { version = "=2.11.5", default-features = false, features = [
-    "cef",
     "compression",
     "dbus",
     "dynamic-acl",
     "macos-private-api",
     "specta",
+    "wry",
     "x11",
 ] }
 tauri-build = "=2.6.3"
-tauri-plugin-opener = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1423992771e0b57582ca3b06a6adc46ec26aa784" }
-tauri-plugin-process = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1423992771e0b57582ca3b06a6adc46ec26aa784" }
-tauri-plugin-single-instance = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1423992771e0b57582ca3b06a6adc46ec26aa784" }
-tauri-plugin-updater = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1423992771e0b57582ca3b06a6adc46ec26aa784" }
-tauri-plugin-window-state = { git = "https://github.com/tauri-apps/plugins-workspace", rev = "1423992771e0b57582ca3b06a6adc46ec26aa784" }
+tauri-plugin-opener = "=2.5.4"
+tauri-plugin-process = "=2.3.1"
+tauri-plugin-single-instance = "=2.4.2"
+tauri-plugin-updater = "=2.10.1"
+tauri-plugin-window-state = "=2.4.1"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 schemars = { version = "1.2", features = ["chrono04", "indexmap2", "uuid1"] }
 uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
 atomicwrites = "0.4"
 fs4 = "1"
 parking_lot = "0.12"
+postcard = { version = "1.1", features = ["use-std"] }
 walkdir = "2.5"
 base64 = "0.22"
 unicode-bidi = "0.3"
@@ -158,6 +160,18 @@ memmap2 = "0.9"
 [profile.dev]
 debug = 1
 
+[profile.dev.package.blake3]
+opt-level = 3
+
+[profile.dev.package.koharu-canvas]
+opt-level = 3
+
+[profile.dev.package.koharu-rasterizer]
+opt-level = 3
+
+[profile.dev.package.postcard]
+opt-level = 3
+
 [profile.dev.package.image]
 opt-level = 3
 
@@ -169,12 +183,3 @@ opt-level = 3
 
 [profile.dev.package.libwebp-sys]
 opt-level = 3
-
-[patch.crates-io]
-tauri = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }
-tauri-build = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }
-tauri-codegen = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }
-tauri-macros = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }
-tauri-plugin = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }
-tauri-runtime = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }
-tauri-utils = { git = "https://github.com/mayocream/tauri", rev = "2908dbbbb7ea0c9aaf30a0e33c819a7eba092278" }

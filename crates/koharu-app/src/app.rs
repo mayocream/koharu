@@ -1,12 +1,10 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use anyhow::{Context as _, Result};
-use tauri::{AppHandle, Cef, Manager as _, WindowEvent};
+use tauri::{AppHandle, Manager as _, WindowEvent, Wry};
 use tokio::sync::Mutex;
 
 use crate::commands::{
     agent::AgentState,
-    canvas::{CanvasChannel, CanvasView},
+    canvas::CanvasChannel,
     lifecycle::{
         Download, DownloadChannel, DownloadState, Initialization, ModelResources, ProjectChannel,
         ResourceChannel,
@@ -15,7 +13,7 @@ use crate::commands::{
     project::{CurrentProject, ProjectLibrary},
 };
 
-pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
+pub(crate) async fn initialize(handle: AppHandle<Wry>) -> Result<()> {
     koharu_ml::init()
         .await
         .context("failed to initialize the ML runtime")?;
@@ -44,21 +42,17 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
         .await
         .as_ref()
         .map(|project| (project.snapshot(), project.active_page()));
-    let canvas_view = handle.state::<CanvasView>();
     let desktop = handle.state::<koharu_desktop::Desktop>();
     if let Some((snapshot, page)) = project {
         desktop.show_page(&snapshot, page).await?;
-        canvas_view.fitted.store(true, Ordering::Release);
     } else {
         desktop.clear().await;
     }
     Ok(())
 }
 
-pub fn run(context: tauri::Context<Cef>) -> Result<()> {
-    let builder = tauri::Builder::<Cef>::default();
-    #[cfg(debug_assertions)]
-    let builder = builder.command_line_args([("remote-debugging-port", Some("4000"))]);
+pub fn run(context: tauri::Context<Wry>) -> Result<()> {
+    let builder = tauri::Builder::<Wry>::default();
     builder
         .plugin(tauri_plugin_single_instance::init(|handle, _, _| {
             if let Some(window) = handle.get_webview_window("main") {
@@ -95,9 +89,6 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                 project: Mutex::new(None),
             });
             application.manage(ProjectLibrary::new()?);
-            application.manage(CanvasView {
-                fitted: AtomicBool::new(true),
-            });
             application.manage(Processing::default());
             application.manage(CanvasChannel::default());
             application.manage(JobChannel::default());
@@ -107,7 +98,7 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
             application.manage(Initialization::default());
 
             let handle = application.handle().clone();
-            application.manage(koharu_desktop::Desktop::new(handle.clone())?);
+            application.manage(koharu_desktop::Desktop::new()?);
             application.manage(AgentState::new(handle.clone())?);
 
             let window_config = application
@@ -117,13 +108,9 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                 .iter()
                 .find(|window| window.label == "main")
                 .context("the main Tauri window configuration is unavailable")?;
-            let offscreen = koharu_desktop::offscreen_surface(&handle);
             let window = tauri::WebviewWindowBuilder::from_config(application, window_config)?
-                .offscreen(offscreen.clone())
                 .build()
-                .context("failed to create the off-screen CEF window")?;
-            tauri::async_runtime::block_on(koharu_desktop::attach(window.clone(), offscreen))
-                .context("failed to attach the desktop runtime")?;
+                .context("failed to create the main window")?;
             window.show().context("failed to show the main window")?;
             window
                 .set_focus()

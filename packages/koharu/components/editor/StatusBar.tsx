@@ -2,13 +2,15 @@
 
 import { useTranslation } from 'react-i18next'
 
-import { dispatch } from '@/lib/backend'
-import { commands } from '@/lib/protocol'
 import { usePage } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { Slider } from '@koharu/ui/components/slider'
 
-export function StatusBar() {
+interface StatusBarProps {
+  onZoomChange: (zoom: number) => void
+}
+
+export function StatusBar({ onZoomChange }: StatusBarProps) {
   const { t } = useTranslation()
   const page = usePage().data
   const camera = useKoharuStore((state) => state.camera)
@@ -24,7 +26,7 @@ export function StatusBar() {
           step={5}
           value={Math.min(800, Math.max(10, zoom))}
           className='w-24 shrink-0 [&_[data-slot=slider-thumb]]:size-2'
-          onValueChange={(value) => dispatch(commands.setZoom, value / 100)}
+          onValueChange={(value) => onZoomChange(value / 100)}
         />
         <span className='w-9 shrink-0 text-right text-foreground tabular-nums'>{zoom}%</span>
       </div>

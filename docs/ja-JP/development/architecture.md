@@ -10,9 +10,10 @@ Koharu は別サーバーへ接続する Web クライアントではなく、1 
 ```mermaid
 flowchart TB
   frontend["packages/koharu<br/>(React + Next.js)"]
+  bridge["packages/bridge<br/>(生成プロトコル + ブラウザー WASM)"]
   entry["crates/koharu<br/>(起動、診断、ビルド統合)"]
   app["crates/koharu-app<br/>(アプリ状態、コマンド、ライフサイクル)"]
-  desktop["crates/koharu-desktop<br/>(CEF + WGPU 合成)"]
+  desktop["crates/koharu-desktop<br/>(ページ準備と同期)"]
   scene["koharu-scene"]
   storage["koharu-storage"]
   pipeline["koharu-pipeline"]
@@ -21,24 +22,28 @@ flowchart TB
   translator["koharu-translator"]
   renderer["koharu-renderer"]
   canvas["koharu-canvas"]
+  rasterizer["koharu-rasterizer"]
   psd["koharu-psd"]
   agent["koharu-agent"]
 
-  frontend -->|"生成された Tauri コマンド<br/>と型付きチャンネル"| app
+  frontend --> bridge
+  bridge -->|"生成された Tauri コマンド<br/>と型付きチャンネル"| app
   entry --> app
   entry --> desktop
   app --> desktop
   app --> scene --> storage
   app --> pipeline --> ml --> native
   app --> translator
-  desktop --> renderer --> canvas
+  desktop --> renderer --> rasterizer
+  bridge --> canvas --> rasterizer
   renderer --> psd
+  rasterizer --> psd
   app --> agent
 ```
 
 ## フロントエンドとアプリ
 
-`packages/koharu` はプロジェクトブラウザー、ページレール、キャンバス操作、インスペクター、設定、アクティビティ、Agent パネルを所有します。`packages/ui` は再利用可能な React 部品とスタイルを所有します。
+`packages/koharu` はプロジェクトブラウザー、ページレール、キャンバス操作、インスペクター、設定、アクティビティ、Agent パネルを所有します。`packages/ui` は再利用可能な React 部品とスタイルを所有します。`packages/bridge` は生成された Tauri プロトコル、ブラウザーキャンバスアダプター、派生した `koharu-canvas` WASM パッケージを所有します。
 
 フロントエンドは名前付き Tauri コマンドを直接呼び出し、HTTP クライアントや汎用イベント封筒を持ちません。
 
@@ -50,6 +55,6 @@ flowchart TB
 
 `koharu-pipeline` は固定ワークフロー、モデル寿命、スケジューリング、進捗、停止、段階コミットを所有します。`koharu-ml` はモデルと共有デバイス、`koharu-translator` はローカル・ホスト翻訳接続を所有します。
 
-`koharu-renderer` はシーンページを保持ベクターへ変換し、`koharu-canvas` と PNG/PSD が同じフレームを利用します。`koharu-desktop` はネイティブキャンバスを先に描画し、その上へオフスクリーン CEF UI を重ねて 1 つの WGPU ウィンドウサーフェスへ合成します。
+`koharu-renderer` はシーンページを `koharu-rasterizer` が所有する移植可能な準備済みフレームへ変換します。`koharu-canvas` はそのフレームを WASM でコンパイルし、Tauri WebView 内の WebGPU キャンバスへ表示します。PNG/PSD とネイティブプレビューは、同じフレームをラスタライザーのネイティブ読み戻し経路で利用します。`koharu-desktop` はページ準備とフレーム世代を調整し、ネイティブウィンドウ合成は所有しません。
 
 安全な Rust ラッパーは unsafe な `-sys` 動的ロードクレートと分離されています。

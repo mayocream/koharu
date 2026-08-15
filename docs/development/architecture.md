@@ -10,9 +10,10 @@ Koharu is one desktop application, not a web client attached to a separate serve
 ```mermaid
 flowchart TB
   frontend["packages/koharu<br/>(React + Next.js)"]
+  bridge["packages/bridge<br/>(generated protocol + browser WASM)"]
   entry["crates/koharu<br/>(startup, diagnostics, build integration)"]
   app["crates/koharu-app<br/>(application state, commands, lifecycle)"]
-  desktop["crates/koharu-desktop<br/>(CEF + WGPU composition)"]
+  desktop["crates/koharu-desktop<br/>(frame preparation and synchronization)"]
   scene["koharu-scene"]
   storage["koharu-storage"]
   pipeline["koharu-pipeline"]
@@ -21,24 +22,28 @@ flowchart TB
   translator["koharu-translator"]
   renderer["koharu-renderer"]
   canvas["koharu-canvas"]
+  rasterizer["koharu-rasterizer"]
   psd["koharu-psd"]
   agent["koharu-agent"]
 
-  frontend -->|"generated direct Tauri commands<br/>and typed channels"| app
+  frontend --> bridge
+  bridge -->|"generated direct Tauri commands<br/>and typed channels"| app
   entry --> app
   entry --> desktop
   app --> desktop
   app --> scene --> storage
   app --> pipeline --> ml --> native
   app --> translator
-  desktop --> renderer --> canvas
+  desktop --> renderer --> rasterizer
+  bridge --> canvas --> rasterizer
   renderer --> psd
+  rasterizer --> psd
   app --> agent
 ```
 
 ## Frontend
 
-`packages/koharu` owns product presentation and interaction state: project browser, page rail, canvas controls, inspector, settings, resource activity, and Agent panel. `packages/ui` owns reusable React primitives and styling.
+`packages/koharu` owns product presentation and interaction state: project browser, page rail, canvas controls, inspector, settings, resource activity, and Agent panel. `packages/ui` owns reusable React primitives and styling. `packages/bridge` owns the generated Tauri protocol, browser canvas adapter, and derived `koharu-canvas` WASM package.
 
 The frontend invokes named Tauri commands directly. It does not maintain an HTTP client or decode a generic application event envelope.
 
@@ -46,7 +51,7 @@ The frontend invokes named Tauri commands directly. It does not maintain an HTTP
 
 `crates/koharu` owns process startup, diagnostics, Tauri configuration, and build integration. It composes `koharu-app` with `koharu-desktop`. `koharu-app` owns Tauri-managed state, project lifecycle, command serialization, processing jobs, desktop synchronization, and agent hosting. Independent typed channels publish project, canvas, job, download, preference, and resource updates.
 
-Rust signatures generate `packages/koharu/lib/protocol.ts`; that file is derived output.
+Rust signatures generate `packages/bridge/src/protocol.ts`; that file is derived output.
 
 ## Domain and durability
 
@@ -56,9 +61,9 @@ Rust signatures generate `packages/koharu/lib/protocol.ts`; that file is derived
 
 `koharu-pipeline` owns the fixed page workflow, model lifetime, scheduling, progress, stop semantics, and incremental stage commits. `koharu-ml` owns model implementations and the shared device abstraction. `koharu-translator` owns local and hosted translation connectivity.
 
-## Rendering and desktop composition
+## Rendering and presentation
 
-`koharu-renderer` interprets one scene page into retained vector content. `koharu-canvas` presents and interacts with that content. PNG and PSD start from the same retained frame. `koharu-desktop` composites the native canvas first and the off-screen CEF interface above it into one WGPU window surface.
+`koharu-renderer` interprets a scene page into a portable prepared frame owned by `koharu-rasterizer`. Browser transport separates a lightweight frame manifest from independently addressable, content-hashed resources. Raster images are canonical GPU-safe tiles with sampling gutters, allowing the browser to copy, validate, upload, cache, and evict bounded pieces instead of a page-sized RGBA texture. `koharu-canvas` retains those resources across page changes, stages each manifest, and atomically activates it through WebGPU only after every required resource is ready. Native PNG, PSD, font previews, and agent previews compose the same tiles into the complete full-resolution frame through the rasterizer's native readback path. `koharu-desktop` coordinates latest-wins preparation, publishes frame generations, and serves exact-generation manifest/resources; it no longer owns a native window compositor.
 
 ## Native bindings
 

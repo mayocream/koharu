@@ -19,12 +19,12 @@ dirs = { workspace = true }
 futures = { workspace = true }
 image = { workspace = true }
 koharu-agent = { workspace = true }
-koharu-canvas = { workspace = true }
 koharu-desktop = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }
+koharu-rasterizer = { workspace = true }
 koharu-runtime = { workspace = true }
 koharu-scene = { workspace = true }
 koharu-secrets = { workspace = true }

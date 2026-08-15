@@ -11,18 +11,29 @@ repository.workspace = true
 keywords.workspace = true
 publish.workspace = true
 
-[dependencies]
-image = { workspace = true }
-koharu-renderer = { workspace = true }
-koharu-scene = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures-channel = "0.3"
+js-sys = "0.3"
+koharu-rasterizer = { path = "../koharu-rasterizer", default-features = false }
+serde = { workspace = true }
+serde-wasm-bindgen = "0.6"
 vello = { workspace = true }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Blob",
+    "BlobPropertyBag",
+    "ColorSpaceConversion",
+    "HtmlCanvasElement",
+    "ImageBitmap",
+    "ImageBitmapOptions",
+    "ImageOrientation",
+    "PremultiplyAlpha",
+    "Window",
+] }
 
 [dev-dependencies]
-criterion = { workspace = true }
-tokio = { workspace = true }
-
-[[bench]]
-name = "hot_paths"
-harness = false
+koharu-rasterizer = { path = "../koharu-rasterizer", default-features = false }

@@ -2,12 +2,16 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag, RelationId, Revision};
-use vello::{
-    Scene,
-    kurbo::{Affine, Rect},
-    peniko::{Fill, Mix},
+use anyhow::anyhow;
+use koharu_rasterizer::{
+    Bounds as PreparedBounds, LayerId, LayerKind as PreparedLayerKind,
+    PREPARED_RASTER_TILE_DIMENSION, Point as PreparedPoint, PreparedContent, PreparedElementFrame,
+    PreparedFrame, PreparedFrameBundle, PreparedLayer, PreparedRaster, PreparedRasterTile,
+    PreparedResource, Presentation as PreparedPresentation, ResourceId,
+    Revision as PreparedRevision,
 };
+use koharu_scene::{BlobId, EntityId, Geometry, LanguageTag, RelationId, Revision};
+use vello::kurbo::Affine;
 
 use crate::{Error, Result, TextAlign, WritingMode};
 
@@ -29,6 +33,7 @@ pub(crate) struct FrameData {
     pub(crate) dependencies: Arc<[RenderDependency]>,
     pub(crate) diagnostics: Arc<[RenderDiagnostic]>,
     pub(crate) stats: RetentionStats,
+    pub(crate) prepared: Arc<PreparedFrameBundle>,
 }
 
 impl std::fmt::Debug for Frame {
@@ -95,6 +100,26 @@ impl Frame {
         self.0.stats
     }
 
+    #[must_use]
+    pub fn prepared(&self) -> &PreparedFrameBundle {
+        &self.0.prepared
+    }
+
+    pub fn raster_frame(&self) -> Result<koharu_rasterizer::Frame> {
+        let raster_sources = self
+            .layers()
+            .iter()
+            .filter_map(|layer| layer.raster_image())
+            .map(|image| (image.source, Arc::clone(&image.pixels)))
+            .collect::<HashMap<_, _>>();
+        self.0
+            .prepared
+            .as_ref()
+            .clone()
+            .into_frame_with_raster_sources(&raster_sources)
+            .map_err(|error| Error::Backend(anyhow!(error)))
+    }
+
     /// Returns one entity normalized into a tightly cropped frame.
     ///
     /// The original layer retains authored presentation. The isolated copy is
@@ -147,6 +172,15 @@ impl Frame {
             ..layer.0.clone_for_frame()
         }));
         let layers: Arc<[Layer]> = vec![isolated].into();
+        let prepared = prepare_frame(
+            self.revision(),
+            self.page(),
+            width,
+            height,
+            (left, top),
+            Affine::translate((-f64::from(left), -f64::from(top))),
+            &layers,
+        )?;
         Ok(Some(Self(Arc::new(FrameData {
             revision: self.revision(),
             page: self.page(),
@@ -159,10 +193,13 @@ impl Frame {
             dependencies: self.0.dependencies.clone(),
             diagnostics: self.0.diagnostics.clone(),
             stats: self.0.stats,
+            prepared: Arc::new(prepared),
         }))))
     }
 
     pub(crate) fn at_revision(&self, revision: Revision, stats: RetentionStats) -> Self {
+        let mut prepared = self.0.prepared.as_ref().clone();
+        prepared.frame.revision = PreparedRevision::new(revision.get());
         Self(Arc::new(FrameData {
             revision,
             page: self.0.page,
@@ -175,6 +212,7 @@ impl Frame {
             dependencies: self.0.dependencies.clone(),
             diagnostics: self.0.diagnostics.clone(),
             stats,
+            prepared: Arc::new(prepared),
         }))
     }
 }
@@ -268,40 +306,9 @@ impl Layer {
         self.0.placement
     }
 
-    pub fn append_vector_with_presentation(
-        &self,
-        scene: &mut Scene,
-        transform: Option<Affine>,
-        presentation: Presentation,
-    ) {
-        if self.raster_image().is_some() {
-            return;
-        }
-        if !presentation.visible || !presentation.opacity.is_finite() || presentation.opacity <= 0.0
-        {
-            return;
-        }
-        let opacity = presentation.opacity.clamp(0.0, 1.0);
-        let placement = transform.map_or(self.0.placement, |outer| outer * self.0.placement);
-        if opacity < 1.0 {
-            let bounds = self.0.node.local_bounds;
-            scene.push_layer(
-                Fill::NonZero,
-                Mix::Normal,
-                opacity,
-                placement,
-                &Rect::new(
-                    f64::from(bounds.x),
-                    f64::from(bounds.y),
-                    f64::from(bounds.x + bounds.width),
-                    f64::from(bounds.y + bounds.height),
-                ),
-            );
-        }
-        scene.append(&self.0.node.scene, Some(placement));
-        if opacity < 1.0 {
-            scene.pop_layer();
-        }
+    #[must_use]
+    pub fn element_frame(&self) -> Option<PreparedElementFrame> {
+        element_frame(self)
     }
 }
 
@@ -334,8 +341,11 @@ pub struct ImageMetadata {
 #[derive(Clone)]
 pub struct RasterImage {
     pub(crate) blob: BlobId,
+    pub(crate) source: ResourceId,
     pub(crate) width: u32,
     pub(crate) height: u32,
+    pub(crate) media_type: String,
+    pub(crate) encoded: Arc<[u8]>,
     pub(crate) pixels: Arc<[u8]>,
 }
 
@@ -437,13 +447,15 @@ pub(crate) enum NodeDescriptor {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ImageNodeDescriptor {
     pub(crate) blob: BlobId,
+    pub(crate) media_type: String,
     pub(crate) expected_size: Option<(u32, u32)>,
     pub(crate) require_size: Option<(u32, u32)>,
 }
 
 pub(crate) struct RetainedNode {
     pub(crate) descriptor: NodeDescriptor,
-    pub(crate) scene: Arc<Scene>,
+    pub(crate) scene: Arc<koharu_rasterizer::PreparedScene>,
+    pub(crate) resources: Arc<[PreparedResource]>,
     pub(crate) local_bounds: RenderBounds,
     pub(crate) image: Option<RasterImage>,
     pub(crate) text: Option<LocalTextMetadata>,
@@ -457,4 +469,241 @@ pub(crate) struct LocalTextMetadata {
     pub(crate) post_script_fonts: Vec<String>,
     pub(crate) font_size: f32,
     pub(crate) color: [u8; 4],
+}
+
+pub(crate) fn prepare_frame(
+    revision: Revision,
+    page: EntityId,
+    width: u32,
+    height: u32,
+    origin: (i32, i32),
+    normalization: Affine,
+    layers: &[Layer],
+) -> Result<PreparedFrameBundle> {
+    let mut resources = Vec::<PreparedResource>::new();
+    let mut prepared_layers = Vec::with_capacity(layers.len());
+    for layer in layers {
+        let (kind, content) = if let Some(image) = layer.raster_image() {
+            (
+                PreparedLayerKind::Raster,
+                PreparedContent::Raster(prepare_raster_tiles(image, &mut resources)?),
+            )
+        } else if matches!(layer.kind(), LayerKind::Text(_)) {
+            for resource in layer.0.node.resources.iter() {
+                if !resources
+                    .iter()
+                    .any(|candidate| candidate.id() == resource.id())
+                {
+                    resources.push(resource.clone());
+                }
+            }
+            (
+                PreparedLayerKind::Text,
+                PreparedContent::Vector(layer.0.node.scene.as_ref().clone()),
+            )
+        } else {
+            // Missing raster assets remain in native diagnostics and metadata but
+            // contribute no visual command to the portable frame.
+            continue;
+        };
+        prepared_layers.push(PreparedLayer {
+            id: layer_id(layer.entity()),
+            geometry: layer
+                .geometry()
+                .points
+                .iter()
+                .map(|point| PreparedPoint {
+                    x: point.x,
+                    y: point.y,
+                })
+                .collect(),
+            bounds: prepared_bounds(layer.bounds()),
+            local_bounds: prepared_bounds(layer.0.node.local_bounds),
+            presentation: PreparedPresentation {
+                visible: layer.presentation().visible,
+                opacity: layer.presentation().opacity.clamp(0.0, 1.0),
+            },
+            kind,
+            placement: layer.placement().as_coeffs(),
+            content,
+            element_frame: element_frame(layer),
+        });
+    }
+    Ok(PreparedFrameBundle {
+        frame: PreparedFrame {
+            revision: PreparedRevision::new(revision.get()),
+            page: layer_id(page),
+            width,
+            height,
+            origin,
+            normalization: normalization.as_coeffs(),
+            layers: prepared_layers,
+        },
+        resources,
+    })
+}
+
+fn prepare_raster_tiles(
+    image: &RasterImage,
+    resources: &mut Vec<PreparedResource>,
+) -> Result<PreparedRaster> {
+    let resource = PreparedResource::encoded_raster(
+        image.width,
+        image.height,
+        image.media_type.clone(),
+        Arc::clone(&image.encoded),
+    )
+    .map_err(|error| Error::Backend(anyhow!(error)))?;
+    let source = resource.id();
+    if !resources.iter().any(|candidate| candidate.id() == source) {
+        resources.push(resource);
+    }
+    let mut tiles = Vec::new();
+    for y in (0..image.height).step_by(PREPARED_RASTER_TILE_DIMENSION as usize) {
+        let height = (image.height - y).min(PREPARED_RASTER_TILE_DIMENSION);
+        for x in (0..image.width).step_by(PREPARED_RASTER_TILE_DIMENSION as usize) {
+            let width = (image.width - x).min(PREPARED_RASTER_TILE_DIMENSION);
+            let gutter = [
+                u32::from(x > 0),
+                u32::from(y > 0),
+                u32::from(x + width < image.width),
+                u32::from(y + height < image.height),
+            ];
+            tiles.push(PreparedRasterTile {
+                x,
+                y,
+                width,
+                height,
+                gutter,
+            });
+        }
+    }
+    Ok(PreparedRaster {
+        source,
+        width: image.width,
+        height: image.height,
+        tiles,
+    })
+}
+
+fn layer_id(entity: EntityId) -> LayerId {
+    LayerId::from_bytes(*entity.as_uuid().as_bytes())
+}
+
+fn prepared_bounds(bounds: RenderBounds) -> PreparedBounds {
+    PreparedBounds {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+    }
+}
+
+fn element_frame(layer: &Layer) -> Option<PreparedElementFrame> {
+    let LayerKind::Text(text) = layer.kind() else {
+        return None;
+    };
+    let bounds = text.rendered_bounds;
+    if bounds.width > 0.0 && bounds.height > 0.0 {
+        return Some(PreparedElementFrame {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            angle_degrees: text.angle_degrees,
+        });
+    }
+    geometry_frame(layer.geometry())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepared_raster_tiles_retain_neighbor_gutters() {
+        let width = PREPARED_RASTER_TILE_DIMENSION + 1;
+        let mut pixels = Vec::with_capacity(width as usize * 4);
+        for x in 0..width {
+            pixels.extend_from_slice(&[(x & 0xff) as u8, (x >> 8) as u8, 0, 255]);
+        }
+        let encoded: Arc<[u8]> = Arc::from(&b"encoded-wide-image"[..]);
+        let source = ResourceId::for_encoded_raster(width, 1, "image/png", &encoded);
+        let image = RasterImage {
+            blob: BlobId::for_bytes(&pixels),
+            source,
+            width,
+            height: 1,
+            media_type: "image/png".to_owned(),
+            encoded,
+            pixels: pixels.into(),
+        };
+        let mut resources = Vec::new();
+
+        let raster = prepare_raster_tiles(&image, &mut resources).unwrap();
+
+        assert_eq!(raster.tiles.len(), 2);
+        assert_eq!(resources.len(), 1);
+        assert_eq!(raster.source, source);
+        assert_eq!(raster.tiles[0].gutter, [0, 0, 1, 0]);
+        assert_eq!(raster.tiles[1].gutter, [1, 0, 0, 0]);
+        assert_eq!(raster.tiles[0].resource_size(), (1_025, 1));
+        assert_eq!(raster.tiles[1].resource_size(), (2, 1));
+        let PreparedResource::EncodedRaster {
+            width,
+            height,
+            bytes,
+            ..
+        } = &resources[0]
+        else {
+            unreachable!();
+        };
+        assert_eq!((*width, *height), (PREPARED_RASTER_TILE_DIMENSION + 1, 1));
+        assert_eq!(bytes.as_ref(), b"encoded-wide-image");
+    }
+}
+
+fn geometry_frame(geometry: &Geometry) -> Option<PreparedElementFrame> {
+    let points = &geometry.points;
+    if points.is_empty()
+        || points
+            .iter()
+            .any(|point| !point.x.is_finite() || !point.y.is_finite())
+    {
+        return None;
+    }
+    if points.len() == 4 {
+        let top = (points[1].x - points[0].x, points[1].y - points[0].y);
+        let right = (points[2].x - points[1].x, points[2].y - points[1].y);
+        let width = top.0.hypot(top.1);
+        let height = right.0.hypot(right.1);
+        if width > f64::EPSILON && height > f64::EPSILON {
+            let center_x = points.iter().map(|point| point.x).sum::<f64>() * 0.25;
+            let center_y = points.iter().map(|point| point.y).sum::<f64>() * 0.25;
+            return Some(PreparedElementFrame {
+                x: (center_x - width * 0.5) as f32,
+                y: (center_y - height * 0.5) as f32,
+                width: width as f32,
+                height: height as f32,
+                angle_degrees: top.1.atan2(top.0).to_degrees() as f32,
+            });
+        }
+    }
+    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
+    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for point in points {
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    (width > f64::EPSILON && height > f64::EPSILON).then_some(PreparedElementFrame {
+        x: min_x as f32,
+        y: min_y as f32,
+        width: width as f32,
+        height: height as f32,
+        angle_degrees: 0.0,
+    })
 }

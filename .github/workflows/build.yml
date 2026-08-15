@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install --no-install-recommends \
-            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
             wget \
@@ -41,9 +41,6 @@ jobs:
           shared-key: koharu-app
           cache-workspace-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install macOS CEF helper targets
-        if: startsWith(matrix.os, 'macos')
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: ilammy/msvc-dev-cmd@v1
         if: startsWith(matrix.os, 'windows')
       - uses: actions/cache@v6

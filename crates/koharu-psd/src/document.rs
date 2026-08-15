@@ -5,10 +5,12 @@
 //! GIMP reference: `TySh` transforms and descriptors consumed by the importer:
 //! https://github.com/GNOME/gimp/blob/758fb4ed995bbb339282d3f777089a33f0a391b8/plug-ins/file-psd/psd-layer-res-load.c#L1345-L1438
 
+use std::sync::Arc;
+
 use image::{DynamicImage, GrayImage, Rgba, RgbaImage};
+use koharu_rasterizer::{Raster, RasterOptions, Rasterizer};
 use koharu_renderer::{
-    Frame, ImageKind, LayerKind, RasterOptions, Renderer, TextAlign, TextMetadata as RenderedText,
-    WritingMode,
+    Frame, ImageKind, LayerKind, TextAlign, TextMetadata as RenderedText, WritingMode,
 };
 use koharu_scene::{AssetRole, Snapshot};
 
@@ -86,11 +88,11 @@ pub(crate) struct TextMetadata {
 pub(crate) async fn build(
     snapshot: &Snapshot,
     frame: &Frame,
-    renderer: &Renderer,
+    rasterizer: Arc<Rasterizer>,
     raster_options: RasterOptions,
     options: &PsdExportOptions,
 ) -> Result<Document, PsdExportError> {
-    let merged = renderer.rasterize(frame, raster_options).await?;
+    let merged = rasterize(Arc::clone(&rasterizer), frame, raster_options).await?;
     let width = merged.image.width();
     let height = merged.image.height();
     validate_dimensions(width, height)?;
@@ -153,14 +155,10 @@ pub(crate) async fn build(
             image.is_some_and(|image| matches!(image.kind, ImageKind::Cleanup | ImageKind::Paint));
         let ordinary_image = image.is_some_and(|image| image.kind == ImageKind::Embedded);
         if (raster && options.include_raster_layers) || ordinary_image {
-            let rendered = renderer
-                .rasterize(
-                    &frame
-                        .cropped(visual.entity())?
-                        .ok_or(PsdExportError::MissingRenderedEntity(visual.entity()))?,
-                    raster_options,
-                )
-                .await?;
+            let cropped = frame
+                .cropped(visual.entity())?
+                .ok_or(PsdExportError::MissingRenderedEntity(visual.entity()))?;
+            let rendered = rasterize(Arc::clone(&rasterizer), &cropped, raster_options).await?;
             let image = image.expect("image branch was selected above");
             let name = image.name.clone().unwrap_or_else(|| match image.kind {
                 ImageKind::Source | ImageKind::Embedded => "Image".to_owned(),
@@ -187,14 +185,10 @@ pub(crate) async fn build(
                 .expect("nonempty visual text was collected before layer projection");
             let index =
                 i32::try_from(offset + 1).map_err(|_| PsdExportError::TooManyLayers(offset + 1))?;
-            let rendered = renderer
-                .rasterize(
-                    &frame
-                        .cropped(visual.entity())?
-                        .ok_or(PsdExportError::MissingRenderedEntity(visual.entity()))?,
-                    raster_options,
-                )
-                .await?;
+            let cropped = frame
+                .cropped(visual.entity())?
+                .ok_or(PsdExportError::MissingRenderedEntity(visual.entity()))?;
+            let rendered = rasterize(Arc::clone(&rasterizer), &cropped, raster_options).await?;
             validate_pixels(&visual.entity().to_string(), &rendered.image)?;
             layers.push(Layer {
                 id: 0,
@@ -225,6 +219,18 @@ pub(crate) async fn build(
         merged: merged.image,
         layers,
     })
+}
+
+async fn rasterize(
+    rasterizer: Arc<Rasterizer>,
+    frame: &Frame,
+    options: RasterOptions,
+) -> Result<Raster, PsdExportError> {
+    let frame = frame.raster_frame()?;
+    tokio::task::spawn_blocking(move || rasterizer.rasterize(&frame, options))
+        .await
+        .map_err(|error| PsdExportError::Task(error.to_string()))?
+        .map_err(PsdExportError::Rasterizer)
 }
 
 fn validate_dimensions(width: u32, height: u32) -> Result<(), PsdExportError> {

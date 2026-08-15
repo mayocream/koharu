@@ -23,7 +23,7 @@ bun install
 bun dev
 ```
 
-`bun dev` 会同时启动 Next.js UI 与 Tauri 应用。
+`bun dev` 会同时启动 Next.js UI 与 Tauri 应用。它还会先构建一次 `koharu-canvas` WASM，再监听 `koharu-canvas` 与 `koharu-rasterizer` 的变更并重新生成 `packages/bridge/src/wasm`。生成包位于 Turbopack 模块图中，因此构建成功后浏览器客户端会刷新。
 
 ## 构建与聚焦检查
 
@@ -50,7 +50,7 @@ Rust 命令签名与 Specta 类型是权威源：
 cargo run -p koharu-app --bin generate
 ```
 
-不要手工编辑 `packages/koharu/lib/protocol.ts`。
+不要手工编辑 `packages/bridge/src/protocol.ts`。
 
 ## 文档
 

@@ -5,7 +5,7 @@ description: Navigate the canvas and use selection, text, paint, erase, color, r
 
 # Canvas Basics
 
-Koharu renders the page natively beneath a transparent desktop interface. The toolbar changes how pointer input is interpreted; the inspector changes the selected layer's persistent properties.
+Koharu renders the page through WebGPU in the desktop webview. The toolbar changes how pointer input is interpreted; the inspector changes the selected layer's persistent properties.
 
 ## Navigate
 

@@ -9,12 +9,14 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 
+import { commands, type FontFamily, type PageImportSource } from '@koharu/bridge/protocol'
+
 import { call } from './backend'
-import { commands, type FontFamily, type PageImportSource } from './protocol'
 
 export const projectKey = ['project'] as const
 export const pagesKey = ['pages'] as const
 export const pageKey = ['page'] as const
+export const preparedPageKey = (page: string) => ['prepared-page', page] as const
 export const fontsKey = ['fonts'] as const
 const importPagesKey = ['import-pages'] as const
 

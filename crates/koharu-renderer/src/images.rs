@@ -11,12 +11,13 @@ pub(crate) const DEFAULT_IMAGE_CACHE_BYTES: usize = 512 * 1024 * 1024;
 pub(crate) struct DecodedImage {
     pub(crate) width: u32,
     pub(crate) height: u32,
+    pub(crate) encoded: Arc<[u8]>,
     pub(crate) pixels: Arc<[u8]>,
 }
 
 impl DecodedImage {
     fn byte_len(&self) -> usize {
-        self.pixels.len()
+        self.encoded.len().saturating_add(self.pixels.len())
     }
 }
 
@@ -99,6 +100,7 @@ mod tests {
         let image = Arc::new(DecodedImage {
             width: 2,
             height: 1,
+            encoded: Arc::from([0_u8; 1]),
             pixels: Arc::from([0_u8; 8]),
         });
         let mut cache = ImageCache::with_limit(4);
@@ -110,10 +112,10 @@ mod tests {
 
 pub(crate) fn decode(
     blob: BlobId,
-    bytes: &[u8],
+    bytes: Arc<[u8]>,
     expected: Option<(u32, u32)>,
 ) -> Result<(BlobId, Arc<DecodedImage>)> {
-    let decoded = image::load_from_memory(bytes)
+    let decoded = image::load_from_memory(&bytes)
         .map_err(|source| Error::Image { blob, source })?
         .into_rgba8();
     if expected.is_some_and(|size| size != decoded.dimensions()) {
@@ -129,6 +131,7 @@ pub(crate) fn decode(
         Arc::new(DecodedImage {
             width: decoded.width(),
             height: decoded.height(),
+            encoded: bytes,
             pixels: Arc::from(decoded.into_raw()),
         }),
     ))

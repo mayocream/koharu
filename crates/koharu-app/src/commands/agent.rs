@@ -7,7 +7,7 @@ use koharu_agent::{Account, Agent, Codex, CodexModel, Config, Control, Event, Lo
 use parking_lot::Mutex;
 use serde::Serialize;
 use specta::Type;
-use tauri::{AppHandle, Cef, Manager as _, State, ipc::Channel};
+use tauri::{AppHandle, Manager as _, State, Wry, ipc::Channel};
 use tokio::sync::Notify;
 
 use self::host::KoharuHost;
@@ -29,7 +29,7 @@ pub(crate) struct AgentState {
 }
 
 impl AgentState {
-    pub(crate) fn new(handle: AppHandle<Cef>) -> Result<Self> {
+    pub(crate) fn new(handle: AppHandle<Wry>) -> Result<Self> {
         Ok(Self {
             agent: Arc::new(Agent::new(Codex::new()?, KoharuHost::new(handle))?),
             runs: Mutex::new(HashMap::new()),
@@ -146,7 +146,7 @@ pub(crate) async fn save_agent_config(
 pub(crate) async fn run_agent(
     prompt: String,
     on_event: Channel<Event>,
-    handle: AppHandle<Cef>,
+    handle: AppHandle<Wry>,
     state: State<'_, AgentState>,
 ) -> std::result::Result<RunId, Error> {
     let prompt = prompt.trim().to_owned();

@@ -4,8 +4,8 @@ import { ChevronLeft, LoaderCircle } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { LanguageChoice } from '@/lib/protocol'
 import { orderedLanguageChoices } from '@/lib/translation'
+import type { LanguageChoice } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import {
   Select,

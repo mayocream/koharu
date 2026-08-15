@@ -4,7 +4,7 @@ import type {
   OcrModel,
   PipelineConfig,
   Stage,
-} from '@/lib/protocol'
+} from '@koharu/bridge/protocol'
 
 export type PipelineModel = DetectionModel | OcrModel | InpaintingModel
 export type ModelStage = Exclude<Stage, 'translation'>

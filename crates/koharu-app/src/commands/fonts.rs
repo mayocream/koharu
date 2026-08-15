@@ -126,7 +126,9 @@ pub(crate) async fn get_font_preview(
     family_name: String,
     desktop: State<'_, Desktop>,
 ) -> std::result::Result<FontPreviewBytes, Error> {
+    let renderer = desktop.renderer();
+    let rasterizer = desktop.rasterizer().await?;
     Ok(FontPreviewBytes(
-        desktop.renderer().font_preview(&family_name).await?,
+        renderer.font_preview(&family_name, rasterizer).await?,
     ))
 }

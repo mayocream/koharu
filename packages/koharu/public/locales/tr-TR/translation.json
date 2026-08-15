@@ -55,7 +55,8 @@
   "canvas": {
     "empty": "Başlamak için bir sayfa seçin.",
     "fit": "Pencereye Sığdır",
-    "surface": "Koharu tuvali"
+    "surface": "Koharu tuvali",
+    "unavailable": "WebGPU tuvali kullanılamıyor"
   },
   "colorPicker": {
     "brushColor": "Fırça rengi",

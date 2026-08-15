@@ -1,9 +1,9 @@
 ---
-title: Pipeline, Rendering, and Desktop Composition
-description: Follow page processing from stage scheduling through retained rendering and native desktop composition.
+title: Pipeline, Rendering, and Browser Presentation
+description: Follow page processing from stage scheduling through retained rendering and WebGPU browser presentation.
 ---
 
-# Pipeline, Rendering, and Desktop Composition
+# Pipeline, Rendering, and Browser Presentation
 
 ## Fixed pipeline
 
@@ -29,16 +29,18 @@ Stopping is cooperative. No new stage starts after the stop request; an active n
 
 ## Retained rendering
 
-`koharu-renderer::Renderer` turns a scene snapshot and page ID into one immutable `Frame`. The frame contains ordered retained layers, entity lookup, presentation metadata, dependencies, diagnostics, and vector scenes.
+`koharu-renderer::Renderer` turns a scene snapshot and page ID into one immutable native `Frame`. The frame contains ordered retained layers, entity lookup, presentation metadata, dependencies, diagnostics, and vector scenes. It prepares that state as a portable `koharu-rasterizer` frame bundle for browser presentation and native readback.
 
 Scene translation is the only visible text source. Typography, fit relations, fonts, images, visibility, and opacity all come from scene data. The renderer loads resources and retains reusable nodes; callers do not provide an alternate document model.
 
-The canvas, flattened PNG, layer crops, and PSD adapter consume this same frame. Incremental renderer updates reuse unchanged nodes but must produce the same result as a complete render.
+The WebGPU canvas, flattened PNG, layer crops, and PSD adapter consume this same prepared frame. Incremental renderer updates reuse unchanged nodes but must produce the same result as a complete render.
 
-## Desktop composition
+## Browser presentation
 
-The WebView draws interface chrome, menus, controls, and inspectors. It stays transparent over the canvas region. Native WGPU/Vello output is composed beneath it in the same desktop window.
+The standard Tauri webview owns the complete visible surface. React draws interface chrome, menus, controls, and inspectors, while `koharu-canvas` compiles to WASM and presents the prepared page through WebGPU in an `HTMLCanvasElement`. Transient camera, transform, stroke, and sampling work remains in the browser; only completed edits cross the Tauri command boundary.
 
-Validate visual changes through the final desktop window. A WebView screenshot alone cannot prove that native canvas pixels are present, and a native render alone cannot prove that transparency and interface composition are correct.
+Page changes publish a generation before the browser requests its lightweight manifest. The canvas reports only missing content IDs, receives those resource packets in separate asynchronous steps, and keeps the previous page visible until the staged generation can activate atomically. Raster resources are canonical 1024-pixel logical tiles with one-pixel interior sampling gutters; this bounds every WASM copy and WebGPU texture while preserving filtered edges. CPU and GPU resources use coordinated bounded caches, so returning to a recently displayed page does not resend or re-upload unchanged tiles. Obsolete native preparations and browser requests cannot publish or activate over a newer generation.
 
-On Windows, the development WebView2 endpoint is `http://127.0.0.1:4000`; use semantic CDP inspection for the web layer and native window capture for the final composite.
+Validate visual changes through the final Tauri window because WebGPU adapter availability, device loss, sizing, and display scaling depend on the system webview. Native PNG and PSD checks still verify the shared rasterizer's readback path independently.
+
+On Windows, the development WebView2 endpoint is `http://127.0.0.1:4000`; use semantic CDP inspection for the DOM and canvas lifecycle, and native window capture when the final composited pixels matter.

@@ -27,14 +27,14 @@ import { TranslationPreferences } from '@/components/preferences/TranslationPref
 import { TypesettingPreferences } from '@/components/preferences/TypesettingPreferences'
 import { call, refreshPreferences, refreshTranslationModels } from '@/lib/backend'
 import { supportedLanguages } from '@/lib/i18n'
+import { receivePreferences, useKoharuStore, type ShortcutAction } from '@/lib/store'
 import {
   commands,
   type PipelineConfig,
   type Preferences,
   type ProviderPreferences as ProviderSettings,
   type TypesettingConfig,
-} from '@/lib/protocol'
-import { receivePreferences, useKoharuStore, type ShortcutAction } from '@/lib/store'
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Input } from '@koharu/ui/components/input'
 import { ScrollArea } from '@koharu/ui/components/scroll-area'

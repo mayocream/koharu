@@ -8,7 +8,8 @@ import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
 import { CanvasOverlay } from '@/components/editor/CanvasOverlay'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
-import { call, dispatch, updateViewport } from '@/lib/backend'
+import { useCanvas } from '@/components/editor/useCanvas'
+import { call } from '@/lib/backend'
 import { expandLayerSelection } from '@/lib/document'
 import {
   controlFrame,
@@ -19,9 +20,20 @@ import {
   selectableLayer,
   translateFrames,
 } from '@/lib/geometry'
-import { commands, type Frame, type Point, type TransformFrame } from '@/lib/protocol'
-import { pageKey, pagesKey, projectKey, refresh, usePage } from '@/lib/queries'
+import {
+  pageKey,
+  pagesKey,
+  preparedPageKey,
+  projectKey,
+  queryClient,
+  refresh,
+  usePage,
+  usePages,
+} from '@/lib/queries'
 import { receiveError, useKoharuStore, type CanvasTool } from '@/lib/store'
+import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
+import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
+import { Button } from '@koharu/ui/components/button'
 
 const canvasCursors = {
   select: undefined,
@@ -37,9 +49,17 @@ type Gesture =
   | { kind: 'pan'; pointer: number; start: Point; translation: [number, number] }
   | { kind: 'move'; pointer: number; start: Point; originals: TransformFrame[] }
   | { kind: 'text'; pointer: number; start: Point; frame: Frame }
-  | { kind: 'paint'; pointer: number }
-  | { kind: 'erase'; pointer: number }
-  | { kind: 'inpaint'; pointer: number }
+  | StrokeGesture
+
+interface StrokeGesture {
+  kind: 'paint' | 'erase' | 'inpaint'
+  pointer: number
+  revision: number
+  layer: string | null
+  points: Point[]
+  diameter: number
+  color?: CanvasColor
+}
 
 interface CanvasView {
   zoom: number
@@ -54,10 +74,14 @@ interface StrokeUpdate {
 export function CanvasWorkspace() {
   const { t } = useTranslation()
   const surface = useRef<HTMLDivElement>(null)
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null)
   const gesture = useRef<Gesture | null>(null)
+  const previousPageIndex = useRef<number | null>(null)
   const spaceHeld = useRef(false)
   const transformActive = useRef(false)
-  const transformFrame = useRef(0)
+  const transformRevision = useRef<number | null>(null)
+  const transformFinal = useRef<TransformFrame[]>([])
+  const commitPending = useRef(false)
   const commandQueue = useRef<Promise<void>>(Promise.resolve())
   const [previews, setPreviews] = useState<Record<string, Frame>>({})
   const [draft, setDraft] = useState<Frame | null>(null)
@@ -66,7 +90,13 @@ export function CanvasWorkspace() {
   const colorSampling = useColorSampling()
 
   const page = usePage().data
+  const pages = usePages().data
   const camera = useKoharuStore((state) => state.camera)
+  const canvasPage = useKoharuStore((state) => state.canvasPage)
+  const canvasRevision = useKoharuStore((state) => state.canvasRevision)
+  const canvasGeneration = useKoharuStore((state) => state.canvasGeneration)
+  const canvasSize = useKoharuStore((state) => state.canvasSize)
+  const fitCanvasRequest = useKoharuStore((state) => state.fitCanvasRequest)
   const layerFrames = useKoharuStore((state) => state.layerFrames)
   const tool = useKoharuStore((state) => state.tool)
   const brush = useKoharuStore((state) => state.brush)
@@ -74,6 +104,12 @@ export function CanvasWorkspace() {
   const selectLayers = useKoharuStore((state) => state.selectLayers)
   const setTool = useKoharuStore((state) => state.setTool)
   const setBrush = useKoharuStore((state) => state.setBrush)
+  const requestCanvasFit = useKoharuStore((state) => state.requestCanvasFit)
+  const canvasState = useCanvas(canvasElement, canvasRevision, canvasGeneration)
+  const canvas = canvasState.canvas
+  const pageId = page?.id
+  const pageWidth = canvasSize[0] || page?.size.width
+  const pageHeight = canvasSize[1] || page?.size.height
   const activeRaster =
     selected.length === 1
       ? page?.layers.find((layer) => layer.id === selected[0] && layer.type === 'raster')
@@ -88,45 +124,43 @@ export function CanvasWorkspace() {
     return pending
   }, [])
 
-  const viewportUpdates = useFrameCommand((element: HTMLElement) => updateViewport(element))
-  const viewUpdates = useFrameCommand(({ zoom, translation }: CanvasView) =>
-    call(commands.setCanvasView, zoom, translation).then(() => undefined),
+  const transformUpdates = useFrameCommand((elements: TransformFrame[]) =>
+    canvas?.updateTransform(elements),
   )
-  const transformUpdates = useFrameCommand((elements: TransformFrame[]) => {
-    transformFrame.current += 1
-    return enqueue(() => call(commands.updateTransform, transformFrame.current, elements)).then(
-      () => undefined,
-    )
-  })
-  const strokeUpdates = useFrameCommand(({ kind, points }: StrokeUpdate) => {
-    if (kind === 'paint') {
-      return enqueue(() => call(commands.extendPaint, points)).then(() => undefined)
-    }
-    if (kind === 'erase') {
-      return enqueue(() => call(commands.extendErase, points)).then(() => undefined)
-    }
-    return enqueue(() => call(commands.extendInpaint, points)).then(() => undefined)
-  }, mergeStrokeUpdates)
-
-  const report = useCallback(() => {
-    if (surface.current) viewportUpdates.schedule(surface.current)
-  }, [viewportUpdates])
+  const strokeUpdates = useFrameCommand(
+    ({ points }: StrokeUpdate) => canvas?.extendStroke(points),
+    mergeStrokeUpdates,
+  )
 
   const beginTransform = useCallback(
     (elements: TransformFrame[]) => {
-      if (!elements.length || transformActive.current) return
+      if (
+        !canvas ||
+        canvasRevision === null ||
+        !elements.length ||
+        transformActive.current ||
+        commitPending.current
+      )
+        return
       transformUpdates.clear()
       transformActive.current = true
-      transformFrame.current = 0
+      transformRevision.current = canvasRevision
+      transformFinal.current = elements
       setPreviews(Object.fromEntries(elements.map(({ element, frame }) => [element, frame])))
-      void enqueue(() => call(commands.beginTransform, elements)).catch(() => undefined)
+      try {
+        canvas.beginTransform(elements)
+      } catch (error) {
+        transformActive.current = false
+        receiveError(errorMessage(error))
+      }
     },
-    [enqueue, transformUpdates],
+    [canvas, canvasRevision, transformUpdates],
   )
 
   const updateTransform = useCallback(
     (elements: TransformFrame[]) => {
       if (!transformActive.current) return
+      transformFinal.current = elements
       setPreviews(Object.fromEntries(elements.map(({ element, frame }) => [element, frame])))
       transformUpdates.schedule(elements)
     },
@@ -137,33 +171,89 @@ export function CanvasWorkspace() {
     if (!transformActive.current) return
     transformUpdates.commit()
     transformActive.current = false
-    void enqueue(() => call(commands.finishTransform))
+    const revision = transformRevision.current
+    const elements = transformFinal.current
+    transformRevision.current = null
+    try {
+      canvas?.finishTransform()
+    } catch (error) {
+      receiveError(errorMessage(error))
+      setPreviews({})
+      return
+    }
+    if (revision === null) {
+      canvas?.cancelTransform()
+      setPreviews({})
+      return
+    }
+    commitPending.current = true
+    void enqueue(() => call(commands.commitTransform, revision, elements))
       .then((revision) => (revision === null ? undefined : refresh(projectKey, pagesKey, pageKey)))
-      .catch(() => undefined)
-      .finally(() => setPreviews({}))
-  }, [enqueue, transformUpdates])
+      .catch(() => canvas?.cancelTransform())
+      .finally(() => {
+        commitPending.current = false
+        setPreviews({})
+      })
+  }, [canvas, enqueue, transformUpdates])
 
   const cancelGesture = useCallback(() => {
     const current = gesture.current
     gesture.current = null
     if (current?.kind === 'paint' || current?.kind === 'erase' || current?.kind === 'inpaint') {
       strokeUpdates.clear()
-    }
-    if (current?.kind === 'paint') {
-      void enqueue(() => call(commands.cancelPaint)).catch(() => undefined)
-    } else if (current?.kind === 'erase') {
-      void enqueue(() => call(commands.cancelErase)).catch(() => undefined)
-    } else if (current?.kind === 'inpaint') {
-      void enqueue(() => call(commands.cancelInpaint)).catch(() => undefined)
+      canvas?.cancelStroke()
     }
     if (transformActive.current) {
       transformUpdates.clear()
       transformActive.current = false
-      void enqueue(() => call(commands.cancelTransform)).catch(() => undefined)
+      transformRevision.current = null
+      canvas?.cancelTransform()
     }
     setDraft(null)
     setPreviews({})
-  }, [enqueue, strokeUpdates, transformUpdates])
+  }, [canvas, strokeUpdates, transformUpdates])
+
+  const fitCanvas = useCallback(() => {
+    const element = surface.current
+    if (
+      canvasState.status !== 'ready' ||
+      !element ||
+      !pageId ||
+      pageWidth === undefined ||
+      pageHeight === undefined
+    )
+      return
+    const bounds = element.getBoundingClientRect()
+    const dpr = window.devicePixelRatio
+    const next = containCamera(bounds.width * dpr, bounds.height * dpr, pageWidth, pageHeight)
+    useKoharuStore.setState({ camera: { ...next, fitted: true } })
+  }, [canvasState.status, pageHeight, pageId, pageWidth])
+
+  const report = useCallback(() => {
+    const element = surface.current
+    if (!element || !canvas) return
+    const bounds = element.getBoundingClientRect()
+    canvas.resize(bounds.width, bounds.height, window.devicePixelRatio, workspaceColor())
+    if (useKoharuStore.getState().camera.fitted) fitCanvas()
+  }, [canvas, fitCanvas])
+
+  const setZoom = useCallback((zoom: number) => {
+    const element = surface.current
+    if (!element) return
+    const bounds = element.getBoundingClientRect()
+    const dpr = window.devicePixelRatio
+    const current = useKoharuStore.getState().camera
+    const center = { x: bounds.width * dpr * 0.5, y: bounds.height * dpr * 0.5 }
+    const pageX = (center.x - current.translation[0]) / current.zoom
+    const pageY = (center.y - current.translation[1]) / current.zoom
+    useKoharuStore.setState({
+      camera: {
+        zoom,
+        translation: [center.x - pageX * zoom, center.y - pageY * zoom],
+        fitted: false,
+      },
+    })
+  }, [])
 
   useEffect(() => {
     const element = surface.current
@@ -183,7 +273,41 @@ export function CanvasWorkspace() {
     }
   }, [report])
 
-  useEffect(() => cancelGesture, [cancelGesture, page?.id, tool])
+  useEffect(() => {
+    canvas?.setView(camera.zoom, camera.translation)
+  }, [canvas, camera])
+
+  useEffect(() => {
+    if (
+      !pageId ||
+      canvasPage !== pageId ||
+      canvasState.generation !== canvasGeneration ||
+      canvasState.status !== 'ready' ||
+      !pages?.length
+    )
+      return
+    const index = pages.findIndex((candidate) => candidate.id === pageId)
+    if (index < 0) return
+    const previous = previousPageIndex.current
+    previousPageIndex.current = index
+    const direction = previous !== null && index < previous ? -1 : 1
+    const adjacent = pages[index + direction]?.id ?? pages[index - direction]?.id
+    if (adjacent) {
+      void prefetchCanvasPages([adjacent])
+        .then((prepared) => {
+          for (const page of prepared) {
+            queryClient.setQueryData(preparedPageKey(page.page.id), page)
+          }
+        })
+        .catch(() => undefined)
+    }
+  }, [canvasGeneration, canvasPage, canvasState.generation, canvasState.status, pageId, pages])
+
+  useEffect(() => {
+    fitCanvas()
+  }, [fitCanvas, fitCanvasRequest])
+
+  useEffect(() => cancelGesture, [cancelGesture, canvasGeneration, canvasRevision, page?.id, tool])
 
   useEffect(() => {
     const editable = (target: EventTarget | null) =>
@@ -223,7 +347,7 @@ export function CanvasWorkspace() {
         return
       }
       if (event.key.toLowerCase() === state.shortcuts.fit) {
-        dispatch(commands.fitCanvas)
+        requestCanvasFit()
         return
       }
       if (event.key === 'Escape') {
@@ -254,7 +378,7 @@ export function CanvasWorkspace() {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
     }
-  }, [cancelGesture, colorSampling, page, selectLayers, setTool])
+  }, [cancelGesture, colorSampling, page, requestCanvasFit, selectLayers, setTool])
 
   const clientPagePoint = (clientX: number, clientY: number) =>
     pagePoint(
@@ -303,14 +427,13 @@ export function CanvasWorkspace() {
       translation = clampCameraTranslation(
         translation,
         camera.zoom,
-        page.size.width,
-        page.size.height,
+        pageWidth ?? page.size.width,
+        pageHeight ?? page.size.height,
         bounds.width * dpr,
         bounds.height * dpr,
         dpr,
       )
       useKoharuStore.setState({ camera: { zoom: camera.zoom, translation, fitted: false } })
-      viewUpdates.schedule({ zoom: camera.zoom, translation })
       return
     }
 
@@ -326,12 +449,9 @@ export function CanvasWorkspace() {
     } else if (current.kind === 'text') {
       current.frame = draftFrame(current.start, point)
       setDraft(current.frame)
-    } else if (current.kind === 'paint') {
-      strokeUpdates.schedule({ kind: 'paint', points })
-    } else if (current.kind === 'erase') {
-      strokeUpdates.schedule({ kind: 'erase', points })
-    } else if (current.kind === 'inpaint') {
-      strokeUpdates.schedule({ kind: 'inpaint', points })
+    } else if (current.kind === 'paint' || current.kind === 'erase' || current.kind === 'inpaint') {
+      current.points.push(...points)
+      strokeUpdates.schedule({ kind: current.kind, points })
     }
   }
 
@@ -355,30 +475,50 @@ export function CanvasWorkspace() {
           return refresh(projectKey, pagesKey, pageKey)
         })
         .catch(() => undefined)
-    } else if (current.kind === 'paint') {
+    } else if (current.kind === 'paint' || current.kind === 'erase' || current.kind === 'inpaint') {
       strokeUpdates.commit()
-      void enqueue(() => call(commands.finishPaint))
-        .then((result) => {
-          selectLayers([result.layer])
-          return refresh(projectKey, pagesKey, pageKey)
-        })
-        .catch(() => undefined)
-    } else if (current.kind === 'erase') {
-      strokeUpdates.commit()
-      void enqueue(() => call(commands.finishErase))
-        .then((result) => {
-          selectLayers([result.layer])
-          return refresh(projectKey, pagesKey, pageKey)
-        })
-        .catch(() => undefined)
-    } else if (current.kind === 'inpaint') {
-      strokeUpdates.commit()
-      void enqueue(() => call(commands.finishInpaint)).catch(() => undefined)
+      try {
+        canvas?.finishStroke()
+      } catch (error) {
+        receiveError(errorMessage(error))
+        return
+      }
+      const operation =
+        current.kind === 'paint'
+          ? enqueue(() =>
+              call(commands.commitPaint, current.revision, current.layer, current.points, {
+                diameter: current.diameter,
+                color: current.color!,
+              }),
+            ).then((result) => {
+              selectLayers([result.layer])
+              return refresh(projectKey, pagesKey, pageKey)
+            })
+          : current.kind === 'erase'
+            ? enqueue(() =>
+                call(
+                  commands.commitErase,
+                  current.revision,
+                  current.layer!,
+                  current.points,
+                  current.diameter,
+                ),
+              ).then((result) => {
+                selectLayers([result.layer])
+                return refresh(projectKey, pagesKey, pageKey)
+              })
+            : enqueue(() =>
+                call(commands.commitInpaint, current.revision, current.points, current.diameter),
+              )
+      commitPending.current = true
+      void operation
+        .catch(() => canvas?.cancelStroke())
+        .finally(() => (commitPending.current = false))
     }
   }
 
   return (
-    <main className='relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tl-2xl bg-transparent'>
+    <main className='relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tl-2xl bg-[var(--surface-canvas)]'>
       <CanvasCommandBar />
       <div className='relative flex min-h-0 min-w-0 flex-1'>
         <ToolBar />
@@ -386,11 +526,22 @@ export function CanvasWorkspace() {
           ref={surface}
           tabIndex={0}
           aria-label={t('canvas.surface')}
-          className='relative min-h-0 min-w-0 flex-1 touch-none overflow-hidden bg-transparent outline-none'
-          style={{ cursor: page ? canvasCursors[tool] : undefined }}
+          aria-busy={page ? canvasState.status !== 'ready' : undefined}
+          className='relative min-h-0 min-w-0 flex-1 touch-none overflow-hidden bg-[var(--surface-canvas)] outline-none'
+          style={{
+            cursor: page && canvasState.status === 'ready' ? canvasCursors[tool] : undefined,
+          }}
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={(event) => {
-            if (!page || event.button > 1) return
+            if (
+              !page ||
+              !canvas ||
+              canvasState.status !== 'ready' ||
+              canvasRevision === null ||
+              commitPending.current ||
+              event.button > 1
+            )
+              return
             if (event.target instanceof Element && event.target.closest('[data-canvas-control]'))
               return
             event.currentTarget.focus()
@@ -432,36 +583,82 @@ export function CanvasWorkspace() {
               setDraft(frame)
             } else if (tool === 'draw') {
               strokeUpdates.clear()
-              gesture.current = { kind: 'paint', pointer: event.pointerId }
-              void enqueue(() =>
-                call(commands.beginPaint, activeRaster?.id ?? null, point, {
+              const color = hexToRgba(brush.color)
+              gesture.current = {
+                kind: 'paint',
+                pointer: event.pointerId,
+                revision: canvasRevision,
+                layer: activeRaster?.id ?? null,
+                points: [point],
+                diameter: brush.diameter,
+                color,
+              }
+              try {
+                canvas.beginStroke({
+                  kind: 'paint',
+                  layer: activeRaster?.id ?? null,
+                  point,
                   diameter: brush.diameter,
-                  color: hexToRgba(brush.color),
-                }),
-              ).catch(() => undefined)
+                  color,
+                })
+              } catch (error) {
+                gesture.current = null
+                receiveError(errorMessage(error))
+              }
             } else if (tool === 'eraser') {
               if (!activeRaster) {
                 receiveError('Select a paint or cleanup layer before using the Eraser.')
                 return
               }
               strokeUpdates.clear()
-              gesture.current = { kind: 'erase', pointer: event.pointerId }
-              void enqueue(() =>
-                call(commands.beginErase, activeRaster.id, point, brush.diameter),
-              ).catch(() => undefined)
+              gesture.current = {
+                kind: 'erase',
+                pointer: event.pointerId,
+                revision: canvasRevision,
+                layer: activeRaster.id,
+                points: [point],
+                diameter: brush.diameter,
+              }
+              try {
+                canvas.beginStroke({
+                  kind: 'erase',
+                  layer: activeRaster.id,
+                  point,
+                  diameter: brush.diameter,
+                })
+              } catch (error) {
+                gesture.current = null
+                receiveError(errorMessage(error))
+              }
             } else if (tool === 'remove') {
               strokeUpdates.clear()
-              gesture.current = { kind: 'inpaint', pointer: event.pointerId }
-              void enqueue(() => call(commands.beginInpaint, point, brush.diameter)).catch(
-                () => undefined,
-              )
+              gesture.current = {
+                kind: 'inpaint',
+                pointer: event.pointerId,
+                revision: canvasRevision,
+                layer: null,
+                points: [point],
+                diameter: brush.diameter,
+              }
+              try {
+                canvas.beginStroke({
+                  kind: 'inpaint',
+                  layer: null,
+                  point,
+                  diameter: brush.diameter,
+                })
+              } catch (error) {
+                gesture.current = null
+                receiveError(errorMessage(error))
+              }
             } else if (tool === 'color_picker') {
-              void call(commands.sampleColor, physical)
+              void canvas
+                .sampleColor(physical)
                 .then((color) => {
                   const hex = rgbaToHex(color)
                   if (!colorSampling?.complete(hex)) setBrush({ ...brush, color: hex })
                 })
-                .catch(() => undefined)
+                .catch((error: unknown) => receiveError(errorMessage(error)))
             }
             event.preventDefault()
           }}
@@ -514,17 +711,22 @@ export function CanvasWorkspace() {
             translation = clampCameraTranslation(
               translation,
               zoom,
-              page.size.width,
-              page.size.height,
+              pageWidth ?? page.size.width,
+              pageHeight ?? page.size.height,
               bounds.width * dpr,
               bounds.height * dpr,
               dpr,
             )
             useKoharuStore.setState({ camera: { zoom, translation, fitted: false } })
-            viewUpdates.schedule({ zoom, translation })
           }}
         >
-          {page && (
+          <canvas
+            ref={setCanvasElement}
+            data-testid='webgpu-canvas'
+            aria-hidden
+            className='pointer-events-none absolute inset-0 block size-full'
+          />
+          {page && canvasState.status === 'ready' && (
             <CanvasOverlay
               page={page}
               camera={camera}
@@ -541,6 +743,40 @@ export function CanvasWorkspace() {
               onTransformEnd={finishTransform}
             />
           )}
+          {page && canvasState.status === 'error' && (
+            <div
+              role='alert'
+              className={
+                canvasState.hasFrame
+                  ? 'absolute inset-x-0 top-3 z-20 flex justify-center px-3'
+                  : 'absolute inset-0 z-20 grid place-items-center bg-[var(--surface-canvas)]/90 p-6'
+              }
+            >
+              <div
+                className={
+                  canvasState.hasFrame
+                    ? 'flex max-w-sm flex-col items-center gap-2 rounded-md border border-border bg-popover/95 p-3 text-center shadow-sm'
+                    : 'flex max-w-sm flex-col items-center gap-2 text-center'
+                }
+              >
+                <p className='text-sm font-medium text-foreground'>{t('canvas.unavailable')}</p>
+                {canvasState.error && (
+                  <p className='text-xs leading-relaxed text-muted-foreground'>
+                    {canvasState.error.message}
+                  </p>
+                )}
+                <Button
+                  data-canvas-control
+                  size='sm'
+                  variant='outline'
+                  className='mt-1'
+                  onClick={canvasState.retry}
+                >
+                  {t('errors.tryAgain')}
+                </Button>
+              </div>
+            </div>
+          )}
           {!page && (
             <div className='pointer-events-none absolute inset-0 grid place-items-center'>
               <p className='text-[12px] text-muted-foreground'>{t('canvas.empty')}</p>
@@ -548,7 +784,7 @@ export function CanvasWorkspace() {
           )}
         </div>
       </div>
-      <StatusBar />
+      <StatusBar onZoomChange={setZoom} />
     </main>
   )
 }
@@ -574,6 +810,33 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
+function containCamera(
+  viewportWidth: number,
+  viewportHeight: number,
+  pageWidth: number,
+  pageHeight: number,
+): CanvasView {
+  if (viewportWidth <= 0 || viewportHeight <= 0 || pageWidth <= 0 || pageHeight <= 0) {
+    return { zoom: 1, translation: [0, 0] }
+  }
+  const zoom = Math.max(
+    Number.EPSILON,
+    Math.min(viewportWidth / pageWidth, viewportHeight / pageHeight),
+  )
+  return {
+    zoom,
+    translation: [
+      (viewportWidth - pageWidth * zoom) * 0.5,
+      (viewportHeight - pageHeight * zoom) * 0.5,
+    ],
+  }
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return typeof error === 'string' ? error : 'The WebGPU canvas returned an unknown error.'
+}
+
 function clampCameraTranslation(
   translation: [number, number],
   zoom: number,
@@ -589,8 +852,10 @@ function clampCameraTranslation(
   const maxX = viewportWidth - minOverlap
   const maxY = viewportHeight - minOverlap
 
-  const x = minX <= maxX ? clamp(translation[0], minX, maxX) : (viewportWidth - pageWidth * zoom) * 0.5
-  const y = minY <= maxY ? clamp(translation[1], minY, maxY) : (viewportHeight - pageHeight * zoom) * 0.5
+  const x =
+    minX <= maxX ? clamp(translation[0], minX, maxX) : (viewportWidth - pageWidth * zoom) * 0.5
+  const y =
+    minY <= maxY ? clamp(translation[1], minY, maxY) : (viewportHeight - pageHeight * zoom) * 0.5
   return [x, y]
 }
 
@@ -601,7 +866,7 @@ function mergeStrokeUpdates(current: StrokeUpdate, next: StrokeUpdate): StrokeUp
 }
 
 function useFrameCommand<Value>(
-  execute: (value: Value) => Promise<unknown>,
+  execute: (value: Value) => void | Promise<unknown>,
   merge?: (current: Value, next: Value) => Value,
 ): FrameCommand<Value> {
   const executeRef = useRef(execute)
@@ -618,7 +883,7 @@ class FrameCommand<Value> {
   private frame: number | null = null
 
   constructor(
-    private readonly execute: (value: Value) => Promise<unknown>,
+    private readonly execute: (value: Value) => void | Promise<unknown>,
     private readonly merge: (current: Value, next: Value) => Value = (_current, next) => next,
   ) {}
 
@@ -649,6 +914,12 @@ class FrameCommand<Value> {
     const value = this.pending
     if (value === undefined) return
     this.pending = undefined
-    void this.execute(value).catch(() => undefined)
+    try {
+      void Promise.resolve(this.execute(value)).catch((error: unknown) =>
+        receiveError(errorMessage(error)),
+      )
+    } catch (error) {
+      receiveError(errorMessage(error))
+    }
   }
 }

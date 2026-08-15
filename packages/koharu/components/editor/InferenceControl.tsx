@@ -17,15 +17,15 @@ import { useTranslation } from 'react-i18next'
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { OutputPicker, type OutputDraft } from '@/components/controls/OutputPicker'
 import { call, refreshTranslationModels } from '@/lib/backend'
+import { receivePreferences, useKoharuStore } from '@/lib/store'
+import { modelKey, providerName } from '@/lib/translation'
 import {
   commands,
   type Model,
   type ModelSelection,
   type ProviderPreference,
   type Stage,
-} from '@/lib/protocol'
-import { receivePreferences, useKoharuStore } from '@/lib/store'
-import { modelKey, providerName } from '@/lib/translation'
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@koharu/ui/components/popover'
 import { cn } from '@koharu/ui/lib/utils'

@@ -18,10 +18,10 @@ jobs:
       REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     runs-on: ubuntu-latest
     steps:
-      # refer: https://v2.tauri.app/start/prerequisites/#linux
       - run: |
           sudo apt update
-          sudo apt install libwebkit2gtk-4.1-dev \
+          sudo apt install --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
             wget \

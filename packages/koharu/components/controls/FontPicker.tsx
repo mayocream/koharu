@@ -6,8 +6,8 @@ import { ChevronDown, ListFilter, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { FontFamily, FontSource } from '@/lib/protocol'
 import { useFontPreview } from '@/lib/queries'
+import type { FontFamily, FontSource } from '@koharu/bridge/protocol'
 import { Badge } from '@koharu/ui/components/badge'
 import { Button } from '@koharu/ui/components/button'
 import {
