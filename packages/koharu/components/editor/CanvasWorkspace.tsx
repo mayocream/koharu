@@ -30,6 +30,12 @@ import {
   usePage,
   usePages,
 } from '@/lib/queries'
+import {
+  isBrushTool,
+  BRUSH_STEP,
+  MAX_BRUSH_DIAMETER,
+  MIN_BRUSH_DIAMETER,
+} from '@/lib/canvas'
 import { receiveError, useKoharuStore, type CanvasTool } from '@/lib/store'
 import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
 import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
@@ -684,6 +690,21 @@ export function CanvasWorkspace() {
           onWheel={(event) => {
             if (!page) return
             event.preventDefault()
+            if (event.altKey && isBrushTool(tool)) {
+              if (event.deltaY !== 0) {
+                const currentBrush = useKoharuStore.getState().brush
+                const delta = event.deltaY < 0 ? BRUSH_STEP : -BRUSH_STEP
+                const nextDiameter = clamp(
+                  currentBrush.diameter + delta,
+                  MIN_BRUSH_DIAMETER,
+                  MAX_BRUSH_DIAMETER,
+                )
+                if (nextDiameter !== currentBrush.diameter) {
+                  setBrush({ ...currentBrush, diameter: nextDiameter })
+                }
+              }
+              return
+            }
             const point = clientPhysicalPoint(event.clientX, event.clientY)
             const current = useKoharuStore.getState().camera
             let zoom = current.zoom
@@ -737,7 +758,7 @@ export function CanvasWorkspace() {
               draft={draft}
               cursor={cursor}
               brushSize={brush.diameter}
-              showBrushCursor={tool === 'draw' || tool === 'eraser' || tool === 'remove'}
+              showBrushCursor={isBrushTool(tool)}
               onTransformStart={beginTransform}
               onTransformFrame={updateTransform}
               onTransformEnd={finishTransform}
