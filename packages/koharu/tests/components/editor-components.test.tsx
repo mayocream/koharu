@@ -289,6 +289,48 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
 
+  it('exports the current page or the entire project in the chosen format', async () => {
+    const user = userEvent.setup()
+    installProject()
+    const exportPages = vi.spyOn(commands, 'exportPages').mockResolvedValue(null)
+    render(<TitleBar />)
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Export PNG' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Current Page…' }))
+    expect(exportPages).toHaveBeenLastCalledWith({
+      kind: 'current_page',
+      page: 'page',
+      format: 'png',
+    })
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Export PNG' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Entire Project' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'PNG Images…' }))
+    expect(exportPages).toHaveBeenLastCalledWith({ kind: 'entire_project', format: 'png' })
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Export PNG' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Entire Project' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'CBZ Archive…' }))
+    expect(exportPages).toHaveBeenLastCalledWith({ kind: 'entire_project', format: 'cbz' })
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Export PSD' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Current Page…' }))
+    expect(exportPages).toHaveBeenLastCalledWith({
+      kind: 'current_page',
+      page: 'page',
+      format: 'psd',
+    })
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    await user.hover(await screen.findByRole('menuitem', { name: 'Export PSD' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Entire Project…' }))
+    expect(exportPages).toHaveBeenLastCalledWith({ kind: 'entire_project', format: 'psd' })
+  })
+
   it('opens community links through the Tauri opener plugin', async () => {
     nativeOpenUrl.mockClear()
     const user = userEvent.setup()
