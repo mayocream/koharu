@@ -53,6 +53,12 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
 
 pub fn run(context: tauri::Context<Cef>) -> Result<()> {
     let builder = tauri::Builder::<Cef>::default();
+    #[cfg(target_os = "linux")]
+    let builder = builder.command_line_args([
+        ("enable-unsafe-webgpu", None),
+        ("enable-features", Some("Vulkan,VulkanFromANGLE")),
+        ("use-angle", Some("vulkan")),
+    ]);
     builder
         .plugin(tauri_plugin_single_instance::init(|handle, _, _| {
             if let Some(window) = handle.get_webview_window("main") {
