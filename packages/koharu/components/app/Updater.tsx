@@ -89,34 +89,36 @@ export function Updater() {
       }}
     >
       <AlertDialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden'>
-        <AlertDialogHeader className='flex shrink-0 flex-col items-start text-left'>
-          <AlertDialogMedia>
+        <AlertDialogHeader className='flex shrink-0 flex-row items-start gap-4 text-left'>
+          <AlertDialogMedia className='mb-0 shrink-0'>
             {state.kind === 'error' ? (
               <RefreshCw className='size-5' />
             ) : (
               <Download className='size-5' />
             )}
           </AlertDialogMedia>
-          <AlertDialogTitle>
-            {state.kind === 'available'
-              ? t('updater.available.title')
-              : state.kind === 'downloading'
-                ? t('updater.downloading.title')
-                : t('updater.error.title')}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {state.kind === 'available' ? (
-              <Trans
-                i18nKey='updater.available.description'
-                values={{ version: state.update.version }}
-                components={{ strong: <strong className='font-medium text-foreground' /> }}
-              />
-            ) : state.kind === 'downloading' ? (
-              t('updater.downloading.subtitle', { version: state.update.version })
-            ) : (
-              t('updater.error.description')
-            )}
-          </AlertDialogDescription>
+          <div className='min-w-0 space-y-1.5'>
+            <AlertDialogTitle>
+              {state.kind === 'available'
+                ? t('updater.available.title')
+                : state.kind === 'downloading'
+                  ? t('updater.downloading.title')
+                  : t('updater.error.title')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {state.kind === 'available' ? (
+                <Trans
+                  i18nKey='updater.available.description'
+                  values={{ version: state.update.version }}
+                  components={{ strong: <strong className='font-medium text-foreground' /> }}
+                />
+              ) : state.kind === 'downloading' ? (
+                t('updater.downloading.subtitle', { version: state.update.version })
+              ) : (
+                t('updater.error.description')
+              )}
+            </AlertDialogDescription>
+          </div>
         </AlertDialogHeader>
 
         {state.kind === 'available' && (
