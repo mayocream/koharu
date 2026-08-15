@@ -30,7 +30,7 @@ jobs:
           test -n "$SPONSORKIT_GITHUB_TOKEN" || { echo "SPONSORKIT_GITHUB_TOKEN is not configured"; exit 1; }
           test -n "$SPONSORKIT_PATREON_TOKEN" || { echo "SPONSORKIT_PATREON_TOKEN is not configured"; exit 1; }
 
-      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run sponsors
 
       - name: Create pull request

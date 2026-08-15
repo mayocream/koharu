@@ -1,3 +1,21 @@
+## [0.67.2](https://github.com/mayocream/koharu/compare/0.67.1..0.67.2) - 2026-08-15
+
+### 🚜 Refactor
+
+- Use Tauri with CEF - ([a6c71bd](https://github.com/mayocream/koharu/commit/a6c71bd06673bbc428cb878987fa135968dc879f))
+
+
+## [0.67.1](https://github.com/mayocream/koharu/compare/0.67.0..0.67.1) - 2026-08-15
+
+### 🐛 Bug Fixes
+
+- *(ui)* Preserve output picker state while saving - ([7fe1d29](https://github.com/mayocream/koharu/commit/7fe1d29d77c5c0308bba28f4eac1fb89dc544431))
+
+### ⚙️ Miscellaneous Tasks
+
+- Enable devtools - ([49883fc](https://github.com/mayocream/koharu/commit/49883fce9bbbf9d25ea830abb738bd4375fc5fd5))
+
+
 ## [0.67.0](https://github.com/mayocream/koharu/compare/stable-diffusion.cpp-master-820-de298c2..0.67.0) - 2026-08-15
 
 ### ⛰️  Features

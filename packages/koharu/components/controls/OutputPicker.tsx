@@ -73,6 +73,7 @@ export function OutputPicker({
           size='icon-xs'
           aria-label={t('common.back')}
           className='rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground'
+          disabled={saving}
           onClick={back}
         >
           <ChevronLeft className='size-3.5' />
@@ -119,13 +120,14 @@ export function OutputPicker({
           {t('model.instructions')}
           <Textarea
             value={draft.instructions}
-            disabled={disabled || saving}
+            disabled={disabled}
             aria-label={t('outputPicker.instructions')}
             placeholder={t('outputPicker.instructionsPlaceholder')}
-            className='min-h-20 resize-none text-[11px] leading-4'
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, instructions: event.currentTarget.value }))
-            }
+            className='max-h-20 min-h-20 resize-none overflow-y-auto text-[11px] leading-4'
+            onChange={(event) => {
+              const instructions = event.currentTarget.value
+              setDraft((current) => ({ ...current, instructions }))
+            }}
           />
         </label>
       </div>

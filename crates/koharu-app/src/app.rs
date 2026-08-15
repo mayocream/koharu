@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use tauri::{AppHandle, Manager as _, WindowEvent, Wry};
+use tauri::{AppHandle, Cef, Manager as _, WindowEvent};
 use tokio::sync::Mutex;
 
 use crate::commands::{
@@ -13,7 +13,7 @@ use crate::commands::{
     project::{CurrentProject, ProjectLibrary},
 };
 
-pub(crate) async fn initialize(handle: AppHandle<Wry>) -> Result<()> {
+pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
     koharu_ml::init()
         .await
         .context("failed to initialize the ML runtime")?;
@@ -51,8 +51,8 @@ pub(crate) async fn initialize(handle: AppHandle<Wry>) -> Result<()> {
     Ok(())
 }
 
-pub fn run(context: tauri::Context<Wry>) -> Result<()> {
-    let builder = tauri::Builder::<Wry>::default();
+pub fn run(context: tauri::Context<Cef>) -> Result<()> {
+    let builder = tauri::Builder::<Cef>::default();
     builder
         .plugin(tauri_plugin_single_instance::init(|handle, _, _| {
             if let Some(window) = handle.get_webview_window("main") {

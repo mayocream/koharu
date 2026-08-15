@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{
-    AppHandle, Manager as _, State, Wry,
+    AppHandle, Cef, Manager as _, State,
     ipc::{Channel, IpcResponse},
 };
 
@@ -316,7 +316,7 @@ pub(crate) async fn commit_inpaint(
     expected_revision: Revision,
     points: Vec<Point>,
     diameter: f32,
-    handle: AppHandle<Wry>,
+    handle: AppHandle<Cef>,
     project: State<'_, CurrentProject>,
 ) -> Result<Option<JobId>, Error> {
     if !diameter.is_finite() || diameter <= 0.0 || points.is_empty() {

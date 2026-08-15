@@ -179,7 +179,6 @@ function RuntimeSelector({
     void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
       .then((saved) => {
         receivePreferences(saved)
-        setView('root')
       })
       .catch(() => undefined)
       .finally(() => setSavingOutput(false))
