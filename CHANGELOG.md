@@ -1,3 +1,10 @@
+## [0.67.3](https://github.com/mayocream/koharu/compare/0.67.2..0.67.3) - 2026-08-15
+
+### 🐛 Bug Fixes
+
+- *(desktop)* Enable Linux WebGPU Vulkan - ([6e19d68](https://github.com/mayocream/koharu/commit/6e19d6877feb17973f5b78d489ae633925b846f9))
+
+
 ## [0.67.2](https://github.com/mayocream/koharu/compare/0.67.1..0.67.2) - 2026-08-15
 
 ### 🚜 Refactor
