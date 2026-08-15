@@ -33,6 +33,13 @@ import {
 } from '@koharu/bridge/protocol'
 import { TooltipProvider } from '@koharu/ui/components/tooltip'
 
+type NativeDragDropHandler = (event: {
+  payload:
+    | { type: 'enter' | 'drop'; paths: string[]; position: { x: number; y: number } }
+    | { type: 'over'; position: { x: number; y: number } }
+    | { type: 'leave' }
+}) => void
+
 const nativeWindow = vi.hoisted(() => ({
   close: vi.fn(async () => undefined),
   isMaximized: vi.fn(async () => false),
@@ -42,8 +49,18 @@ const nativeWindow = vi.hoisted(() => ({
 }))
 const nativeOpenUrl = vi.hoisted(() => vi.fn(async () => undefined))
 const nativeGetVersion = vi.hoisted(() => vi.fn(async () => '0.62.0'))
+const nativeWebview = vi.hoisted(() => ({
+  dragDropHandler: undefined as NativeDragDropHandler | undefined,
+  onDragDropEvent: vi.fn(async (handler: NativeDragDropHandler) => {
+    nativeWebview.dragDropHandler = handler
+    return () => {
+      nativeWebview.dragDropHandler = undefined
+    }
+  }),
+}))
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => nativeWindow }))
+vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => nativeWebview }))
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: nativeGetVersion }))
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: nativeOpenUrl }))
 
@@ -194,6 +211,48 @@ function render(ui: ReactNode) {
 }
 
 describe('greenfield editor', () => {
+  it('imports paths dropped onto the empty page rail', async () => {
+    installProject()
+    queryClient.setQueryData(pagesKey, [])
+    queryClient.setQueryData(pageKey, null)
+    nativeWebview.dragDropHandler = undefined
+    const importPages = vi.spyOn(commands, 'importPages').mockResolvedValue(null)
+    render(<PageRail />)
+
+    const dropZone = screen.getByRole('button', { name: 'Drop pages to import' })
+    vi.spyOn(dropZone, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 200,
+      bottom: 120,
+      width: 200,
+      height: 120,
+      toJSON: () => ({}),
+    })
+    await waitFor(() => expect(nativeWebview.dragDropHandler).toBeDefined())
+
+    act(() => {
+      nativeWebview.dragDropHandler?.({
+        payload: { type: 'enter', paths: ['C:\\manga.cbz'], position: { x: 50, y: 50 } },
+      })
+    })
+    expect(dropZone).toHaveAttribute('data-dragging', 'true')
+    expect(screen.getByText('Release to import')).toBeInTheDocument()
+
+    act(() => {
+      nativeWebview.dragDropHandler?.({
+        payload: { type: 'drop', paths: ['C:\\manga.cbz'], position: { x: 50, y: 50 } },
+      })
+    })
+
+    await waitFor(() =>
+      expect(importPages).toHaveBeenCalledWith({ kind: 'paths', paths: ['C:\\manga.cbz'] }),
+    )
+    expect(dropZone).toHaveAttribute('data-dragging', 'false')
+  })
+
   it('shows import activity and prevents duplicate imports', async () => {
     const user = userEvent.setup()
     installProject()
@@ -215,7 +274,7 @@ describe('greenfield editor', () => {
     expect(screen.queryByRole('button', { name: 'Import pages' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('menuitem', { name: 'File' }))
     await user.hover(await screen.findByRole('menuitem', { name: 'Import Pages…' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Files…' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Files or archives…' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('Importing pages…')
     expect(importPages).toHaveBeenCalledTimes(1)

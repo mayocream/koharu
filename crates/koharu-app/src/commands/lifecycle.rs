@@ -1,4 +1,9 @@
-use std::{fs, io::Cursor, sync::Arc};
+use std::{
+    fs,
+    io::{Cursor, Read},
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{Context as _, Result};
 use koharu_desktop::{CanvasState, Desktop};
@@ -34,11 +39,25 @@ pub struct PageSelection {
     pub page: Page,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PageImportSource {
     Files,
     Folder,
+    Paths { paths: Vec<PathBuf> },
+}
+
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
+const ARCHIVE_EXTENSIONS: &[&str] = &["zip", "cbz"];
+const MAX_ARCHIVE_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_TOTAL_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+struct ImportedPage {
+    name: String,
+    bytes: Arc<[u8]>,
+    format: image::ImageFormat,
+    width: u32,
+    height: u32,
 }
 
 pub(crate) struct Initialization {
@@ -346,85 +365,41 @@ pub(crate) async fn import_pages(
         return Err(anyhow::anyhow!("pages cannot be imported while processing is running").into());
     }
     let dialog = rfd::AsyncFileDialog::new()
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
+        .add_filter("Pages", &["png", "jpg", "jpeg", "webp", "zip", "cbz"])
         .set_parent(&window);
-    let files = match source {
+    let paths = match source {
         PageImportSource::Files => dialog.pick_files().await.map(|files| {
             files
                 .into_iter()
                 .map(|file| file.path().to_owned())
                 .collect::<Vec<_>>()
         }),
-        PageImportSource::Folder => dialog.pick_folder().await.map(|folder| {
-            WalkDir::new(folder.path())
-                .follow_links(false)
-                .into_iter()
-                .filter_map(|entry| match entry {
-                    Ok(entry) if entry.file_type().is_file() => Some(entry.into_path()),
-                    Ok(_) => None,
-                    Err(error) => {
-                        tracing::warn!(%error, "could not inspect an import directory entry");
-                        None
-                    }
-                })
-                .filter(|path| {
-                    path.extension()
-                        .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| {
-                            matches!(
-                                extension.to_ascii_lowercase().as_str(),
-                                "png" | "jpg" | "jpeg" | "webp"
-                            )
-                        })
-                })
-                .collect::<Vec<_>>()
-        }),
+        PageImportSource::Folder => dialog
+            .pick_folder()
+            .await
+            .map(|folder| vec![folder.path().to_owned()]),
+        PageImportSource::Paths { paths } => Some(paths),
     };
-    let Some(mut files) = files else {
+    let Some(paths) = paths else {
         return Ok(());
     };
-    if files.is_empty() {
-        return Err(anyhow::anyhow!("no supported images were found in the selection").into());
-    }
-    alphanumeric_sort::sort_slice_by_os_str_key(&mut files, |path| {
-        path.file_name().unwrap_or_else(|| path.as_os_str())
-    });
-    let pages = tokio::task::spawn_blocking(move || {
-        files
-            .into_par_iter()
-            .map(|file| -> Result<_> {
-                let bytes = fs::read(&file)
-                    .with_context(|| format!("failed to read {}", file.display()))?;
-                let format = image::guess_format(&bytes)
-                    .with_context(|| format!("failed to identify {}", file.display()))?;
-                let (width, height) =
-                    image::ImageReader::with_format(Cursor::new(bytes.as_slice()), format)
-                        .into_dimensions()
-                        .with_context(|| {
-                            format!("failed to read dimensions of {}", file.display())
-                        })?;
-                Ok((
-                    file.file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("page")
-                        .to_owned(),
-                    Arc::<[u8]>::from(bytes),
-                    format,
-                    width,
-                    height,
-                ))
-            })
-            .collect::<Result<Vec<_>>>()
-    })
-    .await
-    .context("page import worker stopped unexpectedly")??;
+    let pages = tokio::task::spawn_blocking(move || load_pages(paths))
+        .await
+        .context("page import worker stopped unexpectedly")??;
 
     let (commit, page) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let source = AssetRole::new("source")?;
         let patch = project.snapshot().patch(|edit| {
-            for (name, bytes, format, width, height) in pages {
+            for ImportedPage {
+                name,
+                bytes,
+                format,
+                width,
+                height,
+            } in pages
+            {
                 let page = edit.add_page(
                     PageDraft::new(name, f64::from(width), f64::from(height)),
                     At::End,
@@ -455,6 +430,206 @@ pub(crate) async fn import_pages(
     let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
     Ok(())
+}
+
+fn load_pages(paths: Vec<PathBuf>) -> Result<Vec<ImportedPage>> {
+    let mut files = collect_import_files(paths);
+    alphanumeric_sort::sort_slice_by_path_key(&mut files, PathBuf::as_path);
+    let pages = files
+        .into_par_iter()
+        .map(|file| {
+            if has_extension(&file, ARCHIVE_EXTENSIONS) {
+                load_archive(&file)
+            } else {
+                load_image_file(&file).map(|page| vec![page])
+            }
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if pages.is_empty() {
+        anyhow::bail!("no supported images were found in the selection");
+    }
+    Ok(pages)
+}
+
+fn collect_import_files(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    paths
+        .into_iter()
+        .flat_map(|path| {
+            if path.is_dir() {
+                WalkDir::new(path)
+                    .follow_links(false)
+                    .into_iter()
+                    .filter_map(|entry| match entry {
+                        Ok(entry) if entry.file_type().is_file() => Some(entry.into_path()),
+                        Ok(_) => None,
+                        Err(error) => {
+                            tracing::warn!(%error, "could not inspect an import directory entry");
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![path]
+            }
+        })
+        .filter(|path| {
+            has_extension(path, IMAGE_EXTENSIONS) || has_extension(path, ARCHIVE_EXTENSIONS)
+        })
+        .collect()
+}
+
+fn load_image_file(path: &Path) -> Result<ImportedPage> {
+    let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+    load_image(
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("page")
+            .to_owned(),
+        bytes,
+        &path.display().to_string(),
+    )
+}
+
+fn load_archive(path: &Path) -> Result<Vec<ImportedPage>> {
+    let file = fs::File::open(path)
+        .with_context(|| format!("failed to open archive {}", path.display()))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .with_context(|| format!("failed to read archive {}", path.display()))?;
+    let mut entries = Vec::new();
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .with_context(|| format!("failed to inspect entry {index} in {}", path.display()))?;
+        let name = entry.name().to_owned();
+        if entry.is_file() && has_extension(Path::new(&name), IMAGE_EXTENSIONS) {
+            entries.push((index, name));
+        }
+    }
+    alphanumeric_sort::sort_slice_by_str_key(&mut entries, |(_, name)| name);
+
+    let mut total_bytes = 0_u64;
+    entries
+        .into_iter()
+        .map(|(index, name)| {
+            let entry_label = format!("{} in {}", name, path.display());
+            let mut entry = archive
+                .by_index(index)
+                .with_context(|| format!("failed to open {entry_label}"))?;
+            if entry.size() > MAX_ARCHIVE_ENTRY_BYTES {
+                anyhow::bail!("{entry_label} exceeds the 512 MiB page limit");
+            }
+            total_bytes = total_bytes
+                .checked_add(entry.size())
+                .context("archive contents are too large")?;
+            if total_bytes > MAX_ARCHIVE_TOTAL_BYTES {
+                anyhow::bail!("{} exceeds the 4 GiB import limit", path.display());
+            }
+
+            let mut bytes = Vec::with_capacity(usize::try_from(entry.size())?);
+            entry
+                .by_ref()
+                .take(MAX_ARCHIVE_ENTRY_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .with_context(|| format!("failed to extract {entry_label}"))?;
+            if bytes.len() as u64 > MAX_ARCHIVE_ENTRY_BYTES {
+                anyhow::bail!("{entry_label} exceeds the 512 MiB page limit");
+            }
+            load_image(
+                Path::new(&name)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("page")
+                    .to_owned(),
+                bytes,
+                &entry_label,
+            )
+        })
+        .collect()
+}
+
+fn load_image(name: String, bytes: Vec<u8>, source: &str) -> Result<ImportedPage> {
+    let format = image::guess_format(&bytes)
+        .with_context(|| format!("failed to identify image format for {source}"))?;
+    let (width, height) = image::ImageReader::with_format(Cursor::new(bytes.as_slice()), format)
+        .into_dimensions()
+        .with_context(|| format!("failed to read image dimensions for {source}"))?;
+    Ok(ImportedPage {
+        name,
+        bytes: Arc::from(bytes),
+        format,
+        width,
+        height,
+    })
+}
+
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extensions
+                .iter()
+                .any(|supported| extension.eq_ignore_ascii_case(supported))
+        })
+}
+
+#[cfg(test)]
+mod import_tests {
+    use std::io::{Cursor, Write as _};
+
+    use image::{DynamicImage, ImageFormat, RgbaImage};
+    use zip::{ZipWriter, write::SimpleFileOptions};
+
+    use super::*;
+
+    #[test]
+    fn imports_archive_images_in_natural_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let archive_path = directory.path().join("chapter.cbz");
+        let mut archive = ZipWriter::new(fs::File::create(&archive_path).unwrap());
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        archive.start_file("chapter/page-10.png", options).unwrap();
+        archive.write_all(&png(10, 1)).unwrap();
+        archive.start_file("chapter/notes.txt", options).unwrap();
+        archive.write_all(b"ignored").unwrap();
+        archive.start_file("chapter/page-2.png", options).unwrap();
+        archive.write_all(&png(2, 1)).unwrap();
+        archive.finish().unwrap();
+
+        let pages = load_pages(vec![archive_path]).unwrap();
+
+        assert_eq!(pages.len(), 2);
+        assert_eq!(pages[0].name, "page-2.png");
+        assert_eq!((pages[0].width, pages[0].height), (2, 1));
+        assert_eq!(pages[1].name, "page-10.png");
+        assert_eq!((pages[1].width, pages[1].height), (10, 1));
+    }
+
+    #[test]
+    fn expands_dropped_folders_and_ignores_unsupported_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("nested");
+        fs::create_dir(&nested).unwrap();
+        fs::write(nested.join("page.png"), png(3, 4)).unwrap();
+        fs::write(nested.join("notes.txt"), b"ignored").unwrap();
+
+        let pages = load_pages(vec![directory.path().to_owned()]).unwrap();
+
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].name, "page.png");
+        assert_eq!((pages[0].width, pages[0].height), (3, 4));
+    }
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(RgbaImage::new(width, height))
+            .write_to(&mut bytes, ImageFormat::Png)
+            .unwrap();
+        bytes.into_inner()
+    }
 }
 
 #[tauri::command]

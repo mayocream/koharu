@@ -50,3 +50,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 walkdir = { workspace = true }
 webp = { workspace = true }
+zip = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
