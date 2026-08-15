@@ -37,8 +37,12 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    lng: 'en-US',
+    supportedLngs: supportedLanguages,
     fallbackLng: 'en-US',
+    detection: {
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
+    },
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default
     },

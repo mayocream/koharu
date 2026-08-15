@@ -92,7 +92,6 @@ export function Providers({ children }: { children: ReactNode }) {
     }
     setLanguage(i18n.language)
     i18n.on('languageChanged', setLanguage)
-    void i18n.changeLanguage()
     return () => i18n.off('languageChanged', setLanguage)
   }, [])
 
