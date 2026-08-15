@@ -796,7 +796,11 @@ describe('greenfield editor', () => {
         },
       },
     }
-    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(nextPreferences)
+    let finishSave!: (saved: Preferences) => void
+    const pendingSave = new Promise<Preferences>((resolve) => {
+      finishSave = resolve
+    })
+    const save = vi.spyOn(commands, 'savePreferences').mockImplementation(() => pendingSave)
     render(<CanvasCommandBar />)
 
     await user.click(screen.getByRole('button', { name: 'Processing settings' }))
@@ -807,9 +811,9 @@ describe('greenfield editor', () => {
     expect(language).not.toHaveTextContent('en-US')
     await user.click(language)
     await user.click(await screen.findByRole('option', { name: 'Japanese' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Translation instructions' }), {
-      target: { value: 'Keep character names unchanged.' },
-    })
+    const instructions = screen.getByRole('textbox', { name: 'Translation instructions' })
+    expect(instructions).toHaveClass('max-h-20', 'overflow-y-auto')
+    await user.type(instructions, 'Keep character names unchanged.')
     expect(screen.queryByRole('button', { name: 'Apply output' })).not.toBeInTheDocument()
 
     await waitFor(() =>
@@ -819,9 +823,16 @@ describe('greenfield editor', () => {
         preferences.typesetting,
       ),
     )
-    expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
-      nextPreferences.pipeline.translation,
+    expect(instructions).not.toBeDisabled()
+    expect(instructions).toHaveFocus()
+    await act(async () => finishSave(nextPreferences))
+    await waitFor(() =>
+      expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
+        nextPreferences.pipeline.translation,
+      ),
     )
+    expect(instructions).toBeInTheDocument()
+    expect(instructions).toHaveFocus()
   })
 
   it('changes the translation model from the runtime selector', async () => {
