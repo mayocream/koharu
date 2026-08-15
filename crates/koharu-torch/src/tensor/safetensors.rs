@@ -139,7 +139,7 @@ impl crate::Tensor {
                 Ok::<(&str, SafeView), TchError>((name.as_ref(), tensor.as_ref().try_into()?))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        safetensors::tensor::serialize_to_file(views, &None, path.as_ref())
+        safetensors::tensor::serialize_to_file(views, None, path.as_ref())
             .map_err(|e| wrap_err(path, e))?;
         Ok(())
     }

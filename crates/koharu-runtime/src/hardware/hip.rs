@@ -23,7 +23,7 @@ pub(super) fn probe() -> Vec<Device> {
     };
     let Some(library) = names
         .iter()
-        .find_map(|name| unsafe { Library::new(name).ok() })
+        .find_map(|name| unsafe { Library::new(*name).ok() })
     else {
         return Vec::new();
     };

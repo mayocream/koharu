@@ -312,13 +312,13 @@ fn adapter_type(ty: &Type) -> Type {
         return ty.clone();
     }
 
-    let Some(GenericArgument::Type(Type::BareFn(function))) = arguments.args.first() else {
+    let Some(GenericArgument::Type(Type::FnPtr(function))) = arguments.args.first() else {
         return ty.clone();
     };
 
     let mut function = function.clone();
     function.unsafety = None;
-    Type::BareFn(function)
+    Type::FnPtr(function)
 }
 
 fn symbol_name(function: &Function) -> String {

@@ -22,7 +22,7 @@ pub(super) fn probe() -> Option<(i32, Vec<Device>)> {
     };
     let library = names
         .iter()
-        .find_map(|name| unsafe { Library::new(name).ok() })?;
+        .find_map(|name| unsafe { Library::new(*name).ok() })?;
     unsafe {
         let init = *library.get::<Init>(b"cuInit\0").ok()?;
         let get_device_count = *library.get::<DeviceGetCount>(b"cuDeviceGetCount\0").ok()?;

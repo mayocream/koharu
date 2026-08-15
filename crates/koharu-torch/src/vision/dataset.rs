@@ -58,8 +58,8 @@ pub fn random_crop(t: &Tensor, pad: i64) -> Tensor {
     let output = t.zeros_like();
     for bindex in 0..size[0] {
         let mut output_view = output.i(bindex);
-        let start_w = rand::thread_rng().gen_range(0..2 * pad);
-        let start_h = rand::thread_rng().gen_range(0..2 * pad);
+        let start_w = rand::rng().random_range(0..2 * pad);
+        let start_h = rand::rng().random_range(0..2 * pad);
         let src = padded.i((bindex, .., start_h..start_h + sz_h, start_w..start_w + sz_w));
         output_view.copy_(&src)
     }
@@ -76,8 +76,8 @@ pub fn random_cutout(t: &Tensor, sz: i64) -> Tensor {
     let mut output = t.zeros_like();
     output.copy_(t);
     for bindex in 0..size[0] {
-        let start_h = rand::thread_rng().gen_range(0..size[2] - sz + 1);
-        let start_w = rand::thread_rng().gen_range(0..size[3] - sz + 1);
+        let start_h = rand::rng().random_range(0..size[2] - sz + 1);
+        let start_w = rand::rng().random_range(0..size[3] - sz + 1);
         let _output = output
             .i((bindex, .., start_h..start_h + sz, start_w..start_w + sz))
             .fill_(0.0);
