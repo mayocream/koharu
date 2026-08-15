@@ -221,36 +221,55 @@ async fn export_project_cbz(
     pages: Vec<ExportPage>,
     path: PathBuf,
 ) -> Result<()> {
-    let mut archive = tokio::task::spawn_blocking(move || {
+    let (sender, mut receiver) = tokio::sync::mpsc::channel::<(String, Vec<u8>)>(2);
+    let archive_worker = tokio::task::spawn_blocking(move || -> Result<()> {
         let file = fs::File::create(&path)
             .with_context(|| format!("failed to create {}", path.display()))?;
-        Ok::<_, anyhow::Error>(ZipWriter::new(file))
-    })
-    .await
-    .context("CBZ export worker stopped unexpectedly")??;
-
-    for page in pages {
-        let frame = renderer.render(&snapshot, page.id).await?;
-        let image = rasterize(Arc::clone(&rasterizer), &frame, RasterOptions::default())
-            .await?
-            .image;
-        let bytes = tokio::task::spawn_blocking(move || encode_png(image))
-            .await
-            .context("PNG encode worker stopped unexpectedly")??;
-        archive = tokio::task::spawn_blocking(move || {
-            append_cbz_entry(&mut archive, &format!("{}.png", page.stem), &bytes)?;
-            Ok::<_, anyhow::Error>(archive)
-        })
-        .await
-        .context("CBZ export worker stopped unexpectedly")??;
-    }
-    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut archive = ZipWriter::new(file);
+        while let Some((name, bytes)) = receiver.blocking_recv() {
+            append_cbz_entry(&mut archive, &name, &bytes)?;
+        }
         archive.finish()?;
         Ok(())
-    })
+    });
+
+    let encoded_pages = stream::iter(pages)
+        .map(|page| {
+            let renderer = renderer.clone();
+            let rasterizer = Arc::clone(&rasterizer);
+            let snapshot = snapshot.clone();
+            async move {
+                let frame = renderer.render(&snapshot, page.id).await?;
+                let image = rasterize(rasterizer, &frame, RasterOptions::default())
+                    .await?
+                    .image;
+                let bytes = tokio::task::spawn_blocking(move || encode_png(image))
+                    .await
+                    .context("PNG encode worker stopped unexpectedly")??;
+                Ok::<_, anyhow::Error>((format!("{}.png", page.stem), bytes))
+            }
+        })
+        .buffered(4);
+    futures::pin_mut!(encoded_pages);
+
+    let export_result = async {
+        while let Some(entry) = encoded_pages.try_next().await? {
+            sender
+                .send(entry)
+                .await
+                .map_err(|_| anyhow::anyhow!("CBZ archive writer stopped unexpectedly"))?;
+        }
+        Ok::<_, anyhow::Error>(())
+    }
     .await
-    .context("CBZ export worker stopped unexpectedly")??;
-    Ok(())
+    .context("failed to prepare CBZ pages");
+    drop(sender);
+
+    let archive_result = archive_worker
+        .await
+        .context("CBZ archive writer stopped unexpectedly")?;
+    archive_result?;
+    export_result
 }
 
 fn export_page_job(snapshot: &Snapshot, id: EntityId, index: Option<usize>) -> Result<ExportPage> {
@@ -309,7 +328,7 @@ fn append_cbz_entry<W: Write + Seek>(
 ) -> Result<()> {
     archive.start_file(
         name,
-        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated),
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
     )?;
     archive.write_all(bytes)?;
     Ok(())
@@ -408,6 +427,7 @@ mod tests {
         assert_eq!(archive.len(), 1);
         let mut entry = archive.by_index(0).unwrap();
         assert_eq!(entry.name(), "0001_Page 1.png");
+        assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
         let mut bytes = Vec::new();
         entry.read_to_end(&mut bytes).unwrap();
         let image = image::load_from_memory_with_format(&bytes, ImageFormat::Png).unwrap();
