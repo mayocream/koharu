@@ -302,7 +302,6 @@
   "outputPicker": {
     "instructions": "Translation instructions",
     "instructionsPlaceholder": "Optional guidance for tone, names, and formatting.",
-    "saving": "Saving output settings",
     "targetLanguage": "Target language",
     "title": "Translation output"
   },

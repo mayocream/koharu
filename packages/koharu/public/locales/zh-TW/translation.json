@@ -302,7 +302,6 @@
   "outputPicker": {
     "instructions": "翻譯指示",
     "instructionsPlaceholder": "關於語氣、名稱和格式的選填說明。",
-    "saving": "正在儲存輸出設定",
     "targetLanguage": "目標語言",
     "title": "翻譯輸出"
   },

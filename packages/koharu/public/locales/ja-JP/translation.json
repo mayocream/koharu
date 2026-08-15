@@ -302,7 +302,6 @@
   "outputPicker": {
     "instructions": "翻訳指示",
     "instructionsPlaceholder": "文体、固有名詞、書式に関する任意の指示。",
-    "saving": "出力設定を保存中",
     "targetLanguage": "対象言語",
     "title": "翻訳出力"
   },

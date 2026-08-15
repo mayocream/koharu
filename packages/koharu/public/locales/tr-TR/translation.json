@@ -302,7 +302,6 @@
   "outputPicker": {
     "instructions": "Çeviri talimatları",
     "instructionsPlaceholder": "Üslup, adlar ve biçimlendirme için isteğe bağlı yönlendirme.",
-    "saving": "Çıktı ayarları kaydediliyor",
     "targetLanguage": "Hedef dil",
     "title": "Çeviri çıktısı"
   },

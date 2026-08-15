@@ -823,6 +823,10 @@ describe('greenfield editor', () => {
         preferences.typesetting,
       ),
     )
+    expect(
+      screen.queryByLabelText(/Saving output settings|outputPicker\.saving/),
+    ).not.toBeInTheDocument()
+    expect(language).not.toBeDisabled()
     expect(instructions).not.toBeDisabled()
     expect(instructions).toHaveFocus()
     await act(async () => finishSave(nextPreferences))
@@ -984,6 +988,10 @@ describe('greenfield editor', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Target language')).toHaveTextContent('English')
+    expect(screen.getByLabelText('Translation instructions')).toHaveClass(
+      'field-sizing-fixed',
+      'overflow-y-auto',
+    )
   })
 
   it('clamps a threshold typed past its bounds before saving it', async () => {

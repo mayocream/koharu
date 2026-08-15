@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, LoaderCircle } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -79,12 +79,6 @@ export function OutputPicker({
           <ChevronLeft className='size-3.5' />
         </Button>
         <span className='ml-1 text-[11px] font-medium'>{t('outputPicker.title')}</span>
-        {saving && (
-          <LoaderCircle
-            aria-label={t('outputPicker.saving')}
-            className='mr-1 ml-auto size-3.5 animate-spin text-muted-foreground'
-          />
-        )}
       </div>
 
       <div className='grid gap-2 p-1'>
@@ -95,7 +89,7 @@ export function OutputPicker({
             items={Object.fromEntries(
               languageChoices.map((language) => [language.tag, language.name]),
             )}
-            disabled={disabled || saving}
+            disabled={disabled}
             onValueChange={(targetLanguage) =>
               targetLanguage && setDraft((current) => ({ ...current, targetLanguage }))
             }

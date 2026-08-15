@@ -302,7 +302,6 @@
   "outputPicker": {
     "instructions": "Instrucciones de traducción",
     "instructionsPlaceholder": "Indicaciones opcionales sobre el tono, los nombres y el formato.",
-    "saving": "Guardando ajustes de salida",
     "targetLanguage": "Idioma de destino",
     "title": "Salida de traducción"
   },

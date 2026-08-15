@@ -302,7 +302,6 @@
   "outputPicker": {
     "instructions": "번역 지침",
     "instructionsPlaceholder": "말투, 이름, 서식에 관한 선택적 지침입니다.",
-    "saving": "출력 설정 저장 중",
     "targetLanguage": "대상 언어",
     "title": "번역 출력"
   },

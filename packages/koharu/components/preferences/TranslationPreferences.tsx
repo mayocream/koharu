@@ -198,7 +198,7 @@ export function TranslationPreferences({
           <Textarea
             aria-label={t('settings.translation.instructionsLabel')}
             value={value.instructions ?? ''}
-            className='min-h-24 resize-y text-[12px] leading-5'
+            className='field-sizing-fixed min-h-24 resize-y overflow-y-auto text-[12px] leading-5'
             placeholder={t('settings.translation.instructionsPlaceholder')}
             onChange={(event) =>
               onChange({ ...value, instructions: event.currentTarget.value || null })
