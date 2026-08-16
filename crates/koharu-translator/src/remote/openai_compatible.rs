@@ -354,9 +354,16 @@ mod tests {
         assert_eq!(strict["json_schema"]["name"], "manga_translation");
         assert_eq!(strict["json_schema"]["strict"], true);
         assert_eq!(
-            strict["json_schema"]["schema"]["properties"]["translations"]["items"]["properties"]["id"]
-                ["maximum"],
-            1
+            strict["json_schema"]["schema"]["properties"]["1"]["type"],
+            "string"
+        );
+        assert_eq!(
+            strict["json_schema"]["schema"]["required"],
+            serde_json::json!(["1", "2"])
+        );
+        assert_eq!(
+            strict["json_schema"]["schema"]["additionalProperties"],
+            false
         );
         assert!(ResponseMode::PromptOnly.response_format(2).is_none());
     }
