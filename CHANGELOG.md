@@ -1,3 +1,19 @@
+## [0.70.0](https://github.com/mayocream/koharu/compare/0.69.1..0.70.0) - 2026-08-16
+
+### ⛰️  Features
+
+- *(translator)* Enforce keyed translation output - ([6269da2](https://github.com/mayocream/koharu/commit/6269da2c4f1d259e28abc9bb72fc76c9a299a49f))
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Respect text direction defaults - ([098d697](https://github.com/mayocream/koharu/commit/098d697f982fb66300eb7ff900085d29270f5afa))
+- Configure CEF remote debugging in debug builds - ([eaee34e](https://github.com/mayocream/koharu/commit/eaee34e3ad39732a93ea8550a3a3503d91ef9a99))
+
+### 📚 Documentation
+
+- Update development prerequisites - ([fc183d8](https://github.com/mayocream/koharu/commit/fc183d89546eaa670416c3010271d79b28442dff))
+
+
 ## [0.69.1](https://github.com/mayocream/koharu/compare/0.69.0..0.69.1) - 2026-08-16
 
 ### 🐛 Bug Fixes
