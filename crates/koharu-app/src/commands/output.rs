@@ -1,5 +1,9 @@
 use anyhow::{Context as _, Result};
 use futures::{StreamExt as _, TryStreamExt as _, stream};
+use image::{
+    ExtendedColorType, ImageEncoder as _,
+    codecs::png::{CompressionType, FilterType, PngEncoder},
+};
 use koharu_psd::{PsdExportOptions, export_page};
 use koharu_rasterizer::{Raster, RasterOptions, Rasterizer};
 use koharu_renderer::{Frame, Renderer};
@@ -108,8 +112,21 @@ pub(crate) async fn export_pages(
                             rasterize(Arc::clone(&rasterizer), &frame, RasterOptions::default())
                                 .await?
                                 .image;
-                        tokio::task::spawn_blocking(move || {
-                            image.save(directory.join(format!("{stem}.png")))
+                        tokio::task::spawn_blocking(move || -> Result<()> {
+                            let file =
+                                std::fs::File::create(directory.join(format!("{stem}.png")))?;
+                            PngEncoder::new_with_quality(
+                                file,
+                                CompressionType::Best,
+                                FilterType::Adaptive,
+                            )
+                            .write_image(
+                                image.as_raw(),
+                                image.width(),
+                                image.height(),
+                                ExtendedColorType::Rgba8,
+                            )?;
+                            Ok(())
                         })
                         .await
                         .context("PNG export worker stopped unexpectedly")??;
