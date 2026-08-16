@@ -192,18 +192,10 @@ mod tests {
         assert_eq!(value["responseMimeType"], "application/json");
         assert_eq!(value["thinkingConfig"]["thinkingBudget"], 0);
         assert_eq!(
-            value["responseJsonSchema"]["properties"]["1"]["type"],
-            "string"
+            value["responseJsonSchema"]["properties"]["translations"]["items"]["properties"]["id"]
+                ["maximum"],
+            1
         );
-        assert_eq!(
-            value["responseJsonSchema"]["properties"]["2"]["type"],
-            "string"
-        );
-        assert_eq!(
-            value["responseJsonSchema"]["required"],
-            serde_json::json!(["1", "2"])
-        );
-        assert_eq!(value["responseJsonSchema"]["additionalProperties"], false);
     }
 
     #[test]
