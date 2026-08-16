@@ -19,8 +19,9 @@ import {
   isBrushTool,
   MAX_BRUSH_DIAMETER,
   MIN_BRUSH_DIAMETER,
-} from '@/lib/canvas'
-import { useKoharuStore, type CanvasTool } from '@/lib/store'
+  useKoharuStore,
+  type CanvasTool,
+} from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 import {
   NumberField,

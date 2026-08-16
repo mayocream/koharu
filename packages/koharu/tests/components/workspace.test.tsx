@@ -175,6 +175,20 @@ describe('canvas interaction adapter', () => {
     await waitFor(() => expect(canvas.setView).toHaveBeenLastCalledWith(1, [0, -10]))
   })
 
+  it('suppresses Alt browser handling while an editor input retains focus', () => {
+    installProject()
+    renderWorkspace()
+    const input = document.createElement('input')
+    document.body.append(input)
+    input.focus()
+
+    const event = new KeyboardEvent('keydown', { key: 'Alt', bubbles: true, cancelable: true })
+    input.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    input.remove()
+  })
+
   it('announces WebGPU startup failures and offers recovery', () => {
     installProject()
     canvasState.status = 'error'

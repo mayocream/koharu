@@ -16,6 +16,13 @@ import type {
 import { toast } from '@koharu/ui/components/toast'
 
 export type CanvasTool = 'select' | 'text' | 'draw' | 'eraser' | 'color_picker' | 'remove' | 'pan'
+export const MIN_BRUSH_DIAMETER = 1
+export const MAX_BRUSH_DIAMETER = 128
+
+export function isBrushTool(tool: CanvasTool): boolean {
+  return tool === 'draw' || tool === 'eraser' || tool === 'remove'
+}
+
 export interface CanvasBrush {
   diameter: number
   color: string

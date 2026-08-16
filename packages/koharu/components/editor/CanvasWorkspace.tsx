@@ -32,14 +32,17 @@ import {
 } from '@/lib/queries'
 import {
   isBrushTool,
-  BRUSH_STEP,
   MAX_BRUSH_DIAMETER,
   MIN_BRUSH_DIAMETER,
-} from '@/lib/canvas'
-import { receiveError, useKoharuStore, type CanvasTool } from '@/lib/store'
+  receiveError,
+  useKoharuStore,
+  type CanvasTool,
+} from '@/lib/store'
 import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
 import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
+
+const BRUSH_DIAMETER_STEP = 4
 
 const canvasCursors = {
   select: undefined,
@@ -322,11 +325,11 @@ export function CanvasWorkspace() {
       (target instanceof HTMLElement && target.isContentEditable)
 
     const down = (event: KeyboardEvent) => {
-      if (editable(event.target)) return
       if (event.key === 'Alt') {
         event.preventDefault()
         return
       }
+      if (editable(event.target)) return
       const state = useKoharuStore.getState()
       if (event.code === 'Space') {
         spaceHeld.current = true
@@ -698,7 +701,7 @@ export function CanvasWorkspace() {
             if (event.altKey && isBrushTool(tool)) {
               if (event.deltaY !== 0) {
                 const currentBrush = useKoharuStore.getState().brush
-                const delta = event.deltaY < 0 ? BRUSH_STEP : -BRUSH_STEP
+                const delta = event.deltaY < 0 ? BRUSH_DIAMETER_STEP : -BRUSH_DIAMETER_STEP
                 const nextDiameter = clamp(
                   currentBrush.diameter + delta,
                   MIN_BRUSH_DIAMETER,
