@@ -175,6 +175,25 @@ describe('canvas interaction adapter', () => {
     await waitFor(() => expect(canvas.setView).toHaveBeenLastCalledWith(1, [0, -10]))
   })
 
+  it('preserves a manual camera when a newer canvas generation becomes ready', () => {
+    installProject()
+    renderWorkspace()
+    const camera = { zoom: 2, translation: [-120, -80] as [number, number], fitted: false }
+
+    act(() => useKoharuStore.setState({ camera }))
+    act(() => {
+      canvasState.status = 'switching'
+      useKoharuStore.setState({ canvasGeneration: 2 })
+    })
+    act(() => {
+      canvasState.status = 'ready'
+      canvasState.generation = 2
+      useKoharuStore.setState({ canvasRevision: 2 })
+    })
+
+    expect(useKoharuStore.getState().camera).toEqual(camera)
+  })
+
   it('suppresses Alt browser handling while an editor input retains focus', () => {
     installProject()
     renderWorkspace()

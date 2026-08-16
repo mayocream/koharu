@@ -224,19 +224,12 @@ export function CanvasWorkspace() {
 
   const fitCanvas = useCallback(() => {
     const element = surface.current
-    if (
-      canvasState.status !== 'ready' ||
-      !element ||
-      !pageId ||
-      pageWidth === undefined ||
-      pageHeight === undefined
-    )
-      return
+    if (!element || !pageId || pageWidth === undefined || pageHeight === undefined) return
     const bounds = element.getBoundingClientRect()
     const dpr = window.devicePixelRatio
     const next = containCamera(bounds.width * dpr, bounds.height * dpr, pageWidth, pageHeight)
     useKoharuStore.setState({ camera: { ...next, fitted: true } })
-  }, [canvasState.status, pageHeight, pageId, pageWidth])
+  }, [pageHeight, pageId, pageWidth])
 
   const report = useCallback(() => {
     const element = surface.current

@@ -1408,14 +1408,14 @@ fn resolve_writing_mode(
     typography: Option<&Typography>,
     analysis: Option<&OcrAnalysis>,
 ) -> WritingMode {
-    if !is_chinese_or_japanese_text(text) {
-        return WritingMode::Horizontal;
-    }
     if let Some(mode) = typography.and_then(|value| value.writing_mode) {
         return match mode {
             koharu_scene::WritingMode::Horizontal => WritingMode::Horizontal,
             koharu_scene::WritingMode::Vertical => WritingMode::VerticalRl,
         };
+    }
+    if !is_chinese_or_japanese_text(text) {
+        return WritingMode::Horizontal;
     }
     match analysis.map(|value| value.direction) {
         Some(TextDirection::Vertical) => WritingMode::VerticalRl,
@@ -1698,6 +1698,39 @@ mod tests {
         assert_eq!(
             resolve_alignment(None, WritingMode::Horizontal, false),
             TextAlign::Center
+        );
+    }
+
+    #[test]
+    fn explicit_vertical_writing_mode_overrides_latin_auto_detection() {
+        let typography = Typography {
+            origin: koharu_scene::Origin::User,
+            preferred_font: None,
+            font_weight: None,
+            font_style: None,
+            size: None,
+            auto_fit: true,
+            color: None,
+            stroke_color: None,
+            stroke_width: None,
+            alignment: None,
+            writing_mode: Some(koharu_scene::WritingMode::Vertical),
+            extensions: BTreeMap::new(),
+        };
+        let bounds = LayoutBox {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 200.0,
+        };
+
+        assert_eq!(
+            resolve_writing_mode("rokuna", bounds, Some(&typography), None),
+            WritingMode::VerticalRl
+        );
+        assert_eq!(
+            resolve_writing_mode("rokuna", bounds, None, None),
+            WritingMode::Horizontal
         );
     }
 
