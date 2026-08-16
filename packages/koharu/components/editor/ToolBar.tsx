@@ -15,7 +15,13 @@ import { useTranslation } from 'react-i18next'
 
 import { ColorWell } from '@/components/controls/ColorWell'
 import { usePage } from '@/lib/queries'
-import { useKoharuStore, type CanvasTool } from '@/lib/store'
+import {
+  isBrushTool,
+  MAX_BRUSH_DIAMETER,
+  MIN_BRUSH_DIAMETER,
+  useKoharuStore,
+  type CanvasTool,
+} from '@/lib/store'
 import { Button } from '@koharu/ui/components/button'
 import {
   NumberField,
@@ -43,8 +49,6 @@ const tools = [
   ['pan', Hand],
 ] as const satisfies ReadonlyArray<readonly [CanvasTool, typeof MousePointer2]>
 
-const MAX_BRUSH_DIAMETER = 128
-
 export function ToolBar() {
   const { t } = useTranslation()
   const page = usePage().data
@@ -53,7 +57,7 @@ export function ToolBar() {
   const setTool = useKoharuStore((state) => state.setTool)
   const setBrush = useKoharuStore((state) => state.setBrush)
   const shortcuts = useKoharuStore((state) => state.shortcuts)
-  const hasBrush = active === 'draw' || active === 'eraser' || active === 'remove'
+  const hasBrush = isBrushTool(active)
 
   return (
     <aside className='absolute top-3 left-3 z-20 flex w-11 flex-col rounded-2xl border border-border bg-[var(--surface-floating)] p-1 shadow-[var(--shadow-toolrail)]'>
@@ -139,13 +143,13 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
         <div className='flex items-center justify-between gap-3'>
           <PopoverTitle className='text-[11px]'>{t('tools.brushSize')}</PopoverTitle>
           <NumberField
-            min={1}
+            min={MIN_BRUSH_DIAMETER}
             max={MAX_BRUSH_DIAMETER}
             step={1}
             value={roundedValue}
             className='w-20'
             onValueChange={(next) => {
-              if (next !== null) onChange(clamp(next, 1, MAX_BRUSH_DIAMETER))
+              if (next !== null) onChange(clamp(next, MIN_BRUSH_DIAMETER, MAX_BRUSH_DIAMETER))
             }}
           >
             <NumberFieldGroup className='h-7'>
@@ -161,7 +165,7 @@ function BrushSize({ value, onChange }: { value: number; onChange: (value: numbe
         </div>
         <Slider
           aria-label={t('tools.brushSize')}
-          min={1}
+          min={MIN_BRUSH_DIAMETER}
           max={MAX_BRUSH_DIAMETER}
           step={1}
           value={value}

@@ -30,10 +30,19 @@ import {
   usePage,
   usePages,
 } from '@/lib/queries'
-import { receiveError, useKoharuStore, type CanvasTool } from '@/lib/store'
+import {
+  isBrushTool,
+  MAX_BRUSH_DIAMETER,
+  MIN_BRUSH_DIAMETER,
+  receiveError,
+  useKoharuStore,
+  type CanvasTool,
+} from '@/lib/store'
 import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
 import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
+
+const BRUSH_DIAMETER_STEP = 4
 
 const canvasCursors = {
   select: undefined,
@@ -316,6 +325,10 @@ export function CanvasWorkspace() {
       (target instanceof HTMLElement && target.isContentEditable)
 
     const down = (event: KeyboardEvent) => {
+      if (event.key === 'Alt') {
+        event.preventDefault()
+        return
+      }
       if (editable(event.target)) return
       const state = useKoharuStore.getState()
       if (event.code === 'Space') {
@@ -363,6 +376,7 @@ export function CanvasWorkspace() {
     }
 
     const up = (event: KeyboardEvent) => {
+      if (event.key === 'Alt') event.preventDefault()
       if (event.code === 'Space') spaceHeld.current = false
     }
     const blur = () => {
@@ -684,6 +698,21 @@ export function CanvasWorkspace() {
           onWheel={(event) => {
             if (!page) return
             event.preventDefault()
+            if (event.altKey && isBrushTool(tool)) {
+              if (event.deltaY !== 0) {
+                const currentBrush = useKoharuStore.getState().brush
+                const delta = event.deltaY < 0 ? BRUSH_DIAMETER_STEP : -BRUSH_DIAMETER_STEP
+                const nextDiameter = clamp(
+                  currentBrush.diameter + delta,
+                  MIN_BRUSH_DIAMETER,
+                  MAX_BRUSH_DIAMETER,
+                )
+                if (nextDiameter !== currentBrush.diameter) {
+                  setBrush({ ...currentBrush, diameter: nextDiameter })
+                }
+              }
+              return
+            }
             const point = clientPhysicalPoint(event.clientX, event.clientY)
             const current = useKoharuStore.getState().camera
             let zoom = current.zoom
@@ -737,7 +766,7 @@ export function CanvasWorkspace() {
               draft={draft}
               cursor={cursor}
               brushSize={brush.diameter}
-              showBrushCursor={tool === 'draw' || tool === 'eraser' || tool === 'remove'}
+              showBrushCursor={isBrushTool(tool)}
               onTransformStart={beginTransform}
               onTransformFrame={updateTransform}
               onTransformEnd={finishTransform}
