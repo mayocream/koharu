@@ -109,7 +109,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
         <TooltipProvider delay={0}>
-          <ClientOnly fallback={<StartupView />}>
+          <ClientOnly>
             <StartupBoundary>{children}</StartupBoundary>
             <Toaster />
           </ClientOnly>
