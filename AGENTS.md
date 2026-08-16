@@ -48,7 +48,7 @@ Document only durable, repository-specific constraints here. Do not record curre
 
 ## Desktop UI Debugging
 
-- The default Windows debugging setup must define `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=4000` before launching Koharu. Treat `http://127.0.0.1:4000` as the default local CDP endpoint.
+- Debug builds must expose the CEF remote debugging endpoint at `http://127.0.0.1:4000` through CEF's command-line arguments.
 - Connect `chrome-devtools-mcp` with `--browser-url=http://127.0.0.1:4000` and prefer its tools for WebView inspection and automation. Use semantic targets and observable conditions instead of coordinate-only actions or fixed delays.
 - Use a lower-level CDP client only when `chrome-devtools-mcp` does not expose a required protocol operation. Use native window capture when CDP cannot observe the final WebGPU output.
 
