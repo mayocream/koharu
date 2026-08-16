@@ -1,3 +1,6 @@
+## [0.70.4](https://github.com/mayocream/koharu/compare/0.70.3..0.70.4) - 2026-08-16
+
+
 ## [0.70.3](https://github.com/mayocream/koharu/compare/0.70.2..0.70.3) - 2026-08-16
 
 ### 🐛 Bug Fixes
