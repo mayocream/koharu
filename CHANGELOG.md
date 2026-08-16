@@ -1,3 +1,12 @@
+## [0.69.1](https://github.com/mayocream/koharu/compare/0.69.0..0.69.1) - 2026-08-16
+
+### 🐛 Bug Fixes
+
+- Compress PNG exports - ([c3d06fb](https://github.com/mayocream/koharu/commit/c3d06fbd65c2d7ff47120f8c9c4a00a996b87290))
+- Preserve canvas zoom and vertical text - ([28968b4](https://github.com/mayocream/koharu/commit/28968b4414e23e7d882f69642ba1efdcdeb0f443))
+- Brush freeze bug, Change brush size with alt + scroll wheel ([#937](https://github.com/mayocream/koharu/issues/937)) - ([0ebc038](https://github.com/mayocream/koharu/commit/0ebc038442c6cb92dd8943e06f632837f9b19863))
+
+
 ## [0.69.0](https://github.com/mayocream/koharu/compare/0.68.0..0.69.0) - 2026-08-15
 
 ### ⛰️  Features
