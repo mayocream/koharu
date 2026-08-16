@@ -1,3 +1,11 @@
+## [0.70.1](https://github.com/mayocream/koharu/compare/0.70.0..0.70.1) - 2026-08-16
+
+### 🐛 Bug Fixes
+
+- *(editor)* Preserve automatic text direction - ([cd57c82](https://github.com/mayocream/koharu/commit/cd57c827ad0375744b7160f65044bd661d0bde5c))
+- *(ui)* Avoid localized hydration mismatch - ([c108afb](https://github.com/mayocream/koharu/commit/c108afb119d3ddb68f9bc2e9a71ab0619853a48f))
+
+
 ## [0.70.0](https://github.com/mayocream/koharu/compare/0.69.1..0.70.0) - 2026-08-16
 
 ### ⛰️  Features
