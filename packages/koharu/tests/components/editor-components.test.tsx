@@ -79,7 +79,7 @@ const textLayer: Layer = {
     stroke_color: [255, 255, 255, 255],
     stroke_width: 0,
     alignment: 'Center',
-    writing_mode: 'Horizontal',
+    writing_mode: null,
   },
   layout: 'paragraph',
   automatic_region: null,
@@ -474,6 +474,7 @@ describe('greenfield editor', () => {
     expect(screen.getByTestId('type-font-picker')).toHaveTextContent('Noto Sans')
     expect(screen.getByTestId('type-size')).toHaveValue('')
     expect(screen.getByTestId('type-size')).toHaveAttribute('placeholder', 'Auto')
+    expect(screen.getByRole('combobox', { name: 'Text direction' })).toHaveTextContent('Auto')
     await user.clear(screen.getByTestId('type-size'))
     await user.type(screen.getByTestId('type-size'), '18')
     await user.tab()
@@ -482,7 +483,7 @@ describe('greenfield editor', () => {
         expect.arrayContaining([
           expect.objectContaining({
             layer: 'element',
-            typography: expect.objectContaining({ size: 18 }),
+            typography: expect.objectContaining({ size: 18, writing_mode: null }),
           }),
         ]),
       ),

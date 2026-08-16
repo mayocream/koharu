@@ -189,6 +189,7 @@ function TypeInspector() {
   const strokeEnabled = strokeWidth > 0 && strokeColor[3] > 0
   const displayedStrokeWidth = strokeWidth > 0 ? strokeWidth : 1.5
   const writingMode = typography.writing_mode ?? 'Horizontal'
+  const writingModeChoice = typography.writing_mode ?? 'Auto'
   const effectiveAlignment =
     typography.alignment ?? (writingMode === 'Vertical' ? 'Start' : 'Center')
 
@@ -352,11 +353,11 @@ function TypeInspector() {
           <InspectorField label={t('inspector.direction')}>
             <Select
               disabled={disabled}
-              value={writingMode}
+              value={writingModeChoice}
               onValueChange={(writing_mode) =>
                 apply((value) => ({
                   ...value,
-                  writing_mode: writing_mode as WritingMode,
+                  writing_mode: writing_mode === 'Auto' ? null : (writing_mode as WritingMode),
                 }))
               }
             >
@@ -364,6 +365,7 @@ function TypeInspector() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value='Auto'>{t('inspector.auto')}</SelectItem>
                 <SelectItem value='Horizontal'>{t('inspector.horizontal')}</SelectItem>
                 <SelectItem value='Vertical'>{t('inspector.vertical')}</SelectItem>
               </SelectContent>

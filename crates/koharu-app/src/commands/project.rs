@@ -1075,6 +1075,11 @@ impl Project {
     }
 
     fn typography_view(typography: SceneTypography) -> Typography {
+        let writing_mode = if matches!(&typography.origin, Origin::User) {
+            typography.writing_mode
+        } else {
+            None
+        };
         Typography {
             preferred_font: typography.preferred_font,
             font_weight: typography.font_weight,
@@ -1085,7 +1090,7 @@ impl Project {
             stroke_color: typography.stroke_color,
             stroke_width: typography.stroke_width,
             alignment: typography.alignment,
-            writing_mode: typography.writing_mode,
+            writing_mode,
         }
     }
 
@@ -1309,7 +1314,39 @@ fn rasterize_stroke(
 
 #[cfg(test)]
 mod tests {
+    use koharu_scene::{Generation, ProducerId, WritingMode};
+
     use super::*;
+
+    #[test]
+    fn only_user_authored_direction_is_projected_as_an_override() {
+        let mut typography = SceneTypography {
+            origin: Origin::Generated(Generation::new(
+                ProducerId::new("dev.koharu.pipeline.detection").expect("valid producer"),
+            )),
+            preferred_font: None,
+            font_weight: None,
+            font_style: None,
+            size: None,
+            auto_fit: true,
+            color: None,
+            stroke_color: None,
+            stroke_width: None,
+            alignment: None,
+            writing_mode: Some(WritingMode::Vertical),
+            extensions: Default::default(),
+        };
+
+        assert_eq!(
+            Project::typography_view(typography.clone()).writing_mode,
+            None
+        );
+        typography.origin = Origin::User;
+        assert_eq!(
+            Project::typography_view(typography).writing_mode,
+            Some(WritingMode::Vertical)
+        );
+    }
 
     #[tokio::test]
     async fn pipeline_commit_rebases_or_yields_to_the_manual_edit() {
