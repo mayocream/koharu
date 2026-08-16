@@ -1,3 +1,10 @@
+## [0.70.3](https://github.com/mayocream/koharu/compare/0.70.2..0.70.3) - 2026-08-16
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Disable broken gfx1032 inpainting solver - ([8199a8b](https://github.com/mayocream/koharu/commit/8199a8b20e5cbfb4affba569475d66bda0eb4572))
+
+
 ## [0.70.2](https://github.com/mayocream/koharu/compare/0.70.1..0.70.2) - 2026-08-16
 
 ### 🐛 Bug Fixes
