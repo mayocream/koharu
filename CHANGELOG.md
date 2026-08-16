@@ -1,3 +1,10 @@
+## [0.70.2](https://github.com/mayocream/koharu/compare/0.70.1..0.70.2) - 2026-08-16
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Disable broken gfx1032 Winograd solver - ([4d9f3ac](https://github.com/mayocream/koharu/commit/4d9f3acad1232ab6ba6c3832ab1e99848c5270d2))
+
+
 ## [0.70.1](https://github.com/mayocream/koharu/compare/0.70.0..0.70.1) - 2026-08-16
 
 ### 🐛 Bug Fixes
