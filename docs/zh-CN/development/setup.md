@@ -7,9 +7,10 @@ description: 构建 Tauri 桌面应用、运行聚焦检查、生成 IPC 绑定�
 
 ## 前置要求
 
-- Rust 1.95 或更高版本及 Rust 2024 edition 工具链
-- Bun 1.0 或更高版本
-- LLVM 15 或更高版本
+- Rust 1.97.1 或更高版本及 Rust 2024 edition 工具链
+- Bun 1.3.14 或更高版本
+- LLVM 22.1.8 或更高版本
+- Ninja 1.13.2 或更高版本
 - 原生依赖需要的平台 C/C++ 构建工具
 
 Linux 还需要 GTK 3 与对应发行版的 X11 桌面库。Windows 使用 MSVC 构建工具。

@@ -7,9 +7,10 @@ description: Build the Tauri desktop application, run focused checks, regenerate
 
 ## Prerequisites
 
-- Rust 1.95 or later with the Rust 2024 edition toolchain;
-- Bun 1.0 or later;
-- LLVM 15 or later;
+- Rust 1.97.1 or later with the Rust 2024 edition toolchain;
+- Bun 1.3.14 or later;
+- LLVM 22.1.8 or later;
+- Ninja 1.13.2 or later;
 - platform C/C++ build tools required by native dependencies.
 
 Linux development also needs GTK 3 and the X11 desktop libraries for your distribution. Windows native work uses MSVC build tools.

@@ -160,10 +160,10 @@ To build Koharu from source, follow the steps below.
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) 1.95 or later (Rust 2024 edition)
-- [Bun](https://bun.sh/) 1.0 or later
-- [LLVM](https://llvm.org/) 15 or later
-- [ninja](https://ninja-build.org/) 1.11 or later
+- [Rust](https://www.rust-lang.org/tools/install) 1.97.1 or later (Rust 2024 edition)
+- [Bun](https://bun.sh/) 1.3.14 or later
+- [LLVM](https://llvm.org/) 22.1.8 or later
+- [Ninja](https://ninja-build.org/) 1.13.2 or later
 
 ### Install dependencies
 

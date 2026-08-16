@@ -7,9 +7,10 @@ description: Tauri アプリのビルド、集中チェック、IPC 生成、ド
 
 ## 前提条件
 
-- Rust 1.95 以降と Rust 2024 edition ツールチェーン
-- Bun 1.0 以降
-- LLVM 15 以降
+- Rust 1.97.1 以降と Rust 2024 edition ツールチェーン
+- Bun 1.3.14 以降
+- LLVM 22.1.8 以降
+- Ninja 1.13.2 以降
 - ネイティブ依存関係に必要な C/C++ ビルドツール
 
 Linux では GTK 3 と各ディストリビューション向けの X11 デスクトップライブラリが必要です。Windows は MSVC ビルドツールを使います。
