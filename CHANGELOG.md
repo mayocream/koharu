@@ -1,3 +1,12 @@
+## [0.72.0](https://github.com/mayocream/koharu/compare/0.71.0..0.72.0) - 2026-08-17
+
+### ⛰️  Features
+
+- *(translator)* Discover provider model catalogs - ([412822d](https://github.com/mayocream/koharu/commit/412822d2c9d542fa39b963ad8e0d1f0a2820c7a4))
+- *(translator)* Add Grok and MiniMax providers - ([800e32b](https://github.com/mayocream/koharu/commit/800e32bb4902d48919313b6ba4ebe05247b7e07a))
+- *(translator)* Refresh remote model catalogs - ([08601a8](https://github.com/mayocream/koharu/commit/08601a8fbffbc7cb802e791d50483635d12f51e2))
+
+
 ## [0.71.0](https://github.com/mayocream/koharu/compare/0.70.6..0.71.0) - 2026-08-17
 
 ### ⛰️  Features
