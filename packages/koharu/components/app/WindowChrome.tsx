@@ -19,13 +19,16 @@ export function WindowControls() {
       })
     }
     synchronize()
-    void window.onResized(synchronize).then((stop) => {
-      if (disposed) stop()
-      else unlisten = stop
+    queueMicrotask(() => {
+      if (disposed) return
+      void window.onResized(synchronize).then((stop) => {
+        if (disposed) void Promise.resolve(stop()).catch(() => undefined)
+        else unlisten = stop
+      })
     })
     return () => {
       disposed = true
-      unlisten?.()
+      if (unlisten) void Promise.resolve(unlisten()).catch(() => undefined)
     }
   }, [])
 

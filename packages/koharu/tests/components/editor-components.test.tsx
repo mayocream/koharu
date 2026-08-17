@@ -2,10 +2,11 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render as testingRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider } from 'next-themes'
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TitleBar } from '@/components/app/TitleBar'
+import { WindowControls } from '@/components/app/WindowChrome'
 import { ActivityCenter } from '@/components/editor/ActivityCenter'
 import { CanvasCommandBar } from '@/components/editor/CanvasCommandBar'
 import { Inspector } from '@/components/editor/Inspector'
@@ -194,6 +195,22 @@ function render(ui: ReactNode) {
 }
 
 describe('greenfield editor', () => {
+  it('registers one native resize listener in React strict mode', async () => {
+    const unlisten = vi.fn()
+    nativeWindow.onResized.mockClear()
+    nativeWindow.onResized.mockResolvedValueOnce(unlisten)
+
+    const view = render(
+      <StrictMode>
+        <WindowControls />
+      </StrictMode>,
+    )
+
+    await waitFor(() => expect(nativeWindow.onResized).toHaveBeenCalledTimes(1))
+    view.unmount()
+    await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1))
+  })
+
   it('shows import activity and prevents duplicate imports', async () => {
     const user = userEvent.setup()
     installProject()

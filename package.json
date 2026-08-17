@@ -5,9 +5,9 @@
   ],
   "scripts": {
     "tauri": "cargo tauri",
-    "postinstall": "cargo install --git https://github.com/tauri-apps/tauri --rev 4af26a3f7f8b692d62cca549bbacd93f5ce90b41 --locked tauri-cli",
+    "postinstall": "cargo install --git https://github.com/tauri-apps/tauri --branch feat/cef --locked tauri-cli",
     "predev": "kill-port 3000",
-    "dev": "cargo tauri dev",
+    "dev": "cargo tauri dev --features default",
     "build": "cargo tauri build --no-bundle",
     "ui:dev": "bun run --filter @koharu/bridge build:dev && bun run --parallel --filter '@koharu/*' dev",
     "ui:build": "bun run --filter @koharu/bridge build && bun run --filter @koharu/app build",
