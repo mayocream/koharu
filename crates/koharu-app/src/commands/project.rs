@@ -204,13 +204,25 @@ impl ProjectLibrary {
                 if !is_project_directory {
                     return None;
                 }
-                Some(ProjectSummary {
-                    name: path.file_stem()?.to_str()?.to_owned(),
-                })
+                let last_used = ["state-a.khr", "state-b.khr"]
+                    .into_iter()
+                    .filter_map(|file| std::fs::metadata(path.join(file)).ok()?.modified().ok())
+                    .max()
+                    .unwrap_or(std::time::UNIX_EPOCH);
+                Some((
+                    last_used,
+                    ProjectSummary {
+                        name: path.file_stem()?.to_str()?.to_owned(),
+                    },
+                ))
             })
             .collect::<Vec<_>>();
-        projects.sort_unstable_by_key(|project| project.name.to_lowercase());
-        Ok(projects)
+        projects.sort_unstable_by(|(left_used, left), (right_used, right)| {
+            right_used
+                .cmp(left_used)
+                .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+        });
+        Ok(projects.into_iter().map(|(_, project)| project).collect())
     }
 
     pub(crate) async fn create(&self, name: &str) -> Result<Project> {
