@@ -1,3 +1,14 @@
+## [0.71.0](https://github.com/mayocream/koharu/compare/0.70.6..0.71.0) - 2026-08-17
+
+### ⛰️  Features
+
+- Support archive and PDF page imports - ([79cc4d6](https://github.com/mayocream/koharu/commit/79cc4d6cf62ee96a071a1ea6d86b834a879755ce))
+
+### 🐛 Bug Fixes
+
+- *(renderer)* Apply language-aware line breaking - ([d4c075f](https://github.com/mayocream/koharu/commit/d4c075fe95bcf511e91a4a15eff6a1f433658dc5))
+
+
 ## [0.70.6](https://github.com/mayocream/koharu/compare/0.70.5..0.70.6) - 2026-08-17
 
 ### 🐛 Bug Fixes
