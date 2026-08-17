@@ -1,4 +1,9 @@
-use std::{collections::HashSet, io::Cursor, path::PathBuf};
+use std::{
+    collections::HashSet,
+    io::Cursor,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -179,6 +184,8 @@ pub(crate) struct ProjectLibrary {
     root: PathBuf,
 }
 
+const LAST_USED_MARKER: &str = ".last-used";
+
 impl ProjectLibrary {
     pub(crate) fn new() -> Result<Self> {
         let root = dirs::document_dir()
@@ -204,23 +211,30 @@ impl ProjectLibrary {
                 if !is_project_directory {
                     return None;
                 }
-                Some(ProjectSummary {
-                    name: path.file_stem()?.to_str()?.to_owned(),
-                })
+                Some((
+                    project_last_used(&path),
+                    ProjectSummary {
+                        name: path.file_stem()?.to_str()?.to_owned(),
+                    },
+                ))
             })
             .collect::<Vec<_>>();
-        projects.sort_unstable_by_key(|project| project.name.to_lowercase());
-        Ok(projects)
+        sort_projects_by_recent_use(&mut projects);
+        Ok(projects.into_iter().map(|(_, project)| project).collect())
     }
 
     pub(crate) async fn create(&self, name: &str) -> Result<Project> {
         let (name, path) = self.resolve(name)?;
-        Project::create(name, path).await
+        let project = Project::create(name, path.clone()).await?;
+        mark_project_used(&path);
+        Ok(project)
     }
 
     pub(crate) async fn open(&self, name: &str) -> Result<Project> {
         let (name, path) = self.resolve(name)?;
-        Project::open(name, path).await
+        let project = Project::open(name, path.clone()).await?;
+        mark_project_used(&path);
+        Ok(project)
     }
 
     pub(crate) fn delete(&self, name: &str) -> Result<()> {
@@ -235,6 +249,29 @@ impl ProjectLibrary {
     fn resolve(&self, name: &str) -> Result<(String, PathBuf)> {
         let name = validate_project_name(name)?;
         Ok((name.clone(), self.root.join(format!("{name}.khrproj"))))
+    }
+}
+
+fn project_last_used(path: &Path) -> SystemTime {
+    [LAST_USED_MARKER, "state-a.khr", "state-b.khr"]
+        .into_iter()
+        .filter_map(|name| std::fs::metadata(path.join(name)).ok()?.modified().ok())
+        .max()
+        .unwrap_or(UNIX_EPOCH)
+}
+
+fn sort_projects_by_recent_use(projects: &mut [(SystemTime, ProjectSummary)]) {
+    projects.sort_unstable_by(|(left_used, left), (right_used, right)| {
+        right_used
+            .cmp(left_used)
+            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+    });
+}
+
+fn mark_project_used(path: &Path) {
+    let marker = path.join(LAST_USED_MARKER);
+    if let Err(error) = std::fs::write(&marker, []) {
+        tracing::warn!(path = %marker.display(), %error, "failed to update project recency");
     }
 }
 
@@ -1314,9 +1351,51 @@ fn rasterize_stroke(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use koharu_scene::{Generation, ProducerId, WritingMode};
 
     use super::*;
+
+    #[test]
+    fn project_summaries_are_sorted_by_recent_use() {
+        let mut projects = vec![
+            (
+                UNIX_EPOCH + Duration::from_secs(10),
+                ProjectSummary {
+                    name: "Older".to_owned(),
+                },
+            ),
+            (
+                UNIX_EPOCH + Duration::from_secs(30),
+                ProjectSummary {
+                    name: "Recent".to_owned(),
+                },
+            ),
+            (
+                UNIX_EPOCH + Duration::from_secs(30),
+                ProjectSummary {
+                    name: "Also Recent".to_owned(),
+                },
+            ),
+            (
+                UNIX_EPOCH + Duration::from_secs(20),
+                ProjectSummary {
+                    name: "Middle".to_owned(),
+                },
+            ),
+        ];
+
+        sort_projects_by_recent_use(&mut projects);
+
+        assert_eq!(
+            projects
+                .into_iter()
+                .map(|(_, project)| project.name)
+                .collect::<Vec<_>>(),
+            ["Also Recent", "Recent", "Middle", "Older"]
+        );
+    }
 
     #[test]
     fn only_user_authored_direction_is_projected_as_an_override() {
