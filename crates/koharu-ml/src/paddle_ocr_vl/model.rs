@@ -3,7 +3,7 @@
 //! Original implementation:
 //! https://github.com/huggingface/transformers/blob/63f32a8782cb70da3365acab16f2b67947737985/src/transformers/models/paddleocr_vl/modeling_paddleocr_vl.py
 
-use std::path::Path;
+use std::{collections::HashSet, path::Path};
 
 use anyhow::{Result, bail, ensure};
 use koharu_torch::{
@@ -11,7 +11,10 @@ use koharu_torch::{
     nn::{self, Module},
 };
 
-use super::config::{PaddleOCRVLConfig, PaddleOCRVisionConfig};
+use super::{
+    REPETITION_PENALTY,
+    config::{PaddleOCRVLConfig, PaddleOCRVisionConfig},
+};
 
 #[derive(Debug)]
 pub(super) struct Model {
@@ -131,14 +134,13 @@ impl Model {
             self.language_model
                 .forward(inputs_embeds, position_ids, true, &mut cache);
         let last_index = hidden_states.size()[1] - 1;
-        let mut next_token = self
-            .lm_head
-            .forward(&hidden_states.narrow(1, last_index, 1))
-            .argmax(-1, false)
-            .int64_value(&[0, 0]);
+        let mut logits = self.lm_head.forward(&hidden_states.select(1, last_index));
 
         let mut generated = Vec::with_capacity(max_new_tokens);
+        let mut unique_tokens = HashSet::new();
+        let mut seen_ids = None;
         for step in 0..max_new_tokens {
+            let next_token = greedy_token(&logits, seen_ids.as_ref());
             if next_token == self.config.eos_token_id {
                 break;
             }
@@ -150,6 +152,12 @@ impl Model {
             let next_ids = Tensor::from_slice(&[next_token])
                 .view([1, 1])
                 .to_device(device);
+            if unique_tokens.insert(next_token) {
+                seen_ids = Some(match seen_ids {
+                    Some(seen_ids) => Tensor::cat(&[seen_ids, next_ids.shallow_clone()], 1),
+                    None => next_ids.shallow_clone(),
+                });
+            }
             let position = input_length + step as i64 + rope_delta;
             let position_ids = Tensor::full([3, 1, 1], position, (Kind::Int64, device));
             let hidden_states = self.language_model.forward(
@@ -158,11 +166,7 @@ impl Model {
                 false,
                 &mut cache,
             );
-            next_token = self
-                .lm_head
-                .forward(&hidden_states)
-                .argmax(-1, false)
-                .int64_value(&[0, 0]);
+            logits = self.lm_head.forward(&hidden_states.select(1, 0));
         }
         generated
     }
@@ -177,6 +181,8 @@ impl Model {
     ) -> Vec<i64> {
         let device = inputs_embeds.device();
         let mut generated = Vec::with_capacity(max_new_tokens);
+        let mut unique_tokens = HashSet::new();
+        let mut seen_ids = None;
         for step in 0..max_new_tokens {
             let mut cache = (0..self.config.num_hidden_layers)
                 .map(|_| None)
@@ -188,11 +194,8 @@ impl Model {
                 &mut cache,
             );
             let last_index = hidden_states.size()[1] - 1;
-            let next_token = self
-                .lm_head
-                .forward(&hidden_states.narrow(1, last_index, 1))
-                .argmax(-1, false)
-                .int64_value(&[0, 0]);
+            let logits = self.lm_head.forward(&hidden_states.select(1, last_index));
+            let next_token = greedy_token(&logits, seen_ids.as_ref());
             if next_token == self.config.eos_token_id {
                 break;
             }
@@ -204,6 +207,12 @@ impl Model {
             let next_ids = Tensor::from_slice(&[next_token])
                 .view([1, 1])
                 .to_device(device);
+            if unique_tokens.insert(next_token) {
+                seen_ids = Some(match seen_ids {
+                    Some(seen_ids) => Tensor::cat(&[seen_ids, next_ids.shallow_clone()], 1),
+                    None => next_ids.shallow_clone(),
+                });
+            }
             inputs_embeds = Tensor::cat(
                 &[inputs_embeds, self.language_model.embed_tokens(&next_ids)],
                 1,
@@ -299,6 +308,20 @@ impl Model {
         .unsqueeze(1);
         Ok((position_ids, rope_delta))
     }
+}
+
+fn greedy_token(logits: &Tensor, seen_ids: Option<&Tensor>) -> i64 {
+    let logits = seen_ids.map_or_else(
+        || logits.shallow_clone(),
+        |seen_ids| {
+            let selected = logits.gather(1, seen_ids, false);
+            let penalty = f64::from(REPETITION_PENALTY);
+            let adjusted =
+                (&selected * penalty).where_self(&selected.lt(0.0), &(&selected / penalty));
+            logits.scatter(1, seen_ids, &adjusted)
+        },
+    );
+    logits.argmax(-1, false).int64_value(&[0])
 }
 
 #[derive(Debug)]

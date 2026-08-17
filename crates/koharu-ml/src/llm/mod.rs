@@ -273,7 +273,7 @@ impl Default for GenerationOptions {
             top_p: None,
             min_p: None,
             seed: DEFAULT_SEED,
-            repeat_penalty: 1.1,
+            repeat_penalty: 1.2,
             repeat_last_n: 64,
             frequency_penalty: 0.0,
             presence_penalty: 0.0,

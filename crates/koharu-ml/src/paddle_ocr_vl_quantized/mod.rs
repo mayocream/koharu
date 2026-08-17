@@ -7,7 +7,7 @@ use koharu_llama::mtmd::mtmd_default_marker;
 use crate::{
     Device,
     llm::{ChatMessage, GenerationOptions, Input, Llm, LoadOptions, MtmdOptions},
-    paddle_ocr_vl::{PaddleOCRVLResult, PaddleOCRVLTask},
+    paddle_ocr_vl::{MAX_NEW_TOKENS, PaddleOCRVLResult, PaddleOCRVLTask, REPETITION_PENALTY},
 };
 
 model_repository!("PaddlePaddle/PaddleOCR-VL-1.6-GGUF" @ "511b09642bb324401f15f97cc23bc67e8f0a291d" {
@@ -55,8 +55,10 @@ impl PaddleOCRVLQuantized {
         let generation = self.model.inference(
             &Input::new(&prompt).with_image(image),
             &GenerationOptions {
+                max_tokens: MAX_NEW_TOKENS,
                 temperature: 0.0,
-                repeat_penalty: 1.0,
+                repeat_penalty: REPETITION_PENALTY,
+                repeat_last_n: MAX_NEW_TOKENS as i32,
                 add_special: true,
                 ..GenerationOptions::default()
             },
