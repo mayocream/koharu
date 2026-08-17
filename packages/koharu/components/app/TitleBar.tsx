@@ -7,7 +7,7 @@ import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
-import { WindowControls } from '@/components/app/WindowChrome'
+import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
 import {
@@ -39,6 +39,7 @@ import { cn } from '@koharu/ui/lib/utils'
 export function TitleBar() {
   const { t } = useTranslation()
   const [aboutOpen, setAboutOpen] = useState(false)
+  const macOS = useMacOS()
   const project = useProject().data
   const pagesQuery = usePages(Boolean(project))
   const pageQuery = usePage(Boolean(project))
@@ -60,20 +61,24 @@ export function TitleBar() {
     <>
       <header
         data-tauri-drag-region='deep'
-        className='flex h-10 shrink-0 items-center bg-[var(--surface-titlebar)] text-[12px]'
+        className='relative flex h-10 shrink-0 items-center bg-[var(--surface-titlebar)] text-[12px]'
       >
-        <div className='flex h-full w-10 shrink-0 items-center justify-center rounded-br-lg'>
-          <Image
-            className='pointer-events-none'
-            src='/icon.png'
-            alt='Koharu'
-            width={17}
-            height={17}
-            draggable={false}
-            priority
-          />
-        </div>
-        <Menubar className='h-full shrink-0 gap-0 border-0 bg-transparent p-0 shadow-none'>
+        {macOS ? (
+          <div className='w-[84px] shrink-0' />
+        ) : (
+          <div className='relative z-10 flex h-full w-10 shrink-0 items-center justify-center rounded-br-lg'>
+            <Image
+              className='pointer-events-none'
+              src='/icon.png'
+              alt='Koharu'
+              width={17}
+              height={17}
+              draggable={false}
+              priority
+            />
+          </div>
+        )}
+        <Menubar className='relative z-10 h-full shrink-0 gap-0 border-0 bg-transparent p-0 shadow-none'>
           <MenubarMenu>
             <MenubarTrigger>{t('menu.file')}</MenubarTrigger>
             <MenubarContent>
@@ -246,9 +251,10 @@ export function TitleBar() {
           </MenubarMenu>
         </Menubar>
 
-        <div className='flex h-full min-w-16 flex-1 items-center justify-center px-3 text-[11px] text-muted-foreground select-none'>
+        <div className='min-w-0 flex-1' />
+        <div className='pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[40vw] min-w-16 -translate-x-1/2 items-center justify-center px-3 text-[11px] text-muted-foreground select-none'>
           {project ? (
-            <span className='pointer-events-none max-w-[40vw] truncate'>
+            <span className='truncate'>
               <span className='font-medium text-foreground'>{project.name}</span>
               {page && (
                 <>
@@ -258,11 +264,11 @@ export function TitleBar() {
               )}
             </span>
           ) : (
-            <span className='pointer-events-none'>Koharu</span>
+            <span>Koharu</span>
           )}
         </div>
 
-        <WindowControls />
+        {!macOS && <WindowControls />}
       </header>
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </>

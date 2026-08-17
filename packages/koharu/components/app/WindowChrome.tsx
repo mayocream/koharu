@@ -5,6 +5,19 @@ import { Copy, Minus, Square, X } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+export function useMacOS() {
+  const [macOS, setMacOS] = useState(false)
+
+  useEffect(() => {
+    setMacOS(
+      navigator.userAgent.includes('Macintosh') ||
+        navigator.platform.toLowerCase().startsWith('mac'),
+    )
+  }, [])
+
+  return macOS
+}
+
 export function WindowControls() {
   const { t } = useTranslation()
   const [maximized, setMaximized] = useState(false)

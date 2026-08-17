@@ -54,7 +54,10 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
 pub fn run(context: tauri::Context<Cef>) -> Result<()> {
     let builder = tauri::Builder::<Cef>::default();
     #[cfg(debug_assertions)]
-    let builder = builder.command_line_args([("remote-debugging-port", Some("4000"))]);
+    let builder = builder.command_line_args([
+        ("remote-debugging-port", Some("4000")),
+        ("--use-mock-keychain", None),
+    ]);
     #[cfg(target_os = "linux")]
     let builder = builder.command_line_args([
         ("enable-unsafe-webgpu", None),

@@ -1,6 +1,26 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/4af26a3f7f8b692d62cca549bbacd93f5ce90b41/crates/tauri-schema-generator/schemas/config.schema.json",
   "identifier": "Koharu",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "width": 1024,
+        "height": 768,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "title": "Koharu",
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 16, "y": 23 },
+        "hiddenTitle": true,
+        "transparent": false,
+        "visible": false
+      }
+    ]
+  },
   "bundle": {
     "macOS": {
       "entitlements": "./Entitlements.plist",

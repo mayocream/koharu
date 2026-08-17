@@ -4,10 +4,11 @@ import { LoaderCircle } from 'lucide-react'
 import Image from 'next/image'
 import { useTranslation } from 'react-i18next'
 
-import { WindowControls } from '@/components/app/WindowChrome'
+import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 
 export function StartupView() {
   const { t } = useTranslation()
+  const macOS = useMacOS()
 
   return (
     <div className='relative flex h-screen w-screen flex-col overflow-hidden bg-[var(--surface-titlebar)] text-foreground'>
@@ -15,21 +16,25 @@ export function StartupView() {
         data-tauri-drag-region='deep'
         className='grid h-10 shrink-0 grid-cols-[132px_1fr_132px] items-center border-b border-border/80 bg-[var(--surface-titlebar)] shadow-[var(--shadow-titlebar)]'
       >
-        <div className='grid h-full w-10 place-items-center rounded-br-lg'>
-          <Image
-            className='pointer-events-none'
-            src='/icon.png'
-            alt=''
-            width={17}
-            height={17}
-            draggable={false}
-            priority
-          />
+        <div className='flex h-full items-center'>
+          {!macOS && (
+            <div className='grid h-full w-10 place-items-center rounded-br-lg'>
+              <Image
+                className='pointer-events-none'
+                src='/icon.png'
+                alt=''
+                width={17}
+                height={17}
+                draggable={false}
+                priority
+              />
+            </div>
+          )}
         </div>
         <div className='grid h-full place-items-center text-[11px] text-muted-foreground select-none'>
           Koharu
         </div>
-        <WindowControls />
+        {!macOS && <WindowControls />}
       </header>
 
       <main className='relative grid min-h-0 flex-1 place-items-center overflow-hidden bg-[var(--surface-canvas)]'>
