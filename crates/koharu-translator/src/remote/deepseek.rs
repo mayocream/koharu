@@ -1,3 +1,5 @@
+// https://api-docs.deepseek.com/quick_start/pricing
+
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;

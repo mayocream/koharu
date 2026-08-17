@@ -1,3 +1,5 @@
+// https://developers.openai.com/api/docs/models/all
+
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
@@ -11,6 +13,7 @@ const URL: &str = "https://api.openai.com/v1/chat/completions";
 #[serde(default)]
 pub struct OpenAiConfig {}
 
+// The adapter requires Chat Completions with structured outputs.
 pub(super) static MODELS: &[(&str, &str)] = &[
     ("gpt-5.6", "5.6"),
     ("gpt-5.6-sol", "5.6 Sol"),
@@ -28,6 +31,7 @@ pub(super) static MODELS: &[(&str, &str)] = &[
     ("o3", "o3"),
     ("gpt-4.1", "4.1"),
     ("gpt-4.1-mini", "4.1 mini"),
+    ("gpt-4o", "4o"),
     ("gpt-4o-mini", "4o mini"),
 ];
 

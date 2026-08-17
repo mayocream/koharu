@@ -15,8 +15,6 @@ const MODELS_URL: &str = "https://api.atlascloud.ai/v1/models";
 #[serde(default)]
 pub struct AtlasCloudConfig {}
 
-pub(super) static MODELS: &[(&str, &str)] = &[("qwen/qwen3.5-flash", "Qwen 3.5 Flash")];
-
 pub(super) async fn translate(
     client: &Client,
     _config: &AtlasCloudConfig,
@@ -45,23 +43,27 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
     let Some(api_key) = koharu_secrets::get("atlas-cloud")? else {
         return Ok(Vec::new());
     };
-    let mut models = Model::catalog(Provider::AtlasCloud, MODELS, false);
     let discovered = super::openai_compatible::discover_models(
         "atlas-cloud",
         client.get(MODELS_URL).bearer_auth(api_key.expose_secret()),
     )
     .await;
-    match discovered {
-        Ok(discovered) => models.extend(discovered.into_iter().map(|model| Model {
-            provider: Provider::AtlasCloud,
-            name: crate::display_name(&model),
-            model: Some(model),
-            quantizations: Vec::new(),
-            vision: false,
-        })),
-        Err(error) => tracing::warn!(%error, "failed to list Atlas Cloud models"),
-    }
-    Ok(models)
+    Ok(match discovered {
+        Ok(discovered) => discovered
+            .into_iter()
+            .map(|model| Model {
+                provider: Provider::AtlasCloud,
+                name: crate::display_name(&model),
+                model: Some(model),
+                quantizations: Vec::new(),
+                vision: false,
+            })
+            .collect(),
+        Err(error) => {
+            tracing::warn!(%error, "failed to list Atlas Cloud models");
+            Vec::new()
+        }
+    })
 }
 
 #[cfg(test)]

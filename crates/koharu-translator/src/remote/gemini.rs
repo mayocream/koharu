@@ -1,5 +1,8 @@
 // Ported from:
 // https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/gemini.rs
+// Model catalog:
+// https://ai.google.dev/gemini-api/docs/models
+// https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
@@ -19,11 +22,15 @@ const ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 #[serde(default)]
 pub struct GeminiConfig {}
 
+// General-purpose models that support generateContent with text output.
 pub(super) static MODELS: &[(&str, &str)] = &[
     ("gemini-flash-lite-latest", "Gemini Flash-Lite Latest"),
     ("gemini-flash-latest", "Gemini Flash Latest"),
     ("gemini-pro-latest", "Gemini Pro Latest"),
+    ("gemini-3.7-flash", "Gemini 3.7 Flash"),
+    ("gemini-3.6-flash", "Gemini 3.6 Flash"),
     ("gemini-3.5-flash", "Gemini 3.5 Flash"),
+    ("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite"),
     ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
     (
         "gemini-3.1-pro-preview-customtools",
@@ -34,6 +41,8 @@ pub(super) static MODELS: &[(&str, &str)] = &[
     ("gemini-2.5-pro", "Gemini 2.5 Pro"),
     ("gemini-2.5-flash", "Gemini 2.5 Flash"),
     ("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"),
+    ("gemma-4-31b-it", "Gemma 4 31B IT"),
+    ("gemma-4-26b-a4b-it", "Gemma 4 26B A4B IT"),
 ];
 
 pub(super) async fn models() -> Result<Vec<Model>> {
