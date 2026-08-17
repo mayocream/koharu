@@ -52,7 +52,8 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
 }
 
 pub fn run(context: tauri::Context<Cef>) -> Result<()> {
-    let builder = tauri::Builder::<Cef>::default();
+    let builder = tauri::Builder::<Cef>::default()
+        .command_line_args::<_, &str>([("--hide-chrome-bubbles", None)]);
     #[cfg(debug_assertions)]
     let builder = builder.command_line_args([
         ("remote-debugging-port", Some("4000")),
