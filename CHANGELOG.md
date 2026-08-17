@@ -1,3 +1,10 @@
+## [0.70.6](https://github.com/mayocream/koharu/compare/0.70.5..0.70.6) - 2026-08-17
+
+### 🐛 Bug Fixes
+
+- Restore app icons - ([faf9f42](https://github.com/mayocream/koharu/commit/faf9f42d83212dda2d1c65743c46d167658bf64a))
+
+
 ## [0.70.5](https://github.com/mayocream/koharu/compare/0.70.4..0.70.5) - 2026-08-17
 
 ### 🐛 Bug Fixes
