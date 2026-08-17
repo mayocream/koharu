@@ -44,6 +44,7 @@ koharu-secrets = { path = "crates/koharu-secrets" }
 # external dependencies
 alphanumeric-sort = "1.5.8"
 arc-swap = "1.9.2"
+hayro = "0.7.1"
 image = "0.25.10"
 webp = { version = "0.3.1" }
 fast_image_resize = { version = "6.1.0", features = ["image", "rayon"] }
@@ -71,6 +72,7 @@ rayon = "1.12.0"
 tokenizers = { version = "0.23.1", features = ["onig"] }
 strum = { version = "0.28.0", features = ["derive"] }
 sysinfo = { version = "0.39.6", features = ["system"] }
+rars = "0.6.0"
 zip = { version = "8.6.0", features = ["deflate"] }
 dirs = "6.0.0"
 futures = "0.3.34"

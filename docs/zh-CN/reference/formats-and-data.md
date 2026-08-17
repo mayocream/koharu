@@ -1,6 +1,6 @@
 ---
 title: 格式与数据位置
-description: 支持的图像格式、项目结构、设置、凭据与缓存位置。
+description: 支持的导入导出格式、项目结构、设置、凭据与缓存位置。
 ---
 
 # 格式与数据位置
@@ -9,7 +9,7 @@ description: 支持的图像格式、项目结构、设置、凭据与缓存位�
 
 | 用途 | 格式 |
 | --- | --- |
-| 页面导入 | PNG、JPEG、WebP |
+| 页面导入 | PNG、JPEG、WebP、CBZ、ZIP、RAR、PDF |
 | 合并导出 | PNG |
 | 分层交换导出 | PSD |
 | Koharu 工作项目 | `.khrproj` 目录 |

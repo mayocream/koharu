@@ -5,7 +5,6 @@ import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import {
   FilePlus2,
   FolderOpen,
-  ImagePlus,
   LoaderCircle,
   MoreHorizontal,
   Search,
@@ -426,7 +425,7 @@ function PageImportMenu({
           className='min-h-7 gap-1 px-1.5 py-0.5 text-[11px] [&_svg:not([class*="size-"])]:size-3.5'
           onClick={() => onImport('files')}
         >
-          <ImagePlus />
+          <FilePlus2 />
           {t('navigator.importFiles')}
         </DropdownMenuItem>
         <DropdownMenuItem

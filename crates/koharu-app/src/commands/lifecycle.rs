@@ -1,12 +1,10 @@
-use std::{fs, io::Cursor, sync::Arc};
-
 use anyhow::{Context as _, Result};
 use koharu_desktop::{CanvasState, Desktop};
 use koharu_scene::{AssetInput, AssetMetadata, AssetRole, At, PageDraft};
 use parking_lot::Mutex;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use strum::{EnumMessage as _, IntoEnumIterator as _};
 use tauri::{AppHandle, Cef, Manager as _, State, WebviewWindow, ipc::Channel};
 use walkdir::WalkDir;
 
@@ -14,6 +12,7 @@ use super::{
     ChannelExt as _, Error,
     agent::AgentState,
     canvas::CanvasChannel,
+    import,
     preferences::Preferences,
     processing::{Job, JobChannel, Processing},
     project::{
@@ -345,8 +344,11 @@ pub(crate) async fn import_pages(
     if !processing.stops.lock().is_empty() {
         return Err(anyhow::anyhow!("pages cannot be imported while processing is running").into());
     }
+    let extensions = import::Format::iter()
+        .flat_map(|format| format.get_serializations())
+        .collect::<Vec<_>>();
     let dialog = rfd::AsyncFileDialog::new()
-        .add_filter("Images", &["png", "jpg", "jpeg", "webp"])
+        .add_filter("Images, archives, and PDF", &extensions)
         .set_parent(&window);
     let files = match source {
         PageImportSource::Files => dialog.pick_files().await.map(|files| {
@@ -370,74 +372,44 @@ pub(crate) async fn import_pages(
                 .filter(|path| {
                     path.extension()
                         .and_then(|extension| extension.to_str())
-                        .is_some_and(|extension| {
-                            matches!(
-                                extension.to_ascii_lowercase().as_str(),
-                                "png" | "jpg" | "jpeg" | "webp"
-                            )
-                        })
+                        .is_some_and(|extension| extension.parse::<import::Format>().is_ok())
                 })
                 .collect::<Vec<_>>()
         }),
     };
-    let Some(mut files) = files else {
+    let Some(files) = files else {
         return Ok(());
     };
     if files.is_empty() {
         return Err(anyhow::anyhow!("no supported images were found in the selection").into());
     }
-    alphanumeric_sort::sort_slice_by_os_str_key(&mut files, |path| {
-        path.file_name().unwrap_or_else(|| path.as_os_str())
-    });
-    let pages = tokio::task::spawn_blocking(move || {
-        files
-            .into_par_iter()
-            .map(|file| -> Result<_> {
-                let bytes = fs::read(&file)
-                    .with_context(|| format!("failed to read {}", file.display()))?;
-                let format = image::guess_format(&bytes)
-                    .with_context(|| format!("failed to identify {}", file.display()))?;
-                let (width, height) =
-                    image::ImageReader::with_format(Cursor::new(bytes.as_slice()), format)
-                        .into_dimensions()
-                        .with_context(|| {
-                            format!("failed to read dimensions of {}", file.display())
-                        })?;
-                Ok((
-                    file.file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("page")
-                        .to_owned(),
-                    Arc::<[u8]>::from(bytes),
-                    format,
-                    width,
-                    height,
-                ))
-            })
-            .collect::<Result<Vec<_>>>()
-    })
-    .await
-    .context("page import worker stopped unexpectedly")??;
+    let pages = tokio::task::spawn_blocking(move || import::import(files))
+        .await
+        .context("page import worker stopped unexpectedly")??;
 
     let (commit, page) = {
         let mut project = project.project.lock().await;
         let project = project.as_mut().context("no project is open")?;
         let source = AssetRole::new("source")?;
         let patch = project.snapshot().patch(|edit| {
-            for (name, bytes, format, width, height) in pages {
+            for imported in pages {
                 let page = edit.add_page(
-                    PageDraft::new(name, f64::from(width), f64::from(height)),
+                    PageDraft::new(
+                        imported.name,
+                        f64::from(imported.width),
+                        f64::from(imported.height),
+                    ),
                     At::End,
                 )?;
                 edit.set_asset(
                     page,
                     &source,
                     AssetInput::new(
-                        bytes,
-                        format.to_mime_type(),
+                        imported.bytes,
+                        imported.format.to_mime_type(),
                         AssetMetadata {
-                            width: Some(width),
-                            height: Some(height),
+                            width: Some(imported.width),
+                            height: Some(imported.height),
                             attributes: Default::default(),
                         },
                     ),

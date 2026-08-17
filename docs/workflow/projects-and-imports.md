@@ -1,6 +1,6 @@
 ---
 title: Projects and Page Imports
-description: Create durable projects, import image sets, and manage page order.
+description: Create durable projects, import page sources, and manage page order.
 ---
 
 # Projects and Page Imports
@@ -23,15 +23,15 @@ Close a project to return to the library. Closing discards the in-memory undo an
 
 ## Import pages
 
-Use **File -> Import Pages -> Files** to choose individual images, or **Folder** to scan a directory recursively. Supported source formats are:
+Use **File -> Import Pages -> Files** to choose individual images, archives, or PDF documents, or **Folder** to scan a directory recursively. Supported source formats are:
 
-- PNG
-- JPEG (`.jpg` and `.jpeg`)
-- WebP
+- images: PNG, JPEG (`.jpg` and `.jpeg`), and WebP;
+- archives: CBZ, ZIP, and RAR, with each supported image entry becoming a page;
+- documents: PDF, with each document page rasterized into a project page.
 
-Folder imports ignore unsupported files and symbolic-link traversal. Koharu sorts accepted paths alphanumerically before adding them, so names such as `page2.png` appear before `page10.png`.
+Folder imports ignore unsupported files and symbolic-link traversal. Koharu sorts accepted paths and archive entries alphanumerically before adding them, so names such as `page2.png` appear before `page10.png`. PDF pages retain document order.
 
-Imported bytes are copied into content-addressed project storage. Moving or deleting the original image later does not remove the project page.
+Imported page bytes are copied into content-addressed project storage; PDF pages are stored as lossless rendered images. Moving or deleting the original source later does not remove the project pages.
 
 Pages cannot be imported while a processing job is running.
 

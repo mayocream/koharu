@@ -1,6 +1,6 @@
 ---
 title: Formats and Data Locations
-description: Supported image formats, project layout, settings, credentials, and caches.
+description: Supported import and export formats, project layout, settings, credentials, and caches.
 ---
 
 # Formats and Data Locations
@@ -9,7 +9,7 @@ description: Supported image formats, project layout, settings, credentials, and
 
 | Purpose | Formats |
 | --- | --- |
-| Page import | PNG, JPEG, WebP |
+| Page import | PNG, JPEG, WebP, CBZ, ZIP, RAR, PDF |
 | Flattened export | PNG |
 | Layered interchange export | PSD |
 | Koharu working project | `.khrproj` directory |

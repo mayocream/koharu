@@ -1,7 +1,7 @@
 'use client'
 
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { FolderOpen, ImagePlus, LoaderCircle, Settings } from 'lucide-react'
+import { FilePlus2, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
 import Image from 'next/image'
 import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -93,7 +93,7 @@ export function TitleBar() {
                 </MenubarSubTrigger>
                 <MenubarSubContent className='min-w-40 p-1'>
                   <MenubarItem disabled={importing} onClick={() => importPages('files')}>
-                    <ImagePlus />
+                    <FilePlus2 />
                     {t('navigator.importFiles')}
                   </MenubarItem>
                   <MenubarItem disabled={importing} onClick={() => importPages('folder')}>
