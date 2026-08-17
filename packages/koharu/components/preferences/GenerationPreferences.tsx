@@ -30,7 +30,11 @@ export function GenerationPreferences({
       title={t('settings.generation.title')}
       description={t('settings.generation.description')}
     >
-      <PreferenceRow title={t('settings.generation.sampling')} align='start'>
+      <PreferenceRow
+        title={t('settings.generation.sampling')}
+        description={t('settings.generation.samplingDescription')}
+        align='start'
+      >
         <div className='grid grid-cols-2 gap-2'>
           <NumberField
             label={t('settings.generation.temperature')}
@@ -103,7 +107,10 @@ export function GenerationPreferences({
           />
         </div>
       </PreferenceRow>
-      <PreferenceRow title={t('settings.generation.vision')}>
+      <PreferenceRow
+        title={t('settings.generation.vision')}
+        description={t('settings.generation.visionDescription')}
+      >
         <div className='flex h-8 items-center justify-end'>
           <Switch
             aria-label={t('settings.generation.vision')}

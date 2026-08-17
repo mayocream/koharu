@@ -1,7 +1,7 @@
 'use client'
 
 import { Eraser } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -94,6 +94,7 @@ function CredentialField({
   onChange: (value: CredentialInput) => void
 }) {
   const { t } = useTranslation()
+  const inputId = useId()
   const [draftValue, setDraftValue] = useState(value.value ?? '')
   useEffect(() => {
     if (value.value !== null) setDraftValue(value.value)
@@ -101,36 +102,44 @@ function CredentialField({
   }, [value.clear, value.configured, value.value])
   const configured = !value.clear && (value.configured || Boolean(draftValue))
   return (
-    <div className='flex gap-2'>
-      <Input
-        aria-label={t('settings.providers.credentialLabel', { provider: label })}
-        type='password'
-        autoComplete='new-password'
-        value={draftValue}
-        placeholder={
-          configured ? t('settings.providers.configured') : t('settings.providers.notConfigured')
-        }
-        className='h-8 min-w-0 flex-1 text-[12px] [&::-ms-reveal]:hidden'
-        onChange={(event) => {
-          const draft = event.currentTarget.value
-          setDraftValue(draft)
-          onChange({ ...value, value: draft || null, clear: false })
-        }}
-      />
-      {configured && (
-        <Button
-          type='button'
-          variant='outline'
-          size='icon'
-          aria-label={t('settings.providers.clearCredential', { provider: label })}
-          onClick={() => {
-            setDraftValue('')
-            onChange({ configured: false, value: null, clear: true })
+    <div className='grid gap-1'>
+      <label htmlFor={inputId} className='text-[10px] text-muted-foreground'>
+        {t('settings.providers.credential')}
+      </label>
+      <div className='flex gap-2'>
+        <Input
+          id={inputId}
+          aria-label={t('settings.providers.credentialLabel', { provider: label })}
+          type='text'
+          autoComplete='off'
+          autoCapitalize='none'
+          spellCheck={false}
+          value={draftValue}
+          placeholder={
+            configured ? t('settings.providers.configured') : t('settings.providers.notConfigured')
+          }
+          className='h-8 min-w-0 flex-1 text-[12px] [-webkit-text-security:disc] [&::placeholder]:[-webkit-text-security:none]'
+          onChange={(event) => {
+            const draft = event.currentTarget.value
+            setDraftValue(draft)
+            onChange({ ...value, value: draft || null, clear: false })
           }}
-        >
-          <Eraser />
-        </Button>
-      )}
+        />
+        {configured && (
+          <Button
+            type='button'
+            variant='outline'
+            size='icon'
+            aria-label={t('settings.providers.clearCredential', { provider: label })}
+            onClick={() => {
+              setDraftValue('')
+              onChange({ configured: false, value: null, clear: true })
+            }}
+          >
+            <Eraser />
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

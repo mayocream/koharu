@@ -368,13 +368,15 @@
       "presencePenalty": "Penalidade de presença",
       "repeatPenalty": "Penalidade de repetição",
       "sampling": "Amostragem",
+      "samplingDescription": "Controla como o modelo seleciona e varia o texto gerado.",
       "temperature": "Temperatura",
       "thinking": "Raciocínio",
       "thinkingDescription": "Pede aos modelos com raciocínio que usem o modo de pensamento.",
       "title": "Geração",
       "topK": "Top K",
       "topP": "Top P",
-      "vision": "Entrada de imagem"
+      "vision": "Visão",
+      "visionDescription": "Fornece imagens das páginas ao LLM durante a tradução."
     },
     "loading": "Carregando preferências…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "Configurado",
       "connections": "Conexões",
       "connectionsDescription": "As credenciais são armazenadas com segurança neste dispositivo.",
+      "credential": "Credencial",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecte provedores de tradução e modelos de linguagem.",
       "notConfigured": "Não configurado",
@@ -441,8 +444,10 @@
       "quantization": "Quantização",
       "quantizationDescription": "Formatos menores usam menos memória, geralmente com perda de qualidade.",
       "selectQuantization": "Selecionar uma quantização",
+      "targetLanguageDescription": "Escolha o idioma para o qual o texto será traduzido.",
       "title": "Tradução",
-      "translationModel": "Modelo de tradução"
+      "translationModel": "Modelo de tradução",
+      "translationModelDescription": "Escolha o modelo usado para traduzir texto."
     },
     "typesetting": {
       "addFamily": "Adicionar família de fontes",

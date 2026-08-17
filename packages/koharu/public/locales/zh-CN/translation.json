@@ -368,13 +368,15 @@
       "presencePenalty": "存在惩罚",
       "repeatPenalty": "重复惩罚",
       "sampling": "采样",
+      "samplingDescription": "控制模型选择和调整生成文本的方式。",
       "temperature": "温度",
       "thinking": "思考",
       "thinkingDescription": "让支持推理的模型使用思考模式。",
       "title": "生成",
       "topK": "前 K 项",
       "topP": "Top P",
-      "vision": "视觉输入"
+      "vision": "视觉",
+      "visionDescription": "翻译时将页面图像输入给 LLM。"
     },
     "loading": "正在加载偏好设置…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "已配置",
       "connections": "连接",
       "connectionsDescription": "凭据安全地存储在此设备上。",
+      "credential": "凭据",
       "credentialLabel": "{{provider}} 凭据",
       "description": "连接翻译和语言模型提供商。",
       "notConfigured": "未配置",
@@ -441,8 +444,10 @@
       "quantization": "量化",
       "quantizationDescription": "较小的格式占用更少内存，但通常会牺牲一些质量。",
       "selectQuantization": "选择量化方式",
+      "targetLanguageDescription": "选择文本要翻译成的语言。",
       "title": "译文",
-      "translationModel": "翻译模型"
+      "translationModel": "翻译模型",
+      "translationModelDescription": "选择用于翻译文本的模型。"
     },
     "typesetting": {
       "addFamily": "添加字体系列",

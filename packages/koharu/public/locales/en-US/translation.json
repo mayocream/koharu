@@ -368,13 +368,15 @@
       "presencePenalty": "Presence penalty",
       "repeatPenalty": "Repeat penalty",
       "sampling": "Sampling",
+      "samplingDescription": "Control how the model selects and varies generated text.",
       "temperature": "Temperature",
       "thinking": "Thinking",
       "thinkingDescription": "Ask reasoning-capable models to use their thinking mode.",
       "title": "Generation",
       "topK": "Top K",
       "topP": "Top P",
-      "vision": "Vision input"
+      "vision": "Vision",
+      "visionDescription": "Feed page images to the LLM during translation."
     },
     "loading": "Loading preferences…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "Configured",
       "connections": "Connections",
       "connectionsDescription": "Credentials are stored securely on this device.",
+      "credential": "Credential",
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",
       "notConfigured": "Not configured",
@@ -441,8 +444,10 @@
       "quantization": "Quantization",
       "quantizationDescription": "Smaller formats use less memory, usually with a quality tradeoff.",
       "selectQuantization": "Select a quantization",
+      "targetLanguageDescription": "Choose the language to translate text into.",
       "title": "Translation",
-      "translationModel": "Translation model"
+      "translationModel": "Translation model",
+      "translationModelDescription": "Choose the model used to translate text."
     },
     "typesetting": {
       "addFamily": "Add font family",

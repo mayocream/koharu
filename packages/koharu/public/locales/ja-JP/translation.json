@@ -368,13 +368,15 @@
       "presencePenalty": "存在ペナルティ",
       "repeatPenalty": "繰り返しペナルティ",
       "sampling": "サンプリング",
+      "samplingDescription": "モデルが生成テキストを選択し、変化させる方法を調整します。",
       "temperature": "温度",
       "thinking": "思考",
       "thinkingDescription": "推論対応モデルに思考モードを使用させます。",
       "title": "生成",
       "topK": "上位 K 件",
       "topP": "Top P",
-      "vision": "ビジョン入力"
+      "vision": "ビジョン",
+      "visionDescription": "翻訳時にページ画像をLLMへ入力します。"
     },
     "loading": "設定を読み込み中…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "設定済み",
       "connections": "接続",
       "connectionsDescription": "認証情報はこのデバイスに安全に保存されます。",
+      "credential": "認証情報",
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",
       "notConfigured": "未設定",
@@ -441,8 +444,10 @@
       "quantization": "量子化",
       "quantizationDescription": "小さい形式はメモリ使用量を抑えますが、通常は品質とのトレードオフがあります。",
       "selectQuantization": "量子化方式を選択",
+      "targetLanguageDescription": "テキストの翻訳先言語を選択します。",
       "title": "翻訳",
-      "translationModel": "翻訳モデル"
+      "translationModel": "翻訳モデル",
+      "translationModelDescription": "テキストの翻訳に使用するモデルを選択します。"
     },
     "typesetting": {
       "addFamily": "フォントファミリーを追加",

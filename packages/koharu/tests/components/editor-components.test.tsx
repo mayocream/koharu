@@ -975,12 +975,17 @@ describe('greenfield editor', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Providers' })).toBeInTheDocument()
     expect(screen.getByLabelText('DeepL credential')).toBeInTheDocument()
     expect(screen.getAllByLabelText('Base URL')).toHaveLength(3)
-    expect(screen.queryByRole('switch', { name: 'Vision input' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Vision' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
     expect(screen.getByRole('heading', { level: 2, name: 'Translation' })).toBeInTheDocument()
+    expect(screen.getByText('Choose the model used to translate text.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Control how the model selects and varies generated text.'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: 'Enable thinking' })).toBeInTheDocument()
     expect(screen.queryByText('Enable thinking')).not.toBeInTheDocument()
-    const vision = screen.getByRole('switch', { name: 'Vision input' })
+    const vision = screen.getByRole('switch', { name: 'Vision' })
+    expect(screen.getByText('Feed page images to the LLM during translation.')).toBeInTheDocument()
     expect(vision).toBeChecked()
     save.mockClear()
     await user.click(vision)
@@ -1007,6 +1012,7 @@ describe('greenfield editor', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Target language')).toHaveTextContent('English')
+    expect(screen.getByText('Choose the language to translate text into.')).toBeInTheDocument()
     expect(screen.getByLabelText('Translation instructions')).toHaveClass(
       'field-sizing-fixed',
       'overflow-y-auto',
@@ -1028,7 +1034,15 @@ describe('greenfield editor', () => {
     render(<ProviderPreferences value={providers} onChange={onChange} />)
 
     const input = screen.getByLabelText('DeepL credential')
-    expect(input).toHaveAttribute('type', 'password')
+    expect(screen.getByText('Credential')).toHaveAttribute('for', input.id)
+    expect(input).toHaveAttribute('type', 'text')
+    expect(input).toHaveAttribute('autocomplete', 'off')
+    expect(input).toHaveAttribute('autocapitalize', 'none')
+    expect(input).toHaveAttribute('spellcheck', 'false')
+    expect(input).toHaveClass(
+      '[-webkit-text-security:disc]',
+      '[&::placeholder]:[-webkit-text-security:none]',
+    )
     expect(input).toHaveValue('')
     expect(input).toHaveAttribute('placeholder', 'Configured')
     expect(

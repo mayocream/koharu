@@ -368,13 +368,15 @@
       "presencePenalty": "存在懲罰",
       "repeatPenalty": "重複懲罰",
       "sampling": "取樣",
+      "samplingDescription": "控制模型選擇和調整生成文字的方式。",
       "temperature": "溫度",
       "thinking": "思考",
       "thinkingDescription": "讓支援推理的模型使用思考模式。",
       "title": "產生",
       "topK": "前 K 項",
       "topP": "Top P",
-      "vision": "視覺輸入"
+      "vision": "視覺",
+      "visionDescription": "翻譯時將頁面影像輸入給 LLM。"
     },
     "loading": "正在載入偏好設定…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "已設定",
       "connections": "連線",
       "connectionsDescription": "認證資訊會安全地儲存在此裝置上。",
+      "credential": "認證資訊",
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
       "notConfigured": "未設定",
@@ -441,8 +444,10 @@
       "quantization": "量化",
       "quantizationDescription": "較小的格式使用較少記憶體，但通常會犧牲一些品質。",
       "selectQuantization": "選擇量化方式",
+      "targetLanguageDescription": "選擇文字要翻譯成的語言。",
       "title": "譯文",
-      "translationModel": "翻譯模型"
+      "translationModel": "翻譯模型",
+      "translationModelDescription": "選擇用於翻譯文字的模型。"
     },
     "typesetting": {
       "addFamily": "新增字型家族",

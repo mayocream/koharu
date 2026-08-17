@@ -81,7 +81,10 @@ export function TranslationPreferences({
         title={t('settings.translation.model')}
         description={t('settings.translation.modelDescription')}
       >
-        <PreferenceRow title={t('settings.translation.translationModel')}>
+        <PreferenceRow
+          title={t('settings.translation.translationModel')}
+          description={t('settings.translation.translationModelDescription')}
+        >
           <Popover open={modelOpen} onOpenChange={setModelOpen}>
             <PopoverTrigger
               type='button'
@@ -165,7 +168,10 @@ export function TranslationPreferences({
       />
 
       <PreferenceSection title={t('settings.translation.output')}>
-        <PreferenceRow title={t('model.targetLanguage')}>
+        <PreferenceRow
+          title={t('model.targetLanguage')}
+          description={t('settings.translation.targetLanguageDescription')}
+        >
           <Select
             value={value.target_language}
             items={Object.fromEntries(

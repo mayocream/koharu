@@ -368,13 +368,15 @@
       "presencePenalty": "존재 페널티",
       "repeatPenalty": "반복 페널티",
       "sampling": "샘플링",
+      "samplingDescription": "모델이 생성할 텍스트를 선택하고 변화시키는 방식을 조절합니다.",
       "temperature": "온도",
       "thinking": "사고",
       "thinkingDescription": "추론 지원 모델이 사고 모드를 사용하도록 합니다.",
       "title": "생성",
       "topK": "상위 K개",
       "topP": "Top P",
-      "vision": "비전 입력"
+      "vision": "비전",
+      "visionDescription": "번역할 때 LLM에 페이지 이미지를 입력합니다."
     },
     "loading": "환경 설정 불러오는 중…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "설정됨",
       "connections": "연결",
       "connectionsDescription": "자격 증명은 이 기기에 안전하게 저장됩니다.",
+      "credential": "자격 증명",
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
       "notConfigured": "설정 안 됨",
@@ -441,8 +444,10 @@
       "quantization": "양자화",
       "quantizationDescription": "작은 형식은 메모리를 덜 사용하지만 일반적으로 품질이 낮아질 수 있습니다.",
       "selectQuantization": "양자화 선택",
+      "targetLanguageDescription": "텍스트를 번역할 언어를 선택합니다.",
       "title": "번역",
-      "translationModel": "번역 모델"
+      "translationModel": "번역 모델",
+      "translationModelDescription": "텍스트 번역에 사용할 모델을 선택합니다."
     },
     "typesetting": {
       "addFamily": "글꼴 패밀리 추가",

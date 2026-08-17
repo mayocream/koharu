@@ -368,13 +368,15 @@
       "presencePenalty": "Штраф за присутствие",
       "repeatPenalty": "Штраф за повторение",
       "sampling": "Сэмплирование",
+      "samplingDescription": "Управляет выбором и вариативностью текста, создаваемого моделью.",
       "temperature": "Температура",
       "thinking": "Рассуждение",
       "thinkingDescription": "Предлагать моделям с поддержкой рассуждений использовать режим размышления.",
       "title": "Генерация",
       "topK": "Топ K",
       "topP": "Top P",
-      "vision": "Ввод изображений"
+      "vision": "Изображения",
+      "visionDescription": "Передаёт изображения страниц языковой модели во время перевода."
     },
     "loading": "Загрузка настроек…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "Настроено",
       "connections": "Подключения",
       "connectionsDescription": "Учётные данные безопасно хранятся на этом устройстве.",
+      "credential": "Учётные данные",
       "credentialLabel": "Учётные данные {{provider}}",
       "description": "Подключите провайдеров перевода и языковых моделей.",
       "notConfigured": "Не настроено",
@@ -441,8 +444,10 @@
       "quantization": "Квантование",
       "quantizationDescription": "Меньшие форматы используют меньше памяти, обычно за счёт качества.",
       "selectQuantization": "Выбрать квантование",
+      "targetLanguageDescription": "Выберите язык, на который нужно перевести текст.",
       "title": "Перевод",
-      "translationModel": "Модель перевода"
+      "translationModel": "Модель перевода",
+      "translationModelDescription": "Выберите модель для перевода текста."
     },
     "typesetting": {
       "addFamily": "Добавить семейство шрифтов",

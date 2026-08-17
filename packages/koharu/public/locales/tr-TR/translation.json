@@ -368,13 +368,15 @@
       "presencePenalty": "Varlık cezası",
       "repeatPenalty": "Tekrar cezası",
       "sampling": "Örnekleme",
+      "samplingDescription": "Modelin oluşturulan metni nasıl seçip çeşitlendireceğini kontrol eder.",
       "temperature": "Sıcaklık",
       "thinking": "Düşünme",
       "thinkingDescription": "Akıl yürütme destekli modellerden düşünme modunu kullanmalarını ister.",
       "title": "Üretim",
       "topK": "İlk K",
       "topP": "Top P",
-      "vision": "Görsel girişi"
+      "vision": "Görsel",
+      "visionDescription": "Çeviri sırasında sayfa görsellerini LLM'ye iletir."
     },
     "loading": "Tercihler yükleniyor…",
     "pipeline": {
@@ -409,6 +411,7 @@
       "configured": "Yapılandırıldı",
       "connections": "Bağlantılar",
       "connectionsDescription": "Kimlik bilgileri bu cihazda güvenli bir şekilde saklanır.",
+      "credential": "Kimlik bilgisi",
       "credentialLabel": "{{provider}} kimlik bilgisi",
       "description": "Çeviri ve dil modeli sağlayıcılarını bağlayın.",
       "notConfigured": "Yapılandırılmadı",
@@ -441,8 +444,10 @@
       "quantization": "Niceleme",
       "quantizationDescription": "Daha küçük biçimler daha az bellek kullanır, ancak genellikle kalite düşer.",
       "selectQuantization": "Niceleme seç",
+      "targetLanguageDescription": "Metnin çevrileceği dili seçin.",
       "title": "Çeviri",
-      "translationModel": "Çeviri modeli"
+      "translationModel": "Çeviri modeli",
+      "translationModelDescription": "Metni çevirmek için kullanılacak modeli seçin."
     },
     "typesetting": {
       "addFamily": "Yazı tipi ailesi ekle",
