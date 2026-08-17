@@ -411,9 +411,7 @@
       "connectionsDescription": "Las credenciales se almacenan de forma segura en este dispositivo.",
       "credentialLabel": "Credencial de {{provider}}",
       "description": "Conecta proveedores de traducción y modelos de lenguaje.",
-      "hideCredential": "Ocultar credencial de {{provider}}",
       "notConfigured": "Sin configurar",
-      "revealCredential": "Mostrar credencial de {{provider}}",
       "title": "Proveedores"
     },
     "shortcuts": {

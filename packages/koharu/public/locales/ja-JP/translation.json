@@ -411,9 +411,7 @@
       "connectionsDescription": "認証情報はこのデバイスに安全に保存されます。",
       "credentialLabel": "{{provider}}の認証情報",
       "description": "翻訳および言語モデルのプロバイダーに接続します。",
-      "hideCredential": "{{provider}}の認証情報を隠す",
       "notConfigured": "未設定",
-      "revealCredential": "{{provider}}の認証情報を表示",
       "title": "プロバイダー"
     },
     "shortcuts": {

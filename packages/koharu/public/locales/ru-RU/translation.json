@@ -411,9 +411,7 @@
       "connectionsDescription": "Учётные данные безопасно хранятся на этом устройстве.",
       "credentialLabel": "Учётные данные {{provider}}",
       "description": "Подключите провайдеров перевода и языковых моделей.",
-      "hideCredential": "Скрыть учётные данные {{provider}}",
       "notConfigured": "Не настроено",
-      "revealCredential": "Показать учётные данные {{provider}}",
       "title": "Провайдеры"
     },
     "shortcuts": {

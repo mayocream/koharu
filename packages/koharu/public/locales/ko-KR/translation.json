@@ -411,9 +411,7 @@
       "connectionsDescription": "자격 증명은 이 기기에 안전하게 저장됩니다.",
       "credentialLabel": "{{provider}} 자격 증명",
       "description": "번역 및 언어 모델 제공자를 연결합니다.",
-      "hideCredential": "{{provider}} 자격 증명 숨기기",
       "notConfigured": "설정 안 됨",
-      "revealCredential": "{{provider}} 자격 증명 표시",
       "title": "제공자"
     },
     "shortcuts": {

@@ -411,9 +411,7 @@
       "connectionsDescription": "認證資訊會安全地儲存在此裝置上。",
       "credentialLabel": "{{provider}} 認證資訊",
       "description": "連線翻譯和語言模型提供者。",
-      "hideCredential": "隱藏 {{provider}} 認證資訊",
       "notConfigured": "未設定",
-      "revealCredential": "顯示 {{provider}} 認證資訊",
       "title": "提供者"
     },
     "shortcuts": {

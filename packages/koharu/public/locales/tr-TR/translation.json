@@ -411,9 +411,7 @@
       "connectionsDescription": "Kimlik bilgileri bu cihazda güvenli bir şekilde saklanır.",
       "credentialLabel": "{{provider}} kimlik bilgisi",
       "description": "Çeviri ve dil modeli sağlayıcılarını bağlayın.",
-      "hideCredential": "{{provider}} kimlik bilgisini gizle",
       "notConfigured": "Yapılandırılmadı",
-      "revealCredential": "{{provider}} kimlik bilgisini göster",
       "title": "Sağlayıcılar"
     },
     "shortcuts": {

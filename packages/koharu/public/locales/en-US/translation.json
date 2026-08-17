@@ -411,9 +411,7 @@
       "connectionsDescription": "Credentials are stored securely on this device.",
       "credentialLabel": "{{provider}} credential",
       "description": "Connect translation and language-model providers.",
-      "hideCredential": "Hide {{provider}} credential",
       "notConfigured": "Not configured",
-      "revealCredential": "Reveal {{provider}} credential",
       "title": "Providers"
     },
     "shortcuts": {

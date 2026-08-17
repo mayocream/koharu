@@ -14,6 +14,7 @@ import { PageRail } from '@/components/editor/PageRail'
 import { ResourceMonitor } from '@/components/editor/ResourceMonitor'
 import { StatusBar } from '@/components/editor/StatusBar'
 import { ToolBar } from '@/components/editor/ToolBar'
+import { ProviderPreferences } from '@/components/preferences/ProviderPreferences'
 import { SettingsPage } from '@/components/preferences/SettingsPage'
 import {
   fontsKey,
@@ -1010,6 +1011,78 @@ describe('greenfield editor', () => {
       'field-sizing-fixed',
       'overflow-y-auto',
     )
+  })
+
+  it('keeps a configured provider credential private and allows clearing it', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const providers = {
+      entries: [
+        {
+          name: 'DeepL',
+          config: { provider: 'deepl' as const, settings: { base_url: null } },
+          credential: { configured: true, value: null, clear: false },
+        },
+      ],
+    }
+    render(<ProviderPreferences value={providers} onChange={onChange} />)
+
+    const input = screen.getByLabelText('DeepL credential')
+    expect(input).toHaveAttribute('type', 'password')
+    expect(input).toHaveValue('')
+    expect(input).toHaveAttribute('placeholder', 'Configured')
+    expect(
+      screen.queryByRole('button', { name: 'Reveal DeepL credential' }),
+    ).not.toBeInTheDocument()
+
+    const clear = screen.getByRole('button', { name: 'Clear DeepL credential' })
+    expect(clear.querySelector('.lucide-eraser')).toBeInTheDocument()
+    expect(clear).not.toHaveClass('text-destructive')
+    await user.click(clear)
+    expect(onChange).toHaveBeenCalledWith({
+      entries: [
+        expect.objectContaining({
+          credential: { configured: false, value: null, clear: true },
+        }),
+      ],
+    })
+  })
+
+  it('preserves a credential draft and focus when autosave finishes', async () => {
+    installProject()
+    const user = userEvent.setup()
+    useKoharuStore.setState({ settingsOpen: true })
+    const save = vi
+      .spyOn(commands, 'savePreferences')
+      .mockImplementation(async (pipeline, providers, typesetting) => ({
+        ...preferences,
+        pipeline,
+        providers: {
+          entries: providers.entries.map((entry) => ({
+            ...entry,
+            credential: entry.credential?.value
+              ? { configured: true, value: null, clear: false }
+              : entry.credential,
+          })),
+        },
+        typesetting,
+      }))
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsPage />
+      </ThemeProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Providers' }))
+    const input = screen.getByLabelText('DeepL credential')
+    await user.type(input, 's')
+    await waitFor(() => expect(save).toHaveBeenCalled())
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('DeepL credential')).toBe(input)
+      expect(input).toHaveFocus()
+      expect(input).toHaveValue('s')
+    })
   })
 
   it('clamps a threshold typed past its bounds before saving it', async () => {

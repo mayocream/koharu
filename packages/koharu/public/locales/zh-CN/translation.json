@@ -411,9 +411,7 @@
       "connectionsDescription": "凭据安全地存储在此设备上。",
       "credentialLabel": "{{provider}} 凭据",
       "description": "连接翻译和语言模型提供商。",
-      "hideCredential": "隐藏 {{provider}} 凭据",
       "notConfigured": "未配置",
-      "revealCredential": "显示 {{provider}} 凭据",
       "title": "提供商"
     },
     "shortcuts": {
