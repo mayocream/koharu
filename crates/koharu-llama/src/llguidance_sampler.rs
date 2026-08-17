@@ -17,9 +17,6 @@ use crate::token::LlamaToken;
 /// Internal state for the llguidance sampler.
 struct LlgContext {
     matcher: Matcher,
-    tok_env: Arc<ApproximateTokEnv>,
-    grammar_kind: String,
-    grammar_data: String,
 }
 
 /// Build a [`toktrie::TokEnv`] from a [`LlamaModel`]'s vocabulary.
@@ -94,11 +91,7 @@ unsafe extern "C" fn llg_apply(
     };
 
     let data = unsafe { std::slice::from_raw_parts_mut(cur_p.data, cur_p.size) };
-    for item in data.iter_mut() {
-        if !mask.is_allowed(item.id.cast_unsigned()) {
-            item.logit = f32::NEG_INFINITY;
-        }
-    }
+    mask.iter_unset_entries(|index| data[index].logit = f32::NEG_INFINITY);
 }
 
 unsafe extern "C" fn llg_reset(smpl: *mut koharu_llama_sys::llama_sampler) {
@@ -112,9 +105,6 @@ unsafe extern "C" fn llg_clone(
     let ctx = unsafe { &*(*smpl).ctx.cast::<LlgContext>() };
     let new_ctx = Box::new(LlgContext {
         matcher: ctx.matcher.deep_clone(),
-        tok_env: Arc::clone(&ctx.tok_env),
-        grammar_kind: ctx.grammar_kind.clone(),
-        grammar_data: ctx.grammar_data.clone(),
     });
     unsafe {
         koharu_llama_sys::llama_sampler_init(
@@ -152,12 +142,15 @@ pub(crate) fn create_llg_sampler(
     grammar_kind: &str,
     grammar_data: &str,
 ) -> Result<LlamaSampler, GrammarError> {
-    let tok_env = build_tok_env(model);
-    let tok_env_dyn: Arc<dyn toktrie::TokenizerEnv + Sync> = tok_env.clone();
-
-    let factory = llguidance::ParserFactory::new_simple(&tok_env_dyn)
+    let factory = model
+        .llguidance_factory
+        .get_or_init(|| {
+            let tok_env = build_tok_env(model);
+            let tok_env: Arc<dyn toktrie::TokenizerEnv + Sync> = tok_env;
+            llguidance::ParserFactory::new_simple(&tok_env).map_err(|_| GrammarError::NullGrammar)
+        })
+        .as_ref()
         .map_err(|_| GrammarError::NullGrammar)?;
-
     let grammar = llguidance::api::TopLevelGrammar::from_tagged_str(grammar_kind, grammar_data)
         .map_err(|_| GrammarError::NullGrammar)?;
 
@@ -167,12 +160,7 @@ pub(crate) fn create_llg_sampler(
 
     let matcher = Matcher::new(Ok(parser));
 
-    let ctx = Box::new(LlgContext {
-        matcher,
-        tok_env,
-        grammar_kind: grammar_kind.to_string(),
-        grammar_data: grammar_data.to_string(),
-    });
+    let ctx = Box::new(LlgContext { matcher });
 
     let sampler = unsafe {
         koharu_llama_sys::llama_sampler_init(

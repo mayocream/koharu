@@ -21,11 +21,20 @@ use crate::{
 pub mod params;
 
 /// A safe wrapper around `llama_model`.
-#[derive(Debug)]
-#[repr(transparent)]
 #[allow(clippy::module_name_repetitions)]
 pub struct LlamaModel {
     pub(crate) model: NonNull<koharu_llama_sys::llama_model>,
+    #[cfg(feature = "llguidance")]
+    pub(crate) llguidance_factory:
+        std::sync::OnceLock<std::result::Result<llguidance::ParserFactory, crate::GrammarError>>,
+}
+
+impl std::fmt::Debug for LlamaModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlamaModel")
+            .field("model", &self.model)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A safe wrapper around `llama_lora_adapter`.
@@ -767,7 +776,11 @@ impl LlamaModel {
         let model = NonNull::new(llama_model).ok_or(LlamaModelLoadError::NullResult)?;
 
         tracing::debug!(?path, "Loaded model");
-        Ok(LlamaModel { model })
+        Ok(LlamaModel {
+            model,
+            #[cfg(feature = "llguidance")]
+            llguidance_factory: std::sync::OnceLock::new(),
+        })
     }
 
     /// Initializes a lora adapter from a file.

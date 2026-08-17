@@ -494,7 +494,17 @@ impl Model {
         let mut samplers = Vec::new();
 
         if let Some(schema) = json_schema {
-            let schema = serde_json::to_string(schema)
+            let mut schema = schema.clone();
+            if let Some(schema) = schema.as_object_mut() {
+                schema.entry("x-guidance").or_insert_with(|| {
+                    serde_json::json!({
+                        "item_separator": ", ",
+                        "key_separator": ": ",
+                        "whitespace_flexible": false
+                    })
+                });
+            }
+            let schema = serde_json::to_string(&schema)
                 .context("failed to serialize structured output schema")?;
             samplers.push(
                 LlamaSampler::llguidance(&self.model, "json_schema", &schema)

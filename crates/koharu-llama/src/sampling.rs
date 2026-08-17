@@ -374,8 +374,8 @@ impl LlamaSampler {
 
     /// `LLGuidance` sampler for constrained decoding.
     ///
-    /// Uses the `llguidance` and `toktrie` Rust crates to enforce grammar constraints
-    /// during token sampling. Supports JSON schema, regex, Lark, and other grammar types.
+    /// Uses the `llguidance` and `toktrie` Rust crates to enforce grammar constraints during token
+    /// sampling. Add it before samplers that reorder or filter the complete candidate vocabulary.
     ///
     /// # Errors
     ///

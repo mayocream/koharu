@@ -121,7 +121,7 @@ impl<'a> ChatInput<'a> {
             return Ok(Self::Text(text));
         };
         Ok(Self::Items(vec![
-            InputItem::Message { content: text },
+            InputItem::Text { content: text },
             InputItem::Image {
                 data_url: encode_image(image)?.data_url(),
             },
@@ -132,7 +132,7 @@ impl<'a> ChatInput<'a> {
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum InputItem<'a> {
-    Message { content: &'a str },
+    Text { content: &'a str },
     Image { data_url: String },
 }
 
@@ -220,7 +220,7 @@ mod tests {
         let value = serde_json::to_value(input).unwrap();
         assert_eq!(
             value[0],
-            serde_json::json!({ "type": "message", "content": "translate" })
+            serde_json::json!({ "type": "text", "content": "translate" })
         );
         assert_eq!(value[1]["type"], "image");
         assert!(
