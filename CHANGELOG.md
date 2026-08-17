@@ -1,3 +1,14 @@
+## [0.70.5](https://github.com/mayocream/koharu/compare/0.70.4..0.70.5) - 2026-08-17
+
+### 🐛 Bug Fixes
+
+- *(macos)* Titlebar style - ([19ec24e](https://github.com/mayocream/koharu/commit/19ec24ee76764f1c2b4e6e8433f4a8fbb6bc0eb7))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(dev)* Fix macos development - ([2169d0d](https://github.com/mayocream/koharu/commit/2169d0d298e4f40003f9379990945a3049e68f2c))
+
+
 ## [0.70.4](https://github.com/mayocream/koharu/compare/0.70.3..0.70.4) - 2026-08-16
 
 
