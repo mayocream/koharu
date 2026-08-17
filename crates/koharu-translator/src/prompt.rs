@@ -1,4 +1,5 @@
 use anyhow::Context;
+use indoc::indoc;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::{Value, json};
 
@@ -78,30 +79,45 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         .map(|language| language.to_string())
         .unwrap_or_else(|| "the detected source language".to_owned());
     let mut prompt = format!(
-        concat!(
-            "You are a professional manga translator. ",
-            "Translate every input segment from {source} into natural {target}. ",
-            "Preserve character voice, emotional tone, relationship nuance, emphasis, and sound ",
-            "effects while keeping wording concise enough for speech bubbles. ",
-            "Each input segment has a numeric `id`. Return only a JSON object whose ",
-            "`translations` array contains one object with `id` and translated `text` for every ",
-            "input segment. Copy every input ID exactly once; order does not matter. Never merge, ",
-            "split, omit, or add segments."
-        ),
+        indoc! {"
+            You are a professional manga translator.
+
+            Translation requirements:
+            - Translate every input segment from {source} into natural {target}.
+            - Preserve meaning, character voice, emotional tone, relationship nuance, emphasis, and sound effects.
+            - Localize idioms and sound effects naturally while keeping wording concise enough for speech bubbles.
+            - Use surrounding segments only for disambiguation and continuity; never merge or split segments.
+            - Write every translated `text` value only in {target}; do not include source text, notes, explanations, or alternatives.
+            - Never preserve or repeat original-language text; translate names, terms, and sound effects using natural {target} conventions.
+
+            Output requirements:
+            - Each input segment has a numeric `id`.
+            - Return only a JSON object whose `translations` array contains one object with `id` and translated `text` for every input segment.
+            - Copy every input ID exactly once; order does not matter.
+            - Never merge, split, omit, duplicate, or add segments.
+        "},
         source = source,
         target = request.target_language,
-    );
+    )
+    .trim_end()
+    .to_owned();
 
     if !request.context.is_empty() {
-        prompt.push_str(
-            " Use the supplied context only to preserve terminology, character voice, and dialogue continuity. Do not translate or return the context entries.",
-        );
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Context requirements:
+            Use the supplied context only to preserve terminology, character voice, and dialogue continuity.
+            Do not translate or return the context entries.
+        "}.trim_end());
     }
 
     if request.image.is_some() {
-        prompt.push_str(
-            " Use the attached original page image as visual context for speaker identity, tone, layout, and ambiguous OCR. Translate only the supplied segments; do not add text seen in the image that is absent from the input segments.",
-        );
+        prompt.push_str("\n\n");
+        prompt.push_str(indoc! {"
+            Image requirements:
+            Use the attached original page image as visual context for speaker identity, tone, layout, and ambiguous OCR.
+            Translate only the supplied segments; do not add text seen in the image that is absent from the input segments.
+        "}.trim_end());
     }
 
     if let Some(instructions) = request
@@ -110,7 +126,7 @@ fn translation_system_prompt(request: &TranslationRequest) -> String {
         .map(str::trim)
         .filter(|instructions| !instructions.is_empty())
     {
-        prompt.push_str(" Additional instructions: ");
+        prompt.push_str("\n\nAdditional instructions:\n");
         prompt.push_str(instructions);
     }
     prompt
