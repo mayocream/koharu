@@ -1,4 +1,4 @@
-//! Unicode line breaking with optional Chinese segmentation and hyphenation.
+//! Unicode line breaking with language-aware segmentation and optional hyphenation.
 
 use std::{ops::Range, sync::LazyLock};
 
@@ -7,7 +7,10 @@ use icu_properties::{
     CodePointMapData,
     props::{LineBreak, Script as IcuScript},
 };
-use icu_segmenter::{LineSegmenter, LineSegmenterBorrowed, options::LineBreakOptions};
+use icu_segmenter::{
+    LineSegmenter, LineSegmenterBorrowed,
+    options::{LineBreakOptions, LineBreakWordOption},
+};
 use jieba_rs::Jieba;
 
 static JIEBA: LazyLock<Jieba> = LazyLock::new(Jieba::new);
@@ -85,8 +88,8 @@ impl HyphenationOptions {
 /// Line breaker using ICU4X.
 pub struct LineBreaker {
     segmenter: LineSegmenterBorrowed<'static>,
+    korean_segmenter: LineSegmenterBorrowed<'static>,
     hyphenation: Option<HyphenationOptions>,
-    chinese_word_segmentation: bool,
 }
 
 fn trim_mandatory_break_suffix(text: &str, start: usize, end: usize) -> usize {
@@ -104,25 +107,16 @@ fn trim_mandatory_break_suffix(text: &str, start: usize, end: usize) -> usize {
 }
 
 impl LineBreaker {
-    /// Creates a line breaker with ICU's default rules.
+    /// Creates a language-aware line breaker.
     #[must_use]
     pub fn new() -> Self {
+        let korean_options = &mut LineBreakOptions::default();
+        korean_options.word_option = Some(LineBreakWordOption::KeepAll);
         Self {
             segmenter: LineSegmenter::new_auto(LineBreakOptions::default()),
+            korean_segmenter: LineSegmenter::new_auto(*korean_options),
             hyphenation: None,
-            chinese_word_segmentation: false,
         }
-    }
-
-    /// Keep Chinese Jieba words together when selecting discretionary line breaks.
-    ///
-    /// ICU still supplies the base Unicode line-break rules; this pass only
-    /// removes non-mandatory break opportunities that fall inside likely
-    /// Chinese word tokens.
-    #[must_use]
-    pub fn with_chinese_word_segmentation(mut self) -> Self {
-        self.chinese_word_segmentation = true;
-        self
     }
 
     /// Enable pattern-based discretionary word hyphenation.
@@ -134,8 +128,12 @@ impl LineBreaker {
 
     /// Returns a vector of line break opportunities in the given text.
     pub fn line_break_opportunities(&self, text: &str) -> Vec<LineBreakOpportunity> {
-        let opportunities = self
-            .segmenter
+        let segmenter = if contains_korean(text) {
+            &self.korean_segmenter
+        } else {
+            &self.segmenter
+        };
+        let opportunities = segmenter
             .segment_str(text)
             .map(|break_pos| LineBreakOpportunity {
                 offset: break_pos,
@@ -151,8 +149,8 @@ impl LineBreaker {
             })
             .collect();
 
-        if self.chinese_word_segmentation && should_segment_as_chinese(text) {
-            apply_chinese_word_segmentation(text, opportunities)
+        if contains_chinese(text) {
+            apply_protected_ranges(opportunities, &chinese_word_ranges(text))
         } else {
             opportunities
         }
@@ -254,11 +252,10 @@ pub fn hyphenation_lang_from_tag(value: &str) -> Option<Lang> {
     Lang::from_iso(primary.as_bytes().try_into().ok()?)
 }
 
-fn apply_chinese_word_segmentation(
-    text: &str,
+fn apply_protected_ranges(
     opportunities: Vec<LineBreakOpportunity>,
+    protected_ranges: &[Range<usize>],
 ) -> Vec<LineBreakOpportunity> {
-    let protected_ranges = chinese_word_ranges(text);
     if protected_ranges.is_empty() {
         return opportunities;
     }
@@ -285,41 +282,27 @@ fn chinese_word_ranges(text: &str) -> Vec<Range<usize>> {
             let end = start + word.len();
             offset = end;
 
-            is_chinese_word_token(word).then_some(start..end)
+            contains_chinese(word).then_some(start..end)
         })
         .collect()
 }
 
-fn should_segment_as_chinese(text: &str) -> bool {
+fn contains_korean(text: &str) -> bool {
     let script_map = CodePointMapData::<IcuScript>::new();
-    let mut has_chinese = false;
-
-    for ch in text.chars() {
-        match script_map.get(ch) {
-            IcuScript::Han | IcuScript::Bopomofo => has_chinese = true,
-            IcuScript::Hiragana | IcuScript::Katakana => return false,
-            _ => {}
-        }
-    }
-
-    has_chinese
+    text.chars()
+        .any(|ch| script_map.get(ch) == IcuScript::Hangul)
 }
 
-fn is_chinese_word_token(word: &str) -> bool {
+fn contains_chinese(text: &str) -> bool {
     let script_map = CodePointMapData::<IcuScript>::new();
-    let mut has_chinese = false;
-    let mut char_count = 0usize;
-
-    for ch in word.chars() {
-        char_count += 1;
-        match script_map.get(ch) {
-            IcuScript::Han | IcuScript::Bopomofo => has_chinese = true,
-            IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Hangul => return false,
-            _ => {}
-        }
-    }
-
-    has_chinese && char_count > 1
+    text.chars()
+        .map(|ch| script_map.get(ch))
+        .try_fold(false, |has_chinese, script| match script {
+            IcuScript::Han | IcuScript::Bopomofo => Some(true),
+            IcuScript::Hiragana | IcuScript::Katakana | IcuScript::Hangul => None,
+            _ => Some(has_chinese),
+        })
+        .unwrap_or(false)
 }
 
 fn hyphenatable_word_bounds(text: &str) -> Option<(usize, usize)> {
@@ -400,7 +383,7 @@ mod tests {
     #[test]
     fn chinese_word_segmentation_keeps_jieba_words_together() {
         let text = "\u{5357}\u{4eac}\u{5e02}\u{957f}\u{6c5f}\u{5927}\u{6865}";
-        let linebreaker = LineBreaker::new().with_chinese_word_segmentation();
+        let linebreaker = LineBreaker::new();
         let segments: Vec<&str> = linebreaker
             .line_segments(text)
             .iter()
@@ -419,7 +402,7 @@ mod tests {
     #[test]
     fn chinese_word_segmentation_preserves_icu_punctuation_rules() {
         let text = "\u{5c0f}\u{8bf4}\u{ff0c}\u{4f60}\u{597d}";
-        let linebreaker = LineBreaker::new().with_chinese_word_segmentation();
+        let linebreaker = LineBreaker::new();
         let segments: Vec<&str> = linebreaker
             .line_segments(text)
             .iter()
@@ -435,7 +418,7 @@ mod tests {
     #[test]
     fn chinese_word_segmentation_does_not_resegment_kana_text() {
         let text = "\u{543e}\u{8f29}\u{306f}\u{732b}";
-        let linebreaker = LineBreaker::new().with_chinese_word_segmentation();
+        let linebreaker = LineBreaker::new();
         let segments: Vec<&str> = linebreaker
             .line_segments(text)
             .iter()
@@ -445,6 +428,21 @@ mod tests {
         assert_eq!(
             segments,
             vec!["\u{543e}", "\u{8f29}", "\u{306f}", "\u{732b}",]
+        );
+    }
+
+    #[test]
+    fn korean_word_segmentation_uses_keep_all() {
+        let text = "B6층 모험가들이 돌아갔으니까 청소 부탁해";
+        let segments = LineBreaker::new()
+            .line_segments(text)
+            .iter()
+            .map(|segment| &text[segment.range.clone()])
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            segments,
+            vec!["B6층 ", "모험가들이 ", "돌아갔으니까 ", "청소 ", "부탁해"]
         );
     }
 
@@ -613,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn mixed_language_breaks_02() {
+    fn mixed_chinese_language_breaks_use_jieba() {
         let text = "《我是猫》是日本作家夏目漱石创作的长篇小说，也是其代表作，它确立了夏目漱石在文学史上的地位。作品淋漓尽致地反映了二十世纪初，日本中小资产阶级的思想和生活，尖锐地揭露和批判了明治“文明开化”的资本主义社会。小说采用幽默、讽刺、滑稽的手法，借助一只猫的视觉、听觉、感觉，嘲笑了明治时代知识分子空虚的精神生活，小说构思奇巧，描写夸张，结构灵活，具有鲜明的艺术特色。";
         let linebreaker = LineBreaker::new();
         let breaks = linebreaker.line_break_opportunities(text);
@@ -623,7 +621,7 @@ mod tests {
             .collect();
         #[rustfmt::skip]
         let expected = vec![
-            "《我", "是", "猫》", "是", "日", "本", "作", "家", "夏", "目", "漱", "石", "创", "作", "的", "长", "篇", "小", "说，", "也", "是", "其", "代", "表", "作，", "它", "确", "立", "了", "夏", "目", "漱", "石", "在", "文", "学", "史", "上", "的", "地", "位。", "作", "品", "淋", "漓", "尽", "致", "地", "反", "映", "了", "二", "十", "世", "纪", "初，", "日", "本", "中", "小", "资", "产", "阶", "级", "的", "思", "想", "和", "生", "活，", "尖", "锐", "地", "揭", "露", "和", "批", "判", "了", "明", "治“文", "明", "开", "化”的", "资", "本", "主", "义", "社", "会。", "小", "说", "采", "用", "幽", "默、", "讽", "刺、", "滑", "稽", "的", "手", "法，", "借", "助", "一", "只", "猫", "的", "视", "觉、", "听", "觉、", "感", "觉，", "嘲", "笑", "了", "明", "治", "时", "代", "知", "识", "分", "子", "空", "虚", "的", "精", "神", "生", "活，", "小", "说", "构", "思", "奇", "巧，", "描", "写", "夸", "张，", "结", "构", "灵", "活，", "具", "有", "鲜", "明", "的", "艺", "术", "特", "色。"
+            "《我", "是", "猫》", "是", "日本", "作家", "夏目漱石", "创作", "的", "长篇小说，", "也", "是", "其", "代表作，", "它", "确立", "了", "夏目漱石", "在", "文学史", "上", "的", "地位。", "作品", "淋漓尽致", "地", "反映", "了", "二十世纪", "初，", "日本", "中小", "资产阶级", "的", "思想", "和", "生活，", "尖锐", "地", "揭露", "和", "批判", "了", "明治“文明", "开化”的", "资本主义", "社会。", "小说", "采用", "幽默、", "讽刺、", "滑稽", "的", "手法，", "借助", "一只", "猫", "的", "视觉、", "听觉、", "感觉，", "嘲笑", "了", "明治", "时代", "知识分子", "空虚", "的", "精神", "生活，", "小说", "构思", "奇巧，", "描写", "夸张，", "结构", "灵活，", "具有", "鲜明", "的", "艺术", "特色。"
         ];
         assert_eq!(segments, expected);
     }

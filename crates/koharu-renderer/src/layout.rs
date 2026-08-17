@@ -496,7 +496,7 @@ impl<'a> TextLayout<'a> {
 
     fn run_with_size(&self, text: &str, font_size: f32) -> Result<LayoutRun<'a>> {
         let shaper = TextShaper::new();
-        let mut line_breaker = LineBreaker::new().with_chinese_word_segmentation();
+        let mut line_breaker = LineBreaker::new();
         if !self.writing_mode.is_vertical()
             && self.hyphenation_policy != HyphenationPolicy::Disabled
             && let Some(lang) = self.hyphenation_lang
