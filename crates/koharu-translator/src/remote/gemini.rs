@@ -1,8 +1,7 @@
 // Ported from:
 // https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/gemini.rs
-// Model catalog:
-// https://ai.google.dev/gemini-api/docs/models
-// https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api
+// Model discovery:
+// https://ai.google.dev/api/models
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
@@ -22,35 +21,55 @@ const ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 #[serde(default)]
 pub struct GeminiConfig {}
 
-// General-purpose models that support generateContent with text output.
-pub(super) static MODELS: &[(&str, &str)] = &[
-    ("gemini-flash-lite-latest", "Gemini Flash-Lite Latest"),
-    ("gemini-flash-latest", "Gemini Flash Latest"),
-    ("gemini-pro-latest", "Gemini Pro Latest"),
-    ("gemini-3.7-flash", "Gemini 3.7 Flash"),
-    ("gemini-3.6-flash", "Gemini 3.6 Flash"),
-    ("gemini-3.5-flash", "Gemini 3.5 Flash"),
-    ("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite"),
-    ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"),
-    (
-        "gemini-3.1-pro-preview-customtools",
-        "Gemini 3.1 Pro Preview Custom Tools",
-    ),
-    ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite"),
-    ("gemini-3-flash-preview", "Gemini 3 Flash Preview"),
-    ("gemini-2.5-pro", "Gemini 2.5 Pro"),
-    ("gemini-2.5-flash", "Gemini 2.5 Flash"),
-    ("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"),
-    ("gemma-4-31b-it", "Gemma 4 31B IT"),
-    ("gemma-4-26b-a4b-it", "Gemma 4 26B A4B IT"),
-];
+pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
+    let Some(api_key) = koharu_secrets::get("gemini")? else {
+        return Ok(Vec::new());
+    };
+    let mut url = Url::parse(ROOT).expect("Gemini API root is valid");
+    url.query_pairs_mut()
+        .append_pair("key", api_key.expose_secret())
+        .append_pair("pageSize", "1000");
+    let response: ModelsResponse = send_json("gemini", client.get(url)).await?;
+    Ok(response
+        .models
+        .into_iter()
+        .filter(|model| {
+            model
+                .supported_generation_methods
+                .iter()
+                .any(|method| method == "generateContent")
+                && supports_translation(&model.name)
+        })
+        .filter_map(|model| {
+            model.name.strip_prefix("models/").map(|id| Model {
+                provider: Provider::Gemini,
+                model: Some(id.to_owned()),
+                name: model.display_name,
+                quantizations: Vec::new(),
+                vision: true,
+            })
+        })
+        .collect())
+}
 
-pub(super) async fn models() -> Result<Vec<Model>> {
-    Ok(if koharu_secrets::get("gemini")?.is_some() {
-        Model::catalog(Provider::Gemini, MODELS, true)
-    } else {
-        Vec::new()
-    })
+fn supports_translation(id: &str) -> bool {
+    ![
+        "antigravity",
+        "computer-use",
+        "deep-research",
+        "embedding",
+        "image",
+        "imagen",
+        "live",
+        "lyria",
+        "native-audio",
+        "omni",
+        "robotics",
+        "tts",
+        "veo",
+    ]
+    .iter()
+    .any(|marker| id.contains(marker))
 }
 
 pub(super) async fn translate(
@@ -184,6 +203,19 @@ struct ResponsePart {
     text: String,
 }
 
+#[derive(Deserialize)]
+struct ModelsResponse {
+    models: Vec<ListedModel>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListedModel {
+    name: String,
+    display_name: String,
+    supported_generation_methods: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +247,13 @@ mod tests {
         assert_eq!(value["parts"][0]["text"], "translate");
         assert_eq!(value["parts"][1]["inlineData"]["mimeType"], "image/jpeg");
         assert!(value["parts"][1]["inlineData"]["data"].is_string());
+    }
+
+    #[test]
+    fn filters_specialized_generate_content_models() {
+        assert!(supports_translation("models/gemini-3.7-flash"));
+        assert!(supports_translation("models/gemma-4-31b-it"));
+        assert!(!supports_translation("models/gemini-3.1-flash-image"));
+        assert!(!supports_translation("models/gemini-3.1-flash-tts-preview"));
     }
 }

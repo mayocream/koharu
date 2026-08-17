@@ -1,4 +1,5 @@
 // https://platform.minimax.io/docs/api-reference/text-post
+// https://platform.minimax.io/docs/api-reference/models/openai/list-models
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
@@ -6,31 +7,36 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use super::send_json;
-use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, prompt};
+use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, display_name, prompt};
 
 // MiniMax recommends compatibility APIs, but this provider intentionally uses its native route.
 const URL: &str = "https://api.minimax.io/v1/text/chatcompletion_v2";
+const MODELS_URL: &str = "https://api.minimax.io/v1/models";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(default)]
 pub struct MiniMaxConfig {}
 
-pub(super) static MODELS: &[(&str, &str)] = &[
-    ("MiniMax-M3", "MiniMax M3"),
-    ("MiniMax-M2.7", "MiniMax M2.7"),
-    ("MiniMax-M2.7-highspeed", "MiniMax M2.7 Highspeed"),
-    ("MiniMax-M2.5", "MiniMax M2.5"),
-    ("MiniMax-M2.5-highspeed", "MiniMax M2.5 Highspeed"),
-    ("MiniMax-M2.1", "MiniMax M2.1"),
-    ("MiniMax-M2", "MiniMax M2"),
-];
-
-pub(super) async fn models() -> Result<Vec<Model>> {
-    Ok(if koharu_secrets::get("minimax")?.is_some() {
-        Model::catalog(Provider::MiniMax, MODELS, false)
-    } else {
-        Vec::new()
-    })
+pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
+    let Some(api_key) = koharu_secrets::get("minimax")? else {
+        return Ok(Vec::new());
+    };
+    let response: ModelsResponse = send_json(
+        "minimax",
+        client.get(MODELS_URL).bearer_auth(api_key.expose_secret()),
+    )
+    .await?;
+    Ok(response
+        .data
+        .into_iter()
+        .map(|model| Model {
+            provider: Provider::MiniMax,
+            name: display_name(&model.id),
+            model: Some(model.id),
+            quantizations: Vec::new(),
+            vision: false,
+        })
+        .collect())
 }
 
 pub(super) async fn translate(
@@ -117,6 +123,16 @@ struct Choice {
 #[derive(Deserialize)]
 struct ResponseMessage {
     content: String,
+}
+
+#[derive(Deserialize)]
+struct ModelsResponse {
+    data: Vec<ListedModel>,
+}
+
+#[derive(Deserialize)]
+struct ListedModel {
+    id: String,
 }
 
 #[derive(Default, Deserialize)]

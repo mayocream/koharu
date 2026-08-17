@@ -108,12 +108,12 @@ pub(crate) async fn models(client: &Client, providers: &ProvidersConfig) -> Vec<
     let mut models = Vec::new();
     let pending: Vec<BoxFuture<'_, Result<Vec<Model>>>> = vec![
         atlas_cloud::models(client).boxed(),
-        openai::models().boxed(),
-        gemini::models().boxed(),
-        claude::models().boxed(),
+        openai::models(client).boxed(),
+        gemini::models(client).boxed(),
+        claude::models(client).boxed(),
         grok::models(client).boxed(),
-        minimax::models().boxed(),
-        deepseek::models().boxed(),
+        minimax::models(client).boxed(),
+        deepseek::models(client).boxed(),
         openai_compatible::models(client, &providers.openai_compatible).boxed(),
         openrouter::models(client).boxed(),
         lm_studio::models(client, &providers.lm_studio).boxed(),

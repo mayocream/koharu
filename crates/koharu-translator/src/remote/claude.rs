@@ -1,7 +1,7 @@
 // Ported from:
 // https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/claude.rs
-// Model catalog:
-// https://platform.claude.com/docs/en/about-claude/model-deprecations
+// Model discovery:
+// https://platform.claude.com/docs/en/api/models/list
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
@@ -14,34 +14,35 @@ use crate::{
 };
 
 const URL: &str = "https://api.anthropic.com/v1/messages";
+const MODELS_URL: &str = "https://api.anthropic.com/v1/models?limit=1000";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(default)]
 pub struct ClaudeConfig {}
 
-// Active, generally available Messages models and their accepted 4.5 aliases.
-pub(super) static MODELS: &[(&str, &str)] = &[
-    ("claude-fable-5", "Claude Fable 5"),
-    ("claude-opus-5", "Claude Opus 5"),
-    ("claude-opus-4-8", "Claude Opus 4.8"),
-    ("claude-sonnet-5", "Claude Sonnet 5"),
-    ("claude-haiku-4-5", "Claude Haiku 4.5"),
-    ("claude-opus-4-7", "Claude Opus 4.7"),
-    ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
-    ("claude-opus-4-6", "Claude Opus 4.6"),
-    ("claude-opus-4-5", "Claude Opus 4.5"),
-    ("claude-opus-4-5-20251101", "Claude Opus 4.5 Snapshot"),
-    ("claude-sonnet-4-5", "Claude Sonnet 4.5"),
-    ("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5 Snapshot"),
-    ("claude-haiku-4-5-20251001", "Claude Haiku 4.5 Snapshot"),
-];
-
-pub(super) async fn models() -> Result<Vec<Model>> {
-    Ok(if koharu_secrets::get("claude")?.is_some() {
-        Model::catalog(Provider::Claude, MODELS, true)
-    } else {
-        Vec::new()
-    })
+pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
+    let Some(api_key) = koharu_secrets::get("claude")? else {
+        return Ok(Vec::new());
+    };
+    let response: ModelsResponse = send_json(
+        "claude",
+        client
+            .get(MODELS_URL)
+            .header("x-api-key", api_key.expose_secret())
+            .header("anthropic-version", "2023-06-01"),
+    )
+    .await?;
+    Ok(response
+        .data
+        .into_iter()
+        .map(|model| Model {
+            provider: Provider::Claude,
+            model: Some(model.id),
+            name: model.display_name,
+            quantizations: Vec::new(),
+            vision: model.capabilities.image_input.supported,
+        })
+        .collect())
 }
 
 pub(super) async fn translate(
@@ -154,6 +155,28 @@ struct Content {
     #[serde(rename = "type")]
     kind: String,
     text: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ModelsResponse {
+    data: Vec<ListedModel>,
+}
+
+#[derive(Deserialize)]
+struct ListedModel {
+    id: String,
+    display_name: String,
+    capabilities: ModelCapabilities,
+}
+
+#[derive(Deserialize)]
+struct ModelCapabilities {
+    image_input: CapabilitySupport,
+}
+
+#[derive(Deserialize)]
+struct CapabilitySupport {
+    supported: bool,
 }
 
 #[cfg(test)]

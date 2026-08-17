@@ -55,19 +55,6 @@ pub struct Model {
 }
 
 impl Model {
-    pub(crate) fn catalog(provider: Provider, entries: &[(&str, &str)], vision: bool) -> Vec<Self> {
-        entries
-            .iter()
-            .map(|&(model, name)| Self {
-                provider,
-                model: Some(model.to_owned()),
-                name: name.to_owned(),
-                quantizations: Vec::new(),
-                vision,
-            })
-            .collect()
-    }
-
     pub(crate) fn service(provider: Provider, name: &str) -> Self {
         Self {
             provider,

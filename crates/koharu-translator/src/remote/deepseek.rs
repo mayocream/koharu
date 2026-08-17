@@ -1,29 +1,41 @@
-// https://api-docs.deepseek.com/quick_start/pricing
+// https://api-docs.deepseek.com/api/list-models
 
 use anyhow::Context;
 use koharu_secrets::ExposeSecret;
 use reqwest::Client;
+use serde::Deserialize;
 
 use super::openai_compatible::{ChatBackend, ResponseMode};
-use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest};
+use super::send_json;
+use crate::{GenerationConfig, Model, Provider, Result, TranslationRequest, display_name};
 
 const URL: &str = "https://api.deepseek.com/chat/completions";
+const MODELS_URL: &str = "https://api.deepseek.com/models";
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(default)]
 pub struct DeepSeekConfig {}
 
-pub(super) static MODELS: &[(&str, &str)] = &[
-    ("deepseek-v4-flash", "DeepSeek V4 Flash"),
-    ("deepseek-v4-pro", "DeepSeek V4 Pro"),
-];
-
-pub(super) async fn models() -> Result<Vec<Model>> {
-    Ok(if koharu_secrets::get("deepseek")?.is_some() {
-        Model::catalog(Provider::DeepSeek, MODELS, false)
-    } else {
-        Vec::new()
-    })
+pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
+    let Some(api_key) = koharu_secrets::get("deepseek")? else {
+        return Ok(Vec::new());
+    };
+    let response: ModelsResponse = send_json(
+        "deepseek",
+        client.get(MODELS_URL).bearer_auth(api_key.expose_secret()),
+    )
+    .await?;
+    Ok(response
+        .data
+        .into_iter()
+        .map(|model| Model {
+            provider: Provider::DeepSeek,
+            name: display_name(&model.id),
+            model: Some(model.id),
+            quantizations: Vec::new(),
+            vision: false,
+        })
+        .collect())
 }
 
 pub(super) async fn translate(
@@ -49,4 +61,14 @@ pub(super) async fn translate(
         "disabled"
     });
     super::openai_compatible::translate(client, backend, request).await
+}
+
+#[derive(Deserialize)]
+struct ModelsResponse {
+    data: Vec<ListedModel>,
+}
+
+#[derive(Deserialize)]
+struct ListedModel {
+    id: String,
 }
