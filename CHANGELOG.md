@@ -1,3 +1,23 @@
+## [0.73.0](https://github.com/mayocream/koharu/compare/0.72.0..0.73.0) - 2026-08-17
+
+### ⛰️  Features
+
+- *(ocr)* Tighten PaddleOCR-VL sampling - ([653eb14](https://github.com/mayocream/koharu/commit/653eb14b02d23693a036a5e9f5391a97b572f9c1))
+- *(translator)* Tune local model sampling - ([9962e14](https://github.com/mayocream/koharu/commit/9962e14c1a4ac77bfc102eb97275bdde37fc30f8))
+- *(translator)* Strengthen translation prompt - ([efb28e3](https://github.com/mayocream/koharu/commit/efb28e3054344035ca1cf35e1d439b1a0b3f0160))
+- Sort projects by recent activity - ([43d6930](https://github.com/mayocream/koharu/commit/43d69300482422ae5835baaf9bcf83a9e8b14c8a))
+- Sort projects by recent use - ([369de57](https://github.com/mayocream/koharu/commit/369de5704aa8d7882f4d7dc1e0a60153ec6b5045))
+
+### 🐛 Bug Fixes
+
+- Refine provider and translation settings - ([138b2ff](https://github.com/mayocream/koharu/commit/138b2ff68ddc7af087845547fbd11a030799cb45))
+- Improve provider credential controls - ([a09f25d](https://github.com/mayocream/koharu/commit/a09f25d382628b3c7f5343c87e02acf8cb5bf7e0))
+
+### ⚡ Performance
+
+- *(translator)* Optimize structured inference - ([e47620c](https://github.com/mayocream/koharu/commit/e47620c06479b6d3e422687dc048289fed8b1abf))
+
+
 ## [0.72.0](https://github.com/mayocream/koharu/compare/0.71.0..0.72.0) - 2026-08-17
 
 ### ⛰️  Features
