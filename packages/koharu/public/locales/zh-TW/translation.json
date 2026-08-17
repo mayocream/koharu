@@ -325,8 +325,10 @@
     "deepseek": "DeepSeek 語言模型。",
     "gemini": "Google Gemini 模型。",
     "google-cloud-translation": "Google Cloud Translation API。",
+    "grok": "xAI Grok 語言模型。",
     "lm-studio": "由 LM Studio 提供的模型。",
     "local": "在此裝置上執行的模型。",
+    "minimax": "MiniMax 語言模型。",
     "openai": "OpenAI 語言模型。",
     "openai-compatible": "任何提供 OpenAI 相容 API 的伺服器。",
     "openrouter": "透過 OpenRouter 路由的模型。"

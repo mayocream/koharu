@@ -5,7 +5,9 @@ mod deepl;
 mod deepseek;
 mod gemini;
 mod google_cloud;
+mod grok;
 mod lm_studio;
+mod minimax;
 mod openai;
 mod openai_compatible;
 mod openrouter;
@@ -22,7 +24,9 @@ pub use deepl::DeepLConfig;
 pub use deepseek::DeepSeekConfig;
 pub use gemini::GeminiConfig;
 pub use google_cloud::GoogleCloudConfig;
+pub use grok::GrokConfig;
 pub use lm_studio::LmStudioConfig;
+pub use minimax::MiniMaxConfig;
 pub use openai::OpenAiConfig;
 pub use openai_compatible::OpenAiCompatibleConfig;
 pub use openrouter::OpenRouterConfig;
@@ -65,6 +69,12 @@ pub(crate) async fn translate(
         Provider::Claude => {
             claude::translate(client, &providers.claude, model()?, generation, request).await
         }
+        Provider::Grok => {
+            grok::translate(client, &providers.grok, model()?, generation, request).await
+        }
+        Provider::MiniMax => {
+            minimax::translate(client, &providers.minimax, model()?, generation, request).await
+        }
         Provider::DeepSeek => {
             deepseek::translate(client, &providers.deepseek, model()?, generation, request).await
         }
@@ -101,6 +111,8 @@ pub(crate) async fn models(client: &Client, providers: &ProvidersConfig) -> Vec<
         openai::models().boxed(),
         gemini::models().boxed(),
         claude::models().boxed(),
+        grok::models(client).boxed(),
+        minimax::models().boxed(),
         deepseek::models().boxed(),
         openai_compatible::models(client, &providers.openai_compatible).boxed(),
         openrouter::models(client).boxed(),

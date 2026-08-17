@@ -111,6 +111,8 @@ fn prepare_secret(args: &Args, provider: Provider) -> Result<()> {
         Provider::OpenAi => Some(("OPENAI_API_KEY", true)),
         Provider::Gemini => Some(("GEMINI_API_KEY", true)),
         Provider::Claude => Some(("ANTHROPIC_API_KEY", true)),
+        Provider::Grok => Some(("XAI_API_KEY", true)),
+        Provider::MiniMax => Some(("MINIMAX_API_KEY", true)),
         Provider::DeepSeek => Some(("DEEPSEEK_API_KEY", true)),
         Provider::OpenAiCompatible => Some(("OPENAI_COMPATIBLE_API_KEY", false)),
         Provider::OpenRouter => Some(("OPENROUTER_API_KEY", true)),

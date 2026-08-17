@@ -325,8 +325,10 @@
     "deepseek": "DeepSeek language models.",
     "gemini": "Google Gemini models.",
     "google-cloud-translation": "Google Cloud Translation API.",
+    "grok": "xAI Grok language models.",
     "lm-studio": "Models served by LM Studio.",
     "local": "Models running on this device.",
+    "minimax": "MiniMax language models.",
     "openai": "OpenAI language models.",
     "openai-compatible": "Any server exposing an OpenAI-compatible API.",
     "openrouter": "Models routed through OpenRouter."

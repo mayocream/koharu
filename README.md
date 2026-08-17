@@ -111,7 +111,7 @@ Koharu has a flexible LLM backend that can run locally or connect to a remote AP
 
 #### Cloud Providers
 
-Koharu supports hosted APIs from [Atlas Cloud](https://www.atlascloud.ai/), [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/).
+Koharu supports hosted APIs from [Atlas Cloud](https://www.atlascloud.ai/), [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [Grok](https://docs.x.ai/developers), [MiniMax](https://platform.minimax.io/), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/).
 
 #### Machine Translation Providers
 

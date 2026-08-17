@@ -325,8 +325,10 @@
     "deepseek": "DeepSeek dil modelleri.",
     "gemini": "Google Gemini modelleri.",
     "google-cloud-translation": "Google Cloud Translation API'si.",
+    "grok": "xAI Grok dil modelleri.",
     "lm-studio": "LM Studio tarafından sunulan modeller.",
     "local": "Bu cihazda çalışan modeller.",
+    "minimax": "MiniMax dil modelleri.",
     "openai": "OpenAI dil modelleri.",
     "openai-compatible": "OpenAI uyumlu API sunan herhangi bir sunucu.",
     "openrouter": "OpenRouter üzerinden yönlendirilen modeller."

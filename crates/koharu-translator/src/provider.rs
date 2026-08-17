@@ -7,7 +7,8 @@ use crate::{
     local::LocalConfig,
     remote::{
         AtlasCloudConfig, CaiyunConfig, ClaudeConfig, DeepLConfig, DeepSeekConfig, GeminiConfig,
-        GoogleCloudConfig, LmStudioConfig, OpenAiCompatibleConfig, OpenAiConfig, OpenRouterConfig,
+        GoogleCloudConfig, GrokConfig, LmStudioConfig, MiniMaxConfig, OpenAiCompatibleConfig,
+        OpenAiConfig, OpenRouterConfig,
     },
 };
 
@@ -143,6 +144,18 @@ define_providers! {
         name: "Claude",
         field: claude,
         config: ClaudeConfig,
+    }
+    Grok {
+        id: "grok",
+        name: "Grok",
+        field: grok,
+        config: GrokConfig,
+    }
+    MiniMax {
+        id: "minimax",
+        name: "MiniMax",
+        field: minimax,
+        config: MiniMaxConfig,
     }
     DeepSeek {
         id: "deepseek",

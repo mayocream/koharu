@@ -325,8 +325,10 @@
     "deepseek": "DeepSeek 言語モデル。",
     "gemini": "Google Gemini モデル。",
     "google-cloud-translation": "Google Cloud Translation API。",
+    "grok": "xAI Grok 言語モデル。",
     "lm-studio": "LM Studio で提供されるモデル。",
     "local": "このデバイスで実行するモデル。",
+    "minimax": "MiniMax 言語モデル。",
     "openai": "OpenAI の言語モデル。",
     "openai-compatible": "OpenAI 互換 API を公開する任意のサーバー。",
     "openrouter": "OpenRouter 経由で提供されるモデル。"

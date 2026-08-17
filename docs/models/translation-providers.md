@@ -12,7 +12,7 @@ Koharu presents one model picker across local and hosted translation backends. A
 The current provider set includes:
 
 - **Local** GGUF models through llama.cpp;
-- **Atlas Cloud**, **OpenAI**, **Gemini**, **Claude**, and **DeepSeek**;
+- **Atlas Cloud**, **OpenAI**, **Gemini**, **Claude**, **Grok**, **MiniMax**, and **DeepSeek**;
 - **OpenRouter**;
 - **LM Studio** and a generic **OpenAI-compatible** endpoint;
 - **DeepL**, **Google Cloud Translation**, and **Caiyun**.
