@@ -111,7 +111,7 @@ protect_breaking_commits = false
 # Exclude commits that are not matched by any commit parser.
 filter_commits = false
 # Regex to select git tags that represent releases.
-tag_pattern = "[0-9].*"
+tag_pattern = '^[0-9]+\.[0-9]+\.[0-9]+$'
 # Regex to select git tags that do not represent proper releases.
 # Takes precedence over `tag_pattern`.
 # Changes belonging to these releases will be included in the next release.

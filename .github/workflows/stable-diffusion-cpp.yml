@@ -2,11 +2,8 @@ name: stable-diffusion.cpp
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: stable-diffusion.cpp branch or tag to build
-        required: true
-        default: master-820-de298c2
+  schedule:
+    - cron: '47 3 * * *'
   push:
     branches: ['main']
     paths:
@@ -23,11 +20,24 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  REF: ${{ github.event.inputs.ref || 'master-820-de298c2' }}
-
 jobs:
+  source:
+    name: Resolve latest release
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+
+    steps:
+      - name: Resolve latest stable-diffusion.cpp release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/leejet/stable-diffusion.cpp/releases/latest --jq .tag_name)
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: source
     name: ${{ matrix.backend }} / ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -35,8 +45,12 @@ jobs:
         include:
           - backend: cuda
             os: windows-2022
+          - backend: cuda
+            os: ubuntu-24.04
           - backend: hip
             os: windows-2022
+          - backend: hip
+            os: ubuntu-24.04
           - backend: vulkan
             os: ubuntu-24.04
           - backend: vulkan
@@ -47,6 +61,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       BACKEND: ${{ matrix.backend }}
+      REF: ${{ needs.source.outputs.tag }}
       SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
     steps:
@@ -94,14 +109,27 @@ jobs:
             "rocm[libraries,devel]==7.14.0"
           rocm-sdk init
 
-          rocm_root=$(cygpath -w "$(rocm-sdk path --root)")
-          printf 'ROCM_PATH=%s\n' "$rocm_root" >> "$GITHUB_ENV"
-          printf 'HIP_PATH=%s\n' "$rocm_root" >> "$GITHUB_ENV"
-          printf 'HIP_PLATFORM=amd\n' >> "$GITHUB_ENV"
-          printf 'HIP_DEVICE_LIB_PATH=%s\\lib\\llvm\\amdgcn\\bitcode\n' "$rocm_root" >> "$GITHUB_ENV"
-          printf 'LLVM_PATH=%s\\lib\\llvm\n' "$rocm_root" >> "$GITHUB_ENV"
-          printf '%s\\bin\n' "$rocm_root" >> "$GITHUB_PATH"
-          printf '%s\\lib\\llvm\\bin\n' "$rocm_root" >> "$GITHUB_PATH"
+          rocm_root=$(rocm-sdk path --root)
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            rocm_root=$(cygpath -w "$rocm_root")
+            rocm_bin="$rocm_root\\bin"
+            llvm_root="$rocm_root\\lib\\llvm"
+            llvm_bin="$llvm_root\\bin"
+            device_lib="$llvm_root\\amdgcn\\bitcode"
+          else
+            rocm_bin="$rocm_root/bin"
+            llvm_root="$rocm_root/lib/llvm"
+            llvm_bin="$llvm_root/bin"
+            device_lib="$llvm_root/amdgcn/bitcode"
+          fi
+          {
+            printf 'ROCM_PATH=%s\n' "$rocm_root"
+            printf 'HIP_PATH=%s\n' "$rocm_root"
+            printf 'HIP_PLATFORM=amd\n'
+            printf 'HIP_DEVICE_LIB_PATH=%s\n' "$device_lib"
+            printf 'LLVM_PATH=%s\n' "$llvm_root"
+          } >> "$GITHUB_ENV"
+          printf '%s\n%s\n' "$rocm_bin" "$llvm_bin" >> "$GITHUB_PATH"
 
       - name: Enable MSVC
         if: runner.os == 'Windows'
@@ -110,6 +138,15 @@ jobs:
       - name: Install Ninja
         if: runner.os == 'Windows'
         run: choco install ninja --no-progress -y
+
+      - name: Install build dependencies on Linux
+        if: runner.os == 'Linux' && matrix.backend != 'vulkan'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build
 
       - name: Install Vulkan build dependencies on Linux
         if: matrix.backend == 'vulkan' && runner.os == 'Linux'
@@ -162,10 +199,14 @@ jobs:
               )
               ;;
             hip)
+              suffix=
+              if [[ "$RUNNER_OS" == Windows ]]; then
+                suffix=.exe
+              fi
               backend_args+=(
                 "-DSD_HIPBLAS=ON"
-                "-DCMAKE_C_COMPILER=clang.exe"
-                "-DCMAKE_CXX_COMPILER=clang++.exe"
+                "-DCMAKE_C_COMPILER=clang$suffix"
+                "-DCMAKE_CXX_COMPILER=clang++$suffix"
                 "-DGPU_TARGETS=gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
                 "-DAMDGPU_TARGETS=gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
               )
@@ -214,7 +255,7 @@ jobs:
 
   release:
     if: github.event_name != 'pull_request'
-    needs: build
+    needs: [source, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -230,9 +271,9 @@ jobs:
       - name: Publish stable-diffusion release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: stable-diffusion.cpp-${{ env.REF }}
+          tag_name: stable-diffusion.cpp-${{ needs.source.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: stable-diffusion.cpp ${{ env.REF }}
+          name: stable-diffusion.cpp ${{ needs.source.outputs.tag }}
           body: Koharu runtime dependency.
           make_latest: 'false'
           fail_on_unmatched_files: true
