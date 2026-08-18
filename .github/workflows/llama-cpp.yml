@@ -91,8 +91,11 @@ jobs:
           cuda: '13.0.0'
           method: network
           sub-packages: >-
-            ["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas",
-            "cublas_dev"]
+            ${{ runner.os == 'Linux'
+              && '["nvcc", "cudart", "crt", "thrust"]'
+              || '["nvcc", "cudart", "crt", "thrust", "nvvm", "cublas", "cublas_dev"]' }}
+          non-cuda-sub-packages: >-
+            ${{ runner.os == 'Linux' && '["libcublas", "libcublas-dev"]' || '[]' }}
 
       - name: Set up Python for ROCm
         if: matrix.backend == 'hip'
