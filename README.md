@@ -39,17 +39,17 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 - Advanced text rendering with vertical CJK and RTL support
 - Layered PSD export with editable text
 
-## GPU Acceleration
+## Hardware Acceleration
 
-Koharu supports CUDA, ROCm / HIP, Metal, and Vulkan. CPU fallback is always available when the accelerated path is unavailable or not worth the setup cost on your system.
+Koharu supports CUDA and ROCm / HIP on Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux.
 
 ### CUDA
 
-Koharu supports NVIDIA GPUs on Windows and Linux through CUDA. Ensure you have the latest NVIDIA driver installed.
+Koharu uses CUDA 13.0 for NVIDIA GPUs on Windows and Linux. Install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/) before starting Koharu; [CUDA 13.0 requires R580 or newer](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver).
 
-### HIP / ROCm
+### ROCm / HIP
 
-Koharu supports AMD GPUs on Windows through ROCm and HIP. Ensure you have the latest AMD driver installed.
+Koharu supports AMD GPUs on Windows and Linux through ROCm and HIP. Before starting Koharu, download and install the [ROCm Core SDK with HIP](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html) for your operating system.
 
 ### Metal
 
@@ -58,6 +58,14 @@ Koharu supports Metal on Apple Silicon Macs.
 ### Vulkan
 
 Koharu also supports Vulkan on Windows and Linux as an alternative to CUDA and HIP.
+
+### WebGPU
+
+The editor canvas uses WebGPU inside Koharu's embedded CEF webview. A working WebGPU adapter and an up-to-date graphics driver are required even when ML inference falls back to CPU.
+
+### CPU
+
+CPU is the fallback when no supported accelerator is available or an accelerator cannot be initialized. It requires no GPU SDK, but inference will be slower.
 
 ## Machine Learning Models
 

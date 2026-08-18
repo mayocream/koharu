@@ -19,6 +19,24 @@ Koharu discovers hardware during startup and selects one shared device for its M
 
 Availability still depends on the operating system, driver, model backend, and native package published for that platform. CPU fallback is normal and prioritizes correctness over speed.
 
+## Platform support
+
+### CUDA
+
+Koharu supports CUDA 13.0 on Windows and Linux. Install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/) before starting Koharu; [CUDA 13.0 requires an R580-series or newer driver](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver).
+
+### ROCm/HIP
+
+Koharu supports ROCm/HIP on Windows and Linux. Before starting Koharu, download and install the [ROCm Core SDK with HIP](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html) for your operating system.
+
+### WebGPU
+
+The editor canvas uses WebGPU inside Koharu's embedded CEF webview. A working WebGPU adapter and an up-to-date graphics driver are required even when ML inference falls back to CPU.
+
+### CPU
+
+CPU is the fallback when no supported accelerator is available or an accelerator cannot be initialized. It requires no GPU SDK, but inference will be slower.
+
 ## What gets downloaded
 
 Koharu resolves three kinds of data on demand:

@@ -19,6 +19,24 @@ Koharu 会为实际使用的功能准备所需原生库和模型文件，并非�
 
 最终可用性还取决于操作系统、驱动、模型后端及对应平台是否发布了原生包。CPU 回退是正常行为，它优先保证正确性而不是速度。
 
+## 平台支持
+
+### CUDA
+
+Koharu 在 Windows 和 Linux 上支持 CUDA 13.0。启动 Koharu 前，请安装[最新的 NVIDIA 驱动](https://www.nvidia.com/en-us/drivers/)；[CUDA 13.0 需要 R580 系列或更高版本的驱动](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver)。
+
+### ROCm/HIP
+
+Koharu 在 Windows 和 Linux 上支持 ROCm/HIP。启动 Koharu 前，请为你的操作系统下载并安装[包含 HIP 的 ROCm Core SDK](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html)。
+
+### WebGPU
+
+编辑器画布通过 Koharu 内嵌的 CEF WebView 使用 WebGPU。即使 ML 推理回退到 CPU，系统仍需提供可用的 WebGPU 适配器和最新的图形驱动。
+
+### CPU
+
+没有可用的受支持加速器或加速器初始化失败时，CPU 将作为回退。CPU 不需要 GPU SDK，但推理速度会更慢。
+
 ## 下载内容
 
 - Torch、llama.cpp 与 diffusion 原生运行时包

@@ -19,6 +19,24 @@ Koharu は使用する機能に必要なネイティブライブラリとモデ�
 
 実際の利用可否は OS、ドライバー、モデルのバックエンド、そのプラットフォーム向けネイティブパッケージに依存します。CPU フォールバックは異常ではなく、速度より正しさを優先する動作です。
 
+## プラットフォーム対応
+
+### CUDA
+
+Koharu は Windows と Linux で CUDA 13.0 に対応しています。Koharu を起動する前に [最新の NVIDIA ドライバー](https://www.nvidia.com/en-us/drivers/)をインストールしてください。[CUDA 13.0 には R580 シリーズ以降のドライバーが必要です](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver)。
+
+### ROCm/HIP
+
+Koharu は Windows と Linux で ROCm/HIP に対応しています。Koharu を起動する前に、使用する OS 向けの [HIP を含む ROCm Core SDK](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html)をダウンロードしてインストールしてください。
+
+### WebGPU
+
+エディターのキャンバスは、Koharu に組み込まれた CEF WebView 内で WebGPU を使用します。ML 推論が CPU にフォールバックする場合でも、利用可能な WebGPU アダプターと最新のグラフィックスドライバーが必要です。
+
+### CPU
+
+対応アクセラレーターがない場合、またはアクセラレーターを初期化できない場合は CPU がフォールバックになります。GPU SDK は不要ですが、推論は遅くなります。
+
 ## ダウンロードされるもの
 
 - Torch、llama.cpp、diffusion のネイティブランタイム

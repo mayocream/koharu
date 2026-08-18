@@ -37,10 +37,10 @@ The WebGPU canvas, flattened PNG, layer crops, and PSD adapter consume this same
 
 ## Browser presentation
 
-The standard Tauri webview owns the complete visible surface. React draws interface chrome, menus, controls, and inspectors, while `koharu-canvas` compiles to WASM and presents the prepared page through WebGPU in an `HTMLCanvasElement`. Transient camera, transform, stroke, and sampling work remains in the browser; only completed edits cross the Tauri command boundary.
+The Tauri CEF webview owns the complete visible surface. React draws interface chrome, menus, controls, and inspectors, while `koharu-canvas` compiles to WASM and presents the prepared page through WebGPU in an `HTMLCanvasElement`. Transient camera, transform, stroke, and sampling work remains in the browser; only completed edits cross the Tauri command boundary.
 
 Page changes publish a generation before the browser requests its lightweight manifest. The canvas reports only missing content IDs, receives those resource packets in separate asynchronous steps, and keeps the previous page visible until the staged generation can activate atomically. Raster resources are canonical 1024-pixel logical tiles with one-pixel interior sampling gutters; this bounds every WASM copy and WebGPU texture while preserving filtered edges. CPU and GPU resources use coordinated bounded caches, so returning to a recently displayed page does not resend or re-upload unchanged tiles. Obsolete native preparations and browser requests cannot publish or activate over a newer generation.
 
 Validate visual changes through the final Tauri window because WebGPU adapter availability, device loss, sizing, and display scaling depend on the system webview. Native PNG and PSD checks still verify the shared rasterizer's readback path independently.
 
-On Windows, the development WebView2 endpoint is `http://127.0.0.1:4000`; use semantic CDP inspection for the DOM and canvas lifecycle, and native window capture when the final composited pixels matter.
+In debug builds, the CEF remote debugging endpoint is `http://127.0.0.1:4000`; use semantic CDP inspection for the DOM and canvas lifecycle, and native window capture when the final pixels matter.
