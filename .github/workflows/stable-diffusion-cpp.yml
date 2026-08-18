@@ -233,6 +233,7 @@ jobs:
             -DGGML_BACKEND_DL=OFF \
             -DGGML_CPU_ALL_VARIANTS=OFF \
             -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
             "${platform_args[@]}" \
             "${backend_args[@]}"
 
