@@ -1,6 +1,10 @@
-use std::sync::{
-    Arc, LazyLock,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    path::Path,
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, ensure};
@@ -8,7 +12,7 @@ use futures::TryStreamExt;
 use reqwest::{StatusCode, header};
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncSeekExt, AsyncWriteExt},
+    io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
     sync::broadcast,
     task::JoinSet,
 };
@@ -16,8 +20,9 @@ use tokio::{
 use crate::network::{DownloadClient, download_client};
 
 const EVENT_CAPACITY: usize = 256;
-const MIN_PART_SIZE: u64 = 8 * 1024 * 1024;
-const MAX_PART_SIZE: u64 = 64 * 1024 * 1024;
+const PART_SIZE: u64 = 8 * 1024 * 1024;
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
+const WRITE_BUFFER_SIZE: usize = 256 * 1024;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 static EVENTS: LazyLock<broadcast::Sender<Event>> =
@@ -65,7 +70,7 @@ impl Transfer {
         self.client.get(url)
     }
 
-    pub(crate) async fn fetch(&self, url: &str, destination: &std::path::Path) -> Result<()> {
+    pub(crate) async fn fetch(&self, url: &str, destination: &Path) -> Result<()> {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let name = display_name(url);
         publish(Event::Started {
@@ -91,76 +96,48 @@ impl Transfer {
         }
     }
 
-    async fn fetch_inner(
-        &self,
-        id: u64,
-        name: &str,
-        url: &str,
-        destination: &std::path::Path,
-    ) -> Result<()> {
-        let probe = self
-            .client
-            .head(url)
-            .header(header::ACCEPT_ENCODING, "identity")
-            .send()
-            .await
-            .with_context(|| format!("failed to inspect {url}"))?
-            .error_for_status()
-            .with_context(|| format!("failed to inspect {url}"))?;
-        let total = probe.content_length();
-        let ranged = probe
-            .headers()
-            .get(header::ACCEPT_RANGES)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value.eq_ignore_ascii_case("bytes"));
-
-        if let Some(total) = total
-            && total > 0
-            && ranged
-        {
-            self.fetch_parts(id, name, url, destination, total).await
-        } else {
-            self.fetch_stream(id, name, url, destination, total).await
-        }
-    }
-
-    async fn fetch_stream(
-        &self,
-        id: u64,
-        name: &str,
-        url: &str,
-        destination: &std::path::Path,
-        total: Option<u64>,
-    ) -> Result<()> {
+    async fn fetch_inner(&self, id: u64, name: &str, url: &str, destination: &Path) -> Result<()> {
         let response = self
             .client
             .get(url)
+            .header(header::RANGE, "bytes=0-0")
             .header(header::ACCEPT_ENCODING, "identity")
             .send()
-            .await?
-            .error_for_status()?;
-        let total = total.or(response.content_length()).unwrap_or(0);
-        let mut file = tokio::fs::File::create(destination).await?;
-        let mut completed = 0;
-        let mut body = response.bytes_stream();
-        while let Some(bytes) = body.try_next().await? {
-            file.write_all(&bytes).await?;
-            completed += bytes.len() as u64;
-            publish(Event::Progress {
-                id,
-                name: name.to_owned(),
-                completed,
-                total,
-            });
-        }
-        file.flush().await?;
-        if total > 0 {
+            .await
+            .with_context(|| format!("failed to inspect {url}"))?;
+        if response.status() == StatusCode::PARTIAL_CONTENT {
+            let content_range = response
+                .headers()
+                .get(header::CONTENT_RANGE)
+                .context("range probe omitted Content-Range")?
+                .to_str()?;
+            let (range, total) = content_range
+                .split_once('/')
+                .context("range probe returned invalid Content-Range")?;
             ensure!(
-                completed == total,
-                "{url} ended after {completed} of {total} bytes"
+                range == "bytes 0-0",
+                "{url} returned Content-Range {content_range} for the range probe"
             );
+            let total = total
+                .parse::<u64>()
+                .with_context(|| format!("{url} returned invalid size {total}"))?;
+            ensure!(total > 0, "{url} returned an empty byte range");
+            return self.fetch_parts(id, name, url, destination, total).await;
         }
-        Ok(())
+        if response.status() == StatusCode::RANGE_NOT_SATISFIABLE
+            && response
+                .headers()
+                .get(header::CONTENT_RANGE)
+                .is_some_and(|value| value == "bytes */0")
+        {
+            tokio::fs::File::create(destination).await?;
+            return Ok(());
+        }
+
+        let response = response
+            .error_for_status()
+            .with_context(|| format!("failed to inspect {url}"))?;
+        fetch_stream(id, name, url, destination, response).await
     }
 
     async fn fetch_parts(
@@ -168,7 +145,7 @@ impl Transfer {
         id: u64,
         name: &str,
         url: &str,
-        destination: &std::path::Path,
+        destination: &Path,
         total: u64,
     ) -> Result<()> {
         tokio::fs::File::create(destination)
@@ -176,103 +153,164 @@ impl Transfer {
             .set_len(total)
             .await?;
 
-        let concurrency = std::thread::available_parallelism()
-            .map(usize::from)
-            .unwrap_or(8)
-            .clamp(4, 32);
-        let part_size = total
-            .div_ceil((concurrency * 4) as u64)
-            .clamp(MIN_PART_SIZE, MAX_PART_SIZE);
-        let completed = Arc::new(AtomicU64::new(0));
+        let transfer = Arc::new(PartTransfer {
+            url: Arc::from(url),
+            destination: Arc::from(destination),
+            name: Arc::from(name),
+            id,
+            total,
+            completed: AtomicU64::new(0),
+        });
         let mut tasks = JoinSet::new();
 
-        for start in (0..total).step_by(part_size as usize) {
-            while tasks.len() >= concurrency {
-                let task = tasks
-                    .join_next()
-                    .await
-                    .context("download task disappeared")?;
-                task.context("download task failed")??;
-            }
-            let end = (start + part_size).min(total) - 1;
+        for start in (0..total).step_by(PART_SIZE as usize) {
             tasks.spawn(fetch_part(
                 self.client.clone(),
-                url.to_owned(),
-                destination.to_owned(),
-                start,
-                end,
-                total,
-                completed.clone(),
-                id,
-                name.to_owned(),
+                transfer.clone(),
+                Part {
+                    start,
+                    end: (start + PART_SIZE).min(total) - 1,
+                },
             ));
         }
         while let Some(result) = tasks.join_next().await {
             result.context("download task failed")??;
         }
         ensure!(
-            completed.load(Ordering::Relaxed) == total,
+            transfer.completed.load(Ordering::Relaxed) == total,
             "{url} download was incomplete"
         );
         Ok(())
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn fetch_part(
-    client: DownloadClient,
-    url: String,
-    destination: std::path::PathBuf,
+struct PartTransfer {
+    url: Arc<str>,
+    destination: Arc<Path>,
+    name: Arc<str>,
+    id: u64,
+    total: u64,
+    completed: AtomicU64,
+}
+
+impl PartTransfer {
+    fn advance(&self, bytes: u64) {
+        let completed = self.completed.fetch_add(bytes, Ordering::Relaxed) + bytes;
+        publish_progress(self.id, &self.name, completed, self.total);
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Part {
     start: u64,
     end: u64,
-    total: u64,
-    completed: Arc<AtomicU64>,
+}
+
+impl Part {
+    const fn len(self) -> u64 {
+        self.end - self.start + 1
+    }
+}
+
+async fn fetch_stream(
     id: u64,
-    name: String,
+    name: &str,
+    url: &str,
+    destination: &Path,
+    response: reqwest::Response,
 ) -> Result<()> {
+    let total = response.content_length().unwrap_or(0);
+    let file = tokio::fs::File::create(destination).await?;
+    let mut file = BufWriter::with_capacity(WRITE_BUFFER_SIZE, file);
+    let mut body = response.bytes_stream();
+    let mut completed = 0;
+    let mut reported = 0;
+    let mut last_report = Instant::now();
+
+    while let Some(bytes) = body.try_next().await? {
+        file.write_all(&bytes).await?;
+        completed += bytes.len() as u64;
+        if last_report.elapsed() >= PROGRESS_INTERVAL {
+            publish_progress(id, name, completed, total);
+            reported = completed;
+            last_report = Instant::now();
+        }
+    }
+    file.flush().await?;
+    if reported != completed {
+        publish_progress(id, name, completed, total);
+    }
+    if total > 0 {
+        ensure!(
+            completed == total,
+            "{url} ended after {completed} of {total} bytes"
+        );
+    }
+    Ok(())
+}
+
+async fn fetch_part(client: DownloadClient, transfer: Arc<PartTransfer>, part: Part) -> Result<()> {
     let response = client
-        .get(&url)
-        .header(header::RANGE, format!("bytes={start}-{end}"))
+        .get(transfer.url.as_ref())
+        .header(header::RANGE, format!("bytes={}-{}", part.start, part.end))
         .header(header::ACCEPT_ENCODING, "identity")
         .send()
         .await?;
     ensure!(
         response.status() == StatusCode::PARTIAL_CONTENT,
-        "{url} did not honor byte range {start}-{end}"
+        "{} did not honor byte range {}-{}",
+        transfer.url,
+        part.start,
+        part.end
     );
     let actual_range = response
         .headers()
         .get(header::CONTENT_RANGE)
         .context("partial response omitted Content-Range")?
         .to_str()?;
-    let expected_range = format!("bytes {start}-{end}/{total}");
+    let expected_range = format!("bytes {}-{}/{}", part.start, part.end, transfer.total);
     ensure!(
         actual_range == expected_range,
-        "{url} returned Content-Range {actual_range}, expected {expected_range}"
+        "{} returned Content-Range {actual_range}, expected {expected_range}",
+        transfer.url
     );
-    let expected = end - start + 1;
-    let bytes = response.bytes().await?;
-    ensure!(
-        bytes.len() as u64 == expected,
-        "{url} returned {} bytes for a {expected}-byte range",
-        bytes.len()
-    );
-
+    let expected = part.len();
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)
-        .open(destination)
+        .open(transfer.destination.as_ref())
         .await?;
-    file.seek(std::io::SeekFrom::Start(start)).await?;
-    file.write_all(&bytes).await?;
+    file.seek(std::io::SeekFrom::Start(part.start)).await?;
+    let mut file = BufWriter::with_capacity(WRITE_BUFFER_SIZE, file);
+    let mut received = 0;
+    let mut body = response.bytes_stream();
+    while let Some(bytes) = body.try_next().await? {
+        received += bytes.len() as u64;
+        ensure!(
+            received <= expected,
+            "{} returned more than {expected} bytes for range {}-{}",
+            transfer.url,
+            part.start,
+            part.end
+        );
+        file.write_all(&bytes).await?;
+    }
     file.flush().await?;
-    let completed = completed.fetch_add(expected, Ordering::Relaxed) + expected;
+    ensure!(
+        received == expected,
+        "{} returned {received} bytes for a {expected}-byte range",
+        transfer.url
+    );
+    transfer.advance(expected);
+    Ok(())
+}
+
+fn publish_progress(id: u64, name: &str, completed: u64, total: u64) {
     publish(Event::Progress {
         id,
-        name,
+        name: name.to_owned(),
         completed,
         total,
     });
-    Ok(())
 }
 
 fn publish(event: Event) {

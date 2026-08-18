@@ -65,7 +65,10 @@ pub(crate) fn download_client() -> Result<DownloadClient> {
         .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(policy.connect_timeout_seconds.max(1)))
         .read_timeout(Duration::from_secs(policy.read_timeout_seconds.max(1)))
-        .http2_adaptive_window(true)
+        // Parallel ranges need separate TCP congestion windows instead of one
+        // HTTP/2 connection shared by every request.
+        .http1_only()
+        .tcp_keepalive(Duration::from_secs(60))
         .build()
         .context("failed to build download client")?;
     let client = Arc::new(
