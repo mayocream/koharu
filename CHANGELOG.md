@@ -1,3 +1,14 @@
+## [0.75.11](https://github.com/mayocream/koharu/compare/0.75.10..0.75.11) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Isolate bundled ROCm libraries on Linux - ([6c21c9a](https://github.com/mayocream/koharu/commit/6c21c9add22e97ef75c7aa6459eb1c1c76ef1614))
+
+### ⚙️ Miscellaneous Tasks
+
+- Disable OpenMP for stable-diffusion.cpp - ([77de3a4](https://github.com/mayocream/koharu/commit/77de3a4d4d9f28fe290344e83c7cc3f9330bd313))
+
+
 ## [0.75.10](https://github.com/mayocream/koharu/compare/0.75.9..0.75.10) - 2026-08-18
 
 ### 🐛 Bug Fixes
