@@ -28,62 +28,67 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 ![screenshot](docs/screenshot.png)
 
 > [!NOTE]
-> Support and discussion are available on the [Discord server](https://discord.gg/mHvHkxGnUY).
+> Join our [Discord server](https://discord.gg/mHvHkxGnUY) for support and discussion.
 
 ## Features
 
-- Automatic detection of text regions, speech bubbles, and cleanup masks
-- OCR for manga dialogue, captions, and other page text
-- Inpainting to remove source lettering from the page
-- Translation with local or remote LLM backends
-- Advanced text rendering with vertical CJK and RTL support
-- Layered PSD export with editable text
+- [Multi-format project management](https://koharu.rs/workflow/projects-and-imports/) for raster images, archives, and PDFs with page sequencing
+- [Selective pipeline](https://koharu.rs/workflow/process-pages/) for detection, OCR, translation, and inpainting at page or project scope
+- [Detection and segmentation](https://koharu.rs/workflow/process-pages/) for text regions, speech bubbles, and cleanup regions
+- [Multimodal OCR](https://koharu.rs/models/vision-and-inpainting/) for dialogue, captions, and general page text
+- [Local GGUF inference and hosted providers](https://koharu.rs/models/translation-providers/) for LLM and machine-translation workflows
+- [Generative inpainting](https://koharu.rs/workflow/cleanup-and-inpainting/) for source-text removal and artwork reconstruction
+- [Proofreading](https://koharu.rs/workflow/review-text/) for correcting OCR and translation output
+- [WebGPU-based canvas](https://koharu.rs/workflow/canvas-basics/) for manual cleanup, text placement, and page composition
+- [Multilingual text shaping and layout](https://koharu.rs/workflow/typesetting/) with automatic fitting, font fallback, vertical CJK, and right-to-left text
+- [Layered PSD export](https://koharu.rs/workflow/export/) for flattened delivery and layered editing
+- [Agent-based workflow](https://koharu.rs/agent/work-with-projects/) for project inspection, editing, and pipeline control
 
 ## Hardware Acceleration
 
-Koharu supports CUDA and ROCm / HIP on Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux.
+Koharu supports GPU acceleration with CUDA and ROCm / HIP on Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux. [Runtime and hardware requirements](https://koharu.rs/getting-started/runtime-models-and-hardware/) vary by backend and operating system.
 
 ### CUDA
 
-Koharu uses CUDA 13.0 for NVIDIA GPUs on Windows and Linux. Install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/) before starting Koharu; [CUDA 13.0 requires R580 or newer](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver).
+The CUDA backend targets CUDA 13.0 on Windows and Linux. Make sure to install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/). [CUDA 13.0 requires R580 or newer](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver).
 
 ### ROCm / HIP
 
-Koharu supports AMD GPUs on Windows and Linux through ROCm and HIP. Before starting Koharu, download and install the [ROCm Core SDK with HIP](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html) for your operating system.
+ROCm / HIP is available for AMD GPUs on Windows and Linux. Make sure to install the official [ROCm Core SDK with HIP](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html).
 
 ### Metal
 
-Koharu supports Metal on Apple Silicon Macs.
+Metal is used on Apple silicon Macs.
 
 ### Vulkan
 
-Koharu also supports Vulkan on Windows and Linux as an alternative to CUDA and HIP.
+Vulkan is available on Windows and Linux as an alternative to CUDA and ROCm / HIP.
 
 ### WebGPU
 
-The editor canvas uses WebGPU inside Koharu's embedded CEF webview. A working WebGPU adapter and an up-to-date graphics driver are required even when ML inference falls back to CPU.
+The editor canvas uses WebGPU inside the embedded CEF webview. WebGPU requires a current graphics driver even when inference runs on the CPU.
 
 ### CPU
 
-CPU is the fallback when no supported accelerator is available or an accelerator cannot be initialized. It requires no GPU SDK, but inference will be slower.
+Koharu uses the CPU when no accelerator is available or initialization fails. No GPU SDK is required, but inference is slower.
 
 ## Machine Learning Models
 
-Koharu uses a staged stack of vision and language models instead of trying to solve the entire page with a single network.
+Koharu uses separate models for detection, OCR, inpainting, and translation. [Vision and inpainting](https://koharu.rs/models/vision-and-inpainting/) and [translation and generation](https://koharu.rs/models/translation-and-generation/) have separate model settings.
 
 ### Computer Vision Models
 
-Koharu uses multiple pretrained models, each tuned for a specific part of the page pipeline.
+Detection, OCR, and inpainting models are selected separately.
 
 #### Detection and Layout
 
-Koharu uses object detection to find text regions, speech bubbles, and segmentation masks.
+The detection model finds text regions, speech bubbles, and segmentation masks.
 
 - [Koharu Layout RF-DETR Seg 2XL](https://huggingface.co/mayocream/koharu-layout-rfdetr-seg-2xl-1152)
 
 #### OCR
 
-These models recognize source text after detection.
+OCR reads source text from detected regions.
 
 - [PaddleOCR VL 1.6](https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6)
 - [Manga OCR](https://huggingface.co/mayocream/manga-ocr)
@@ -91,7 +96,7 @@ These models recognize source text after detection.
 
 #### Inpainting
 
-These models remove source lettering before translated text is rendered back onto the page.
+Inpainting reconstructs the image behind source text before the translation is rendered.
 
 - [FLUX.2 Klein](https://huggingface.co/unsloth/FLUX.2-klein-4B-GGUF)
 - [RORem mixed](https://huggingface.co/mayocream/RORem-mixed-GGUF)
@@ -100,7 +105,7 @@ These models remove source lettering before translated text is rendered back ont
 
 ### Large Language Models
 
-Koharu has a flexible LLM backend that can run locally or connect to a remote API.
+Translation can use a local language model or a remote API.
 
 #### General-Purpose Local Models
 
@@ -119,25 +124,25 @@ Koharu has a flexible LLM backend that can run locally or connect to a remote AP
 
 #### Cloud Providers
 
-Koharu supports hosted APIs from [Atlas Cloud](https://www.atlascloud.ai/), [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [Grok](https://docs.x.ai/developers), [MiniMax](https://platform.minimax.io/), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/).
+Hosted LLM providers: [Atlas Cloud](https://www.atlascloud.ai/), [OpenAI](https://platform.openai.com/), [Gemini](https://ai.google.dev/), [Claude](https://www.anthropic.com/api), [Grok](https://docs.x.ai/developers), [MiniMax](https://platform.minimax.io/), [DeepSeek](https://platform.deepseek.com/), and [OpenRouter](https://openrouter.ai/).
 
 #### Machine Translation Providers
 
-For pure machine-translation use cases, Koharu also supports [DeepL](https://www.deepl.com/), [Google Cloud Translation](https://cloud.google.com/translate), and [Caiyun](https://fanyi.caiyunapp.com/).
+Machine-translation providers: [DeepL](https://www.deepl.com/), [Google Cloud Translation](https://cloud.google.com/translate), and [Caiyun](https://fanyi.caiyunapp.com/).
 
 #### OpenAI-Compatible Providers
 
-Koharu supports any provider that implements the OpenAI-compatible API.
+OpenAI-compatible endpoints are also supported.
 
 ## Installation
 
-You can download the latest release of Koharu from the [releases page](https://github.com/mayocream/koharu/releases/latest).
+Download release builds from the [releases page](https://github.com/mayocream/koharu/releases/latest). [Installation requirements and first launch](https://koharu.rs/getting-started/install/) vary by operating system.
 
-We provide prebuilt binaries for Windows, macOS, and Linux.
+Builds are available for Windows, macOS, and Linux.
 
 ### WinGet
 
-On Windows, you can install Koharu with [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
+Install on Windows with [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
 
 ```bash
 winget install koharu
@@ -145,7 +150,7 @@ winget install koharu
 
 ### Homebrew
 
-On macOS, you can install Koharu with [Homebrew](https://brew.sh/):
+Install on macOS with [Homebrew](https://brew.sh/):
 
 ```bash
 brew install --cask koharu
@@ -153,7 +158,7 @@ brew install --cask koharu
 
 ## Troubleshooting
 
-You can also set the `RUST_LOG` environment variable to `debug` or `trace` to see more verbose logs:
+Startup, runtime, model, and provider errors are covered in [Troubleshooting](https://koharu.rs/reference/troubleshooting/). Set `RUST_LOG` to `debug` or `trace` for verbose logs:
 
 ```bash
 # macOS / Linux
@@ -164,7 +169,7 @@ $env:RUST_LOG="debug"; koharu.exe
 
 ## Development
 
-To build Koharu from source, follow the steps below.
+Platform dependencies and validation commands for local builds are listed in [Development Setup](https://koharu.rs/development/setup/).
 
 ### Prerequisites
 
@@ -191,7 +196,7 @@ bun dev
 bun run build
 ```
 
-The built binaries are written to `target/release`.
+The executable is written to `target/release`.
 
 ## Sponsorship
 
