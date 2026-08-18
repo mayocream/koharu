@@ -1,3 +1,10 @@
+## [0.75.2](https://github.com/mayocream/koharu/compare/0.75.1..0.75.2) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(app)* Restore frameless window resizing - ([d8bddc4](https://github.com/mayocream/koharu/commit/d8bddc426b48758c8feec39694438c8699956d26))
+
+
 ## [0.75.1](https://github.com/mayocream/koharu/compare/0.75.0..0.75.1) - 2026-08-18
 
 ### ⚡ Performance
