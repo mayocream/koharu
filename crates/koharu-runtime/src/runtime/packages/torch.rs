@@ -45,6 +45,13 @@ enum Backend {
     )]
     Cuda13,
     #[strum(
+        serialize = "rocm-7.2",
+        props(
+            linux = "libgomp.so,libc10.so,libc10_hip.so,libaotriton_v2.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_rocshmem.so,libtorch_hip.so,libtorch.so"
+        )
+    )]
+    Rocm72,
+    #[strum(
         serialize = "rocm-7.14",
         props(
             windows = "libomp140.x86_64.dll,uv.dll,dl.dll,liblzma.dll,c10.dll,c10_hip.dll,aotriton_v2.dll,caffe2_nvrtc.dll,torch_global_deps.dll,torch_cpu.dll,torch_hip.dll,shm.dll,torch.dll"
@@ -92,39 +99,39 @@ impl Torch {
     fn selected_rocm(self) -> Option<Rocm> {
         match self.0 {
             Backend::Rocm714(target) => Some(target),
-            Backend::Cpu | Backend::Cuda13 => None,
+            Backend::Cpu | Backend::Cuda13 | Backend::Rocm72 => None,
         }
     }
 
-    fn urls(self, target: Option<Rocm>) -> Result<Vec<String>> {
-        if matches!(self.0, Backend::Rocm714(_)) {
-            let target = target.context("ROCm Torch requires a device target")?;
-            let mut urls = vec![
-                format!(
-                    "{}/torch-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
-                    rocm::INDEX,
-                    rocm::VERSION
-                ),
-                format!(
-                    "{}/amd_torch_device_{target}-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
-                    rocm::INDEX,
-                    rocm::VERSION
-                ),
-            ];
-            if let Some(family) = target.torch_family() {
-                urls.push(format!(
-                    "{}/amd_torch_device_{family}-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
-                    rocm::INDEX,
-                    rocm::VERSION
-                ));
-            }
-            return Ok(urls);
-        }
-
+    fn urls(self) -> Result<Vec<String>> {
         let backend = match self.0 {
             Backend::Cpu => "cpu",
             Backend::Cuda13 => "cu130",
-            Backend::Rocm714(_) => unreachable!(),
+            Backend::Rocm72 => "rocm7.2",
+            Backend::Rocm714(target) => {
+                // Windows ROCm is resolved separately because AMD publishes its runtime and
+                // device assets outside the Torch wheel.
+                let mut urls = vec![
+                    format!(
+                        "{}/torch-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
+                        rocm::INDEX,
+                        rocm::VERSION
+                    ),
+                    format!(
+                        "{}/amd_torch_device_{target}-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
+                        rocm::INDEX,
+                        rocm::VERSION
+                    ),
+                ];
+                if let Some(family) = target.torch_family() {
+                    urls.push(format!(
+                        "{}/amd_torch_device_{family}-{ROCM_TORCH_VERSION}%2Brocm{}-cp312-cp312-win_amd64.whl",
+                        rocm::INDEX,
+                        rocm::VERSION
+                    ));
+                }
+                return Ok(urls);
+            }
         };
         if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             Ok(vec![format!(
@@ -151,6 +158,7 @@ impl fmt::Display for Torch {
         formatter.write_str(match self.0 {
             Backend::Cpu => "cpu",
             Backend::Cuda13 => "cuda-13",
+            Backend::Rocm72 => "rocm-7.2",
             Backend::Rocm714(_) => "rocm-7.14",
         })
     }
@@ -170,23 +178,28 @@ impl Package for Torch {
             .join("torch")
             .join(version)
             .join(rocm.map_or_else(|| self.to_string(), |target| format!("rocm-{target}")));
-        let urls = self.urls(rocm)?;
+        let urls = self.urls()?;
         let libraries = self.library_names()?.collect::<Vec<_>>();
         let mut patterns = libraries
             .iter()
             .map(|name| format!("torch/lib/{name}"))
             .collect::<Vec<_>>();
-        if rocm.is_some() {
-            patterns.extend([
+        match self.0 {
+            Backend::Rocm714(_) => patterns.extend([
                 "torch/.kpack/**/*".to_owned(),
                 "torch/lib/aotriton.images/**/*".to_owned(),
-            ]);
-        } else if matches!(self.0, Backend::Cpu) {
-            patterns.extend([
+            ]),
+            Backend::Rocm72 => {
+                // Linux ROCm is self-contained in the PyTorch wheel, including its shared
+                // libraries and device assets.
+                patterns.extend(["torch/lib/*.so*".to_owned(), "torch/lib/**/*".to_owned()]);
+            }
+            Backend::Cpu => patterns.extend([
                 "torch/include/**/*".to_owned(),
                 "torch/share/cmake/**/*".to_owned(),
                 "torch/lib/*.lib".to_owned(),
-            ]);
+            ]),
+            Backend::Cuda13 => {}
         }
 
         Store::directory(
@@ -228,6 +241,8 @@ impl DiscoverablePackage for Torch {
                     .ok()
                     .map(Backend::Rocm714)
                     .map(Self)
+            } else if cfg!(target_os = "linux") {
+                Some(Self(Backend::Rocm72))
             } else {
                 None
             };
@@ -242,7 +257,7 @@ impl RuntimePackage for Torch {
 
     fn dependencies(self, _hardware: &Hardware) -> Result<Vec<Component>> {
         match self.0 {
-            Backend::Cpu => Ok(Vec::new()),
+            Backend::Cpu | Backend::Rocm72 => Ok(Vec::new()),
             Backend::Rocm714(target) => Ok(vec![Component::Rocm(target)]),
             Backend::Cuda13 => {
                 let packages = [
