@@ -1,3 +1,14 @@
+## [0.75.8](https://github.com/mayocream/koharu/compare/0.75.7..0.75.8) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Isolate bundled DRM symbols on Linux - ([fb74b75](https://github.com/mayocream/koharu/commit/fb74b7527bf1ddc3bd832cde09f3e2cc01f3c319))
+
+### ⚙️ Miscellaneous Tasks
+
+- Cache on release - ([9772b7c](https://github.com/mayocream/koharu/commit/9772b7cde02f5fd3896834d41a0a218243971e46))
+
+
 ## [0.75.7](https://github.com/mayocream/koharu/compare/0.75.6..0.75.7) - 2026-08-18
 
 ### 🐛 Bug Fixes
