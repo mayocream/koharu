@@ -4833,6 +4833,7 @@ dependencies = [
  "fs4",
  "futures",
  "koharu-config",
+ "libc",
  "libloading 0.9.0",
  "num_cpus",
  "petgraph",

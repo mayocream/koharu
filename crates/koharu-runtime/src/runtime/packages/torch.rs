@@ -284,6 +284,18 @@ impl RuntimePackage for Torch {
     async fn activate(self) -> Result<()> {
         let libraries = self.library_names()?.collect::<Vec<_>>();
         let directory = self.install().await?.join("libtorch/lib");
+        #[cfg(target_os = "linux")]
+        if matches!(self.0, Backend::Rocm72) {
+            // Keep the wheel's stateful DRM symbols isolated from copies already loaded by the host.
+            use libloading::os::unix::{Library, RTLD_LAZY, RTLD_LOCAL};
+            let flags = RTLD_LAZY | RTLD_LOCAL | libc::RTLD_DEEPBIND;
+            std::mem::forget(unsafe {
+                (
+                    Library::open(Some(directory.join("libdrm.so")), flags)?,
+                    Library::open(Some(directory.join("libdrm_amdgpu.so")), flags)?,
+                )
+            });
+        }
         for library in libraries {
             loader::load(directory.join(library))?;
         }

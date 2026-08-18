@@ -30,6 +30,7 @@ zip = { workspace = true }
 tokio = { workspace = true }
 walkdir = { workspace = true }
 libloading = { workspace = true }
+libc = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 fast-glob = { workspace = true }
