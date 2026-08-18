@@ -64,17 +64,115 @@ Record the project revision, page, output format, and both images. PNG and PSD s
 
 ## Collect detailed logs
 
-Koharu uses the `RUST_LOG` environment variable. Launch the executable from a terminal with debug logging:
+Debug logs show what Koharu was doing immediately before a problem. To collect them, you must start Koharu from a terminal instead of opening it from its usual icon.
+
+If you have never used a terminal, that is okay. A terminal is a text window that runs a command you paste into it. The commands below only start Koharu with more detailed logging. They do not delete files, change your projects, or permanently change Koharu's settings.
+
+!!! important "Close Koharu before you begin"
+
+    Save your work and completely close every Koharu window. Debug logging only applies to the new copy of Koharu started by the command. It cannot add logging to a copy that is already running.
+
+### macOS
+
+1. Press **Command + Space** to open Spotlight Search.
+2. Type `Terminal`, then press **Return**. A window with a text prompt opens.
+3. Copy the following line. In Terminal, press **Command + V** to paste it, then press **Return**:
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+4. Koharu should open and log lines should begin appearing in the Terminal window. Leave Terminal open.
+5. Use Koharu normally until the problem happens again. Then return to Terminal and keep the output for your report.
+
+If Terminal displays `command not found: koharu`, the app is installed but its short command is not available. If Koharu is in the normal **Applications** folder, use its full path instead:
 
 ```bash
-# macOS / Linux
-RUST_LOG=debug koharu
+RUST_LOG=debug /Applications/koharu.app/Contents/MacOS/koharu
 ```
+
+If that also says the file does not exist, open Finder and check that `koharu.app` is in **Applications**. Move it there or replace `/Applications/koharu.app` in the command with the app's actual location.
+
+### Linux
+
+1. Open the application menu and search for `Terminal`. On many Linux desktops, **Ctrl + Alt + T** also opens it.
+2. Copy the following line. In Terminal, press **Ctrl + Shift + V** to paste it, then press **Enter**:
+
+    ```bash
+    RUST_LOG=debug koharu
+    ```
+
+3. Koharu should open and log lines should begin appearing in the Terminal window. Leave Terminal open.
+4. Use Koharu until the problem happens again, then return to Terminal and keep the output.
+
+If Terminal displays `command not found: koharu`, try the standard path used by Koharu's Debian and RPM packages:
+
+```bash
+RUST_LOG=debug /usr/bin/koharu
+```
+
+If `/usr/bin/koharu` does not exist, reinstall Koharu using the package for your Linux distribution.
+
+### Windows PowerShell
+
+These instructions require **PowerShell**, not Command Prompt.
+
+1. Open the **Start** menu.
+2. Type `PowerShell`, then open **Windows PowerShell**. Windows Terminal is also suitable when its tab says **PowerShell**. A window with a prompt similar to `PS C:\Users\YourName>` opens.
+3. Copy the following complete line. Press **Ctrl + V** or right-click to paste it, then press **Enter**:
+
+    ```powershell
+    $env:RUST_LOG="debug"; koharu.exe
+    ```
+
+4. Koharu should open and log lines should begin appearing in the PowerShell window. Leave PowerShell open.
+5. Use Koharu until the problem happens again, then return to PowerShell and keep the output.
+
+Do not copy the `PS C:\Users\YourName>` prompt shown in the window. Only paste the command from the code block.
+
+If PowerShell says that `koharu.exe` “is not recognized,” it needs the executable's full path:
+
+1. Open the **Start** menu and search for `Koharu`.
+2. Right-click Koharu and choose **Open file location**.
+3. Right-click the Koharu shortcut, choose **Properties**, and copy the path shown next to **Target**.
+4. Return to PowerShell. Replace the example path below with the Target path you copied, but keep the `&` and quotation marks:
+
+    ```powershell
+    $env:RUST_LOG="debug"; & "C:\path\to\koharu.exe"
+    ```
+
+The `RUST_LOG` value remains active only in that PowerShell window. Closing the window clears it.
+
+### What to expect
+
+- The terminal may look busy and may not show another prompt until Koharu closes. This is normal.
+- Debug output is much longer than ordinary output. Messages, warnings, errors, and timing lines are all useful, so do not copy only the red or last line.
+- Keep the terminal open while reproducing the problem. Opening Koharu from its normal icon will not use the command's logging setting.
+- Close Koharu normally after the problem occurs. If it is frozen, return to the terminal and press **Ctrl + C** once to stop the launched process.
+
+### Save the output to a file
+
+For a long log, it is easier to attach a text file than to send screenshots. Open a new terminal or PowerShell window and use the command for your operating system below. Reproduce the problem and then close Koharu. The file will be named `koharu-debug.log` in your Home folder.
+
+macOS or Linux:
+
+```bash
+RUST_LOG=debug koharu 2>&1 | tee "$HOME/koharu-debug.log"
+```
+
+Windows PowerShell:
 
 ```powershell
-# Windows PowerShell
-$env:RUST_LOG='debug'
-koharu.exe
+$env:RUST_LOG="debug"; koharu.exe *>&1 | Tee-Object -FilePath "$HOME\koharu-debug.log"
 ```
 
-Remove credentials and private page text before sharing logs. Report issues on [GitHub](https://github.com/mayocream/koharu/issues) or ask for help on [Discord](https://discord.gg/mHvHkxGnUY).
+If you needed a full executable path in the earlier steps, use that same full path in the file-saving command.
+
+Before sharing the file, search it for API keys, credentials, private filenames, and private page text. Replace only sensitive values with `[removed]`; keep the surrounding error messages and log lines. Also include:
+
+- your operating system and Koharu version;
+- what you were trying to do;
+- the exact steps that made the problem happen;
+- the approximate time the problem appeared in the log.
+
+Attach the text log to a [GitHub issue](https://github.com/mayocream/koharu/issues) or ask for help on [Discord](https://discord.gg/mHvHkxGnUY). A text log is more useful than screenshots of part of the terminal.
