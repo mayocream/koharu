@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
+use backon::{ExponentialBuilder, Retryable};
 use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::{StatusCode, header};
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,9 @@ use crate::network::{DownloadClient, download_client};
 const EVENT_CAPACITY: usize = 256;
 const PART_SIZE: u64 = 4 * 1024 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
+const RANGE_RETRIES: usize = 5;
+const RANGE_RETRY_MAX_DELAY: Duration = Duration::from_secs(2);
+const RANGE_RETRY_MIN_DELAY: Duration = Duration::from_millis(250);
 const WRITE_BUFFER_SIZE: usize = 256 * 1024;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -166,7 +170,7 @@ impl Transfer {
         });
 
         stream::iter(parts)
-            .map(|part| fetch_part(self.client.clone(), Arc::clone(&transfer), part))
+            .map(|part| fetch_with_retry(self.client.clone(), Arc::clone(&transfer), part))
             .buffer_unordered(num_cpus::get().saturating_mul(4).clamp(16, 64))
             .try_collect::<()>()
             .await?;
@@ -242,7 +246,44 @@ async fn fetch_stream(
     Ok(())
 }
 
-async fn fetch_part(client: DownloadClient, transfer: Arc<PartTransfer>, part: Part) -> Result<()> {
+async fn fetch_with_retry(
+    client: DownloadClient,
+    transfer: Arc<PartTransfer>,
+    part: Part,
+) -> Result<()> {
+    let start = part.start;
+    let end = part.end;
+    (|| fetch_range(&client, &transfer, &part))
+        .retry(
+            ExponentialBuilder::default()
+                .with_min_delay(RANGE_RETRY_MIN_DELAY)
+                .with_max_delay(RANGE_RETRY_MAX_DELAY)
+                .with_max_times(RANGE_RETRIES)
+                .with_jitter(),
+        )
+        .when(|error| {
+            error.chain().any(|cause| {
+                cause
+                    .downcast_ref::<reqwest::Error>()
+                    .is_some_and(|error| error.is_body() || error.is_decode())
+            })
+        })
+        .notify(|error, delay| {
+            tracing::warn!(
+                start,
+                end,
+                ?delay,
+                %error,
+                "retrying interrupted download range"
+            );
+        })
+        .await
+        .with_context(|| format!("failed to download byte range {start}-{end}"))?;
+    transfer.advance(part.len());
+    Ok(())
+}
+
+async fn fetch_range(client: &DownloadClient, transfer: &PartTransfer, part: &Part) -> Result<()> {
     let response = client
         .get(transfer.url.as_ref())
         .header(header::RANGE, format!("bytes={}-{}", part.start, part.end))
@@ -293,7 +334,6 @@ async fn fetch_part(client: DownloadClient, transfer: Arc<PartTransfer>, part: P
         "{} returned {received} bytes for a {expected}-byte range",
         transfer.url
     );
-    transfer.advance(expected);
     Ok(())
 }
 
@@ -325,6 +365,7 @@ fn display_name(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::AsyncReadExt;
 
     #[test]
     fn names_downloads_from_the_url_path() {
@@ -341,5 +382,67 @@ mod tests {
         let event = Event::Finished { id: 42 };
         publish(event.clone());
         assert_eq!(receiver.try_recv().unwrap(), event);
+    }
+
+    #[tokio::test]
+    async fn retries_interrupted_range_bodies() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let bodies: [&[u8]; 2] = [b"abcd", b"abcdefgh"];
+            for body in bodies {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let mut buffer = [0; 1024];
+                    let read = socket.read(&mut buffer).await.unwrap();
+                    assert!(read > 0);
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                assert!(
+                    String::from_utf8_lossy(&request)
+                        .to_ascii_lowercase()
+                        .contains("range: bytes=0-7")
+                );
+
+                socket
+                    .write_all(
+                        b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-7/8\r\nContent-Length: 8\r\nConnection: close\r\n\r\n",
+                    )
+                    .await
+                    .unwrap();
+                socket.write_all(body).await.unwrap();
+                socket.shutdown().await.unwrap();
+            }
+        });
+
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("download");
+        tokio::fs::File::create(&destination)
+            .await
+            .unwrap()
+            .set_len(8)
+            .await
+            .unwrap();
+        let transfer = Arc::new(PartTransfer {
+            url: Arc::from(format!("http://{address}/artifact")),
+            destination: Arc::from(destination.as_path()),
+            name: Arc::from("artifact"),
+            id: 1,
+            total: 8,
+            completed: AtomicU64::new(0),
+        });
+        let client =
+            Arc::new(reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build());
+
+        fetch_with_retry(client, Arc::clone(&transfer), Part { start: 0, end: 7 })
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(tokio::fs::read(destination).await.unwrap(), b"abcdefgh");
+        assert_eq!(transfer.completed.load(Ordering::Relaxed), 8);
     }
 }

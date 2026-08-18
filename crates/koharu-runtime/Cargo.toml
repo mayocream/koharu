@@ -14,6 +14,7 @@ publish = true
 
 [dependencies]
 anyhow = { workspace = true }
+backon = { workspace = true }
 dirs = { workspace = true }
 dunce = { workspace = true }
 futures = { workspace = true }
