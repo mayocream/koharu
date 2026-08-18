@@ -433,7 +433,8 @@ fn draw_layout(
                     normalized_coords: font.normalized_coords().to_vec(),
                     transform: transform.as_coeffs(),
                     glyph_transform,
-                    hint: options.hint_glyphs && !matches!(style, PreparedGlyphStyle::Stroke { .. }),
+                    hint: options.hint_glyphs
+                        && !matches!(style, PreparedGlyphStyle::Stroke { .. }),
                     embolden: if font.synthetic_bold() {
                         [1.0, 1.0]
                     } else {
