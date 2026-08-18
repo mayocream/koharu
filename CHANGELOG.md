@@ -1,3 +1,10 @@
+## [0.75.9](https://github.com/mayocream/koharu/compare/0.75.8..0.75.9) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(translator)* Use LM Studio vision capability - ([8ab7cde](https://github.com/mayocream/koharu/commit/8ab7cde12bfc8fc9bae2012c531a8442cd13426a))
+
+
 ## [0.75.8](https://github.com/mayocream/koharu/compare/0.75.7..0.75.8) - 2026-08-18
 
 ### 🐛 Bug Fixes
