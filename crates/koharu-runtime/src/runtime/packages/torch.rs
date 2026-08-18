@@ -286,15 +286,19 @@ impl RuntimePackage for Torch {
         let directory = self.install().await?.join("libtorch/lib");
         #[cfg(target_os = "linux")]
         if matches!(self.0, Backend::Rocm72) {
-            // Keep the wheel's stateful DRM symbols isolated from copies already loaded by the host.
+            // Keep the wheel's stateful ROCm symbols ahead of copies already loaded by the host.
             use libloading::os::unix::{Library, RTLD_LAZY, RTLD_LOCAL};
             let flags = RTLD_LAZY | RTLD_LOCAL | libc::RTLD_DEEPBIND;
-            std::mem::forget(unsafe {
-                (
-                    Library::open(Some(directory.join("libdrm.so")), flags)?,
-                    Library::open(Some(directory.join("libdrm_amdgpu.so")), flags)?,
-                )
-            });
+            for library in [
+                "libdrm.so",
+                "libdrm_amdgpu.so",
+                "librocprofiler-register.so",
+                "libamd_comgr.so",
+                "libhsa-runtime64.so",
+                "libamdhip64.so",
+            ] {
+                std::mem::forget(unsafe { Library::open(Some(directory.join(library)), flags)? });
+            }
         }
         for library in libraries {
             loader::load(directory.join(library))?;
