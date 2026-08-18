@@ -81,7 +81,7 @@ pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<V
             name: display_name(&model.key),
             model: Some(model.key),
             quantizations: Vec::new(),
-            vision: model.kind == "vlm",
+            vision: model.capabilities.vision,
         })
         .collect())
 }
@@ -158,6 +158,12 @@ struct ListedModel {
     #[serde(rename = "type")]
     kind: String,
     key: String,
+    capabilities: ListedModelCapabilities,
+}
+
+#[derive(Deserialize)]
+struct ListedModelCapabilities {
+    vision: bool,
 }
 
 #[cfg(test)]
@@ -199,18 +205,37 @@ mod tests {
     fn model_discovery_keeps_language_and_vision_models() {
         let response: ModelsResponse = serde_json::from_value(serde_json::json!({
             "models": [
-                { "type": "llm", "key": "publisher/chat-model" },
-                { "type": "vlm", "key": "publisher/vision-model" },
-                { "type": "embedding", "key": "publisher/embed-model" }
+                {
+                    "type": "llm",
+                    "key": "publisher/chat-model",
+                    "capabilities": { "vision": false }
+                },
+                {
+                    "type": "llm",
+                    "key": "publisher/vision-model",
+                    "capabilities": { "vision": true }
+                },
+                {
+                    "type": "embedding",
+                    "key": "publisher/embed-model",
+                    "capabilities": { "vision": false }
+                }
             ]
         }))
         .unwrap();
         let models = response
             .models
             .into_iter()
-            .filter_map(|model| matches!(model.kind.as_str(), "llm" | "vlm").then_some(model.key))
+            .filter(|model| matches!(model.kind.as_str(), "llm" | "vlm"))
+            .map(|model| (model.key, model.capabilities.vision))
             .collect::<Vec<_>>();
-        assert_eq!(models, ["publisher/chat-model", "publisher/vision-model"]);
+        assert_eq!(
+            models,
+            [
+                ("publisher/chat-model".to_owned(), false),
+                ("publisher/vision-model".to_owned(), true)
+            ]
+        );
     }
 
     #[test]
