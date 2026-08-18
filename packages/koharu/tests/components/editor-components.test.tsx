@@ -894,20 +894,32 @@ describe('greenfield editor', () => {
     expect(instructions).toHaveFocus()
   })
 
-  it('changes the translation model from the runtime selector', async () => {
+  it('changes the translation model without re-enabling vision or thinking', async () => {
     installProject()
     const user = userEvent.setup()
-    const nextPreferences: Preferences = {
+    const currentPreferences: Preferences = {
       ...preferences,
       pipeline: {
         ...preferences.pipeline,
         translation: {
           ...preferences.pipeline.translation,
+          model: { ...preferences.pipeline.translation.model, vision: false },
+          generation: { ...preferences.pipeline.translation.generation, thinking: false },
+        },
+      },
+    }
+    useKoharuStore.setState({ preferences: currentPreferences })
+    const nextPreferences: Preferences = {
+      ...currentPreferences,
+      pipeline: {
+        ...currentPreferences.pipeline,
+        translation: {
+          ...currentPreferences.pipeline.translation,
           model: {
             provider: 'local',
             model: 'gemma4-12b-it',
             quantization: null,
-            vision: true,
+            vision: false,
           },
         },
       },
@@ -940,12 +952,12 @@ describe('greenfield editor', () => {
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith(
         nextPreferences.pipeline,
-        preferences.providers,
-        preferences.typesetting,
+        currentPreferences.providers,
+        currentPreferences.typesetting,
       ),
     )
-    expect(useKoharuStore.getState().preferences?.pipeline.translation.model).toEqual(
-      nextPreferences.pipeline.translation.model,
+    expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
+      nextPreferences.pipeline.translation,
     )
   })
 
