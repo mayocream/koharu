@@ -93,7 +93,8 @@
   }
 
   button,
-  [role='button'] {
+  [role='button'],
+  .window-resize-handle {
     -webkit-app-region: no-drag;
   }
 

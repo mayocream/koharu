@@ -2,8 +2,19 @@
 
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Copy, Minus, Square, X } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+
+const resizeHandles = [
+  { direction: 'North', className: 'top-0 right-2 left-2 h-1 cursor-n-resize' },
+  { direction: 'South', className: 'right-2 bottom-0 left-2 h-1 cursor-s-resize' },
+  { direction: 'East', className: 'top-2 right-0 bottom-2 w-1 cursor-e-resize' },
+  { direction: 'West', className: 'top-2 bottom-2 left-0 w-1 cursor-w-resize' },
+  { direction: 'NorthEast', className: 'top-0 right-0 size-2 cursor-ne-resize' },
+  { direction: 'NorthWest', className: 'top-0 left-0 size-2 cursor-nw-resize' },
+  { direction: 'SouthEast', className: 'right-0 bottom-0 size-2 cursor-se-resize' },
+  { direction: 'SouthWest', className: 'bottom-0 left-0 size-2 cursor-sw-resize' },
+] as const
 
 export function useMacOS() {
   const [macOS, setMacOS] = useState(false)
@@ -52,25 +63,54 @@ export function WindowControls() {
   }
 
   return (
-    <div className='flex h-full shrink-0'>
-      <WindowButton label={t('window.minimize')} onClick={() => void getCurrentWindow().minimize()}>
-        <Minus />
-      </WindowButton>
-      <WindowButton
-        label={t(maximized ? 'window.restore' : 'window.maximize')}
-        onClick={() => void toggleMaximize()}
-      >
-        {maximized ? <Copy /> : <Square />}
-      </WindowButton>
-      <WindowButton
-        label={t('window.close')}
-        className='hover:text-destructive-foreground hover:bg-destructive'
-        onClick={() => void getCurrentWindow().close()}
-      >
-        <X />
-      </WindowButton>
-    </div>
+    <>
+      {!maximized && <WindowResizeHandles />}
+      <div className='flex h-full shrink-0'>
+        <WindowButton
+          label={t('window.minimize')}
+          onClick={() => void getCurrentWindow().minimize()}
+        >
+          <Minus />
+        </WindowButton>
+        <WindowButton
+          label={t(maximized ? 'window.restore' : 'window.maximize')}
+          onClick={() => void toggleMaximize()}
+        >
+          {maximized ? <Copy /> : <Square />}
+        </WindowButton>
+        <WindowButton
+          label={t('window.close')}
+          className='hover:text-destructive-foreground hover:bg-destructive'
+          onClick={() => void getCurrentWindow().close()}
+        >
+          <X />
+        </WindowButton>
+      </div>
+    </>
   )
+}
+
+function WindowResizeHandles() {
+  const startResize =
+    (direction: (typeof resizeHandles)[number]['direction']) =>
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+      event.stopPropagation()
+      void getCurrentWindow()
+        .startResizeDragging(direction)
+        .catch(() => undefined)
+    }
+
+  return resizeHandles.map(({ direction, className }) => (
+    <div
+      key={direction}
+      aria-hidden='true'
+      data-window-resize-handle={direction}
+      className={`window-resize-handle fixed z-50 ${className}`}
+      onPointerDown={startResize(direction)}
+    />
+  ))
 }
 
 function WindowButton({

@@ -40,6 +40,7 @@ const nativeWindow = vi.hoisted(() => ({
   isMaximized: vi.fn(async () => false),
   minimize: vi.fn(async () => undefined),
   onResized: vi.fn(async () => () => undefined),
+  startResizeDragging: vi.fn(async () => undefined),
   toggleMaximize: vi.fn(async () => undefined),
 }))
 const nativeOpenUrl = vi.hoisted(() => vi.fn(async () => undefined))
@@ -210,6 +211,41 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(nativeWindow.onResized).toHaveBeenCalledTimes(1))
     view.unmount()
     await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1))
+  })
+
+  it('starts native resize dragging from every frameless window edge', () => {
+    nativeWindow.startResizeDragging.mockClear()
+    const view = render(<WindowControls />)
+    const directions = [
+      'North',
+      'South',
+      'East',
+      'West',
+      'NorthEast',
+      'NorthWest',
+      'SouthEast',
+      'SouthWest',
+    ]
+
+    for (const direction of directions) {
+      fireEvent.pointerDown(
+        view.container.querySelector(`[data-window-resize-handle="${direction}"]`)!,
+        { button: 0 },
+      )
+    }
+
+    expect(nativeWindow.startResizeDragging.mock.calls).toEqual(
+      directions.map((direction) => [direction]),
+    )
+  })
+
+  it('removes resize handles while the window is maximized', async () => {
+    nativeWindow.isMaximized.mockResolvedValueOnce(true)
+    const view = render(<WindowControls />)
+
+    await waitFor(() =>
+      expect(view.container.querySelector('[data-window-resize-handle]')).not.toBeInTheDocument(),
+    )
   })
 
   it('shows import activity and prevents duplicate imports', async () => {
