@@ -1,3 +1,10 @@
+## [0.75.1](https://github.com/mayocream/koharu/compare/0.75.0..0.75.1) - 2026-08-18
+
+### ⚡ Performance
+
+- *(runtime)* Accelerate multipart downloads - ([22dab37](https://github.com/mayocream/koharu/commit/22dab373485245bbe1ce9ec2b35ca7a72ba56d45))
+
+
 ## [0.75.0](https://github.com/mayocream/koharu/compare/0.74.0..0.75.0) - 2026-08-18
 
 ### ⛰️  Features
