@@ -39,7 +39,6 @@ jobs:
         with:
           shared-key: koharu-app
           cache-workspace-crates: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install macOS CEF helper targets
         if: startsWith(matrix.platform, 'macos')
