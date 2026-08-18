@@ -126,8 +126,10 @@ impl TextRenderer {
                 writing_mode,
                 options,
                 transform,
-                stroke.color,
-                stroke.width_px,
+                GlyphPaint {
+                    color: stroke.color,
+                    dilation_px: stroke.width_px,
+                },
             );
         }
         draw_layout(
@@ -137,8 +139,10 @@ impl TextRenderer {
             writing_mode,
             options,
             transform,
-            options.color,
-            0.0,
+            GlyphPaint {
+                color: options.color,
+                dilation_px: 0.0,
+            },
         );
     }
 
@@ -370,6 +374,12 @@ fn placement(rect: LayoutBox, width: f32, height: f32) -> (f32, f32) {
     (x, y)
 }
 
+/// Color and outward dilation for one glyph draw pass (border or ordinary fill).
+struct GlyphPaint {
+    color: [u8; 4],
+    dilation_px: f32,
+}
+
 fn draw_layout(
     scene: &mut PreparedScene,
     resources: &mut Vec<PreparedResource>,
@@ -377,8 +387,7 @@ fn draw_layout(
     writing_mode: WritingMode,
     options: &TextRenderOptions,
     transform: Affine,
-    color: [u8; 4],
-    dilation_px: f32,
+    paint: GlyphPaint,
 ) {
     for line in &layout.lines {
         let (baseline_x, baseline_y) = match writing_mode {
@@ -429,9 +438,9 @@ fn draw_layout(
                     // Hinting folds a uniform zoom into `font_size` for crisp fill text, but a
                     // border needs the real transform so its dilation amount stays proportional
                     // to that same zoom instead of being rendered at a fixed pixel size.
-                    hint: options.hint_glyphs && dilation_px == 0.0,
-                    embolden: [synthetic_bold + dilation_px; 2],
-                    color,
+                    hint: options.hint_glyphs && paint.dilation_px == 0.0,
+                    embolden: [synthetic_bold + paint.dilation_px; 2],
+                    color: paint.color,
                     glyphs,
                 }));
             start = end;
