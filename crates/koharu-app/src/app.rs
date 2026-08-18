@@ -68,6 +68,8 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
     builder
         .plugin(
             tauri_plugin_log::Builder::new()
+                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .max_file_size(1_000_000)
                 .clear_targets()
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::LogDir { file_name: None },
