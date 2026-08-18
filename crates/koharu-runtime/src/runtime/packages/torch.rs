@@ -47,7 +47,7 @@ enum Backend {
     #[strum(
         serialize = "rocm-7.2",
         props(
-            linux = "libgomp.so,libc10.so,libc10_hip.so,libaotriton_v2.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_rocshmem.so,libtorch_hip.so,libtorch.so"
+            linux = "libgomp.so,libc10.so,libc10_hip.so,libaotriton_v2.so,libcaffe2_nvrtc.so,libshm.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch_hip.so,libtorch_rocshmem.so,libtorch.so"
         )
     )]
     Rocm72,
