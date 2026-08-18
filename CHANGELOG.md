@@ -1,3 +1,10 @@
+## [0.75.4](https://github.com/mayocream/koharu/compare/0.75.3..0.75.4) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load ROCm Torch dependencies in order - ([01bc970](https://github.com/mayocream/koharu/commit/01bc97057d89169a5251dec9236707bb087f25b8))
+
+
 ## [0.75.3](https://github.com/mayocream/koharu/compare/0.75.2..0.75.3) - 2026-08-18
 
 ### 🐛 Bug Fixes
