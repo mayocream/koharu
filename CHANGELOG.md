@@ -1,3 +1,12 @@
+## [0.75.6](https://github.com/mayocream/koharu/compare/0.75.5..0.75.6) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(ml)* Select precision by device capability - ([ce2e6fb](https://github.com/mayocream/koharu/commit/ce2e6fbe2a4a31f7355c5c892ee9c5f4a6083e54))
+- *(runtime)* Retry interrupted download ranges - ([1143fe7](https://github.com/mayocream/koharu/commit/1143fe77dd1179e4e477c1776aff8d5f62382dbb))
+- *(runtime)* Correct Linux cuDNN library manifest - ([84ef3ee](https://github.com/mayocream/koharu/commit/84ef3ee5ed6c40e6ba0a2e9f0b2e92d25c761969))
+
+
 ## [0.75.5](https://github.com/mayocream/koharu/compare/0.75.4..0.75.5) - 2026-08-18
 
 ### ⛰️  Features
