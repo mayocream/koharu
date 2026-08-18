@@ -32,17 +32,17 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 
 ## Features
 
-- Import raster images, archives, and PDFs with [multi-format project management](https://koharu.rs/workflow/projects-and-imports/)
-- Execute detection, OCR, translation, and inpainting through a [selective pipeline](https://koharu.rs/workflow/process-pages/) at page or project scope
-- Locate text regions, speech bubbles, and cleanup regions using [layout detection and segmentation](https://koharu.rs/workflow/process-pages/)
-- Run [multi-model OCR](https://koharu.rs/models/vision-and-inpainting/) on dialogue, captions, and general page text
-- Translate with [local GGUF inference, hosted LLM providers, or machine-translation services](https://koharu.rs/models/translation-providers/)
-- Remove source text and reconstruct artwork with [direct or generative inpainting](https://koharu.rs/workflow/cleanup-and-inpainting/)
-- Correct OCR and translation output during [proofreading](https://koharu.rs/workflow/review-text/)
-- Perform manual cleanup, text placement, and page composition on a [WebGPU-based canvas](https://koharu.rs/workflow/canvas-basics/)
-- Typeset vertical CJK and right-to-left text using [multilingual shaping, automatic fitting, and font fallback](https://koharu.rs/workflow/typesetting/)
-- Export [flattened PNG or layered PSD files](https://koharu.rs/workflow/export/) for delivery or further editing
-- Inspect, edit, and process the open project with [Koharu Agent](https://koharu.rs/agent/work-with-projects/)
+- [Multi-format project management](https://koharu.rs/workflow/projects-and-imports/) for raster images, archives, and PDFs with page sequencing
+- [Selective pipeline](https://koharu.rs/workflow/process-pages/) for detection, OCR, translation, and inpainting at page or project scope
+- [Detection and segmentation](https://koharu.rs/workflow/process-pages/) for text regions, speech bubbles, and cleanup regions
+- [Multimodal OCR](https://koharu.rs/models/vision-and-inpainting/) for dialogue, captions, and general page text
+- [Local GGUF inference and hosted providers](https://koharu.rs/models/translation-providers/) for LLM and machine-translation workflows
+- [Generative inpainting](https://koharu.rs/workflow/cleanup-and-inpainting/) for source-text removal and artwork reconstruction
+- [Proofreading](https://koharu.rs/workflow/review-text/) for correcting OCR and translation output
+- [WebGPU-based canvas](https://koharu.rs/workflow/canvas-basics/) for manual cleanup, text placement, and page composition
+- [Multilingual text shaping and layout](https://koharu.rs/workflow/typesetting/) with automatic fitting, font fallback, vertical CJK, and right-to-left text
+- [Layered PSD export](https://koharu.rs/workflow/export/) for flattened delivery and layered editing
+- [Agent-based workflow](https://koharu.rs/agent/work-with-projects/) for project inspection, editing, and pipeline control
 
 ## Hardware Acceleration
 
