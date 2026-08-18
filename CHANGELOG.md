@@ -1,3 +1,10 @@
+## [0.75.10](https://github.com/mayocream/koharu/compare/0.75.9..0.75.10) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load CUDA Torch dependencies in order - ([0d20664](https://github.com/mayocream/koharu/commit/0d2066409ed827761fbe5fc782cded94d13825b1))
+
+
 ## [0.75.9](https://github.com/mayocream/koharu/compare/0.75.8..0.75.9) - 2026-08-18
 
 ### 🐛 Bug Fixes
