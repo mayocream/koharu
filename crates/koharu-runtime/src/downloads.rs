@@ -8,19 +8,18 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::{StatusCode, header};
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
     sync::broadcast,
-    task::JoinSet,
 };
 
 use crate::network::{DownloadClient, download_client};
 
 const EVENT_CAPACITY: usize = 256;
-const PART_SIZE: u64 = 8 * 1024 * 1024;
+const PART_SIZE: u64 = 4 * 1024 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 const WRITE_BUFFER_SIZE: usize = 256 * 1024;
 
@@ -161,21 +160,16 @@ impl Transfer {
             total,
             completed: AtomicU64::new(0),
         });
-        let mut tasks = JoinSet::new();
+        let parts = (0..total).step_by(PART_SIZE as usize).map(|start| Part {
+            start,
+            end: (start + PART_SIZE).min(total) - 1,
+        });
 
-        for start in (0..total).step_by(PART_SIZE as usize) {
-            tasks.spawn(fetch_part(
-                self.client.clone(),
-                transfer.clone(),
-                Part {
-                    start,
-                    end: (start + PART_SIZE).min(total) - 1,
-                },
-            ));
-        }
-        while let Some(result) = tasks.join_next().await {
-            result.context("download task failed")??;
-        }
+        stream::iter(parts)
+            .map(|part| fetch_part(self.client.clone(), Arc::clone(&transfer), part))
+            .buffer_unordered(num_cpus::get().saturating_mul(4).clamp(16, 64))
+            .try_collect::<()>()
+            .await?;
         ensure!(
             transfer.completed.load(Ordering::Relaxed) == total,
             "{url} download was incomplete"
@@ -200,14 +194,13 @@ impl PartTransfer {
     }
 }
 
-#[derive(Clone, Copy)]
 struct Part {
     start: u64,
     end: u64,
 }
 
 impl Part {
-    const fn len(self) -> u64 {
+    const fn len(&self) -> u64 {
         self.end - self.start + 1
     }
 }

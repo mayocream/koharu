@@ -19,6 +19,7 @@ dunce = { workspace = true }
 futures = { workspace = true }
 fs4 = { workspace = true }
 koharu-config = { workspace = true }
+num_cpus = { workspace = true }
 petgraph = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
