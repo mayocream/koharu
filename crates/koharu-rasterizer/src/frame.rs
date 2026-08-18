@@ -4,15 +4,15 @@ use std::{collections::HashMap, sync::Arc};
 
 use vello::{
     FontEmbolden, Glyph, Scene,
-    kurbo::{Affine, BezPath, Diagonal2, Join, Rect, Stroke},
+    kurbo::{Affine, BezPath, Diagonal2, Join, Rect},
     peniko::{Blob, Color, Fill, FontData, Mix},
 };
 
 use crate::{
     Bounds, CompositionCommand, Error, FillRule, LayerId, LayerKind, PathElement, PreparedContent,
-    PreparedElementFrame, PreparedFrame, PreparedFrameBundle, PreparedFrameManifest,
-    PreparedGlyphStyle, PreparedPath, PreparedResource, PreparedResourceStore, PreparedScene,
-    PreparedSceneCommand, Presentation, RasterDraw, ResourceId, Result, Revision,
+    PreparedElementFrame, PreparedFrame, PreparedFrameBundle, PreparedFrameManifest, PreparedPath,
+    PreparedResource, PreparedResourceStore, PreparedScene, PreparedSceneCommand, Presentation,
+    RasterDraw, ResourceId, Result, Revision,
 };
 
 #[derive(Clone)]
@@ -474,25 +474,22 @@ fn compile_scene(
                     run = run.glyph_transform(Some(Affine::new(transform)));
                 }
                 if prepared.embolden != [0.0, 0.0] {
-                    run = run.font_embolden(FontEmbolden::new(Diagonal2::new(
-                        f64::from(prepared.embolden[0]),
-                        f64::from(prepared.embolden[1]),
-                    )));
+                    // Round joins avoid the long miter spikes a dilated outline can otherwise
+                    // produce at sharp glyph corners once the border width is large.
+                    run = run.font_embolden(
+                        FontEmbolden::new(Diagonal2::new(
+                            f64::from(prepared.embolden[0]),
+                            f64::from(prepared.embolden[1]),
+                        ))
+                        .with_join(Join::Round),
+                    );
                 }
                 let glyphs = prepared.glyphs.iter().map(|glyph| Glyph {
                     id: glyph.id,
                     x: glyph.x,
                     y: glyph.y,
                 });
-                match prepared.style {
-                    PreparedGlyphStyle::Fill { color } => {
-                        run.brush(rgba(color)).draw(Fill::NonZero, glyphs);
-                    }
-                    PreparedGlyphStyle::Stroke { color, width } => {
-                        let stroke = Stroke::new(f64::from(width)).with_join(Join::Round);
-                        run.brush(rgba(color)).draw(&stroke, glyphs);
-                    }
-                }
+                run.brush(rgba(prepared.color)).draw(Fill::NonZero, glyphs);
             }
             PreparedSceneCommand::FillPath(prepared) => {
                 let path = compile_path(prepared);
