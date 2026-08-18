@@ -1,3 +1,10 @@
+## [0.75.5](https://github.com/mayocream/koharu/compare/0.75.4..0.75.5) - 2026-08-18
+
+### ⛰️  Features
+
+- *(app)* Persist backend logs - ([3587243](https://github.com/mayocream/koharu/commit/3587243199c39335755ca28669dd171f412d8b6f))
+
+
 ## [0.75.4](https://github.com/mayocream/koharu/compare/0.75.3..0.75.4) - 2026-08-18
 
 ### 🐛 Bug Fixes
