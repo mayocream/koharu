@@ -1,3 +1,29 @@
+## [0.75.0](https://github.com/mayocream/koharu/compare/0.74.0..0.75.0) - 2026-08-18
+
+### ⛰️  Features
+
+- *(runtime)* Add Linux CUDA and ROCm artifacts - ([cf914e8](https://github.com/mayocream/koharu/commit/cf914e8b92aee5829e6a6a03edd08a893b0eda95))
+
+### 🐛 Bug Fixes
+
+- *(ci)* Use Linux CUDA package names - ([2a05c67](https://github.com/mayocream/koharu/commit/2a05c67c24736c7bc117961c27c954ca5676276f))
+
+### 📚 Documentation
+
+- Improve readme feature list - ([b015225](https://github.com/mayocream/koharu/commit/b0152251435d6fff9afe3c746a76014e1150169c))
+- Improve readme - ([316795b](https://github.com/mayocream/koharu/commit/316795b93fe66f1abfea07af30cd98924b456a5d))
+- Document hardware runtime support - ([2d38f14](https://github.com/mayocream/koharu/commit/2d38f14ef4c76ad00355f7fe3ccb2004f7525c05))
+- Expand debug logging guide - ([cba2629](https://github.com/mayocream/koharu/commit/cba26293a26b9777a29769099c636e41d30f6454))
+
+### ⚡ Performance
+
+- *(runtime)* Maximize download throughput - ([b608a9f](https://github.com/mayocream/koharu/commit/b608a9f7f7311969fd7c5a31c0d1eb81c153c03b))
+
+### ⚙️ Miscellaneous Tasks
+
+- Automate native dependency releases - ([9cd3100](https://github.com/mayocream/koharu/commit/9cd3100515c17fbb0007bc456c5e47add6a49a55))
+
+
 ## [0.74.0](https://github.com/mayocream/koharu/compare/0.73.0..0.74.0) - 2026-08-18
 
 ### ⛰️  Features
