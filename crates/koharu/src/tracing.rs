@@ -360,6 +360,14 @@ impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for TimingLayer {
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         let mut fields = Fields(String::new());
         event.record(&mut fields);
+        let level = match *event.metadata().level() {
+            Level::ERROR => log::Level::Error,
+            Level::WARN => log::Level::Warn,
+            Level::INFO => log::Level::Info,
+            Level::DEBUG => log::Level::Debug,
+            Level::TRACE => log::Level::Trace,
+        };
+        log::log!(target: event.metadata().target(), level, "{}", fields.0);
         let node = Node::Event {
             level: *event.metadata().level(),
             message: fields.0,

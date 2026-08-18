@@ -66,6 +66,14 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
         ("use-angle", Some("vulkan")),
     ]);
     builder
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir { file_name: None },
+                ))
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|handle, _, _| {
             if let Some(window) = handle.get_webview_window("main") {
                 let _ = window.unminimize();

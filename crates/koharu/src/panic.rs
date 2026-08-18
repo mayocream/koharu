@@ -16,6 +16,8 @@ pub fn install() {
             .map(|l| format!("{}:{}", l.file(), l.line()))
             .unwrap_or_default();
 
+        tracing::error!(%msg, %location, "Koharu panicked");
+
         if let Some(client) = sentry::Hub::current().client() {
             client.flush(Some(Duration::from_secs(2)));
         }
