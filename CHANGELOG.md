@@ -1,3 +1,10 @@
+## [0.75.7](https://github.com/mayocream/koharu/compare/0.75.6..0.75.7) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(app)* Limit persistent log size - ([a4e8b4d](https://github.com/mayocream/koharu/commit/a4e8b4d029f2304eabbdc4a00059d67ee9cbd261))
+
+
 ## [0.75.6](https://github.com/mayocream/koharu/compare/0.75.5..0.75.6) - 2026-08-18
 
 ### 🐛 Bug Fixes
