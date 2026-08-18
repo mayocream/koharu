@@ -16,7 +16,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "llama.cpp-b10430";
+const RELEASE: &str = "llama.cpp-b10472";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Llama {
@@ -29,6 +29,14 @@ pub(crate) enum Llama {
     )]
     WindowsCuda,
     #[strum(
+        serialize = "linux-cuda",
+        props(
+            asset = "llama-cuda-ubuntu-24.04.tar.gz",
+            libraries = "libllama.so,libmtmd.so"
+        )
+    )]
+    LinuxCuda,
+    #[strum(
         serialize = "windows-hip",
         props(
             asset = "llama-hip-windows-2022.tar.gz",
@@ -36,6 +44,14 @@ pub(crate) enum Llama {
         )
     )]
     WindowsHip,
+    #[strum(
+        serialize = "linux-hip",
+        props(
+            asset = "llama-hip-ubuntu-24.04.tar.gz",
+            libraries = "libllama.so,libmtmd.so"
+        )
+    )]
+    LinuxHip,
     #[strum(
         serialize = "windows-vulkan",
         props(
@@ -121,6 +137,12 @@ impl DiscoverablePackage for Llama {
             }
             None
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            if hardware.supports_cuda() {
+                return Some(Self::LinuxCuda);
+            }
+            if hardware.supports_rocm() {
+                return Some(Self::LinuxHip);
+            }
             hardware.supports_vulkan().then_some(Self::LinuxVulkan)
         } else if hardware.supports_metal() {
             Some(Self::MacosMetal)
@@ -135,12 +157,14 @@ impl RuntimePackage for Llama {
 
     fn dependencies(self, hardware: &Hardware) -> Result<Vec<Component>> {
         match self {
-            Self::WindowsCuda => Ok(vec![
+            Self::WindowsCuda | Self::LinuxCuda => Ok(vec![
                 Component::Cuda(Cuda::Runtime13),
                 Component::Cuda(Cuda::Blas13),
             ]),
             Self::WindowsHip => Ok(vec![Component::Rocm(Rocm::discover(hardware)?)]),
-            Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => Ok(Vec::new()),
+            Self::LinuxHip | Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => {
+                Ok(Vec::new())
+            }
         }
     }
 

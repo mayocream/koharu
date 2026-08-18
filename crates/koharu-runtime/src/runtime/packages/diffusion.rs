@@ -29,6 +29,14 @@ pub(crate) enum Diffusion {
     )]
     WindowsCuda,
     #[strum(
+        serialize = "linux-cuda",
+        props(
+            asset = "stable-diffusion-cuda-ubuntu-24.04.tar.gz",
+            library = "libstable-diffusion.so"
+        )
+    )]
+    LinuxCuda,
+    #[strum(
         serialize = "windows-hip",
         props(
             asset = "stable-diffusion-hip-windows-2022.tar.gz",
@@ -36,6 +44,14 @@ pub(crate) enum Diffusion {
         )
     )]
     WindowsHip,
+    #[strum(
+        serialize = "linux-hip",
+        props(
+            asset = "stable-diffusion-hip-ubuntu-24.04.tar.gz",
+            library = "libstable-diffusion.so"
+        )
+    )]
+    LinuxHip,
     #[strum(
         serialize = "windows-vulkan",
         props(
@@ -121,6 +137,12 @@ impl DiscoverablePackage for Diffusion {
             }
             None
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            if hardware.supports_cuda() {
+                return Some(Self::LinuxCuda);
+            }
+            if hardware.supports_rocm() {
+                return Some(Self::LinuxHip);
+            }
             hardware.supports_vulkan().then_some(Self::LinuxVulkan)
         } else if hardware.supports_metal() {
             Some(Self::MacosMetal)
@@ -135,12 +157,14 @@ impl RuntimePackage for Diffusion {
 
     fn dependencies(self, hardware: &Hardware) -> Result<Vec<Component>> {
         match self {
-            Self::WindowsCuda => Ok(vec![
+            Self::WindowsCuda | Self::LinuxCuda => Ok(vec![
                 Component::Cuda(Cuda::Runtime13),
                 Component::Cuda(Cuda::Blas13),
             ]),
             Self::WindowsHip => Ok(vec![Component::Rocm(Rocm::discover(hardware)?)]),
-            Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => Ok(Vec::new()),
+            Self::LinuxHip | Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => {
+                Ok(Vec::new())
+            }
         }
     }
 
