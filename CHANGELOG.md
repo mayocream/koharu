@@ -1,3 +1,14 @@
+## [0.74.0](https://github.com/mayocream/koharu/compare/0.73.0..0.74.0) - 2026-08-18
+
+### ⛰️  Features
+
+- *(runtime)* Support ROCm Torch on Linux - ([7462036](https://github.com/mayocream/koharu/commit/7462036cbda998e4517b3925d3117d8f36549f3f))
+
+### 🐛 Bug Fixes
+
+- *(app)* Hide link status bubble - ([002ec11](https://github.com/mayocream/koharu/commit/002ec11bd6133c082cf5989ac57ddb4f0f2ef46a))
+
+
 ## [0.73.0](https://github.com/mayocream/koharu/compare/0.72.0..0.73.0) - 2026-08-17
 
 ### ⛰️  Features
