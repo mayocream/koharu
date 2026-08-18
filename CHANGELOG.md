@@ -1,3 +1,10 @@
+## [0.75.3](https://github.com/mayocream/koharu/compare/0.75.2..0.75.3) - 2026-08-18
+
+### 🐛 Bug Fixes
+
+- *(ui)* Preserve model toggle preferences - ([63764d6](https://github.com/mayocream/koharu/commit/63764d6c28647cd992200474be164fc5faad6d47))
+
+
 ## [0.75.2](https://github.com/mayocream/koharu/compare/0.75.1..0.75.2) - 2026-08-18
 
 ### 🐛 Bug Fixes
