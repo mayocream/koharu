@@ -213,6 +213,7 @@ struct ListedModel {
     name: String,
     display_name: String,
     supported_generation_methods: Vec<String>,
+    #[serde(default)]
     thinking: bool,
 }
 
@@ -258,16 +259,24 @@ mod tests {
     }
 
     #[test]
-    fn reads_thinking_capability_from_model_list() {
+    fn reads_optional_thinking_capability_from_model_list() {
         let response: ModelsResponse = serde_json::from_value(serde_json::json!({
-            "models": [{
-                "name": "models/gemini-3.7-flash",
-                "displayName": "Gemini 3.7 Flash",
-                "supportedGenerationMethods": ["generateContent"],
-                "thinking": true
-            }]
+            "models": [
+                {
+                    "name": "models/gemini-3.7-flash",
+                    "displayName": "Gemini 3.7 Flash",
+                    "supportedGenerationMethods": ["generateContent"],
+                    "thinking": true
+                },
+                {
+                    "name": "models/gemini-2.0-flash-lite",
+                    "displayName": "Gemini 2.0 Flash-Lite",
+                    "supportedGenerationMethods": ["generateContent"]
+                }
+            ]
         }))
         .unwrap();
         assert!(response.models[0].thinking);
+        assert!(!response.models[1].thinking);
     }
 }
