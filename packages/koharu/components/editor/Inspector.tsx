@@ -906,7 +906,6 @@ function LayerRow({
       <div
         data-selected={selected}
         data-expanded={expanded}
-        className='min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none'
         className={`min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none ${
           dragOverId === layer.id && dropPos
             ? dropPos === 'before'
