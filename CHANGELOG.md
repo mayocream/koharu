@@ -1,3 +1,16 @@
+## [0.77.0](https://github.com/mayocream/koharu/compare/0.76.0..0.77.0) - 2026-08-19
+
+### ⛰️  Features
+
+- Add native usage metrics - ([66e603d](https://github.com/mayocream/koharu/commit/66e603d4438a2f61aee41cf6bbe38c36e97f8219))
+
+### 🐛 Bug Fixes
+
+- *(ci)* Cover supported ROCm targets in HIP builds - ([b855982](https://github.com/mayocream/koharu/commit/b855982c3e2eba09b3fc285535828d972b11e77e))
+- *(ci)* Target dependency releases at default branch - ([d2b04ad](https://github.com/mayocream/koharu/commit/d2b04ad4337229bcab4355610f936ef09bfc1417))
+- *(pipeline)* Refine detection and inpainting reruns - ([acb7d99](https://github.com/mayocream/koharu/commit/acb7d99c9855db8c09224655c84d5d68e359c2e5))
+
+
 ## [0.76.0](https://github.com/mayocream/koharu/compare/0.75.16..0.76.0) - 2026-08-19
 
 ### ⛰️  Features
