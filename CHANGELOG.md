@@ -1,3 +1,14 @@
+## [0.75.14](https://github.com/mayocream/koharu/compare/0.75.13..0.75.14) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Preserve ROCm wheel layout - ([b830b49](https://github.com/mayocream/koharu/commit/b830b4955cd7411070a5526dea53caf0754c9578))
+
+### ⚙️ Miscellaneous Tasks
+
+- Optimize release caches - ([9aba741](https://github.com/mayocream/koharu/commit/9aba7419dbc9358bb77951995b691cfffd24f49c))
+
+
 ## [0.75.13](https://github.com/mayocream/koharu/compare/0.75.12..0.75.13) - 2026-08-19
 
 ### 🐛 Bug Fixes
