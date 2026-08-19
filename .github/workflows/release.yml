@@ -23,7 +23,7 @@ jobs:
             args: '--target aarch64-apple-darwin'
           - platform: 'ubuntu-latest'
             args: ''
-          - platform: 'windows-latest'
+          - platform: 'windows-2022'
             args: ''
 
     runs-on: ${{ matrix.platform }}
