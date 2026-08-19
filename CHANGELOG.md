@@ -1,3 +1,15 @@
+## [0.76.0](https://github.com/mayocream/koharu/compare/0.75.16..0.76.0) - 2026-08-19
+
+### ⛰️  Features
+
+- *(translator)* Support local reasoning - ([87104fc](https://github.com/mayocream/koharu/commit/87104fcf4d419e0de0f9d0cca7c404d87a0b6a14))
+
+### 🐛 Bug Fixes
+
+- *(translator)* Respect model capabilities - ([f842172](https://github.com/mayocream/koharu/commit/f842172e636628da0a018dfa1c4811d4d90f5301))
+- *(translator)* Align reasoning capabilities - ([5b6672c](https://github.com/mayocream/koharu/commit/5b6672ccefb94a1afefcaf45190cb633b5b65442))
+
+
 ## [0.75.16](https://github.com/mayocream/koharu/compare/0.75.15..0.75.16) - 2026-08-19
 
 ### 🐛 Bug Fixes
