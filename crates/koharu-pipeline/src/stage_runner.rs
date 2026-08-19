@@ -55,6 +55,19 @@ impl StageRunner {
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
         }
+        let skip = self.stages.skip(job.stage, &job.input).map_err(|error| {
+            self.stage_error(
+                job.stage,
+                model,
+                AttemptFailure {
+                    kind: ErrorKind::Processing,
+                    error,
+                },
+            )
+        })?;
+        if skip {
+            return Ok(StageOutcome::Skipped);
+        }
         let permit = self.accelerator.acquire().await;
         if job.stop.stopped() {
             return Ok(StageOutcome::Stopped);
