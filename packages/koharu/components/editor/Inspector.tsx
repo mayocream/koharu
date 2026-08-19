@@ -475,6 +475,43 @@ function normalizeFontName(value: string): string {
   return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
+function isDescendant(layers: Layer[], parentId: EntityId, childId: EntityId): boolean {
+  let current = layers.find((l) => l.id === childId)
+  while (current && current.parent) {
+    if (current.parent === parentId) return true
+    const parent = current.parent
+    current = layers.find((l) => l.id === parent)
+  }
+  return false
+}
+
+function isValidDrop(
+  layers: Layer[],
+  draggedId: EntityId,
+  targetId: EntityId,
+  pos: 'before' | 'after' | 'inside',
+  pageId: EntityId,
+): boolean {
+  if (draggedId === targetId || isDescendant(layers, draggedId, targetId)) return false
+
+  const draggedLayer = layers.find((l) => l.id === draggedId)
+  const targetLayer = layers.find((l) => l.id === targetId)
+  if (!draggedLayer || !targetLayer || isLockedLayer(targetLayer) || isLockedLayer(draggedLayer))
+    return false
+
+  const parent = pos === 'inside' ? targetId : (targetLayer.parent ?? pageId)
+  const parentLayer = layers.find((l) => l.id === parent)
+  const isParentTextGroup = parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+
+  const isDraggedText = isTextLayer(draggedLayer)
+  const hasTextGroup = layers.some((l) => isGroupLayer(l) && l.role === 'text')
+
+  if (isDraggedText && hasTextGroup && !isParentTextGroup) return false
+  if (!isDraggedText && isParentTextGroup) return false
+
+  return true
+}
+
 function displayedLayers(layers: Layer[], page: EntityId) {
   const indexes = new Map(layers.map((layer, index) => [layer.id, index]))
   const rows: { layer: Layer; index: number; depth: number }[] = []
@@ -500,6 +537,11 @@ function LayersInspector() {
   )
   const [movingLayer, setMovingLayer] = useState<EntityId | null>(null)
 
+  const [draggedId, setDraggedId] = useState<EntityId | null>(null)
+  const [dragOverId, setDragOverId] = useState<EntityId | null>(null)
+  const [dropPos, setDropPos] = useState<'before' | 'after' | 'inside' | null>(null)
+  const lastDragOverRef = useRef<{ id: EntityId; pos: 'before' | 'after' | 'inside' } | null>(null)
+
   useEffect(() => {
     setExpandedLayer(selected.length === 1 ? (selected[0] ?? null) : null)
   }, [selected])
@@ -512,7 +554,7 @@ function LayersInspector() {
     if (movingLayer !== null || isLockedLayer(layer)) return
     const parent = layer.parent ?? page.id
     const storedSiblings = page.layers.filter(
-      (candidate) => !isLockedLayer(candidate) && (candidate.parent ?? page.id) === parent,
+      (candidate) => (candidate.parent ?? page.id) === parent,
     )
     const parentLayer = page.layers.find((candidate) => candidate.id === parent)
     const shownSiblings =
@@ -530,7 +572,7 @@ function LayersInspector() {
       (next) => {
         queryClient.setQueryData(pageKey, next)
         setMovingLayer(null)
-        void refresh(projectKey)
+        void refresh(projectKey, pageKey)
       },
       () => setMovingLayer(null),
     )
@@ -556,6 +598,91 @@ function LayersInspector() {
     setExpandedLayer(layer)
   }
 
+  const handleDragStart = (id: EntityId) => {
+    setDraggedId(id)
+  }
+
+  const handleDragEnd = () => {
+    if (draggedId && lastDragOverRef.current && movingLayer === null) {
+      handleDrop(draggedId, lastDragOverRef.current.id, lastDragOverRef.current.pos)
+    }
+    setTimeout(() => {
+      setDraggedId(null)
+      setDragOverId(null)
+      setDropPos(null)
+      lastDragOverRef.current = null
+    }, 0)
+  }
+
+  const handleDragOver = (id: EntityId, pos: 'before' | 'after' | 'inside') => {
+    setDragOverId(id)
+    setDropPos(pos)
+    lastDragOverRef.current = { id, pos }
+  }
+
+  const handleDragLeave = () => {
+    setDragOverId(null)
+    setDropPos(null)
+  }
+
+  const handleDrop = (
+    sourceId: EntityId,
+    targetId: EntityId,
+    calculatedDropPos: 'before' | 'after' | 'inside',
+  ) => {
+    if (!isValidDrop(page.layers, sourceId, targetId, calculatedDropPos, page.id)) return
+
+    const sourceLayer = page.layers.find((l) => l.id === sourceId)
+    const targetLayer = page.layers.find((l) => l.id === targetId)
+    if (!sourceLayer || !targetLayer) return
+
+    let parent = targetLayer.parent ?? page.id
+    if (calculatedDropPos === 'inside') {
+      parent = targetLayer.id
+    }
+
+    const storedSiblingsWithoutSource = page.layers.filter(
+      (c) => (c.parent ?? page.id) === parent && c.id !== sourceId,
+    )
+
+    const parentLayer = page.layers.find((candidate) => candidate.id === parent)
+    const isTextGroup = parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+
+    let targetStoredIndex = 0
+
+    if (calculatedDropPos === 'inside') {
+      targetStoredIndex = isTextGroup ? storedSiblingsWithoutSource.length : 0
+    } else {
+      const shownSiblingsWithoutSource = isTextGroup
+        ? storedSiblingsWithoutSource
+        : [...storedSiblingsWithoutSource].reverse()
+
+      const targetIdxInShown = shownSiblingsWithoutSource.findIndex((c) => c.id === targetId)
+      if (targetIdxInShown !== -1) {
+        const targetShownIndex =
+          calculatedDropPos === 'before' ? targetIdxInShown : targetIdxInShown + 1
+        targetStoredIndex = isTextGroup
+          ? targetShownIndex
+          : storedSiblingsWithoutSource.length - targetShownIndex
+      } else {
+        targetStoredIndex = storedSiblingsWithoutSource.length
+      }
+    }
+
+    setMovingLayer(sourceId)
+    void call(commands.moveLayer, sourceId, parent, targetStoredIndex)
+      .then((next) => {
+        queryClient.setQueryData(pageKey, next)
+        void refresh(projectKey, pageKey)
+      })
+      .finally(() => {
+        setMovingLayer(null)
+        setDraggedId(null)
+        setDragOverId(null)
+        setDropPos(null)
+      })
+  }
+
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <header className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
@@ -571,9 +698,7 @@ function LayersInspector() {
           {layers.map(({ layer, index, depth }) => {
             const locked = isLockedLayer(layer)
             const storedSiblings = page.layers.filter(
-              (candidate) =>
-                !isLockedLayer(candidate) &&
-                (candidate.parent ?? page.id) === (layer.parent ?? page.id),
+              (candidate) => (candidate.parent ?? page.id) === (layer.parent ?? page.id),
             )
             const parentLayer = page.layers.find((candidate) => candidate.id === layer.parent)
             const siblings =
@@ -597,10 +722,25 @@ function LayersInspector() {
                     .catch(() => undefined)
                 }
                 onMove={(delta) => move(layer, delta)}
-                canMoveUp={!locked && position > 0}
-                canMoveDown={!locked && position >= 0 && position < siblings.length - 1}
+                canMoveUp={!locked && position > 0 && !isLockedLayer(siblings[position - 1])}
+                canMoveDown={
+                  !locked &&
+                  position >= 0 &&
+                  position < siblings.length - 1 &&
+                  !isLockedLayer(siblings[position + 1])
+                }
                 reordering={movingLayer !== null}
                 onDelete={isGroupLayer(layer) ? undefined : () => deleteLayer(layer.id)}
+                draggedId={draggedId}
+                dragOverId={dragOverId}
+                dropPos={dropPos}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                layersList={page.layers}
+                pageId={page.id}
               />
             )
           })}
@@ -625,6 +765,16 @@ function LayerRow({
   canMoveDown,
   reordering,
   onDelete,
+  draggedId,
+  dragOverId,
+  dropPos,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  layersList,
+  pageId,
 }: {
   layer: Layer
   index: number
@@ -639,17 +789,136 @@ function LayerRow({
   canMoveDown: boolean
   reordering: boolean
   onDelete?: () => void
+  draggedId: EntityId | null
+  dragOverId: EntityId | null
+  dropPos: 'before' | 'after' | 'inside' | null
+  onDragStart: (id: EntityId) => void
+  onDragEnd: () => void
+  onDragOver: (id: EntityId, pos: 'before' | 'after' | 'inside') => void
+  onDragLeave: () => void
+  onDrop: (sourceId: EntityId, targetId: EntityId, pos: 'before' | 'after' | 'inside') => void
+  layersList: Layer[]
+  pageId: EntityId
 }) {
   const { t } = useTranslation()
   const name = localizedLayerName(layer, index, t)
   const detail = localizedLayerKind(layer, t)
   const Icon = layerIcon(layer)
+
   return (
-    <div className='group min-w-0 px-1 py-px' style={{ paddingLeft: `${depth * 10 + 4}px` }}>
+    <div
+      className='group min-w-0 px-1 py-px'
+      style={{ paddingLeft: `${depth * 10 + 4}px` }}
+      draggable={!locked && !reordering}
+      onDragStart={(e) => {
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', layer.id)
+        }
+        onDragStart(layer.id)
+      }}
+      onDragEnd={() => {
+        onDragEnd()
+      }}
+      onDragEnter={(e) => {
+        const dragged = draggedId
+        if (!dragged) return
+
+        const rect = e.currentTarget.getBoundingClientRect()
+        const hoverY = e.clientY - rect.top
+        const isGroup = isGroupLayer(layer)
+
+        let pos: 'before' | 'after' | 'inside'
+        if (isGroup && hoverY > rect.height * 0.25 && hoverY < rect.height * 0.75) {
+          pos = 'inside'
+        } else if (hoverY < rect.height / 2) {
+          pos = 'before'
+        } else {
+          pos = 'after'
+        }
+
+        if (!isValidDrop(layersList, dragged, layer.id, pos, pageId)) return
+
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'move'
+        }
+        e.preventDefault()
+      }}
+      onDragOver={(e) => {
+        const dragged = draggedId
+        if (!dragged) return
+
+        const rect = e.currentTarget.getBoundingClientRect()
+        const hoverY = e.clientY - rect.top
+        const isGroup = isGroupLayer(layer)
+
+        let pos: 'before' | 'after' | 'inside'
+        if (isGroup && hoverY > rect.height * 0.25 && hoverY < rect.height * 0.75) {
+          pos = 'inside'
+        } else if (hoverY < rect.height / 2) {
+          pos = 'before'
+        } else {
+          pos = 'after'
+        }
+
+        if (!isValidDrop(layersList, dragged, layer.id, pos, pageId)) return
+
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'move'
+        }
+        e.preventDefault()
+        onDragOver(layer.id, pos)
+      }}
+      onDragLeave={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect()
+        if (
+          e.clientX < rect.left ||
+          e.clientX >= rect.right ||
+          e.clientY < rect.top ||
+          e.clientY >= rect.bottom
+        ) {
+          onDragLeave()
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        const dragged = draggedId
+        if (dragged) {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const hoverY = e.clientY - rect.top
+          const isGroup = isGroupLayer(layer)
+
+          let pos: 'before' | 'after' | 'inside'
+          if (isGroup && hoverY > rect.height * 0.25 && hoverY < rect.height * 0.75) {
+            pos = 'inside'
+          } else if (hoverY < rect.height / 2) {
+            pos = 'before'
+          } else {
+            pos = 'after'
+          }
+
+          if (isValidDrop(layersList, dragged, layer.id, pos, pageId)) {
+            onDrop(dragged, layer.id, pos)
+          }
+        }
+      }}
+    >
       <div
         data-selected={selected}
         data-expanded={expanded}
         className='min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none'
+        className={`min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none ${
+          dragOverId === layer.id && dropPos
+            ? dropPos === 'before'
+              ? 'rounded-t-none shadow-[inset_0_2px_0_0_var(--primary)]'
+              : dropPos === 'after'
+                ? 'rounded-b-none shadow-[inset_0_-2px_0_0_var(--primary)]'
+                : 'bg-primary/10 ring-1 ring-primary'
+            : ''
+        }`}
+        style={{
+          pointerEvents: draggedId !== null ? 'none' : 'auto',
+        }}
       >
         <div className='relative flex min-w-0 items-center gap-0.5'>
           <button
