@@ -226,7 +226,7 @@ impl RuntimePackage for Rocm {
         } else {
             anyhow::bail!("ROCm packages support only Windows and Linux")
         } {
-            loader::load(root.join(library))?;
+            loader::load_global(root.join(library))?;
         }
         Ok(())
     }
