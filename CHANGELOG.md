@@ -1,3 +1,14 @@
+## [0.75.15](https://github.com/mayocream/koharu/compare/0.75.14..0.75.15) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(ci)* Avoid MSVC environment during app builds - ([7ab39f1](https://github.com/mayocream/koharu/commit/7ab39f14676ef0ff39166cfa1cc70a334af7dbbb))
+
+### ⚙️ Miscellaneous Tasks
+
+- Enable Linux AppImage bundling - ([6d4d303](https://github.com/mayocream/koharu/commit/6d4d303ea0cacbfba3ffa70280e2f915cda15ac6))
+
+
 ## [0.75.14](https://github.com/mayocream/koharu/compare/0.75.13..0.75.14) - 2026-08-19
 
 ### 🐛 Bug Fixes
