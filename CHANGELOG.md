@@ -1,3 +1,10 @@
+## [0.75.13](https://github.com/mayocream/koharu/compare/0.75.12..0.75.13) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Share ROCm runtime on Linux - ([c6dab0c](https://github.com/mayocream/koharu/commit/c6dab0c076129551627744ac491b77f3bde4d66d))
+
+
 ## [0.75.12](https://github.com/mayocream/koharu/compare/0.75.11..0.75.12) - 2026-08-19
 
 ### 🐛 Bug Fixes
