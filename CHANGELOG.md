@@ -1,3 +1,10 @@
+## [0.77.1](https://github.com/mayocream/koharu/compare/0.77.0..0.77.1) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load Linux cuFile for Torch - ([556485b](https://github.com/mayocream/koharu/commit/556485b18651e952e9adee92825b5c02d66ed31d))
+
+
 ## [0.77.0](https://github.com/mayocream/koharu/compare/0.76.0..0.77.0) - 2026-08-19
 
 ### ⛰️  Features
