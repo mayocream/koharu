@@ -25,7 +25,7 @@ concurrency:
 jobs:
   source:
     name: Resolve latest release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
 
@@ -48,13 +48,13 @@ jobs:
           - backend: cuda
             os: windows-latest
           - backend: cuda
-            os: ubuntu-24.04
+            os: ubuntu-latest
           - backend: hip
             os: windows-latest
           - backend: hip
-            os: ubuntu-24.04
+            os: ubuntu-latest
           - backend: vulkan
-            os: ubuntu-24.04
+            os: ubuntu-latest
           - backend: vulkan
             os: windows-latest
           - backend: metal
@@ -235,7 +235,7 @@ jobs:
   release:
     if: github.event_name != 'pull_request'
     needs: [source, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
