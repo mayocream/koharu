@@ -772,6 +772,76 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(reset).toHaveBeenCalledWith([{ layer: 'element', points: null }]))
   })
 
+  it('supports drag and drop reordering of layers', async () => {
+    installProject()
+    queryClient.setQueryData(pageKey, (page: { layers: Layer[] }) => ({
+      ...page,
+      layers: [
+        {
+          ...textLayer,
+          id: 'element1',
+          content: { ...textLayer.content, translation: { text: 'Layer 1', language: null } },
+        },
+        {
+          ...textLayer,
+          id: 'element2',
+          content: { ...textLayer.content, translation: { text: 'Layer 2', language: null } },
+        },
+      ],
+    }))
+
+    const moveLayer = vi.spyOn(commands, 'moveLayer').mockResolvedValue({
+      id: 'page',
+      label: 'Page 1',
+      size: { width: 1000, height: 1500 },
+      layers: [],
+      regions: [],
+    })
+
+    render(<Inspector />)
+
+    const button1 = screen.getByRole('button', { name: 'Edit Layer 1' })
+    const button2 = screen.getByRole('button', { name: 'Edit Layer 2' })
+    const row1 = button1.closest('.group')!
+    const row2 = button2.closest('.group')!
+
+    vi.spyOn(row2, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 140,
+      left: 0,
+      right: 200,
+      width: 200,
+      height: 40,
+      x: 0,
+      y: 100,
+      toJSON: () => {},
+    })
+
+    act(() => {
+      fireEvent.dragStart(row1)
+    })
+    act(() => {
+      const event = new MouseEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 110,
+      })
+      row2.dispatchEvent(event)
+    })
+    act(() => {
+      const event = new MouseEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 110,
+      })
+      row2.dispatchEvent(event)
+    })
+
+    await waitFor(() => {
+      expect(moveLayer).toHaveBeenCalledWith('element1', 'page', 1)
+    })
+  })
+
   it('shows zoom before page size without a fit control', () => {
     installProject()
     useKoharuStore.setState({ camera: { zoom: 1.25, translation: [0, 0], fitted: false } })
