@@ -14,6 +14,15 @@ export function modelKey(model: Model | ModelSelection): string {
   return `${model.provider}:${model.model ?? ''}`
 }
 
+export function modelSelection(model: Model, vision: boolean): ModelSelection {
+  return {
+    provider: model.provider,
+    model: model.model,
+    quantization: model.quantizations[0]?.id ?? null,
+    vision: vision && model.vision,
+  }
+}
+
 export function orderedLanguageChoices(
   languages: readonly LanguageChoice[],
 ): Array<{ tag: string; name: string }> {

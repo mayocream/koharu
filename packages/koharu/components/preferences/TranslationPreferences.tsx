@@ -11,7 +11,7 @@ import {
   PreferenceRow,
   PreferenceSection,
 } from '@/components/preferences/PreferenceFields'
-import { modelKey, orderedLanguageChoices, providerName } from '@/lib/translation'
+import { modelKey, modelSelection, orderedLanguageChoices, providerName } from '@/lib/translation'
 import type {
   LanguageChoice,
   Model,
@@ -109,12 +109,7 @@ export function TranslationPreferences({
                 onSelect={(model) => {
                   onChange({
                     ...value,
-                    model: {
-                      provider: model.provider,
-                      model: model.model,
-                      quantization: model.quantizations[0]?.id ?? null,
-                      vision: model.vision,
-                    },
+                    model: modelSelection(model, value.model.vision),
                   })
                   setModelOpen(false)
                 }}

@@ -961,6 +961,54 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('disables vision when the runtime selector chooses a text-only model', async () => {
+    installProject()
+    const nextPreferences: Preferences = {
+      ...preferences,
+      pipeline: {
+        ...preferences.pipeline,
+        translation: {
+          ...preferences.pipeline.translation,
+          model: {
+            provider: 'deepseek',
+            model: 'deepseek-chat',
+            quantization: null,
+            vision: false,
+          },
+        },
+      },
+    }
+    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(nextPreferences)
+    useKoharuStore.setState({
+      translationModels: [
+        ...useKoharuStore.getState().translationModels,
+        {
+          provider: 'deepseek',
+          model: 'deepseek-chat',
+          name: 'DeepSeek Chat',
+          quantizations: [],
+          vision: false,
+        },
+      ],
+    })
+    render(<CanvasCommandBar />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Processing settings' }))
+    fireEvent.click(screen.getByRole('button', { name: /Model Gemma 4 E2B Instruct/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use DeepSeek Chat from deepseek' }))
+
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        nextPreferences.pipeline,
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+    expect(useKoharuStore.getState().preferences?.pipeline.translation.model).toEqual(
+      nextPreferences.pipeline.translation.model,
+    )
+  })
+
   it('constrains long model names inside the runtime selector', async () => {
     installProject()
     const longName = 'Llama 3.2 8x3b Moe Dark Champion Instruct Uncensored Abliterated 18.4b'
