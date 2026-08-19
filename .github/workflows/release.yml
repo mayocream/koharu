@@ -35,9 +35,6 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: startsWith(matrix.platform, 'windows')
-
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: koharu-app
