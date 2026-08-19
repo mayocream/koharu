@@ -1,3 +1,10 @@
+## [0.75.12](https://github.com/mayocream/koharu/compare/0.75.11..0.75.12) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(ui)* Gate vision by model capability - ([80b03f1](https://github.com/mayocream/koharu/commit/80b03f16d7340fd0560720f18806f31425f44216))
+
+
 ## [0.75.11](https://github.com/mayocream/koharu/compare/0.75.10..0.75.11) - 2026-08-18
 
 ### 🐛 Bug Fixes
