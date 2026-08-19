@@ -276,7 +276,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: stable-diffusion.cpp-${{ needs.source.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ github.event.repository.default_branch }}
           name: stable-diffusion.cpp ${{ needs.source.outputs.tag }}
           body: Koharu runtime dependency.
           make_latest: 'false'
