@@ -35,10 +35,14 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: startsWith(matrix.platform, 'windows')
+
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: koharu-app
-          cache-workspace-crates: true
+          # Main-branch builds own the shared dependency cache.
+          save-if: false
 
       - name: Install macOS CEF helper targets
         if: startsWith(matrix.platform, 'macos')
@@ -58,6 +62,11 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
 
       - name: Install dependencies
         run: bun install

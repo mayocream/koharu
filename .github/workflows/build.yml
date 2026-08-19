@@ -36,13 +36,12 @@ jobs:
             librsvg2-dev
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: startsWith(matrix.os, 'windows')
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: koharu-app
-          cache-workspace-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: startsWith(matrix.os, 'windows')
       - name: Install macOS CEF helper targets
         if: startsWith(matrix.os, 'macos')
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
