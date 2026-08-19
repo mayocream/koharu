@@ -1,3 +1,10 @@
+## [0.77.2](https://github.com/mayocream/koharu/compare/0.77.1..0.77.2) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load ROCm libraries globally - ([1dda084](https://github.com/mayocream/koharu/commit/1dda08440a0b6d2115025ee9a8def543375083ff))
+
+
 ## [0.77.1](https://github.com/mayocream/koharu/compare/0.77.0..0.77.1) - 2026-08-19
 
 ### 🐛 Bug Fixes
