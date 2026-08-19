@@ -1,3 +1,10 @@
+## [0.77.3](https://github.com/mayocream/koharu/compare/0.77.2..0.77.3) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(translator)* Decode optional Gemini thinking capability - ([3da3391](https://github.com/mayocream/koharu/commit/3da339141b56b97323e001ce79df260cfd2ddc27))
+
+
 ## [0.77.2](https://github.com/mayocream/koharu/compare/0.77.1..0.77.2) - 2026-08-19
 
 ### 🐛 Bug Fixes
