@@ -126,6 +126,7 @@ pub(crate) fn models() -> Vec<Model> {
                 })
                 .collect(),
             vision: descriptor.projector.is_some(),
+            reasoning: false,
         })
         .collect()
 }

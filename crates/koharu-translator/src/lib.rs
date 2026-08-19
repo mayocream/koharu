@@ -62,8 +62,8 @@ impl Translator {
     }
 
     #[must_use]
-    pub fn supports_vision(selection: &ModelSelection) -> bool {
-        selection.vision
+    pub fn supports_vision(selection: &ModelSelection, generation: &GenerationConfig) -> bool {
+        generation.vision
             && (selection.provider != Provider::Local || local::supports_vision(selection))
     }
 
@@ -110,7 +110,12 @@ impl Translator {
             return Ok((provider_id, request.segments));
         }
 
-        if Self::supports_vision(selection) {
+        let generation = GenerationConfig {
+            reasoning: generation.reasoning && selection.reasoning,
+            ..generation
+        };
+
+        if Self::supports_vision(selection, &generation) {
             request.prepare_image()?;
         } else {
             request.remove_image();
@@ -172,28 +177,37 @@ impl Translator {
 mod tests {
     use super::*;
 
-    fn local_selection(model: &str, vision: bool) -> ModelSelection {
+    fn local_selection(model: &str) -> ModelSelection {
         ModelSelection {
             provider: Provider::Local,
             model: Some(model.to_owned()),
             quantization: None,
-            vision,
+            reasoning: false,
         }
     }
 
     #[test]
-    fn local_vision_requires_capability_and_selection() {
-        assert!(Translator::supports_vision(&local_selection(
-            "gemma4-e2b-it",
-            true
-        )));
-        assert!(!Translator::supports_vision(&local_selection(
-            "gemma4-e2b-it",
-            false
-        )));
-        assert!(!Translator::supports_vision(&local_selection(
-            "lfm2.5-1.2b-instruct",
-            true
-        )));
+    fn local_vision_requires_capability_and_generation_setting() {
+        assert!(Translator::supports_vision(
+            &local_selection("gemma4-e2b-it"),
+            &GenerationConfig {
+                vision: true,
+                ..GenerationConfig::default()
+            }
+        ));
+        assert!(!Translator::supports_vision(
+            &local_selection("gemma4-e2b-it"),
+            &GenerationConfig {
+                vision: false,
+                ..GenerationConfig::default()
+            }
+        ));
+        assert!(!Translator::supports_vision(
+            &local_selection("lfm2.5-1.2b-instruct"),
+            &GenerationConfig {
+                vision: true,
+                ..GenerationConfig::default()
+            }
+        ));
     }
 }

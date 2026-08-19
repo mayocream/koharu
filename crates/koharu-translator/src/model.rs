@@ -4,7 +4,7 @@ use specta::Type;
 
 use crate::Provider;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(default)]
 pub struct GenerationConfig {
     pub temperature: Option<f32>,
@@ -15,7 +15,25 @@ pub struct GenerationConfig {
     pub repeat_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
-    pub thinking: bool,
+    pub reasoning: bool,
+    pub vision: bool,
+}
+
+impl Default for GenerationConfig {
+    fn default() -> Self {
+        Self {
+            temperature: None,
+            top_k: None,
+            top_p: None,
+            min_p: None,
+            max_tokens: None,
+            repeat_penalty: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            reasoning: false,
+            vision: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -25,7 +43,7 @@ pub struct ModelSelection {
     pub model: Option<String>,
     #[serde(default)]
     pub quantization: Option<String>,
-    pub vision: bool,
+    pub reasoning: bool,
 }
 
 impl Default for ModelSelection {
@@ -34,7 +52,7 @@ impl Default for ModelSelection {
             provider: Provider::Local,
             model: Some(crate::local::DEFAULT_MODEL.to_owned()),
             quantization: Some(crate::local::DEFAULT_QUANTIZATION.to_owned()),
-            vision: true,
+            reasoning: false,
         }
     }
 }
@@ -52,6 +70,7 @@ pub struct Model {
     pub name: String,
     pub quantizations: Vec<Quantization>,
     pub vision: bool,
+    pub reasoning: bool,
 }
 
 impl Model {
@@ -62,6 +81,7 @@ impl Model {
             name: name.to_owned(),
             quantizations: Vec::new(),
             vision: false,
+            reasoning: false,
         }
     }
 }

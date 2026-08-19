@@ -64,6 +64,7 @@ export function TranslationPreferences({
     model: value.model.model ?? null,
     name: value.model.model ?? providerName(providers, value.model.provider),
     quantizations: [],
+    vision: false,
   }
   const choices = selected ? modelChoices : [current, ...modelChoices]
   const quantizations = current.quantizations
@@ -71,6 +72,7 @@ export function TranslationPreferences({
   const configurableVision =
     provider && hasVision(provider.config) ? { ...provider, config: provider.config } : null
   const visionAvailable = current.vision || configurableVision !== null
+  const reasoningAvailable = current.reasoning
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
     <PreferencePage
@@ -109,7 +111,12 @@ export function TranslationPreferences({
                 onSelect={(model) => {
                   onChange({
                     ...value,
-                    model: modelSelection(model, value.model.vision),
+                    model: modelSelection(model),
+                    generation: {
+                      ...value.generation,
+                      vision: (value.generation.vision ?? false) && model.vision,
+                      reasoning: (value.generation.reasoning ?? false) && model.reasoning,
+                    },
                   })
                   setModelOpen(false)
                 }}
@@ -148,11 +155,11 @@ export function TranslationPreferences({
 
       <GenerationPreferences
         value={value.generation}
-        vision={value.model.vision}
         visionAvailable={visionAvailable}
+        reasoningAvailable={reasoningAvailable}
         onChange={(generation) => onChange({ ...value, generation })}
         onVisionChange={(vision) => {
-          onChange({ ...value, model: { ...value.model, vision } })
+          onChange({ ...value, generation: { ...value.generation, vision } })
           if (configurableVision) {
             onProviderChange({
               ...configurableVision,

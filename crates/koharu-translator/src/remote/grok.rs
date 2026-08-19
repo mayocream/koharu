@@ -69,6 +69,7 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
                 .input_modalities
                 .iter()
                 .any(|modality| modality == "image"),
+            reasoning: true,
         })
         .collect())
 }
@@ -104,7 +105,7 @@ fn request_body<'a>(
         temperature: generation.temperature,
         top_p: generation.top_p,
         max_output_tokens: generation.max_tokens,
-        reasoning: generation.thinking.then_some(Reasoning { effort: "high" }),
+        reasoning: generation.reasoning.then_some(Reasoning { effort: "high" }),
         text: TextConfig {
             format: TextFormat {
                 kind: "json_schema",
@@ -214,7 +215,7 @@ mod tests {
             "grok-4.5",
             &GenerationConfig {
                 max_tokens: Some(1024),
-                thinking: true,
+                reasoning: true,
                 ..GenerationConfig::default()
             },
             &request,
