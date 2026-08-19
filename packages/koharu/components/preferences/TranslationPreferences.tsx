@@ -51,13 +51,11 @@ export function TranslationPreferences({
     model: value.model.model ?? null,
     name: value.model.model ?? providerName(providers, value.model.provider),
     quantizations: [],
-    vision: false,
+    vision: value.model.vision ?? false,
     reasoning: value.model.reasoning ?? false,
   }
   const choices = selected ? modelChoices : [current, ...modelChoices]
   const quantizations = current.quantizations
-  const visionAvailable = current.vision
-  const reasoningAvailable = current.reasoning
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
     <PreferencePage
@@ -97,11 +95,6 @@ export function TranslationPreferences({
                   onChange({
                     ...value,
                     model: modelSelection(model),
-                    generation: {
-                      ...value.generation,
-                      vision: (value.generation.vision ?? false) && model.vision,
-                      reasoning: (value.generation.reasoning ?? false) && model.reasoning,
-                    },
                   })
                   setModelOpen(false)
                 }}
@@ -140,18 +133,7 @@ export function TranslationPreferences({
 
       <GenerationPreferences
         value={value.generation}
-        visionAvailable={visionAvailable}
-        reasoningAvailable={reasoningAvailable}
-        onChange={(generation) =>
-          onChange({
-            ...value,
-            model: { ...value.model, reasoning: current.reasoning },
-            generation: {
-              ...generation,
-              reasoning: (generation.reasoning ?? false) && current.reasoning,
-            },
-          })
-        }
+        onChange={(generation) => onChange({ ...value, generation })}
       />
 
       <PreferenceSection title={t('settings.translation.output')}>

@@ -145,12 +145,6 @@ function RuntimeSelector({
       translation: {
         ...preferences.pipeline.translation,
         model: modelSelection(next),
-        generation: {
-          ...preferences.pipeline.translation.generation,
-          vision: (preferences.pipeline.translation.generation.vision ?? false) && next.vision,
-          reasoning:
-            (preferences.pipeline.translation.generation.reasoning ?? false) && next.reasoning,
-        },
       },
     }
     void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
@@ -456,7 +450,7 @@ function availableModels(
       model: selected.model ?? null,
       name: selected.model ?? providerName(providers, selected.provider),
       quantizations: [],
-      vision: false,
+      vision: selected.vision ?? false,
       reasoning: selected.reasoning ?? false,
     },
     ...models,

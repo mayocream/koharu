@@ -15,8 +15,8 @@ pub struct GenerationConfig {
     pub repeat_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub presence_penalty: Option<f32>,
-    pub reasoning: bool,
-    pub vision: bool,
+    pub reasoning: Option<bool>,
+    pub vision: Option<bool>,
 }
 
 impl Default for GenerationConfig {
@@ -30,8 +30,22 @@ impl Default for GenerationConfig {
             repeat_penalty: None,
             frequency_penalty: None,
             presence_penalty: None,
-            reasoning: false,
-            vision: true,
+            reasoning: Some(false),
+            vision: Some(true),
+        }
+    }
+}
+
+impl GenerationConfig {
+    pub(crate) fn for_model(self, model: &ModelSelection) -> Self {
+        Self {
+            reasoning: if model.reasoning {
+                self.reasoning
+            } else {
+                None
+            },
+            vision: if model.vision { self.vision } else { None },
+            ..self
         }
     }
 }
@@ -44,6 +58,8 @@ pub struct ModelSelection {
     #[serde(default)]
     pub quantization: Option<String>,
     #[serde(default)]
+    pub vision: bool,
+    #[serde(default)]
     pub reasoning: bool,
 }
 
@@ -53,7 +69,8 @@ impl Default for ModelSelection {
             provider: Provider::Local,
             model: Some(crate::local::DEFAULT_MODEL.to_owned()),
             quantization: Some(crate::local::DEFAULT_QUANTIZATION.to_owned()),
-            reasoning: false,
+            vision: true,
+            reasoning: true,
         }
     }
 }
@@ -165,14 +182,41 @@ pub(crate) fn display_name(model: &str) -> String {
 mod tests {
     use super::*;
 
+    fn selection(vision: bool, reasoning: bool) -> ModelSelection {
+        ModelSelection {
+            provider: Provider::LmStudio,
+            model: Some("publisher/model".to_owned()),
+            quantization: None,
+            vision,
+            reasoning,
+        }
+    }
+
     #[test]
-    fn model_selection_defaults_missing_reasoning() {
+    fn generation_omits_unsupported_model_capabilities() {
+        let generation = GenerationConfig {
+            vision: Some(true),
+            reasoning: Some(false),
+            ..GenerationConfig::default()
+        };
+        let supported = generation.for_model(&selection(true, true));
+        assert_eq!(supported.vision, Some(true));
+        assert_eq!(supported.reasoning, Some(false));
+
+        let unsupported = generation.for_model(&selection(false, false));
+        assert_eq!(unsupported.vision, None);
+        assert_eq!(unsupported.reasoning, None);
+    }
+
+    #[test]
+    fn model_selection_defaults_missing_capabilities() {
         let selection: ModelSelection = serde_json::from_value(serde_json::json!({
             "provider": "lm-studio",
             "model": "publisher/model",
             "quantization": null
         }))
         .unwrap();
+        assert!(!selection.vision);
         assert!(!selection.reasoning);
     }
 }

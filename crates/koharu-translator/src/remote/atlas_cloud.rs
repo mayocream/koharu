@@ -25,7 +25,7 @@ pub(super) async fn translate(
     let api_key =
         koharu_secrets::get("atlas-cloud")?.context("atlas-cloud API key is not configured")?;
     let backend = ChatBackend {
-        reasoning: Some(generation.reasoning),
+        reasoning: generation.reasoning,
         ..ChatBackend::new(
             "atlas-cloud",
             CHAT_URL,

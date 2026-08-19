@@ -19,6 +19,7 @@ export function modelSelection(model: Model): ModelSelection {
     provider: model.provider,
     model: model.model,
     quantization: model.quantizations[0]?.id ?? null,
+    vision: model.vision,
     reasoning: model.reasoning,
   }
 }

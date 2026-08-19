@@ -44,7 +44,9 @@ pub(super) async fn translate(
         system_prompt: &system,
         temperature: generation.temperature,
         max_output_tokens: generation.max_tokens,
-        reasoning: generation.reasoning.then_some("on"),
+        reasoning: generation
+            .reasoning
+            .map(|enabled| if enabled { "on" } else { "off" }),
         store: false,
     };
     let http = client.post(endpoint(config.base_url.as_ref(), "chat"));
@@ -217,17 +219,19 @@ mod tests {
 
     #[test]
     fn serializes_reasoning_for_supported_models() {
-        let value = serde_json::to_value(ChatRequest {
-            model: "publisher/reasoning-model",
-            input: ChatInput::Text("input"),
-            system_prompt: "system",
-            temperature: None,
-            max_output_tokens: None,
-            reasoning: Some("on"),
-            store: false,
-        })
-        .unwrap();
-        assert_eq!(value["reasoning"], "on");
+        for mode in ["on", "off"] {
+            let value = serde_json::to_value(ChatRequest {
+                model: "publisher/reasoning-model",
+                input: ChatInput::Text("input"),
+                system_prompt: "system",
+                temperature: None,
+                max_output_tokens: None,
+                reasoning: Some(mode),
+                store: false,
+            })
+            .unwrap();
+            assert_eq!(value["reasoning"], mode);
+        }
     }
 
     #[test]

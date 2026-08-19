@@ -64,9 +64,9 @@ pub(super) async fn translate(
         system: &system,
         messages: [Message::user(&user, request.image.as_deref())?],
         temperature: generation.temperature,
-        thinking: generation
-            .reasoning
-            .then_some(ThinkingConfig { kind: "adaptive" }),
+        thinking: generation.reasoning.map(|enabled| ThinkingConfig {
+            kind: if enabled { "adaptive" } else { "disabled" },
+        }),
     };
     let response: Response = send_json(
         "claude",

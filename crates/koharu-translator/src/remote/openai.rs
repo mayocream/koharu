@@ -78,11 +78,9 @@ pub(super) async fn translate(
     let backend = ChatBackend {
         max_tokens: None,
         max_completion_tokens: generation.max_tokens,
-        reasoning_effort: Some(if generation.reasoning {
-            "medium"
-        } else {
-            "none"
-        }),
+        reasoning_effort: generation
+            .reasoning
+            .map(|enabled| if enabled { "medium" } else { "none" }),
         ..ChatBackend::new(
             "openai",
             URL,

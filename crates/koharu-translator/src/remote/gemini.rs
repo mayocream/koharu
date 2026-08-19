@@ -93,8 +93,8 @@ pub(super) async fn translate(
         generation_config: GenerationConfig {
             temperature: generation.temperature,
             max_output_tokens: generation.max_tokens,
-            thinking_config: generation.reasoning.then_some(ThinkingConfig {
-                thinking_budget: -1,
+            thinking_config: generation.reasoning.map(|enabled| ThinkingConfig {
+                thinking_budget: if enabled { -1 } else { 0 },
             }),
             response_mime_type: "application/json",
             response_json_schema: schema,

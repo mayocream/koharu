@@ -12,13 +12,9 @@ import { Switch } from '@koharu/ui/components/switch'
 
 export function GenerationPreferences({
   value,
-  visionAvailable,
-  reasoningAvailable,
   onChange,
 }: {
   value: GenerationConfig
-  visionAvailable: boolean
-  reasoningAvailable: boolean
   onChange: (value: GenerationConfig) => void
 }) {
   const { t } = useTranslation()
@@ -100,8 +96,7 @@ export function GenerationPreferences({
         <div className='flex h-8 items-center justify-end'>
           <Switch
             aria-label={t('settings.generation.enableReasoning')}
-            checked={reasoningAvailable && (value.reasoning ?? false)}
-            disabled={!reasoningAvailable}
+            checked={value.reasoning ?? false}
             onCheckedChange={(reasoning) => update({ reasoning })}
           />
         </div>
@@ -113,8 +108,7 @@ export function GenerationPreferences({
         <div className='flex h-8 items-center justify-end'>
           <Switch
             aria-label={t('settings.generation.vision')}
-            checked={visionAvailable && (value.vision ?? false)}
-            disabled={!visionAvailable}
+            checked={value.vision ?? false}
             onCheckedChange={(vision) => update({ vision })}
           />
         </div>

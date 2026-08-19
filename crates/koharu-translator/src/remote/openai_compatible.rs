@@ -41,7 +41,9 @@ pub(super) async fn compatible(
     let api_key = koharu_secrets::get("openai-compatible")?;
     let endpoint = endpoint(config.base_url.as_ref(), "chat/completions");
     let backend = ChatBackend {
-        reasoning: Some(generation.reasoning),
+        reasoning_effort: generation
+            .reasoning
+            .map(|enabled| if enabled { "medium" } else { "none" }),
         ..ChatBackend::new(
             "openai-compatible",
             &endpoint,

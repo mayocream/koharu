@@ -63,7 +63,7 @@ impl Translator {
 
     #[must_use]
     pub fn supports_vision(selection: &ModelSelection, generation: &GenerationConfig) -> bool {
-        generation.vision
+        generation.vision.unwrap_or(false)
             && (selection.provider != Provider::Local || local::supports_vision(selection))
     }
 
@@ -110,10 +110,7 @@ impl Translator {
             return Ok((provider_id, request.segments));
         }
 
-        let generation = GenerationConfig {
-            reasoning: generation.reasoning && selection.reasoning,
-            ..generation
-        };
+        let generation = generation.for_model(selection);
 
         if Self::supports_vision(selection, &generation) {
             request.prepare_image()?;
@@ -182,7 +179,8 @@ mod tests {
             provider: Provider::Local,
             model: Some(model.to_owned()),
             quantization: None,
-            reasoning: false,
+            vision: true,
+            reasoning: true,
         }
     }
 
@@ -191,21 +189,21 @@ mod tests {
         assert!(Translator::supports_vision(
             &local_selection("gemma4-e2b-it"),
             &GenerationConfig {
-                vision: true,
+                vision: Some(true),
                 ..GenerationConfig::default()
             }
         ));
         assert!(!Translator::supports_vision(
             &local_selection("gemma4-e2b-it"),
             &GenerationConfig {
-                vision: false,
+                vision: Some(false),
                 ..GenerationConfig::default()
             }
         ));
         assert!(!Translator::supports_vision(
             &local_selection("lfm2.5-1.2b-instruct"),
             &GenerationConfig {
-                vision: true,
+                vision: Some(true),
                 ..GenerationConfig::default()
             }
         ));

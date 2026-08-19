@@ -37,6 +37,7 @@ async fn stop_after_a_page_keeps_completed_progress() {
             provider: koharu_translator::Provider::OpenAi,
             model: Some("gpt-5.6-luna".to_owned()),
             quantization: None,
+            vision: true,
             reasoning: true,
         },
         ..Default::default()

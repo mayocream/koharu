@@ -241,8 +241,8 @@ export type GenerationConfig = {
 	repeat_penalty?: number | null,
 	frequency_penalty?: number | null,
 	presence_penalty?: number | null,
-	reasoning?: boolean,
-	vision?: boolean,
+	reasoning?: boolean | null,
+	vision?: boolean | null,
 };
 
 export type Geometry = {
@@ -334,6 +334,7 @@ export type ModelSelection = {
 	provider: Provider,
 	model?: string | null,
 	quantization?: string | null,
+	vision?: boolean,
 	reasoning?: boolean,
 };
 

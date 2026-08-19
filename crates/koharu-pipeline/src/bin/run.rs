@@ -108,6 +108,7 @@ impl Arguments {
                     model: Some(self.llm.clone()),
                     quantization: None,
                     vision: true,
+                    reasoning: true,
                 },
                 generation: GenerationConfig::default(),
                 target_language: self.target_language,

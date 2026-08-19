@@ -97,9 +97,10 @@ const preferences: Preferences = {
         provider: 'local',
         model: 'gemma4-e2b-it',
         quantization: null,
-        reasoning: false,
+        vision: true,
+        reasoning: true,
       },
-      generation: { vision: true },
+      generation: { vision: true, reasoning: false },
       target_language: 'en-US',
       instructions: null,
     },
@@ -923,6 +924,7 @@ describe('greenfield editor', () => {
             provider: 'local',
             model: 'gemma4-12b-it',
             quantization: null,
+            vision: true,
             reasoning: true,
           },
         },
@@ -966,7 +968,7 @@ describe('greenfield editor', () => {
     )
   })
 
-  it('disables vision when the runtime selector chooses a text-only model', async () => {
+  it('preserves vision when the runtime selector chooses a text-only model', async () => {
     installProject()
     const nextPreferences: Preferences = {
       ...preferences,
@@ -978,11 +980,12 @@ describe('greenfield editor', () => {
             provider: 'deepseek',
             model: 'deepseek-chat',
             quantization: null,
+            vision: false,
             reasoning: true,
           },
           generation: {
             ...preferences.pipeline.translation.generation,
-            vision: false,
+            vision: true,
             reasoning: false,
           },
         },
@@ -1100,7 +1103,6 @@ describe('greenfield editor', () => {
       expect(save).toHaveBeenCalledWith(
         expect.objectContaining({
           translation: expect.objectContaining({
-            model: expect.objectContaining({ reasoning: true }),
             generation: expect.objectContaining({ reasoning: true }),
           }),
         }),
@@ -1143,7 +1145,7 @@ describe('greenfield editor', () => {
     )
   })
 
-  it('enables reasoning for providers that declare reasoning support', async () => {
+  it('keeps generation controls independent from model capabilities', async () => {
     installProject()
     const user = userEvent.setup()
     const configured: Preferences = {
@@ -1156,6 +1158,7 @@ describe('greenfield editor', () => {
             provider: 'deepseek',
             model: 'deepseek-chat',
             quantization: null,
+            vision: false,
             reasoning: true,
           },
           generation: {
@@ -1189,6 +1192,10 @@ describe('greenfield editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
     const reasoning = screen.getByRole('switch', { name: 'Enable reasoning' })
     expect(reasoning).not.toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('switch', { name: 'Vision' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     await user.click(reasoning)
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith(

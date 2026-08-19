@@ -49,11 +49,9 @@ pub(super) async fn translate(
     let api_key = koharu_secrets::get("deepseek")?.context("deepseek API key is not configured")?;
     let backend = ChatBackend {
         temperature: generation.temperature.or(Some(1.3)),
-        thinking: Some(if generation.reasoning {
-            "enabled"
-        } else {
-            "disabled"
-        }),
+        thinking: generation
+            .reasoning
+            .map(|enabled| if enabled { "enabled" } else { "disabled" }),
         ..ChatBackend::new(
             "deepseek",
             URL,
