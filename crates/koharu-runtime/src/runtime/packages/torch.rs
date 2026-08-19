@@ -253,8 +253,12 @@ impl RuntimePackage for Torch {
                 ];
                 let packages = packages.into_iter();
                 #[cfg(target_os = "linux")]
-                let packages =
-                    packages.chain([Cuda::SparseLt08, Cuda::Collective229, Cuda::SharedMemory34]);
+                let packages = packages.chain([
+                    Cuda::File115,
+                    Cuda::SparseLt08,
+                    Cuda::Collective229,
+                    Cuda::SharedMemory34,
+                ]);
                 Ok(packages.map(Component::Cuda).collect())
             }
         }

@@ -111,6 +111,12 @@ pub(crate) enum Cuda {
     #[cfg(target_os = "linux")]
     SparseLt08,
     #[strum(
+        serialize = "cufile-1.15",
+        props(project = "nvidia-cufile/1.15.1.6", linux = "libcufile.so.0")
+    )]
+    #[cfg(target_os = "linux")]
+    File115,
+    #[strum(
         serialize = "nccl-2.29",
         props(project = "nvidia-nccl-cu13/2.29.7", linux = "libnccl.so.2")
     )]
