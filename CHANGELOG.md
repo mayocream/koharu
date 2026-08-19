@@ -1,3 +1,17 @@
+## [0.75.16](https://github.com/mayocream/koharu/compare/0.75.15..0.75.16) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(ci)* Restore Windows 2022 app builds - ([bf7a6ea](https://github.com/mayocream/koharu/commit/bf7a6ea9036e7eb422bc298d13e9e1e181ba190a))
+- *(ci)* Stabilize dependency builds - ([2486494](https://github.com/mayocream/koharu/commit/248649469d15213ef2d64146a8bd8320ebf7edd2))
+- *(editor)* Replace text centered stroke with outward path ([#951](https://github.com/mayocream/koharu/issues/951)) - ([fbc2e4f](https://github.com/mayocream/koharu/commit/fbc2e4f11b6f0f7a815b00590a6bcaae574b2008))
+
+### ⚙️ Miscellaneous Tasks
+
+- Use ubuntu-latest runners - ([dda25ba](https://github.com/mayocream/koharu/commit/dda25baa1f70722c87de10ecc5216a0e742331a7))
+- Use windows-latest runners - ([d4997ca](https://github.com/mayocream/koharu/commit/d4997cad5dd1855f4b11e63ff250ba852e09864e))
+
+
 ## [0.75.15](https://github.com/mayocream/koharu/compare/0.75.14..0.75.15) - 2026-08-19
 
 ### 🐛 Bug Fixes
