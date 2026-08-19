@@ -44,17 +44,17 @@ jobs:
       matrix:
         include:
           - backend: cuda
-            os: windows-2022
+            os: windows-latest
           - backend: cuda
             os: ubuntu-24.04
           - backend: hip
-            os: windows-2022
+            os: windows-latest
           - backend: hip
             os: ubuntu-24.04
           - backend: vulkan
             os: ubuntu-24.04
           - backend: vulkan
-            os: windows-2022
+            os: windows-latest
           - backend: metal
             os: macos-latest
 
