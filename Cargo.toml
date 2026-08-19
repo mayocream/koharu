@@ -33,6 +33,7 @@ koharu-torch = { path = "crates/koharu-torch" }
 koharu-torch-sys = { path = "crates/koharu-torch-sys" }
 koharu-agent = { path = "crates/koharu-agent" }
 koharu-ml = { path = "crates/koharu-ml" }
+koharu-metrics = { path = "crates/koharu-metrics" }
 koharu-pipeline = { path = "crates/koharu-pipeline" }
 koharu-translator = { path = "crates/koharu-translator" }
 koharu-psd = { path = "crates/koharu-psd" }

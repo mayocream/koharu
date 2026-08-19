@@ -386,6 +386,7 @@ pub(crate) async fn import_pages(
     let pages = tokio::task::spawn_blocking(move || import::import(files))
         .await
         .context("page import worker stopped unexpectedly")??;
+    let page_count = pages.len();
 
     let (commit, page) = {
         let mut project = project.project.lock().await;
@@ -426,6 +427,12 @@ pub(crate) async fn import_pages(
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
+    tracing::info!(
+        target: "koharu_metrics",
+        metric = "import",
+        import_source = ?source,
+        page_count,
+    );
     Ok(())
 }
 

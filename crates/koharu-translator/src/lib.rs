@@ -97,7 +97,18 @@ impl Translator {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(
+        target = "koharu_metrics",
+        name = "model_run",
+        skip_all,
+        fields(
+            stage = "translation",
+            provider = %selection.provider,
+            model = selection.model.as_deref().unwrap_or("provider_default"),
+            target_language = request.target_language.tag(),
+            outcome = tracing::field::Empty,
+        ),
+    )]
     pub async fn translate(
         &self,
         selection: &ModelSelection,
@@ -107,6 +118,7 @@ impl Translator {
         let provider = selection.provider;
         let provider_id: &'static str = provider.into();
         if request.segments.is_empty() {
+            tracing::Span::current().record("outcome", "skipped");
             return Ok((provider_id, request.segments));
         }
 
@@ -136,6 +148,7 @@ impl Translator {
             }
             .into());
         }
+        tracing::Span::current().record("outcome", "completed");
         Ok((provider_id, translated))
     }
 

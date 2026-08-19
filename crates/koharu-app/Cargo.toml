@@ -22,6 +22,7 @@ image = { workspace = true }
 koharu-agent = { workspace = true }
 koharu-desktop = { workspace = true }
 koharu-ml = { workspace = true }
+koharu-metrics = { workspace = true }
 koharu-pipeline = { workspace = true }
 koharu-psd = { workspace = true }
 koharu-renderer = { workspace = true }

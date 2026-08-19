@@ -33,6 +33,7 @@ async fn main() {
         tracing_subscriber::registry()
             .with(filter)
             .with(sentry::tracing_layer())
+            .with(koharu_metrics::layer())
             .with(koharu::tracing::TimingLayer::new()),
     )
     .expect("failed to set the global tracing subscriber");

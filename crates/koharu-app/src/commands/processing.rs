@@ -135,8 +135,20 @@ pub(crate) async fn process(
                     Some((progress.0, progress.1, Some(page), Some(stage), Some(model)))
                 }
                 Progress::Finished {
-                    page, stage, model, ..
+                    page,
+                    stage,
+                    model,
+                    elapsed,
                 } => {
+                    if stage != koharu_pipeline::Stage::Translation {
+                        tracing::info!(
+                            target: "koharu_metrics",
+                            metric = "model_run",
+                            stage = %stage,
+                            model,
+                            duration_ms = elapsed.as_secs_f64() * 1000.0,
+                        );
+                    }
                     let mut progress = progress.lock();
                     progress.0 = progress.0.saturating_add(1).min(progress.1);
                     Some((progress.0, progress.1, Some(page), Some(stage), Some(model)))
