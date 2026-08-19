@@ -480,7 +480,7 @@
     "projectList": "Proyectos",
     "projectName": "Nombre del proyecto",
     "projectNamePlaceholder": "Mi nuevo proyecto",
-    "storageHint": "Los proyectos se guardan localmente en tu carpeta Documentos.",
+    "storageHint": "Los proyectos se guardan localmente en este dispositivo.",
     "title": "Proyectos",
     "yourProjects": "Tus proyectos"
   },

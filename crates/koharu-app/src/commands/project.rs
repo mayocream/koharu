@@ -11,7 +11,7 @@ use koharu_scene::{
     TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
     Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use tokio::sync::Mutex;
 
@@ -174,24 +174,53 @@ pub(crate) struct CurrentProject {
     pub(crate) project: Mutex<Option<Project>>,
 }
 
+/// Location of the project library, stored under `[projects]` in
+/// `~/.koharu/config.toml`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ProjectsConfig {
+    /// Directory holding `*.khrproj` projects. Absolute, with a leading `~`
+    /// accepted for the home directory. Defaults to `<Documents>/Koharu`.
+    pub(crate) root: Option<PathBuf>,
+}
+
 #[derive(Clone)]
 pub(crate) struct ProjectLibrary {
-    root: PathBuf,
+    config: koharu_config::Config<ProjectsConfig>,
 }
 
 impl ProjectLibrary {
     pub(crate) fn new() -> Result<Self> {
-        let root = dirs::document_dir()
-            .context("the Documents directory is unavailable")?
-            .join("Koharu");
+        Ok(Self {
+            config: koharu_config::load("projects")?,
+        })
+    }
+
+    /// Resolves the configured root, creating it on demand. The configuration
+    /// file is read once per process, so an edited root applies at the next
+    /// launch; a root changed in process applies to the following operation.
+    fn root(&self) -> Result<PathBuf> {
+        let root = match self.config.read()?.root.clone() {
+            Some(root) => expand_home(root)?,
+            None => dirs::document_dir()
+                .context("the Documents directory is unavailable")?
+                .join("Koharu"),
+        };
+        if root.is_relative() {
+            bail!(
+                "the configured project root {} must be an absolute path",
+                root.display()
+            );
+        }
         std::fs::create_dir_all(&root)
             .with_context(|| format!("failed to create {}", root.display()))?;
-        Ok(Self { root })
+        Ok(root)
     }
 
     pub(crate) fn list(&self) -> Result<Vec<ProjectSummary>> {
-        let mut projects = std::fs::read_dir(&self.root)
-            .with_context(|| format!("failed to read {}", self.root.display()))?
+        let root = self.root()?;
+        let mut projects = std::fs::read_dir(&root)
+            .with_context(|| format!("failed to read {}", root.display()))?
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
             .filter_map(|entry| {
@@ -246,8 +275,17 @@ impl ProjectLibrary {
 
     fn resolve(&self, name: &str) -> Result<(String, PathBuf)> {
         let name = validate_project_name(name)?;
-        Ok((name.clone(), self.root.join(format!("{name}.khrproj"))))
+        Ok((name.clone(), self.root()?.join(format!("{name}.khrproj"))))
     }
+}
+
+/// Expands a leading `~` so hand-written configuration can stay portable.
+fn expand_home(path: PathBuf) -> Result<PathBuf> {
+    let Ok(rest) = path.strip_prefix("~") else {
+        return Ok(path);
+    };
+    let home = dirs::home_dir().context("could not determine the home directory")?;
+    Ok(home.join(rest))
 }
 
 pub(crate) struct Project {
@@ -1329,6 +1367,17 @@ mod tests {
     use koharu_scene::{Generation, ProducerId, WritingMode};
 
     use super::*;
+
+    #[test]
+    fn a_leading_tilde_resolves_against_the_home_directory() {
+        let home = dirs::home_dir().expect("home directory");
+        assert_eq!(
+            expand_home(PathBuf::from("~/Manga")).expect("expanded"),
+            home.join("Manga")
+        );
+        let absolute = home.join("Elsewhere");
+        assert_eq!(expand_home(absolute.clone()).expect("unchanged"), absolute);
+    }
 
     #[test]
     fn only_user_authored_direction_is_projected_as_an_override() {

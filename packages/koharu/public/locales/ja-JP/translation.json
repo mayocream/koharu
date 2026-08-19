@@ -480,7 +480,7 @@
     "projectList": "プロジェクト",
     "projectName": "プロジェクト名",
     "projectNamePlaceholder": "新しいプロジェクト",
-    "storageHint": "プロジェクトは「ドキュメント」フォルダーにローカル保存されます。",
+    "storageHint": "プロジェクトはこのデバイスにローカル保存されます。",
     "title": "プロジェクト",
     "yourProjects": "プロジェクト一覧"
   },
