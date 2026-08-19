@@ -12,6 +12,16 @@ use crate::{
 pub(crate) const VERSION: &str = "7.14.0";
 pub(crate) const INDEX: &str = "https://repo.amd.com/rocm/whl-multi-arch";
 
+pub(crate) fn wheel_platform() -> Result<&'static str> {
+    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        Ok("win_amd64")
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Ok("linux_x86_64")
+    } else {
+        anyhow::bail!("ROCm packages support only Windows and Linux x86_64")
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumString)]
 pub(crate) enum Rocm {
     #[strum(serialize = "gfx1010")]
@@ -85,8 +95,17 @@ impl Rocm {
     }
 
     fn complete(self, path: &Path) -> bool {
-        path.join("core/bin/amdhip64_7.dll").is_file()
-            && path.join("libraries/bin/MIOpen.dll").is_file()
+        let complete = if cfg!(target_os = "windows") {
+            path.join("core/bin/amdhip64_7.dll").is_file()
+                && path.join("libraries/bin/MIOpen.dll").is_file()
+        } else if cfg!(target_os = "linux") {
+            path.join("core/lib/libamdhip64.so.7").is_file()
+                && path.join("libraries/lib/libMIOpen.so.1").is_file()
+        } else {
+            return false;
+        };
+
+        complete
             && path
                 .join("libraries/.kpack")
                 .join(format!("blas_lib_{self}.kpack"))
@@ -98,45 +117,39 @@ impl sealed::Sealed for Rocm {}
 
 impl Package for Rocm {
     async fn install(self) -> Result<PathBuf> {
-        if !cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            anyhow::bail!("ROCm packages are available only on Windows x86_64")
-        }
-        let target = Store::root()
+        let platform = wheel_platform()?;
+        let path = Store::root()
             .join("rocm")
             .join(VERSION)
             .join(self.to_string());
         Store::directory(
-            target,
+            path,
             move |path| self.complete(path),
             move |stage| async move {
                 let transfer = Transfer::new()?;
-                for (url, destination, pattern) in [
+                for (url, source, destination) in [
                     (
-                        format!("{INDEX}/rocm_sdk_core-{VERSION}-py3-none-win_amd64.whl"),
+                        format!("{INDEX}/rocm_sdk_core-{VERSION}-py3-none-{platform}.whl"),
+                        "_rocm_sdk_core",
                         "core",
-                        "_rocm_sdk_core/**/*",
                     ),
                     (
-                        format!("{INDEX}/rocm_sdk_libraries-{VERSION}-py3-none-win_amd64.whl"),
+                        format!("{INDEX}/rocm_sdk_libraries-{VERSION}-py3-none-{platform}.whl"),
+                        "_rocm_sdk_libraries",
                         "libraries",
-                        "_rocm_sdk_libraries/**/*",
                     ),
                     (
-                        format!("{INDEX}/rocm_sdk_device_{self}-{VERSION}-py3-none-win_amd64.whl"),
+                        format!("{INDEX}/rocm_sdk_device_{self}-{VERSION}-py3-none-{platform}.whl"),
+                        "_rocm_sdk_libraries",
                         "libraries",
-                        "_rocm_sdk_libraries/**/*",
                     ),
                 ] {
                     let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
                     transfer.fetch(&url, archive.path()).await?;
                     let unpacked = tempfile::tempdir()?;
-                    extract(archive.path(), unpacked.path(), &[pattern])?;
-                    let source = if destination == "core" {
-                        unpacked.path().join("_rocm_sdk_core")
-                    } else {
-                        unpacked.path().join("_rocm_sdk_libraries")
-                    };
-                    merge(&source, &stage.join(destination))?;
+                    let pattern = format!("{source}/**/*");
+                    extract(archive.path(), unpacked.path(), &[&pattern])?;
+                    merge(&unpacked.path().join(source), &stage.join(destination))?;
                 }
                 Ok(())
             },
@@ -150,7 +163,7 @@ impl RuntimePackage for Rocm {
 
     async fn activate(self) -> Result<()> {
         let root = self.install().await?;
-        if self == Self::Gfx1032 {
+        if cfg!(target_os = "windows") && self == Self::Gfx1032 {
             // The ROCm 7.14 package's MIOpen 3.5.2 selects F3x2 and F2x3 Winograd assembly kernels
             // that COMGR cannot build for gfx1032 on Windows. Disable only those solvers while
             // preserving other Winograd paths.
@@ -161,26 +174,62 @@ impl RuntimePackage for Rocm {
                 std::env::set_var("MIOPEN_DEBUG_AMD_WINOGRAD_RXS_F2X3_G1", "0");
             }
         }
-        for library in [
-            "core/bin/amd_comgr.dll",
-            "core/bin/rocm_kpack.dll",
-            "core/bin/rocm-openblas.dll",
-            "core/bin/amdhip64_7.dll",
-            "core/bin/hiprtc-builtins0714.dll",
-            "core/bin/hiprtc0714.dll",
-            "libraries/bin/rocrand.dll",
-            "libraries/bin/hiprand.dll",
-            "libraries/bin/rocblas.dll",
-            "libraries/bin/hipblas.dll",
-            "libraries/bin/libhipblaslt.dll",
-            "libraries/bin/rocfft.dll",
-            "libraries/bin/hipfft.dll",
-            "libraries/bin/rocsolver.dll",
-            "libraries/bin/hipsolver.dll",
-            "libraries/bin/rocsparse.dll",
-            "libraries/bin/hipsparse.dll",
-            "libraries/bin/MIOpen.dll",
-        ] {
+
+        for library in if cfg!(target_os = "windows") {
+            &[
+                "core/bin/amd_comgr.dll",
+                "core/bin/rocm_kpack.dll",
+                "core/bin/rocm-openblas.dll",
+                "core/bin/amdhip64_7.dll",
+                "core/bin/hiprtc-builtins0714.dll",
+                "core/bin/hiprtc0714.dll",
+                "libraries/bin/rocrand.dll",
+                "libraries/bin/hiprand.dll",
+                "libraries/bin/rocblas.dll",
+                "libraries/bin/hipblas.dll",
+                "libraries/bin/libhipblaslt.dll",
+                "libraries/bin/rocfft.dll",
+                "libraries/bin/hipfft.dll",
+                "libraries/bin/rocsolver.dll",
+                "libraries/bin/hipsolver.dll",
+                "libraries/bin/rocsparse.dll",
+                "libraries/bin/hipsparse.dll",
+                "libraries/bin/MIOpen.dll",
+            ][..]
+        } else if cfg!(target_os = "linux") {
+            &[
+                "core/lib/librocprofiler-register.so.0",
+                "core/lib/libamd_comgr.so.3",
+                "core/lib/libhsa-runtime64.so.1",
+                "core/lib/libamdhip64.so.7",
+                "core/lib/librocprofiler-sdk.so.1",
+                "core/lib/librocprofiler-sdk-roctx.so.1",
+                "core/lib/libroctracer64.so.4",
+                "core/lib/libroctx64.so.4",
+                "core/lib/libhiprtc-builtins.so.7",
+                "core/lib/libhiprtc.so.7",
+                "core/lib/rocm_sysdeps/lib/librocm_sysdeps_liblzma.so.5",
+                "core/lib/host-math/lib/librocm-openblas.so.0",
+                "core/lib/librocm_smi64.so.1",
+                "libraries/lib/librocblas.so.5",
+                "libraries/lib/libhipblas.so.3",
+                "libraries/lib/libhipblaslt.so.1",
+                "libraries/lib/librocfft.so.0",
+                "libraries/lib/libhipfft.so.0",
+                "libraries/lib/librocrand.so.1",
+                "libraries/lib/libhiprand.so.1",
+                "libraries/lib/librocsolver.so.0",
+                "libraries/lib/libhipsolver.so.1",
+                "libraries/lib/librocsparse.so.1",
+                "libraries/lib/libhipsparse.so.4",
+                "libraries/lib/libhipsparselt.so.0",
+                "libraries/lib/libMIOpen.so.1",
+                "libraries/lib/libhipdnn_backend.so",
+                "libraries/lib/librccl.so.1",
+            ][..]
+        } else {
+            anyhow::bail!("ROCm packages support only Windows and Linux")
+        } {
             loader::load(root.join(library))?;
         }
         Ok(())

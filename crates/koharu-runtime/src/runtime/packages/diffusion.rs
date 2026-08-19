@@ -161,10 +161,10 @@ impl RuntimePackage for Diffusion {
                 Component::Cuda(Cuda::Runtime13),
                 Component::Cuda(Cuda::Blas13),
             ]),
-            Self::WindowsHip => Ok(vec![Component::Rocm(Rocm::discover(hardware)?)]),
-            Self::LinuxHip | Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => {
-                Ok(Vec::new())
+            Self::WindowsHip | Self::LinuxHip => {
+                Ok(vec![Component::Rocm(Rocm::discover(hardware)?)])
             }
+            Self::WindowsVulkan | Self::LinuxVulkan | Self::MacosMetal => Ok(Vec::new()),
         }
     }
 
