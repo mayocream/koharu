@@ -371,7 +371,7 @@
       "samplingDescription": "控制模型选择和调整生成文本的方式。",
       "temperature": "温度",
       "reasoning": "推理",
-      "reasoningDescription": "让支持推理的模型使用推理。",
+      "reasoningDescription": "翻译时使用模型推理。",
       "title": "生成",
       "topK": "前 K 项",
       "topP": "Top P",

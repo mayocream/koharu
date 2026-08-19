@@ -117,7 +117,7 @@ const preferences: Preferences = {
         name: 'OpenAI-compatible',
         config: {
           provider: 'openai-compatible',
-          settings: { base_url: 'http://localhost:11434/v1', vision: false },
+          settings: { base_url: 'http://localhost:11434/v1' },
         },
         credential: emptyCredential(),
       },
@@ -176,7 +176,7 @@ function installProject() {
         name: 'Gemma 4 E2B Instruct',
         quantizations: [],
         vision: true,
-        reasoning: false,
+        reasoning: true,
       },
     ],
     selectedPages: ['page'],
@@ -923,7 +923,7 @@ describe('greenfield editor', () => {
             provider: 'local',
             model: 'gemma4-12b-it',
             quantization: null,
-            reasoning: false,
+            reasoning: true,
           },
         },
       },
@@ -938,7 +938,7 @@ describe('greenfield editor', () => {
           name: 'Gemma 4 12B',
           quantizations: [],
           vision: true,
-          reasoning: false,
+          reasoning: true,
         },
       ],
     })
@@ -1090,11 +1090,24 @@ describe('greenfield editor', () => {
     expect(
       screen.getByText('Control how the model selects and varies generated text.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'Enable reasoning' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    expect(screen.getByText('Use model reasoning during translation.')).toBeInTheDocument()
+    const reasoning = screen.getByRole('switch', { name: 'Enable reasoning' })
+    expect(reasoning).not.toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByText('Enable reasoning')).not.toBeInTheDocument()
+    save.mockClear()
+    await user.click(reasoning)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            model: expect.objectContaining({ reasoning: true }),
+            generation: expect.objectContaining({ reasoning: true }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
     const vision = screen.getByRole('switch', { name: 'Vision' })
     expect(screen.getByText('Feed page images to the LLM during translation.')).toBeInTheDocument()
     expect(vision).toBeChecked()

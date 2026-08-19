@@ -371,7 +371,7 @@
       "samplingDescription": "모델이 생성할 텍스트를 선택하고 변화시키는 방식을 조절합니다.",
       "temperature": "온도",
       "reasoning": "추론",
-      "reasoningDescription": "추론 지원 모델이 추론을 사용하도록 합니다.",
+      "reasoningDescription": "번역할 때 모델 추론을 사용합니다.",
       "title": "생성",
       "topK": "상위 K개",
       "topP": "Top P",

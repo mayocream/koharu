@@ -43,6 +43,7 @@ pub struct ModelSelection {
     pub model: Option<String>,
     #[serde(default)]
     pub quantization: Option<String>,
+    #[serde(default)]
     pub reasoning: bool,
 }
 
@@ -158,4 +159,20 @@ pub(crate) fn display_name(model: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_selection_defaults_missing_reasoning() {
+        let selection: ModelSelection = serde_json::from_value(serde_json::json!({
+            "provider": "lm-studio",
+            "model": "publisher/model",
+            "quantization": null
+        }))
+        .unwrap();
+        assert!(!selection.reasoning);
+    }
 }

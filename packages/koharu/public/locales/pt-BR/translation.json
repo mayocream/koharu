@@ -371,7 +371,7 @@
       "samplingDescription": "Controla como o modelo seleciona e varia o texto gerado.",
       "temperature": "Temperatura",
       "reasoning": "Raciocínio",
-      "reasoningDescription": "Pede aos modelos compatíveis que usem raciocínio.",
+      "reasoningDescription": "Usa o raciocínio do modelo durante a tradução.",
       "title": "Geração",
       "topK": "Top K",
       "topP": "Top P",

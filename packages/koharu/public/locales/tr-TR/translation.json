@@ -371,7 +371,7 @@
       "samplingDescription": "Modelin oluşturulan metni nasıl seçip çeşitlendireceğini kontrol eder.",
       "temperature": "Sıcaklık",
       "reasoning": "Akıl yürütme",
-      "reasoningDescription": "Desteklenen modellerden akıl yürütmeyi kullanmalarını ister.",
+      "reasoningDescription": "Çeviri sırasında model akıl yürütmesini kullanır.",
       "title": "Üretim",
       "topK": "İlk K",
       "topP": "Top P",

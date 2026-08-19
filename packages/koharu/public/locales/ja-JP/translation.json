@@ -371,7 +371,7 @@
       "samplingDescription": "モデルが生成テキストを選択し、変化させる方法を調整します。",
       "temperature": "温度",
       "reasoning": "推論",
-      "reasoningDescription": "推論対応モデルに推論を使用させます。",
+      "reasoningDescription": "翻訳時にモデルの推論を使用します。",
       "title": "生成",
       "topK": "上位 K 件",
       "topP": "Top P",

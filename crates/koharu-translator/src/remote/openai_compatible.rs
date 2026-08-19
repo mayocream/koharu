@@ -19,7 +19,6 @@ const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 #[serde(default)]
 pub struct OpenAiCompatibleConfig {
     pub base_url: Option<Url>,
-    pub vision: bool,
 }
 
 impl Default for OpenAiCompatibleConfig {
@@ -28,7 +27,6 @@ impl Default for OpenAiCompatibleConfig {
             base_url: Some(
                 Url::parse(DEFAULT_BASE_URL).expect("default OpenAI-compatible URL is valid"),
             ),
-            vision: false,
         }
     }
 }
@@ -178,7 +176,7 @@ pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> 
             name: display_name(&model),
             model: Some(model),
             quantizations: Vec::new(),
-            vision: config.vision,
+            vision: true,
             reasoning: true,
         })
         .collect())

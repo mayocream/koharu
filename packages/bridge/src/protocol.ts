@@ -334,14 +334,13 @@ export type ModelSelection = {
 	provider: Provider,
 	model?: string | null,
 	quantization?: string | null,
-	reasoning: boolean,
+	reasoning?: boolean,
 };
 
 export type OcrModel = { model: "paddleocr-vl-1.6" } | { model: "manga-ocr" } | { model: "baberu-ocr" };
 
 export type OpenAiCompatibleConfig = {
 	base_url?: string | null,
-	vision?: boolean,
 };
 
 export type OpenAiConfig = Record<string, never>;

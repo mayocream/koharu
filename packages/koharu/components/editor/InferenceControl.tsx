@@ -457,7 +457,7 @@ function availableModels(
       name: selected.model ?? providerName(providers, selected.provider),
       quantizations: [],
       vision: false,
-      reasoning: selected.reasoning,
+      reasoning: selected.reasoning ?? false,
     },
     ...models,
   ]

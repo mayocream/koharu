@@ -29,8 +29,8 @@ use minijinja::{Environment, Error as TemplateError, ErrorKind as TemplateErrorK
 use serde::Serialize;
 
 use super::{
-    Capabilities, ChatMessage, FinishReason, Generation, GenerationControl, GenerationOptions,
-    Input, LoadOptions, Media, TokenChunk,
+    Capabilities, ChatMessage, ChatTemplateOptions, FinishReason, Generation, GenerationControl,
+    GenerationOptions, Input, LoadOptions, Media, TokenChunk,
 };
 use crate::Backend;
 
@@ -86,7 +86,7 @@ impl ChatTemplate {
         })
     }
 
-    fn render(&self, messages: &[ChatMessage], add_generation_prompt: bool) -> Result<String> {
+    fn render(&self, messages: &[ChatMessage], options: ChatTemplateOptions) -> Result<String> {
         let messages = messages
             .iter()
             .map(|message| TemplateMessage {
@@ -104,8 +104,8 @@ impl ChatTemplate {
                 messages => messages,
                 bos_token => self.bos_token.as_str(),
                 eos_token => self.eos_token.as_str(),
-                add_generation_prompt => add_generation_prompt,
-                enable_thinking => false,
+                add_generation_prompt => options.add_generation_prompt,
+                enable_thinking => options.enable_thinking,
                 tools => Vec::<()>::new(),
                 documents => Vec::<()>::new(),
             })
@@ -211,9 +211,9 @@ impl Model {
     pub(super) fn render_chat_prompt(
         &self,
         messages: &[ChatMessage],
-        add_generation_prompt: bool,
+        options: ChatTemplateOptions,
     ) -> Result<String> {
-        self.chat_template.render(messages, add_generation_prompt)
+        self.chat_template.render(messages, options)
     }
 
     pub(super) fn inference<F>(

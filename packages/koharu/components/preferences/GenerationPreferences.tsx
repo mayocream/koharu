@@ -15,13 +15,11 @@ export function GenerationPreferences({
   visionAvailable,
   reasoningAvailable,
   onChange,
-  onVisionChange,
 }: {
   value: GenerationConfig
   visionAvailable: boolean
   reasoningAvailable: boolean
   onChange: (value: GenerationConfig) => void
-  onVisionChange: (value: boolean) => void
 }) {
   const { t } = useTranslation()
   const update = (changes: Partial<GenerationConfig>) => onChange({ ...value, ...changes })
@@ -117,7 +115,7 @@ export function GenerationPreferences({
             aria-label={t('settings.generation.vision')}
             checked={visionAvailable && (value.vision ?? false)}
             disabled={!visionAvailable}
-            onCheckedChange={onVisionChange}
+            onCheckedChange={(vision) => update({ vision })}
           />
         </div>
       </PreferenceRow>
