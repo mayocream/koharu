@@ -18,8 +18,8 @@ pub use prepared::{
     Bounds, FillRule, LayerId, LayerKind, PREPARED_FRAME_MANIFEST_VERSION,
     PREPARED_RASTER_TILE_DIMENSION, PREPARED_RESOURCE_FORMAT_VERSION, PathElement, Point,
     PreparedContent, PreparedElementFrame, PreparedFrame, PreparedFrameBundle,
-    PreparedFrameManifest, PreparedGlyph, PreparedGlyphRun, PreparedGlyphStyle, PreparedLayer,
-    PreparedPath, PreparedRaster, PreparedRasterTile, PreparedResource, PreparedResourceKind,
+    PreparedFrameManifest, PreparedGlyph, PreparedGlyphRun, PreparedLayer, PreparedPath,
+    PreparedRaster, PreparedRasterTile, PreparedResource, PreparedResourceKind,
     PreparedResourcePacket, PreparedResourceRef, PreparedResourceStore, PreparedScene,
     PreparedSceneCommand, Presentation, ResourceId, Revision,
 };
