@@ -1,3 +1,15 @@
+## [0.77.4](https://github.com/mayocream/koharu/compare/0.77.3..0.77.4) - 2026-08-20
+
+### 📚 Documentation
+
+- Describe agent resources - ([dff193d](https://github.com/mayocream/koharu/commit/dff193de9fdbd6e40b3ec9995358b40572cb8164))
+- Make contribution guidance more welcoming - ([765d327](https://github.com/mayocream/koharu/commit/765d327170ae8330a54ef4755465467f956cef70))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(runtime)* Update native runtimes - ([6df4ded](https://github.com/mayocream/koharu/commit/6df4ded508658019e3b969ac9dc863d8fdccc9e1))
+
+
 ## [0.77.3](https://github.com/mayocream/koharu/compare/0.77.2..0.77.3) - 2026-08-19
 
 ### 🐛 Bug Fixes
