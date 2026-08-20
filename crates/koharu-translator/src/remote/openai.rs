@@ -35,6 +35,7 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
             model: Some(model.id),
             quantizations: Vec::new(),
             vision: true,
+            reasoning: true,
         })
         .collect())
 }
@@ -74,24 +75,21 @@ pub(super) async fn translate(
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
     let api_key = koharu_secrets::get("openai")?.context("openai API key is not configured")?;
-    let mut backend = ChatBackend::new(
-        "openai",
-        URL,
-        Some(api_key.expose_secret()),
-        model,
-        generation,
-        ResponseMode::JsonSchema,
-    );
-    backend.max_tokens = None;
-    backend.max_completion_tokens = generation.max_tokens;
-    backend.reasoning_effort = ["gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.5", "gpt-5.6"]
-        .iter()
-        .any(|prefix| model.starts_with(prefix))
-        .then_some(if generation.thinking {
-            "medium"
-        } else {
-            "none"
-        });
+    let backend = ChatBackend {
+        max_tokens: None,
+        max_completion_tokens: generation.max_tokens,
+        reasoning_effort: generation
+            .reasoning
+            .map(|enabled| if enabled { "medium" } else { "none" }),
+        ..ChatBackend::new(
+            "openai",
+            URL,
+            Some(api_key.expose_secret()),
+            model,
+            generation,
+            ResponseMode::JsonSchema,
+        )
+    };
     super::openai_compatible::translate(client, backend, request).await
 }
 

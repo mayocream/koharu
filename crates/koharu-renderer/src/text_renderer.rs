@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use koharu_rasterizer::{
-    PreparedGlyph, PreparedGlyphRun, PreparedGlyphStyle, PreparedResource, PreparedScene,
-    PreparedSceneCommand, ResourceId,
+    PreparedGlyph, PreparedGlyphRun, PreparedResource, PreparedScene, PreparedSceneCommand,
+    ResourceId,
 };
 use vello::kurbo::Affine;
 
@@ -111,6 +111,10 @@ impl TextRenderer {
         options: &TextRenderOptions,
         transform: Affine,
     ) {
+        // The border is drawn first as an outward-only dilation of the glyph outline (see
+        // `draw_layout`), then the ordinary fill is drawn on top in the foreground color. Unlike a
+        // centered stroke, a dilation never grows inward, so it can't punch a hole through small
+        // features (e.g. dots) once the border width exceeds their radius.
         if let Some(stroke) = options
             .stroke
             .filter(|stroke| stroke.width_px > 0.0 && stroke.color[3] > 0)
@@ -122,7 +126,10 @@ impl TextRenderer {
                 writing_mode,
                 options,
                 transform,
-                DrawStyle::Stroke(stroke),
+                GlyphPaint {
+                    color: stroke.color,
+                    dilation_px: stroke.width_px,
+                },
             );
         }
         draw_layout(
@@ -132,7 +139,10 @@ impl TextRenderer {
             writing_mode,
             options,
             transform,
-            DrawStyle::Fill,
+            GlyphPaint {
+                color: options.color,
+                dilation_px: 0.0,
+            },
         );
     }
 
@@ -364,10 +374,10 @@ fn placement(rect: LayoutBox, width: f32, height: f32) -> (f32, f32) {
     (x, y)
 }
 
-#[derive(Clone, Copy)]
-enum DrawStyle {
-    Stroke(StrokeOptions),
-    Fill,
+/// Color and outward dilation for one glyph draw pass (border or ordinary fill).
+struct GlyphPaint {
+    color: [u8; 4],
+    dilation_px: f32,
 }
 
 fn draw_layout(
@@ -377,7 +387,7 @@ fn draw_layout(
     writing_mode: WritingMode,
     options: &TextRenderOptions,
     transform: Affine,
-    style: DrawStyle,
+    paint: GlyphPaint,
 ) {
     for line in &layout.lines {
         let (baseline_x, baseline_y) = match writing_mode {
@@ -415,15 +425,7 @@ fn draw_layout(
             let glyph_transform = font
                 .synthetic_skew()
                 .map(|angle| Affine::skew(-(angle.to_radians().tan() as f64), 0.0).as_coeffs());
-            let style = match style {
-                DrawStyle::Fill => PreparedGlyphStyle::Fill {
-                    color: options.color,
-                },
-                DrawStyle::Stroke(stroke) => PreparedGlyphStyle::Stroke {
-                    color: stroke.color,
-                    width: stroke.width_px * 2.0,
-                },
-            };
+            let synthetic_bold = if font.synthetic_bold() { 1.0 } else { 0.0 };
             scene
                 .commands
                 .push(PreparedSceneCommand::GlyphRun(PreparedGlyphRun {
@@ -433,13 +435,12 @@ fn draw_layout(
                     normalized_coords: font.normalized_coords().to_vec(),
                     transform: transform.as_coeffs(),
                     glyph_transform,
-                    hint: options.hint_glyphs,
-                    embolden: if font.synthetic_bold() {
-                        [1.0, 1.0]
-                    } else {
-                        [0.0; 2]
-                    },
-                    style,
+                    // Hinting folds a uniform zoom into `font_size` for crisp fill text, but a
+                    // border needs the real transform so its dilation amount stays proportional
+                    // to that same zoom instead of being rendered at a fixed pixel size.
+                    hint: options.hint_glyphs && paint.dilation_px == 0.0,
+                    embolden: [synthetic_bold + paint.dilation_px; 2],
+                    color: paint.color,
                     glyphs,
                 }));
             start = end;

@@ -44,13 +44,16 @@ pub(super) async fn translate(
         system_prompt: &system,
         temperature: generation.temperature,
         max_output_tokens: generation.max_tokens,
-        reasoning: if generation.thinking { "on" } else { "off" },
+        reasoning: generation
+            .reasoning
+            .map(|enabled| if enabled { "on" } else { "off" }),
         store: false,
     };
-    let mut http = client.post(endpoint(config.base_url.as_ref(), "chat"));
-    if let Some(api_key) = api_key {
-        http = http.bearer_auth(api_key.expose_secret());
-    }
+    let http = client.post(endpoint(config.base_url.as_ref(), "chat"));
+    let http = match api_key {
+        Some(api_key) => http.bearer_auth(api_key.expose_secret()),
+        None => http,
+    };
     let response: ChatResponse = send_json("lm-studio", http.json(&body)).await?;
     let text = response
         .output
@@ -67,21 +70,29 @@ pub(super) async fn translate(
 
 pub(super) async fn models(client: &Client, config: &LmStudioConfig) -> Result<Vec<Model>> {
     let api_key = koharu_secrets::get("lm-studio")?;
-    let mut request = client.get(endpoint(config.base_url.as_ref(), "models"));
-    if let Some(api_key) = api_key {
-        request = request.bearer_auth(api_key.expose_secret());
-    }
+    let request = client.get(endpoint(config.base_url.as_ref(), "models"));
+    let request = match api_key {
+        Some(api_key) => request.bearer_auth(api_key.expose_secret()),
+        None => request,
+    };
     let response: ModelsResponse = send_json("lm-studio", request).await?;
     Ok(response
         .models
         .into_iter()
         .filter(|model| matches!(model.kind.as_str(), "llm" | "vlm"))
-        .map(|model| Model {
-            provider: Provider::LmStudio,
-            name: display_name(&model.key),
-            model: Some(model.key),
-            quantizations: Vec::new(),
-            vision: model.capabilities.vision,
+        .map(|model| {
+            let capabilities = model.capabilities;
+            Model {
+                provider: Provider::LmStudio,
+                name: display_name(&model.key),
+                model: Some(model.key),
+                quantizations: Vec::new(),
+                vision: capabilities
+                    .as_ref()
+                    .is_some_and(|capabilities| capabilities.vision),
+                reasoning: capabilities
+                    .is_some_and(|capabilities| capabilities.reasoning.is_some()),
+            }
         })
         .collect())
 }
@@ -104,7 +115,8 @@ struct ChatRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
-    reasoning: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<&'static str>,
     store: bool,
 }
 
@@ -158,13 +170,17 @@ struct ListedModel {
     #[serde(rename = "type")]
     kind: String,
     key: String,
-    capabilities: ListedModelCapabilities,
+    capabilities: Option<ListedModelCapabilities>,
 }
 
 #[derive(Deserialize)]
 struct ListedModelCapabilities {
     vision: bool,
+    reasoning: Option<ListedModelReasoning>,
 }
+
+#[derive(Deserialize)]
+struct ListedModelReasoning {}
 
 #[cfg(test)]
 mod tests {
@@ -191,14 +207,31 @@ mod tests {
             system_prompt: "system",
             temperature: Some(0.2),
             max_output_tokens: Some(1024),
-            reasoning: "off",
+            reasoning: None,
             store: false,
         })
         .unwrap();
         assert_eq!(value["max_output_tokens"], 1024);
-        assert_eq!(value["reasoning"], "off");
+        assert!(value.get("reasoning").is_none());
         assert_eq!(value["store"], false);
         assert!(value.get("messages").is_none());
+    }
+
+    #[test]
+    fn serializes_reasoning_for_supported_models() {
+        for mode in ["on", "off"] {
+            let value = serde_json::to_value(ChatRequest {
+                model: "publisher/reasoning-model",
+                input: ChatInput::Text("input"),
+                system_prompt: "system",
+                temperature: None,
+                max_output_tokens: None,
+                reasoning: Some(mode),
+                store: false,
+            })
+            .unwrap();
+            assert_eq!(value["reasoning"], mode);
+        }
     }
 
     #[test]
@@ -213,12 +246,17 @@ mod tests {
                 {
                     "type": "llm",
                     "key": "publisher/vision-model",
-                    "capabilities": { "vision": true }
+                    "capabilities": {
+                        "vision": true,
+                        "reasoning": {
+                            "allowed_options": ["off", "on"],
+                            "default": "on"
+                        }
+                    }
                 },
                 {
                     "type": "embedding",
-                    "key": "publisher/embed-model",
-                    "capabilities": { "vision": false }
+                    "key": "publisher/embed-model"
                 }
             ]
         }))
@@ -227,13 +265,22 @@ mod tests {
             .models
             .into_iter()
             .filter(|model| matches!(model.kind.as_str(), "llm" | "vlm"))
-            .map(|model| (model.key, model.capabilities.vision))
+            .map(|model| {
+                let capabilities = model.capabilities;
+                (
+                    model.key,
+                    capabilities
+                        .as_ref()
+                        .is_some_and(|capabilities| capabilities.vision),
+                    capabilities.is_some_and(|capabilities| capabilities.reasoning.is_some()),
+                )
+            })
             .collect::<Vec<_>>();
         assert_eq!(
             models,
             [
-                ("publisher/chat-model".to_owned(), false),
-                ("publisher/vision-model".to_owned(), true)
+                ("publisher/chat-model".to_owned(), false, false),
+                ("publisher/vision-model".to_owned(), true, true)
             ]
         );
     }

@@ -221,19 +221,6 @@ export function SettingsPage() {
                   onChange={(translation) =>
                     setPipeline((current) => (current ? { ...current, translation } : current))
                   }
-                  onProviderChange={(replacement) =>
-                    setProviders((current) =>
-                      current
-                        ? {
-                            entries: current.entries.map((entry) =>
-                              entry.config.provider === replacement.config.provider
-                                ? replacement
-                                : entry,
-                            ),
-                          }
-                        : current,
-                    )
-                  }
                 />
               ) : (
                 <LoadingPreferences />

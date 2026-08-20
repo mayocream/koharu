@@ -80,9 +80,11 @@ set_property(
 )
 
 # libmtmd uses the GGML symbols exported by libllama instead of embedding a
-# second copy of the static GGML graph.
+# second copy of the static GGML graph. Preserve its other upstream dependencies.
 set_property(TARGET llama PROPERTY INTERFACE_LINK_LIBRARIES "")
-set_property(TARGET mtmd PROPERTY LINK_LIBRARIES "llama;Threads::Threads")
+get_target_property(_mtmd_link_libraries mtmd LINK_LIBRARIES)
+list(REMOVE_ITEM _mtmd_link_libraries ggml)
+set_property(TARGET mtmd PROPERTY LINK_LIBRARIES "${_mtmd_link_libraries}")
 set_property(TARGET mtmd PROPERTY INTERFACE_LINK_LIBRARIES "llama")
 target_include_directories(mtmd PRIVATE "${LLAMA_CPP_SOURCE_DIR}/ggml/include")
 

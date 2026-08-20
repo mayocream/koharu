@@ -26,15 +26,17 @@ pub(super) async fn translate(
 ) -> Result<Vec<String>> {
     let api_key =
         koharu_secrets::get("openrouter")?.context("openrouter API key is not configured")?;
-    let mut backend = ChatBackend::new(
-        "openrouter",
-        CHAT_URL,
-        Some(api_key.expose_secret()),
-        model,
-        generation,
-        ResponseMode::PromptOnly,
-    );
-    backend.reasoning = Some(generation.thinking);
+    let backend = ChatBackend {
+        reasoning: generation.reasoning,
+        ..ChatBackend::new(
+            "openrouter",
+            CHAT_URL,
+            Some(api_key.expose_secret()),
+            model,
+            generation,
+            ResponseMode::PromptOnly,
+        )
+    };
     super::openai_compatible::translate(client, backend, request).await
 }
 
@@ -61,6 +63,11 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
                     .input_modalities
                     .iter()
                     .any(|modality| modality == "image"),
+                reasoning: model.reasoning.is_some()
+                    || model
+                        .supported_parameters
+                        .iter()
+                        .any(|parameter| parameter == "reasoning"),
             })
             .collect(),
         Err(error) => {
@@ -80,9 +87,45 @@ struct ListedModel {
     id: String,
     name: String,
     architecture: Architecture,
+    supported_parameters: Vec<String>,
+    reasoning: Option<ReasoningCapabilities>,
 }
+
+#[derive(Deserialize)]
+struct ReasoningCapabilities {}
 
 #[derive(Deserialize)]
 struct Architecture {
     input_modalities: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_reasoning_capability_from_model_list() {
+        let response: ModelsResponse = serde_json::from_value(serde_json::json!({
+            "data": [
+                {
+                    "id": "provider/reasoning-model",
+                    "name": "Reasoning Model",
+                    "architecture": { "input_modalities": ["text"] },
+                    "supported_parameters": ["reasoning"],
+                    "reasoning": {
+                        "supported_efforts": ["high", "medium", "low"]
+                    }
+                },
+                {
+                    "id": "provider/chat-model",
+                    "name": "Chat Model",
+                    "architecture": { "input_modalities": ["text"] },
+                    "supported_parameters": []
+                }
+            ]
+        }))
+        .unwrap();
+        assert!(response.data[0].reasoning.is_some());
+        assert!(response.data[1].reasoning.is_none());
+    }
 }

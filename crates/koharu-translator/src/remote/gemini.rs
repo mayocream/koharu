@@ -47,6 +47,7 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
                 name: model.display_name,
                 quantizations: Vec::new(),
                 vision: true,
+                reasoning: model.thinking,
             })
         })
         .collect())
@@ -92,11 +93,9 @@ pub(super) async fn translate(
         generation_config: GenerationConfig {
             temperature: generation.temperature,
             max_output_tokens: generation.max_tokens,
-            thinking_config: model
-                .starts_with("gemini-2.5-flash")
-                .then_some(ThinkingConfig {
-                    thinking_budget: if generation.thinking { -1 } else { 0 },
-                }),
+            thinking_config: generation.reasoning.map(|enabled| ThinkingConfig {
+                thinking_budget: if enabled { -1 } else { 0 },
+            }),
             response_mime_type: "application/json",
             response_json_schema: schema,
         },
@@ -214,6 +213,8 @@ struct ListedModel {
     name: String,
     display_name: String,
     supported_generation_methods: Vec<String>,
+    #[serde(default)]
+    thinking: bool,
 }
 
 #[cfg(test)]
@@ -255,5 +256,27 @@ mod tests {
         assert!(supports_translation("models/gemma-4-31b-it"));
         assert!(!supports_translation("models/gemini-3.1-flash-image"));
         assert!(!supports_translation("models/gemini-3.1-flash-tts-preview"));
+    }
+
+    #[test]
+    fn reads_optional_thinking_capability_from_model_list() {
+        let response: ModelsResponse = serde_json::from_value(serde_json::json!({
+            "models": [
+                {
+                    "name": "models/gemini-3.7-flash",
+                    "displayName": "Gemini 3.7 Flash",
+                    "supportedGenerationMethods": ["generateContent"],
+                    "thinking": true
+                },
+                {
+                    "name": "models/gemini-2.0-flash-lite",
+                    "displayName": "Gemini 2.0 Flash-Lite",
+                    "supportedGenerationMethods": ["generateContent"]
+                }
+            ]
+        }))
+        .unwrap();
+        assert!(response.models[0].thinking);
+        assert!(!response.models[1].thinking);
     }
 }

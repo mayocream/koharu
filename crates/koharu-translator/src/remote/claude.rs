@@ -35,12 +35,16 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
     Ok(response
         .data
         .into_iter()
-        .map(|model| Model {
-            provider: Provider::Claude,
-            model: Some(model.id),
-            name: model.display_name,
-            quantizations: Vec::new(),
-            vision: model.capabilities.image_input.supported,
+        .map(|model| {
+            let reasoning = model.capabilities.thinking.types.adaptive.supported;
+            Model {
+                provider: Provider::Claude,
+                model: Some(model.id),
+                name: model.display_name,
+                quantizations: Vec::new(),
+                vision: model.capabilities.image_input.supported,
+                reasoning,
+            }
         })
         .collect())
 }
@@ -60,15 +64,9 @@ pub(super) async fn translate(
         system: &system,
         messages: [Message::user(&user, request.image.as_deref())?],
         temperature: generation.temperature,
-        thinking: model
-            .starts_with("claude-sonnet-5")
-            .then_some(ThinkingConfig {
-                kind: if generation.thinking {
-                    "adaptive"
-                } else {
-                    "disabled"
-                },
-            }),
+        thinking: generation.reasoning.map(|enabled| ThinkingConfig {
+            kind: if enabled { "adaptive" } else { "disabled" },
+        }),
     };
     let response: Response = send_json(
         "claude",
@@ -172,6 +170,17 @@ struct ListedModel {
 #[derive(Deserialize)]
 struct ModelCapabilities {
     image_input: CapabilitySupport,
+    thinking: ThinkingCapability,
+}
+
+#[derive(Deserialize)]
+struct ThinkingCapability {
+    types: ThinkingTypes,
+}
+
+#[derive(Deserialize)]
+struct ThinkingTypes {
+    adaptive: CapabilitySupport,
 }
 
 #[derive(Deserialize)]
@@ -192,5 +201,32 @@ mod tests {
         assert_eq!(value["content"][1]["type"], "image");
         assert_eq!(value["content"][1]["source"]["type"], "base64");
         assert_eq!(value["content"][1]["source"]["media_type"], "image/jpeg");
+    }
+
+    #[test]
+    fn reads_adaptive_thinking_capability_from_model_list() {
+        let response: ModelsResponse = serde_json::from_value(serde_json::json!({
+            "data": [{
+                "id": "claude-opus-4-8",
+                "display_name": "Claude Opus 4.8",
+                "capabilities": {
+                    "image_input": { "supported": true },
+                    "thinking": {
+                        "types": {
+                            "adaptive": { "supported": true }
+                        }
+                    }
+                }
+            }]
+        }))
+        .unwrap();
+        assert!(
+            response.data[0]
+                .capabilities
+                .thinking
+                .types
+                .adaptive
+                .supported
+        );
     }
 }

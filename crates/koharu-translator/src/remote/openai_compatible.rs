@@ -19,7 +19,6 @@ const DEFAULT_BASE_URL: &str = "http://localhost:11434/v1";
 #[serde(default)]
 pub struct OpenAiCompatibleConfig {
     pub base_url: Option<Url>,
-    pub vision: bool,
 }
 
 impl Default for OpenAiCompatibleConfig {
@@ -28,7 +27,6 @@ impl Default for OpenAiCompatibleConfig {
             base_url: Some(
                 Url::parse(DEFAULT_BASE_URL).expect("default OpenAI-compatible URL is valid"),
             ),
-            vision: false,
         }
     }
 }
@@ -42,19 +40,20 @@ pub(super) async fn compatible(
 ) -> Result<Vec<String>> {
     let api_key = koharu_secrets::get("openai-compatible")?;
     let endpoint = endpoint(config.base_url.as_ref(), "chat/completions");
-    translate(
-        client,
-        ChatBackend::new(
+    let backend = ChatBackend {
+        reasoning_effort: generation
+            .reasoning
+            .map(|enabled| if enabled { "medium" } else { "none" }),
+        ..ChatBackend::new(
             "openai-compatible",
             &endpoint,
             api_key.as_ref().map(ExposeSecret::expose_secret),
             model,
             generation,
             ResponseMode::PromptOnly,
-        ),
-        request,
-    )
-    .await
+        )
+    };
+    translate(client, backend, request).await
 }
 
 pub(super) async fn translate(
@@ -99,10 +98,11 @@ pub(super) async fn translate(
             .response_mode
             .response_format(request.segments.len()),
     };
-    let mut http = client.post(backend.endpoint).json(&body);
-    if let Some(api_key) = backend.api_key {
-        http = http.bearer_auth(api_key);
-    }
+    let http = client.post(backend.endpoint).json(&body);
+    let http = match backend.api_key {
+        Some(api_key) => http.bearer_auth(api_key),
+        None => http,
+    };
     let response: ChatResponse = send_json(backend.provider, http).await?;
     let text = response
         .choices
@@ -165,10 +165,11 @@ impl<'a> ChatBackend<'a> {
 
 pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> Result<Vec<Model>> {
     let api_key = koharu_secrets::get("openai-compatible")?;
-    let mut request = client.get(endpoint(config.base_url.as_ref(), "models"));
-    if let Some(api_key) = api_key {
-        request = request.bearer_auth(api_key.expose_secret());
-    }
+    let request = client.get(endpoint(config.base_url.as_ref(), "models"));
+    let request = match api_key {
+        Some(api_key) => request.bearer_auth(api_key.expose_secret()),
+        None => request,
+    };
     Ok(discover_models("openai-compatible", request)
         .await?
         .into_iter()
@@ -177,7 +178,8 @@ pub(super) async fn models(client: &Client, config: &OpenAiCompatibleConfig) -> 
             name: display_name(&model),
             model: Some(model),
             quantizations: Vec::new(),
-            vision: config.vision,
+            vision: true,
+            reasoning: true,
         })
         .collect())
 }
@@ -394,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn serializes_openrouter_reasoning_control() {
+    fn serializes_reasoning_control() {
         assert_eq!(
             serde_json::to_value(ReasoningConfig { enabled: false }).unwrap(),
             serde_json::json!({ "enabled": false })

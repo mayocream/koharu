@@ -1,3 +1,85 @@
+## [0.77.3](https://github.com/mayocream/koharu/compare/0.77.2..0.77.3) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(translator)* Decode optional Gemini thinking capability - ([3da3391](https://github.com/mayocream/koharu/commit/3da339141b56b97323e001ce79df260cfd2ddc27))
+
+
+## [0.77.2](https://github.com/mayocream/koharu/compare/0.77.1..0.77.2) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load ROCm libraries globally - ([1dda084](https://github.com/mayocream/koharu/commit/1dda08440a0b6d2115025ee9a8def543375083ff))
+
+
+## [0.77.1](https://github.com/mayocream/koharu/compare/0.77.0..0.77.1) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Load Linux cuFile for Torch - ([556485b](https://github.com/mayocream/koharu/commit/556485b18651e952e9adee92825b5c02d66ed31d))
+
+
+## [0.77.0](https://github.com/mayocream/koharu/compare/0.76.0..0.77.0) - 2026-08-19
+
+### ⛰️  Features
+
+- Add native usage metrics - ([66e603d](https://github.com/mayocream/koharu/commit/66e603d4438a2f61aee41cf6bbe38c36e97f8219))
+
+### 🐛 Bug Fixes
+
+- *(ci)* Cover supported ROCm targets in HIP builds - ([b855982](https://github.com/mayocream/koharu/commit/b855982c3e2eba09b3fc285535828d972b11e77e))
+- *(ci)* Target dependency releases at default branch - ([d2b04ad](https://github.com/mayocream/koharu/commit/d2b04ad4337229bcab4355610f936ef09bfc1417))
+- *(pipeline)* Refine detection and inpainting reruns - ([acb7d99](https://github.com/mayocream/koharu/commit/acb7d99c9855db8c09224655c84d5d68e359c2e5))
+
+
+## [0.76.0](https://github.com/mayocream/koharu/compare/0.75.16..0.76.0) - 2026-08-19
+
+### ⛰️  Features
+
+- *(translator)* Support local reasoning - ([87104fc](https://github.com/mayocream/koharu/commit/87104fcf4d419e0de0f9d0cca7c404d87a0b6a14))
+
+### 🐛 Bug Fixes
+
+- *(translator)* Respect model capabilities - ([f842172](https://github.com/mayocream/koharu/commit/f842172e636628da0a018dfa1c4811d4d90f5301))
+- *(translator)* Align reasoning capabilities - ([5b6672c](https://github.com/mayocream/koharu/commit/5b6672ccefb94a1afefcaf45190cb633b5b65442))
+
+
+## [0.75.16](https://github.com/mayocream/koharu/compare/0.75.15..0.75.16) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(ci)* Restore Windows 2022 app builds - ([bf7a6ea](https://github.com/mayocream/koharu/commit/bf7a6ea9036e7eb422bc298d13e9e1e181ba190a))
+- *(ci)* Stabilize dependency builds - ([2486494](https://github.com/mayocream/koharu/commit/248649469d15213ef2d64146a8bd8320ebf7edd2))
+- *(editor)* Replace text centered stroke with outward path ([#951](https://github.com/mayocream/koharu/issues/951)) - ([fbc2e4f](https://github.com/mayocream/koharu/commit/fbc2e4f11b6f0f7a815b00590a6bcaae574b2008))
+
+### ⚙️ Miscellaneous Tasks
+
+- Use ubuntu-latest runners - ([dda25ba](https://github.com/mayocream/koharu/commit/dda25baa1f70722c87de10ecc5216a0e742331a7))
+- Use windows-latest runners - ([d4997ca](https://github.com/mayocream/koharu/commit/d4997cad5dd1855f4b11e63ff250ba852e09864e))
+
+
+## [0.75.15](https://github.com/mayocream/koharu/compare/0.75.14..0.75.15) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(ci)* Avoid MSVC environment during app builds - ([7ab39f1](https://github.com/mayocream/koharu/commit/7ab39f14676ef0ff39166cfa1cc70a334af7dbbb))
+
+### ⚙️ Miscellaneous Tasks
+
+- Enable Linux AppImage bundling - ([6d4d303](https://github.com/mayocream/koharu/commit/6d4d303ea0cacbfba3ffa70280e2f915cda15ac6))
+
+
+## [0.75.14](https://github.com/mayocream/koharu/compare/0.75.13..0.75.14) - 2026-08-19
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Preserve ROCm wheel layout - ([b830b49](https://github.com/mayocream/koharu/commit/b830b4955cd7411070a5526dea53caf0754c9578))
+
+### ⚙️ Miscellaneous Tasks
+
+- Optimize release caches - ([9aba741](https://github.com/mayocream/koharu/commit/9aba7419dbc9358bb77951995b691cfffd24f49c))
+
+
 ## [0.75.13](https://github.com/mayocream/koharu/compare/0.75.12..0.75.13) - 2026-08-19
 
 ### 🐛 Bug Fixes

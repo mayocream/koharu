@@ -98,8 +98,9 @@ const preferences: Preferences = {
         model: 'gemma4-e2b-it',
         quantization: null,
         vision: true,
+        reasoning: true,
       },
-      generation: {},
+      generation: { vision: true, reasoning: false },
       target_language: 'en-US',
       instructions: null,
     },
@@ -117,7 +118,7 @@ const preferences: Preferences = {
         name: 'OpenAI-compatible',
         config: {
           provider: 'openai-compatible',
-          settings: { base_url: 'http://localhost:11434/v1', vision: false },
+          settings: { base_url: 'http://localhost:11434/v1' },
         },
         credential: emptyCredential(),
       },
@@ -176,6 +177,7 @@ function installProject() {
         name: 'Gemma 4 E2B Instruct',
         quantizations: [],
         vision: true,
+        reasoning: true,
       },
     ],
     selectedPages: ['page'],
@@ -964,7 +966,7 @@ describe('greenfield editor', () => {
     expect(instructions).toHaveFocus()
   })
 
-  it('changes the translation model without re-enabling vision or thinking', async () => {
+  it('changes the translation model without re-enabling vision or reasoning', async () => {
     installProject()
     const user = userEvent.setup()
     const currentPreferences: Preferences = {
@@ -973,8 +975,11 @@ describe('greenfield editor', () => {
         ...preferences.pipeline,
         translation: {
           ...preferences.pipeline.translation,
-          model: { ...preferences.pipeline.translation.model, vision: false },
-          generation: { ...preferences.pipeline.translation.generation, thinking: false },
+          generation: {
+            ...preferences.pipeline.translation.generation,
+            vision: false,
+            reasoning: false,
+          },
         },
       },
     }
@@ -989,7 +994,8 @@ describe('greenfield editor', () => {
             provider: 'local',
             model: 'gemma4-12b-it',
             quantization: null,
-            vision: false,
+            vision: true,
+            reasoning: true,
           },
         },
       },
@@ -1004,6 +1010,7 @@ describe('greenfield editor', () => {
           name: 'Gemma 4 12B',
           quantizations: [],
           vision: true,
+          reasoning: true,
         },
       ],
     })
@@ -1031,7 +1038,7 @@ describe('greenfield editor', () => {
     )
   })
 
-  it('disables vision when the runtime selector chooses a text-only model', async () => {
+  it('preserves vision when the runtime selector chooses a text-only model', async () => {
     installProject()
     const nextPreferences: Preferences = {
       ...preferences,
@@ -1044,6 +1051,12 @@ describe('greenfield editor', () => {
             model: 'deepseek-chat',
             quantization: null,
             vision: false,
+            reasoning: true,
+          },
+          generation: {
+            ...preferences.pipeline.translation.generation,
+            vision: true,
+            reasoning: false,
           },
         },
       },
@@ -1058,6 +1071,7 @@ describe('greenfield editor', () => {
           name: 'DeepSeek Chat',
           quantizations: [],
           vision: false,
+          reasoning: true,
         },
       ],
     })
@@ -1074,8 +1088,8 @@ describe('greenfield editor', () => {
         preferences.typesetting,
       ),
     )
-    expect(useKoharuStore.getState().preferences?.pipeline.translation.model).toEqual(
-      nextPreferences.pipeline.translation.model,
+    expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
+      nextPreferences.pipeline.translation,
     )
   })
 
@@ -1091,6 +1105,7 @@ describe('greenfield editor', () => {
           name: longName,
           quantizations: [],
           vision: true,
+          reasoning: false,
         },
       ],
     })
@@ -1148,8 +1163,23 @@ describe('greenfield editor', () => {
     expect(
       screen.getByText('Control how the model selects and varies generated text.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'Enable thinking' })).toBeInTheDocument()
-    expect(screen.queryByText('Enable thinking')).not.toBeInTheDocument()
+    expect(screen.getByText('Use model reasoning during translation.')).toBeInTheDocument()
+    const reasoning = screen.getByRole('switch', { name: 'Enable reasoning' })
+    expect(reasoning).not.toHaveAttribute('aria-disabled', 'true')
+    expect(screen.queryByText('Enable reasoning')).not.toBeInTheDocument()
+    save.mockClear()
+    await user.click(reasoning)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            generation: expect.objectContaining({ reasoning: true }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
     const vision = screen.getByRole('switch', { name: 'Vision' })
     expect(screen.getByText('Feed page images to the LLM during translation.')).toBeInTheDocument()
     expect(vision).toBeChecked()
@@ -1159,7 +1189,7 @@ describe('greenfield editor', () => {
       expect(save).toHaveBeenCalledWith(
         expect.objectContaining({
           translation: expect.objectContaining({
-            model: expect.objectContaining({ vision: false }),
+            generation: expect.objectContaining({ vision: false }),
           }),
         }),
         preferences.providers,
@@ -1182,6 +1212,71 @@ describe('greenfield editor', () => {
     expect(screen.getByLabelText('Translation instructions')).toHaveClass(
       'field-sizing-fixed',
       'overflow-y-auto',
+    )
+  })
+
+  it('keeps generation controls independent from model capabilities', async () => {
+    installProject()
+    const user = userEvent.setup()
+    const configured: Preferences = {
+      ...preferences,
+      pipeline: {
+        ...preferences.pipeline,
+        translation: {
+          ...preferences.pipeline.translation,
+          model: {
+            provider: 'deepseek',
+            model: 'deepseek-chat',
+            quantization: null,
+            vision: false,
+            reasoning: true,
+          },
+          generation: {
+            ...preferences.pipeline.translation.generation,
+            reasoning: false,
+          },
+        },
+      },
+    }
+    useKoharuStore.setState({
+      settingsOpen: true,
+      preferences: configured,
+      translationModels: [
+        {
+          provider: 'deepseek',
+          model: 'deepseek-chat',
+          name: 'DeepSeek Chat',
+          quantizations: [],
+          vision: false,
+          reasoning: true,
+        },
+      ],
+    })
+    const save = vi.spyOn(commands, 'savePreferences').mockResolvedValue(configured)
+    render(
+      <ThemeProvider attribute='class'>
+        <SettingsPage />
+      </ThemeProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Translation' }))
+    const reasoning = screen.getByRole('switch', { name: 'Enable reasoning' })
+    expect(reasoning).not.toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('switch', { name: 'Vision' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    await user.click(reasoning)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            generation: expect.objectContaining({ reasoning: true }),
+          }),
+        }),
+        configured.providers,
+        configured.typesetting,
+      ),
     )
   })
 
@@ -1319,6 +1414,7 @@ describe('greenfield editor', () => {
           name: 'OpenRouter Auto',
           quantizations: [],
           vision: true,
+          reasoning: true,
         },
       ],
     })

@@ -15,7 +15,6 @@ import { modelKey, modelSelection, orderedLanguageChoices, providerName } from '
 import type {
   LanguageChoice,
   Model,
-  ProviderConfig,
   ProviderPreference,
   TranslationConfig as TranslationSettings,
 } from '@koharu/bridge/protocol'
@@ -30,30 +29,18 @@ import {
 } from '@koharu/ui/components/select'
 import { Textarea } from '@koharu/ui/components/textarea'
 
-type ConfigWithSetting<T, Key extends PropertyKey> = T extends { settings: infer Settings }
-  ? Key extends keyof Settings
-    ? [Settings[Key]] extends [never]
-      ? never
-      : T
-    : never
-  : never
-
-type VisionConfig = ConfigWithSetting<ProviderConfig, 'vision'>
-
 export function TranslationPreferences({
   value,
   modelChoices,
   providers,
   languages,
   onChange,
-  onProviderChange,
 }: {
   value: TranslationSettings
   modelChoices: Model[]
   providers: ProviderPreference[]
   languages: LanguageChoice[]
   onChange: (value: TranslationSettings) => void
-  onProviderChange: (value: ProviderPreference) => void
 }) {
   const { t } = useTranslation()
   const [modelOpen, setModelOpen] = useState(false)
@@ -64,13 +51,11 @@ export function TranslationPreferences({
     model: value.model.model ?? null,
     name: value.model.model ?? providerName(providers, value.model.provider),
     quantizations: [],
+    vision: value.model.vision ?? false,
+    reasoning: value.model.reasoning ?? false,
   }
   const choices = selected ? modelChoices : [current, ...modelChoices]
   const quantizations = current.quantizations
-  const provider = providers.find((entry) => entry.config.provider === value.model.provider)
-  const configurableVision =
-    provider && hasVision(provider.config) ? { ...provider, config: provider.config } : null
-  const visionAvailable = current.vision || configurableVision !== null
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
   return (
     <PreferencePage
@@ -109,7 +94,7 @@ export function TranslationPreferences({
                 onSelect={(model) => {
                   onChange({
                     ...value,
-                    model: modelSelection(model, value.model.vision),
+                    model: modelSelection(model),
                   })
                   setModelOpen(false)
                 }}
@@ -148,18 +133,7 @@ export function TranslationPreferences({
 
       <GenerationPreferences
         value={value.generation}
-        vision={value.model.vision}
-        visionAvailable={visionAvailable}
         onChange={(generation) => onChange({ ...value, generation })}
-        onVisionChange={(vision) => {
-          onChange({ ...value, model: { ...value.model, vision } })
-          if (configurableVision) {
-            onProviderChange({
-              ...configurableVision,
-              config: withVision(configurableVision.config, vision),
-            })
-          }
-        }}
       />
 
       <PreferenceSection title={t('settings.translation.output')}>
@@ -209,17 +183,6 @@ export function TranslationPreferences({
       </PreferenceSection>
     </PreferencePage>
   )
-}
-
-function hasVision(config: ProviderConfig): config is VisionConfig {
-  return 'vision' in config.settings
-}
-
-function withVision(config: VisionConfig, vision: boolean): ProviderConfig {
-  return {
-    ...config,
-    settings: { ...config.settings, vision },
-  } as ProviderConfig
 }
 
 function ModelLabel({ model, providers }: { model: Model; providers: ProviderPreference[] }) {

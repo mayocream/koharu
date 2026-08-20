@@ -62,8 +62,8 @@ impl Translator {
     }
 
     #[must_use]
-    pub fn supports_vision(selection: &ModelSelection) -> bool {
-        selection.vision
+    pub fn supports_vision(selection: &ModelSelection, generation: &GenerationConfig) -> bool {
+        generation.vision.unwrap_or(false)
             && (selection.provider != Provider::Local || local::supports_vision(selection))
     }
 
@@ -97,7 +97,18 @@ impl Translator {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(
+        target = "koharu_metrics",
+        name = "model_run",
+        skip_all,
+        fields(
+            stage = "translation",
+            provider = %selection.provider,
+            model = selection.model.as_deref().unwrap_or("provider_default"),
+            target_language = request.target_language.tag(),
+            outcome = tracing::field::Empty,
+        ),
+    )]
     pub async fn translate(
         &self,
         selection: &ModelSelection,
@@ -107,10 +118,13 @@ impl Translator {
         let provider = selection.provider;
         let provider_id: &'static str = provider.into();
         if request.segments.is_empty() {
+            tracing::Span::current().record("outcome", "skipped");
             return Ok((provider_id, request.segments));
         }
 
-        if Self::supports_vision(selection) {
+        let generation = generation.for_model(selection);
+
+        if Self::supports_vision(selection, &generation) {
             request.prepare_image()?;
         } else {
             request.remove_image();
@@ -134,6 +148,7 @@ impl Translator {
             }
             .into());
         }
+        tracing::Span::current().record("outcome", "completed");
         Ok((provider_id, translated))
     }
 
@@ -172,28 +187,38 @@ impl Translator {
 mod tests {
     use super::*;
 
-    fn local_selection(model: &str, vision: bool) -> ModelSelection {
+    fn local_selection(model: &str) -> ModelSelection {
         ModelSelection {
             provider: Provider::Local,
             model: Some(model.to_owned()),
             quantization: None,
-            vision,
+            vision: true,
+            reasoning: true,
         }
     }
 
     #[test]
-    fn local_vision_requires_capability_and_selection() {
-        assert!(Translator::supports_vision(&local_selection(
-            "gemma4-e2b-it",
-            true
-        )));
-        assert!(!Translator::supports_vision(&local_selection(
-            "gemma4-e2b-it",
-            false
-        )));
-        assert!(!Translator::supports_vision(&local_selection(
-            "lfm2.5-1.2b-instruct",
-            true
-        )));
+    fn local_vision_requires_capability_and_generation_setting() {
+        assert!(Translator::supports_vision(
+            &local_selection("gemma4-e2b-it"),
+            &GenerationConfig {
+                vision: Some(true),
+                ..GenerationConfig::default()
+            }
+        ));
+        assert!(!Translator::supports_vision(
+            &local_selection("gemma4-e2b-it"),
+            &GenerationConfig {
+                vision: Some(false),
+                ..GenerationConfig::default()
+            }
+        ));
+        assert!(!Translator::supports_vision(
+            &local_selection("lfm2.5-1.2b-instruct"),
+            &GenerationConfig {
+                vision: Some(true),
+                ..GenerationConfig::default()
+            }
+        ));
     }
 }

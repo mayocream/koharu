@@ -34,6 +34,7 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
             model: Some(model.id),
             quantizations: Vec::new(),
             vision: false,
+            reasoning: true,
         })
         .collect())
 }
@@ -46,20 +47,20 @@ pub(super) async fn translate(
     request: &TranslationRequest,
 ) -> Result<Vec<String>> {
     let api_key = koharu_secrets::get("deepseek")?.context("deepseek API key is not configured")?;
-    let mut backend = ChatBackend::new(
-        "deepseek",
-        URL,
-        Some(api_key.expose_secret()),
-        model,
-        generation,
-        ResponseMode::JsonObject,
-    );
-    backend.temperature = generation.temperature.or(Some(1.3));
-    backend.thinking = Some(if generation.thinking {
-        "enabled"
-    } else {
-        "disabled"
-    });
+    let backend = ChatBackend {
+        temperature: generation.temperature.or(Some(1.3)),
+        thinking: generation
+            .reasoning
+            .map(|enabled| if enabled { "enabled" } else { "disabled" }),
+        ..ChatBackend::new(
+            "deepseek",
+            URL,
+            Some(api_key.expose_secret()),
+            model,
+            generation,
+            ResponseMode::JsonObject,
+        )
+    };
     super::openai_compatible::translate(client, backend, request).await
 }
 

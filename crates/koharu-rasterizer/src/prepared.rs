@@ -11,7 +11,7 @@ use crate::{Error, Result};
 
 const MANIFEST_MAGIC: [u8; 8] = *b"KHRMANF\0";
 const RESOURCE_MAGIC: [u8; 8] = *b"KHRRSRC\0";
-pub const PREPARED_FRAME_MANIFEST_VERSION: u16 = 3;
+pub const PREPARED_FRAME_MANIFEST_VERSION: u16 = 4;
 pub const PREPARED_RESOURCE_FORMAT_VERSION: u16 = 3;
 /// Logical raster tile edge used by portable frames. The one-pixel sampling
 /// gutter is stored outside this logical extent where adjacent pixels exist.
@@ -650,7 +650,7 @@ pub struct PreparedGlyphRun {
     pub glyph_transform: Option<[f64; 6]>,
     pub hint: bool,
     pub embolden: [f32; 2],
-    pub style: PreparedGlyphStyle,
+    pub color: [u8; 4],
     pub glyphs: Vec<PreparedGlyph>,
 }
 
@@ -677,11 +677,6 @@ impl PreparedGlyphRun {
         {
             return Err(Error::invalid("glyph run contains a non-finite position"));
         }
-        if let PreparedGlyphStyle::Stroke { width, .. } = self.style
-            && (!width.is_finite() || width <= 0.0)
-        {
-            return Err(Error::invalid("glyph stroke width is invalid"));
-        }
         Ok(())
     }
 }
@@ -691,18 +686,6 @@ pub struct PreparedGlyph {
     pub id: u32,
     pub x: f32,
     pub y: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub enum PreparedGlyphStyle {
-    Fill {
-        color: [u8; 4],
-    },
-    /// Vello outline width, already doubled from the authored outside radius.
-    Stroke {
-        color: [u8; 4],
-        width: f32,
-    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

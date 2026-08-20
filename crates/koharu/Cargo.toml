@@ -19,6 +19,7 @@ default = ["tauri/cef"]
 clap = { workspace = true }
 console = { workspace = true }
 koharu-app = { workspace = true }
+koharu-metrics = { workspace = true }
 koharu-torch-sys = { workspace = true }
 log = { workspace = true }
 rfd = { workspace = true }

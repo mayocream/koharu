@@ -25,7 +25,7 @@ concurrency:
 jobs:
   source:
     name: Resolve latest release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
 
@@ -48,13 +48,13 @@ jobs:
           - backend: cuda
             os: windows-2022
           - backend: cuda
-            os: ubuntu-24.04
+            os: ubuntu-latest
           - backend: hip
             os: windows-2022
           - backend: hip
-            os: ubuntu-24.04
+            os: ubuntu-latest
           - backend: vulkan
-            os: ubuntu-24.04
+            os: ubuntu-latest
           - backend: vulkan
             os: windows-2022
           - backend: metal
@@ -195,7 +195,7 @@ jobs:
               backend_args+=(
                 "-DCMAKE_C_COMPILER=clang$suffix"
                 "-DCMAKE_CXX_COMPILER=clang++$suffix"
-                "-DGPU_TARGETS=gfx1030;gfx1031;gfx1032;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
+                "-DGPU_TARGETS=gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201;gfx908;gfx90a"
               )
               ;;
             vulkan)
@@ -235,7 +235,7 @@ jobs:
   release:
     if: github.event_name != 'pull_request'
     needs: [source, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
@@ -251,7 +251,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: llama.cpp-${{ needs.source.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ github.event.repository.default_branch }}
           name: llama.cpp ${{ needs.source.outputs.tag }}
           body: Koharu runtime dependency.
           make_latest: 'false'

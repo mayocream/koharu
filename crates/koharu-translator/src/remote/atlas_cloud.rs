@@ -24,19 +24,18 @@ pub(super) async fn translate(
 ) -> Result<Vec<String>> {
     let api_key =
         koharu_secrets::get("atlas-cloud")?.context("atlas-cloud API key is not configured")?;
-    super::openai_compatible::translate(
-        client,
-        ChatBackend::new(
+    let backend = ChatBackend {
+        reasoning: generation.reasoning,
+        ..ChatBackend::new(
             "atlas-cloud",
             CHAT_URL,
             Some(api_key.expose_secret()),
             model,
             generation,
             ResponseMode::PromptOnly,
-        ),
-        request,
-    )
-    .await
+        )
+    };
+    super::openai_compatible::translate(client, backend, request).await
 }
 
 pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
@@ -57,6 +56,7 @@ pub(super) async fn models(client: &Client) -> Result<Vec<Model>> {
                 model: Some(model),
                 quantizations: Vec::new(),
                 vision: false,
+                reasoning: true,
             })
             .collect(),
         Err(error) => {

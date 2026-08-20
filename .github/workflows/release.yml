@@ -35,9 +35,6 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: startsWith(matrix.platform, 'windows')
-
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: koharu-app
@@ -131,6 +128,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+          GA_API_SECRET: ${{ secrets.GA_API_SECRET }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         with:
           tauriScript: cargo tauri

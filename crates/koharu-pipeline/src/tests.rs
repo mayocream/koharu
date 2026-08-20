@@ -38,6 +38,7 @@ async fn stop_after_a_page_keeps_completed_progress() {
             model: Some("gpt-5.6-luna".to_owned()),
             quantization: None,
             vision: true,
+            reasoning: true,
         },
         ..Default::default()
     };

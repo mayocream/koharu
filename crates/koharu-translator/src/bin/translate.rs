@@ -83,7 +83,8 @@ async fn main() -> Result<()> {
         provider,
         model,
         quantization: None,
-        vision: false,
+        vision: true,
+        reasoning: true,
     };
     let mut request = TranslationRequest::new(args.segments, args.target);
     if let Some(instructions) = args.instructions {

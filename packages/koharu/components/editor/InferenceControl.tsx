@@ -144,7 +144,7 @@ function RuntimeSelector({
       ...preferences.pipeline,
       translation: {
         ...preferences.pipeline.translation,
-        model: modelSelection(next, preferences.pipeline.translation.model.vision),
+        model: modelSelection(next),
       },
     }
     void call(commands.savePreferences, pipeline, preferences.providers, preferences.typesetting)
@@ -450,7 +450,8 @@ function availableModels(
       model: selected.model ?? null,
       name: selected.model ?? providerName(providers, selected.provider),
       quantizations: [],
-      vision: selected.vision,
+      vision: selected.vision ?? false,
+      reasoning: selected.reasoning ?? false,
     },
     ...models,
   ]

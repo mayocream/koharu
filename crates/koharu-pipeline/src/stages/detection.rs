@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, VecDeque},
     io::Cursor,
     sync::{Arc, Mutex},
 };
@@ -24,7 +24,7 @@ use koharu_ml::koharu_layout_rfdetr_seg_2xl::{
 use koharu_scene::{
     AssetInput, AssetMetadata, AssetRole, At, BubbleRegion, DetectionAnalysis, DetectionLabel,
     EntityId, EntityOrigin, FitsTo, FlowsIn, Generation, Geometry, Inside, Origin, PanelRegion,
-    Point, Presents, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy, TextLayout,
+    Point, RecognizedFrom, Region, RegionKind, RegionSpec, RemovePolicy, TextLayout,
     TextLayoutKind, TextRegion, TextRole, Typography, WritingMode,
 };
 use rayon::prelude::*;
@@ -47,7 +47,6 @@ const COLOR_CLUSTER_MIN_DISTANCE_SQUARED: u32 = 32 * 32;
 const COLOR_CLUSTER_COUNT: usize = 4;
 const MIN_EXTREME_COLOR_PIXELS: u32 = 4;
 const MIN_MEASURED_STROKE_WIDTH: u8 = 2;
-const NMS_CONTAINMENT_THRESHOLD: f32 = 0.9;
 const DIALOGUE_MASK_CONTAINMENT_THRESHOLD: f32 = 0.9;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
@@ -98,6 +97,20 @@ impl Processor {
 impl StageProcessor for Processor {
     fn model(&self) -> &'static str {
         MODEL_NAME
+    }
+
+    fn skip(&self, input: &StageInput) -> Result<bool> {
+        for entity in input.scene.descendants(input.page)? {
+            let id = entity.id();
+            if input.contains_entity(id)?
+                && entity
+                    .component::<Region>()?
+                    .is_some_and(|region| region.kind == TextRegion::kind())
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn unload(&self) -> bool {
@@ -185,19 +198,6 @@ enum RegionOutput<'a> {
     Other,
 }
 
-#[derive(Clone)]
-struct PreviousText {
-    bounds: [f32; 4],
-    geometry: Geometry,
-    content: EntityId,
-    layer: EntityId,
-}
-
-struct TextReuse {
-    previous: Vec<PreviousText>,
-    contents: BTreeSet<EntityId>,
-}
-
 #[derive(Default)]
 struct PageRegions<'a> {
     bubbles: Vec<DetectedRegion<'a>>,
@@ -217,28 +217,13 @@ async fn build_patch(
     generation: &Generation,
 ) -> Result<koharu_scene::Patch> {
     let page = input.page;
-    let mut text_reuse = TextReuse {
-        previous: previous_texts(input, generation)?,
-        contents: BTreeSet::new(),
-    };
     let mut edit = input.scene.edit_as(generation.clone());
     edit.observe_subtree(page)?;
     remove_previous_regions(input, &mut edit, generation)
         .context("failed to replace the previous detection regions")?;
-    write_page(
-        input,
-        &mut edit,
-        page,
-        image,
-        output,
-        generation,
-        &mut text_reuse,
-    )
-    .await
-    .context("failed to write detection output")?;
-    let TextReuse { previous, contents } = text_reuse;
-    remove_unmatched_texts(input, &mut edit, generation, previous, &contents)
-        .context("failed to remove unmatched detected text")?;
+    write_page(input, &mut edit, page, image, output, generation)
+        .await
+        .context("failed to write detection output")?;
     finish(edit)
 }
 
@@ -271,86 +256,6 @@ fn remove_previous_regions(
     Ok(())
 }
 
-fn previous_texts(input: &StageInput, generation: &Generation) -> Result<Vec<PreviousText>> {
-    let mut previous = Vec::new();
-    for entity in input.scene.descendants(input.page)? {
-        let region = entity.id();
-        if !input.contains_entity(region)? {
-            continue;
-        }
-        let owned_text_region = entity
-            .component::<EntityOrigin>()?
-            .is_some_and(|origin| {
-                matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
-            })
-            && entity
-                .component::<Region>()?
-                .is_some_and(|value| value.kind == TextRegion::kind());
-        if !owned_text_region {
-            continue;
-        }
-        let Some(geometry) = entity.component::<Geometry>()? else {
-            continue;
-        };
-        let Some(bounds) = geometry_bounds(&geometry) else {
-            continue;
-        };
-        for recognized in input.scene.relations_to_as::<RecognizedFrom>(region) {
-            let content = recognized.value().source;
-            for presentation in input.scene.relations_to_as::<Presents>(content) {
-                previous.push(PreviousText {
-                    bounds,
-                    geometry: geometry.clone(),
-                    content,
-                    layer: presentation.value().source,
-                });
-            }
-        }
-    }
-    Ok(previous)
-}
-
-fn remove_unmatched_texts(
-    input: &StageInput,
-    edit: &mut koharu_scene::Edit,
-    generation: &Generation,
-    previous: Vec<PreviousText>,
-    reused_contents: &BTreeSet<EntityId>,
-) -> Result<()> {
-    let mut contents = BTreeSet::new();
-    for previous in previous {
-        contents.insert(previous.content);
-        let layer_generated = input
-            .scene
-            .component::<EntityOrigin>(previous.layer)?
-            .is_some_and(|origin| {
-                matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
-            });
-        if layer_generated {
-            edit.remove_entity(previous.layer, RemovePolicy::Cascade)?;
-        } else if input.scene.component::<Geometry>(previous.layer)?.is_none() {
-            let mut geometry = previous.geometry;
-            geometry.origin = Origin::User;
-            edit.set(previous.layer, &geometry)?;
-        }
-    }
-    for content in contents {
-        if reused_contents.contains(&content) {
-            continue;
-        }
-        let content_generated = input
-            .scene
-            .component::<EntityOrigin>(content)?
-            .is_some_and(|origin| {
-                matches!(origin.origin, Origin::Generated(ref owner) if owner.producer == generation.producer)
-            });
-        if content_generated {
-            edit.remove_entity(content, RemovePolicy::Cascade)?;
-        }
-    }
-    Ok(())
-}
-
 async fn write_page(
     input: &StageInput,
     edit: &mut koharu_scene::Edit,
@@ -358,7 +263,6 @@ async fn write_page(
     image: &DynamicImage,
     output: KoharuLayoutDetections,
     generation: &Generation,
-    text_reuse: &mut TextReuse,
 ) -> Result<()> {
     let KoharuLayoutDetections {
         mut detections,
@@ -376,16 +280,8 @@ async fn write_page(
     sort_by_layout(&mut detections);
 
     let image = image.to_rgb8();
-    let regions = write_regions(
-        &input.scene,
-        edit,
-        page,
-        &image,
-        &detections,
-        generation,
-        text_reuse,
-    )
-    .context("failed to write detected regions")?;
+    let regions = write_regions(&input.scene, edit, page, &image, &detections, generation)
+        .context("failed to write detected regions")?;
     link_dialogue_regions(edit, &regions, generation)
         .context("failed to associate detected text with dialogue regions")?;
     write_masks(input, edit, page, &detections, size)
@@ -400,7 +296,6 @@ fn write_regions<'a>(
     image: &RgbImage,
     detections: &'a [KoharuLayoutDetection],
     generation: &Generation,
-    text_reuse: &mut TextReuse,
 ) -> Result<PageRegions<'a>> {
     let mut regions = PageRegions::default();
     let inferred = detections
@@ -421,10 +316,8 @@ fn write_regions<'a>(
         None
     };
     for (index, (detection, inferred)) in detections.iter().zip(inferred).enumerate() {
-        match write_region(
-            snapshot, edit, page, detection, inferred, generation, text_reuse,
-        )
-        .with_context(|| format!("failed to write {} detection {index}", detection.label))?
+        match write_region(edit, page, detection, inferred, generation)
+            .with_context(|| format!("failed to write {} detection {index}", detection.label))?
         {
             RegionOutput::Bubble(bubble) => regions.bubbles.push(bubble),
             RegionOutput::Text(text) => {
@@ -441,17 +334,12 @@ fn write_regions<'a>(
 }
 
 fn write_region<'a>(
-    snapshot: &koharu_scene::Snapshot,
     edit: &mut koharu_scene::Edit,
     page: EntityId,
     detection: &'a KoharuLayoutDetection,
     inferred: Option<InferredTypography>,
     generation: &Generation,
-    text_reuse: &mut TextReuse,
 ) -> Result<RegionOutput<'a>> {
-    let previous = (detection.label == "text")
-        .then(|| take_previous_text(&mut text_reuse.previous, detection.bbox))
-        .flatten();
     let entity = edit
         .add_entity(page, At::End)
         .context("failed to create a detected region")?;
@@ -500,72 +388,38 @@ fn write_region<'a>(
         });
     }
 
-    let (content, layer, created) = previous
-        .map_or_else(
-            || -> Result<_> {
-                let content = edit.add_text_content(page, At::End)?;
-                let layer = edit.add_text_layer(
-                    page,
-                    At::End,
-                    content,
-                    &TextLayout {
-                        origin: Origin::Generated(generation.clone()),
-                        kind: TextLayoutKind::Paragraph,
-                    },
-                )?;
-                Ok((content, layer, true))
-            },
-            |previous| Ok((previous.content, previous.layer, false)),
-        )
-        .context("failed to create or reuse detected text entities")?;
-    if !created {
-        text_reuse.contents.insert(content);
-    }
-    if created
-        || snapshot
-            .component::<TextRole>(content)?
-            .is_none_or(|value| value.origin != Origin::User)
-    {
-        write_text_role(edit, content, "dev.koharu.text.free-text", generation)
-            .context("failed to set the detected text role")?;
-    }
-    if created || snapshot.component::<TextLayout>(layer)?.is_none() {
-        edit.set(
-            layer,
-            &TextLayout {
-                origin: Origin::Generated(generation.clone()),
-                kind: TextLayoutKind::Paragraph,
-            },
-        )
-        .context("failed to set detected text layout")?;
-    }
-    if created
-        || snapshot
-            .component::<Typography>(layer)?
-            .is_none_or(|value| value.origin != Origin::User)
-    {
-        edit.set(
-            layer,
-            &Typography {
-                origin: Origin::Generated(generation.clone()),
-                preferred_font: None,
-                font_weight: None,
-                font_style: None,
-                size: None,
-                auto_fit: true,
-                color: inferred
-                    .map(|value| [value.color[0], value.color[1], value.color[2], u8::MAX]),
-                stroke_color: inferred
-                    .and_then(|value| value.stroke_color)
-                    .map(|color| [color[0], color[1], color[2], u8::MAX]),
-                stroke_width: inferred.and_then(|value| value.stroke_width),
-                alignment: None,
-                writing_mode: inferred.map(|value| value.writing_mode),
-                extensions: Default::default(),
-            },
-        )
-        .context("failed to set detected typography")?;
-    }
+    let content = edit.add_text_content(page, At::End)?;
+    let layer = edit.add_text_layer(
+        page,
+        At::End,
+        content,
+        &TextLayout {
+            origin: Origin::Generated(generation.clone()),
+            kind: TextLayoutKind::Paragraph,
+        },
+    )?;
+    write_text_role(edit, content, "dev.koharu.text.free-text", generation)
+        .context("failed to set the detected text role")?;
+    edit.set(
+        layer,
+        &Typography {
+            origin: Origin::Generated(generation.clone()),
+            preferred_font: None,
+            font_weight: None,
+            font_style: None,
+            size: None,
+            auto_fit: true,
+            color: inferred.map(|value| [value.color[0], value.color[1], value.color[2], u8::MAX]),
+            stroke_color: inferred
+                .and_then(|value| value.stroke_color)
+                .map(|color| [color[0], color[1], color[2], u8::MAX]),
+            stroke_width: inferred.and_then(|value| value.stroke_width),
+            alignment: None,
+            writing_mode: inferred.map(|value| value.writing_mode),
+            extensions: Default::default(),
+        },
+    )
+    .context("failed to set detected typography")?;
     edit.relate::<RecognizedFrom>(content, entity)
         .context("failed to associate detected text content with its region")?;
 
@@ -607,27 +461,6 @@ fn containing_bubble<'regions, 'detections>(
                 >= DIALOGUE_MASK_CONTAINMENT_THRESHOLD
         })
         .min_by_key(|bubble| bubble.area)
-}
-
-fn take_previous_text(previous: &mut Vec<PreviousText>, bounds: [f32; 4]) -> Option<PreviousText> {
-    let (index, overlap) = previous
-        .iter()
-        .enumerate()
-        .map(|(index, previous)| (index, overlap_over_smaller(previous.bounds, bounds)))
-        .max_by(|left, right| left.1.total_cmp(&right.1))?;
-    (overlap >= 0.5).then(|| previous.swap_remove(index))
-}
-
-fn geometry_bounds(geometry: &Geometry) -> Option<[f32; 4]> {
-    let first = geometry.points.first()?;
-    let (mut left, mut top, mut right, mut bottom) = (first.x, first.y, first.x, first.y);
-    for point in &geometry.points[1..] {
-        left = left.min(point.x);
-        top = top.min(point.y);
-        right = right.max(point.x);
-        bottom = bottom.max(point.y);
-    }
-    Some([left as f32, top as f32, right as f32, bottom as f32])
 }
 
 fn write_text_role(
@@ -1808,9 +1641,7 @@ fn non_maximum_suppression(detections: &mut Vec<KoharuLayoutDetection>, threshol
     for candidate in detections.drain(..) {
         let suppressed = kept.iter().any(|existing: &KoharuLayoutDetection| {
             existing.label == candidate.label
-                && (intersection_over_union(existing.bbox, candidate.bbox) >= threshold
-                    || overlap_over_smaller(existing.bbox, candidate.bbox)
-                        >= NMS_CONTAINMENT_THRESHOLD)
+                && intersection_over_union(existing.bbox, candidate.bbox) >= threshold
         });
         if !suppressed {
             kept.push(candidate);
@@ -1990,15 +1821,6 @@ fn intersection_over_union(left: [f32; 4], right: [f32; 4]) -> f32 {
     }
 }
 
-fn overlap_over_smaller(left: [f32; 4], right: [f32; 4]) -> f32 {
-    let smaller = area(left).min(area(right));
-    if smaller <= 0.0 {
-        0.0
-    } else {
-        intersection_area(left, right) / smaller
-    }
-}
-
 fn intersection_area(left: [f32; 4], right: [f32; 4]) -> f32 {
     (left[2].min(right[2]) - left[0].max(right[0])).max(0.0)
         * (left[3].min(right[3]) - left[1].max(right[1])).max(0.0)
@@ -2024,9 +1846,9 @@ mod tests {
     use super::{
         DIALOGUE_MASK_CONTAINMENT_THRESHOLD, DetectedRegion, DetectedText, DetectionModel,
         ImageSize, KoharuLayoutRFDetrSeg2XLConfig, MaskPixel, PageRegions, Processor, RegionOutput,
-        TextReuse, closed_mask_for, color_palette, generation, infer_typography, layout_order,
-        link_dialogue_regions, mask_containment, mask_for, mask_geometry, non_maximum_suppression,
-        normalize_text_color, write_region,
+        StageInput, StageProcessor, closed_mask_for, color_palette, generation, infer_typography,
+        layout_order, link_dialogue_regions, mask_containment, mask_for, mask_geometry,
+        non_maximum_suppression, normalize_text_color, write_region,
     };
 
     #[test]
@@ -2044,6 +1866,42 @@ mod tests {
         assert_eq!(settings.text_threshold, None);
         assert_eq!(settings.bubble_threshold, None);
         assert_eq!(settings.panel_threshold, Some(0.55));
+    }
+
+    #[tokio::test]
+    async fn detection_skips_a_page_with_existing_text() {
+        let mut session = Session::memory().await.unwrap();
+        let mut page = None;
+        let patch = session
+            .snapshot()
+            .patch(|edit| {
+                let id = edit.add_page(PageDraft::new("page", 100.0, 100.0), At::End)?;
+                edit.add_analysis_region::<TextRegion>(
+                    id,
+                    At::End,
+                    &Geometry::rectangle(10.0, 10.0, 20.0, 20.0),
+                    None,
+                )?;
+                page = Some(id);
+                Ok(())
+            })
+            .unwrap();
+        let snapshot = session.commit(patch).await.unwrap().snapshot;
+        let page = page.unwrap();
+        let input = StageInput::new(
+            snapshot,
+            page,
+            None,
+            None,
+            std::sync::Arc::new(crate::ImageCache::default()),
+            None,
+        );
+        let processor = Processor::new(
+            DetectionModel::KoharuLayoutRFDetrSeg2XL(KoharuLayoutRFDetrSeg2XLConfig::default()),
+            koharu_ml::Device::cpu(),
+        );
+
+        assert!(processor.skip(&input).unwrap());
     }
 
     #[tokio::test]
@@ -2385,22 +2243,9 @@ mod tests {
         let inferred = infer_typography(&image, &detection);
         let generation = generation(super::PRODUCER, super::MODEL_ID).unwrap();
         let mut layer = None;
-        let mut text_reuse = TextReuse {
-            previous: Vec::new(),
-            contents: Default::default(),
-        };
         let patch = snapshot
             .patch(|edit| {
-                let output = write_region(
-                    &snapshot,
-                    edit,
-                    page,
-                    &detection,
-                    inferred,
-                    &generation,
-                    &mut text_reuse,
-                )
-                .unwrap();
+                let output = write_region(edit, page, &detection, inferred, &generation).unwrap();
                 let RegionOutput::Text(text) = output else {
                     panic!("expected a text region");
                 };
@@ -2436,7 +2281,7 @@ mod tests {
             .filter(|detection| detection.label == "text")
             .map(|detection| detection.score)
             .collect::<Vec<_>>();
-        assert_eq!(text_scores, [0.9, 0.6]);
+        assert_eq!(text_scores, [0.9, 0.6, 0.5]);
         assert!(
             detections
                 .iter()
