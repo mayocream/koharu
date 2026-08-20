@@ -476,11 +476,16 @@ function normalizeFontName(value: string): string {
 }
 
 function isDescendant(layers: Layer[], parentId: EntityId, childId: EntityId): boolean {
-  let current = layers.find((l) => l.id === childId)
+  const layerMap = new Map<EntityId, Layer>()
+  for (let i = 0; i < layers.length; i++) {
+    const l = layers[i]
+    layerMap.set(l.id, l)
+  }
+
+  let current = layerMap.get(childId)
   while (current && current.parent) {
     if (current.parent === parentId) return true
-    const parent = current.parent
-    current = layers.find((l) => l.id === parent)
+    current = layerMap.get(current.parent)
   }
   return false
 }
@@ -540,6 +545,7 @@ function LayersInspector() {
   const [draggedId, setDraggedId] = useState<EntityId | null>(null)
   const [dragOverId, setDragOverId] = useState<EntityId | null>(null)
   const [dropPos, setDropPos] = useState<'before' | 'after' | 'inside' | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const lastDragOverRef = useRef<{ id: EntityId; pos: 'before' | 'after' | 'inside' } | null>(null)
   const scrollIntervalRef = useRef<number | null>(null)
   const lastClientYRef = useRef<number | null>(null)
@@ -604,16 +610,28 @@ function LayersInspector() {
     setDraggedId(id)
   }
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (e: React.DragEvent) => {
     if (scrollIntervalRef.current !== null) {
       clearInterval(scrollIntervalRef.current)
       scrollIntervalRef.current = null
     }
     lastClientYRef.current = null
 
-    if (draggedId && lastDragOverRef.current && movingLayer === null) {
+    const isCanceled = e.clientX === 0 && e.clientY === 0
+    let isInside = false
+    if (!isCanceled && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      isInside =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom
+    }
+
+    if (draggedId && lastDragOverRef.current && isInside && movingLayer === null) {
       handleDrop(draggedId, lastDragOverRef.current.id, lastDragOverRef.current.pos)
     }
+
     setTimeout(() => {
       setDraggedId(null)
       setDragOverId(null)
@@ -698,7 +716,7 @@ function LayersInspector() {
   }
 
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
+    <div ref={containerRef} className='flex min-h-0 flex-1 flex-col'>
       <header className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
         <Layers3 className='size-3 text-primary' />
         <h2 className='text-[10px] font-semibold'>{t('layers.title')}</h2>
@@ -846,7 +864,7 @@ function LayerRow({
   dragOverId: EntityId | null
   dropPos: 'before' | 'after' | 'inside' | null
   onDragStart: (id: EntityId) => void
-  onDragEnd: () => void
+  onDragEnd: (e: React.DragEvent) => void
   onDragOver: (id: EntityId, pos: 'before' | 'after' | 'inside') => void
   onDragLeave: () => void
   onDrop: (sourceId: EntityId, targetId: EntityId, pos: 'before' | 'after' | 'inside') => void
@@ -869,9 +887,8 @@ function LayerRow({
           e.dataTransfer.setData('text/plain', layer.id)
         }
         onDragStart(layer.id)
-      }}
-      onDragEnd={() => {
-        onDragEnd()
+      onDragEnd={(e) => {
+        onDragEnd(e)
       }}
       onDragEnter={(e) => {
         const dragged = draggedId
