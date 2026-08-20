@@ -541,6 +541,8 @@ function LayersInspector() {
   const [dragOverId, setDragOverId] = useState<EntityId | null>(null)
   const [dropPos, setDropPos] = useState<'before' | 'after' | 'inside' | null>(null)
   const lastDragOverRef = useRef<{ id: EntityId; pos: 'before' | 'after' | 'inside' } | null>(null)
+  const scrollIntervalRef = useRef<number | null>(null)
+  const lastClientYRef = useRef<number | null>(null)
 
   useEffect(() => {
     setExpandedLayer(selected.length === 1 ? (selected[0] ?? null) : null)
@@ -603,6 +605,12 @@ function LayersInspector() {
   }
 
   const handleDragEnd = () => {
+    if (scrollIntervalRef.current !== null) {
+      clearInterval(scrollIntervalRef.current)
+      scrollIntervalRef.current = null
+    }
+    lastClientYRef.current = null
+
     if (draggedId && lastDragOverRef.current && movingLayer === null) {
       handleDrop(draggedId, lastDragOverRef.current.id, lastDragOverRef.current.pos)
     }
@@ -615,14 +623,20 @@ function LayersInspector() {
   }
 
   const handleDragOver = (id: EntityId, pos: 'before' | 'after' | 'inside') => {
-    setDragOverId(id)
-    setDropPos(pos)
     lastDragOverRef.current = { id, pos }
+    setDragOverId((prev) => (prev === id ? prev : id))
+    setDropPos((prev) => (prev === pos ? prev : pos))
+  }
+
+  const handleInvalidDragOver = () => {
+    lastDragOverRef.current = null
+    setDragOverId((prev) => (prev === null ? prev : null))
+    setDropPos((prev) => (prev === null ? prev : null))
   }
 
   const handleDragLeave = () => {
-    setDragOverId(null)
-    setDropPos(null)
+    setDragOverId((prev) => (prev === null ? prev : null))
+    setDropPos((prev) => (prev === null ? prev : null))
   }
 
   const handleDrop = (
@@ -693,7 +707,46 @@ function LayersInspector() {
         </span>
       </header>
 
-      <ScrollArea className='min-h-0 flex-1'>
+      <ScrollArea
+        className='min-h-0 flex-1'
+        onDragOver={(e) => {
+          if (draggedId) {
+            if (!e.defaultPrevented) {
+              handleInvalidDragOver()
+            }
+            e.preventDefault()
+            if (e.dataTransfer) {
+              e.dataTransfer.dropEffect = 'move'
+            }
+          }
+          lastClientYRef.current = e.clientY
+          const container = e.currentTarget
+          if (scrollIntervalRef.current === null && draggedId) {
+            scrollIntervalRef.current = window.setInterval(() => {
+              const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')
+              if (!viewport || lastClientYRef.current === null) return
+              const rect = viewport.getBoundingClientRect()
+              const relativeY = lastClientYRef.current - rect.top
+              const threshold = 50
+              let scrollDelta = 0
+              if (relativeY < threshold) {
+                const ratio = (threshold - relativeY) / threshold
+                scrollDelta = -Math.max(1, Math.floor(ratio * 15))
+              } else if (relativeY > rect.height - threshold) {
+                const ratio = (relativeY - (rect.height - threshold)) / threshold
+                scrollDelta = Math.max(1, Math.floor(ratio * 15))
+              }
+
+              if (scrollDelta !== 0) {
+                viewport.scrollTop += scrollDelta
+              } else if (scrollIntervalRef.current !== null) {
+                clearInterval(scrollIntervalRef.current)
+                scrollIntervalRef.current = null
+              }
+            }, 16)
+          }
+        }}
+      >
         <div className='py-0.5'>
           {layers.map(({ layer, index, depth }) => {
             const locked = isLockedLayer(layer)
