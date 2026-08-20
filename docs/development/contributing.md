@@ -1,45 +1,55 @@
 ---
 title: Contributing
-description: Choose a scoped change, follow Koharu ownership rules, and submit evidence with a pull request.
+description: Find a place to help, prepare a focused change, and open a clear pull request.
 ---
 
 # Contributing
 
-Koharu welcomes focused bug fixes, documentation improvements, model-port corrections, and well-scoped product work.
+Thank you for helping improve Koharu. Contributions of every size are welcome, including bug fixes, documentation, translations, model-port corrections, and focused product improvements.
 
-## Before coding
+## Find a place to help
 
-1. Search [open issues](https://github.com/mayocream/koharu/issues) and existing pull requests.
-2. Open an issue before starting a large behavior or architecture change.
-3. Read `AGENTS.md` and the README of every crate whose ownership boundary you will change.
-4. Keep generated files, model weights, datasets, credentials, build output, and machine-specific artifacts out of commits.
+- Browse the [good first issues](https://github.com/mayocream/koharu/contribute).
+- Search [open issues](https://github.com/mayocream/koharu/issues) and pull requests for related work.
+- Ask on [Discord](https://discord.gg/mHvHkxGnUY) if you need help choosing an issue or narrowing the scope.
 
-## Change expectations
+## Plan the change
 
-- Update every in-repository consumer when an API or schema changes; do not add backward-compatibility aliases.
-- Keep provider-specific defaults and request behavior in the provider that owns them.
-- Keep safe APIs separate from unsafe FFI and dynamic-loading code.
-- For upstream model ports, preserve checkpoint-affecting structure and compare structured output on identical inputs.
-- Optimize representative work on the real target device and report correctness as well as timing.
+Keep each pull request focused on one problem. Open an issue before starting a large behavior or architecture change so the direction can be discussed early.
 
-Comments should explain ownership, invariants, upstream mapping, or an intentional divergence. Do not narrate straightforward code.
+The README of an affected crate can provide useful context about that component's responsibilities.
 
-## Verification
+## Follow Koharu's project rules
 
-Run the smallest relevant debug-profile check or focused test once. Do not make every contributor run unrelated full suites. Format changed Rust and TypeScript files and run `git diff --check` before opening a pull request.
+- Update every in-repository consumer when an API or schema changes instead of adding compatibility aliases.
+- Keep provider-specific defaults and request behavior with the provider that owns them.
+- Keep safe public APIs separate from unsafe FFI and dynamic-loading code.
+- For upstream model ports, preserve checkpoint-affecting structure and compare structured outputs on identical inputs.
+- Measure performance changes on the real target device with representative inputs, and report correctness alongside timing.
+- Do not commit credentials, model weights, datasets, generated output, build artifacts, or machine-specific files.
 
-Include in the pull request:
+Comments are most useful when they explain ownership, invariants, upstream mapping, or an intentional divergence.
 
-- the problem and chosen ownership boundary;
-- important behavior or schema changes;
-- focused commands and their results;
+## Check your work
+
+Review the complete diff and run the smallest relevant debug-profile check or focused test once. Unrelated full test suites are not required. Format changed Rust and TypeScript files and run `git diff --check`.
+
+Add change-specific evidence when relevant:
+
 - screenshots for visible UI changes;
-- device, input, baseline, result, and correctness difference for performance work.
+- the device, input, baseline, result, and correctness difference for performance work;
+- structured output comparisons for model ports.
+
+If a check cannot run in your environment, mention it in the pull request so reviewers know what remains unverified.
+
+## Open a pull request
+
+Explain the problem, the chosen solution, important behavior or ownership changes, and the checks you ran. Keep unrelated refactoring out of the pull request so the change remains easy to review.
+
+Review is a conversation. Maintainers may suggest revisions or a smaller scope, and contributors are welcome to ask questions when feedback is unclear.
 
 ## AI-assisted contributions
 
-Disclose meaningful use of generative AI. You remain responsible for understanding, reviewing, and testing everything submitted. Unreviewed generated code, speculative issue spam, and low-quality automated pull requests may be closed.
-
-Use [GitHub Issues](https://github.com/mayocream/koharu/issues) for bugs and planned changes. Use [Discord](https://discord.gg/mHvHkxGnUY) for design questions and community support.
+AI tools may be used to assist development. Please understand, review, and test everything you submit, and adapt generated material to Koharu's codebase and conventions. You should be able to explain the change and the evidence that supports it.
 
 Next, set up the checkout with [Development setup](/development/setup/).
