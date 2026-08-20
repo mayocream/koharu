@@ -887,6 +887,7 @@ function LayerRow({
           e.dataTransfer.setData('text/plain', layer.id)
         }
         onDragStart(layer.id)
+      }}
       onDragEnd={(e) => {
         onDragEnd(e)
       }}
