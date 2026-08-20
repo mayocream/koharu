@@ -16,7 +16,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "stable-diffusion.cpp-master-820-de298c2";
+const RELEASE: &str = "stable-diffusion.cpp-master-827-97d2990";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Diffusion {
@@ -31,7 +31,7 @@ pub(crate) enum Diffusion {
     #[strum(
         serialize = "linux-cuda",
         props(
-            asset = "stable-diffusion-cuda-ubuntu-24.04.tar.gz",
+            asset = "stable-diffusion-cuda-ubuntu-latest.tar.gz",
             library = "libstable-diffusion.so"
         )
     )]
@@ -47,7 +47,7 @@ pub(crate) enum Diffusion {
     #[strum(
         serialize = "linux-hip",
         props(
-            asset = "stable-diffusion-hip-ubuntu-24.04.tar.gz",
+            asset = "stable-diffusion-hip-ubuntu-latest.tar.gz",
             library = "libstable-diffusion.so"
         )
     )]
@@ -63,7 +63,7 @@ pub(crate) enum Diffusion {
     #[strum(
         serialize = "linux-vulkan",
         props(
-            asset = "stable-diffusion-vulkan-ubuntu-24.04.tar.gz",
+            asset = "stable-diffusion-vulkan-ubuntu-latest.tar.gz",
             library = "libstable-diffusion.so"
         )
     )]

@@ -16,7 +16,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "llama.cpp-b10472";
+const RELEASE: &str = "llama.cpp-b10488";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Llama {
@@ -31,7 +31,7 @@ pub(crate) enum Llama {
     #[strum(
         serialize = "linux-cuda",
         props(
-            asset = "llama-cuda-ubuntu-24.04.tar.gz",
+            asset = "llama-cuda-ubuntu-latest.tar.gz",
             libraries = "libllama.so,libmtmd.so"
         )
     )]
@@ -47,7 +47,7 @@ pub(crate) enum Llama {
     #[strum(
         serialize = "linux-hip",
         props(
-            asset = "llama-hip-ubuntu-24.04.tar.gz",
+            asset = "llama-hip-ubuntu-latest.tar.gz",
             libraries = "libllama.so,libmtmd.so"
         )
     )]
@@ -63,7 +63,7 @@ pub(crate) enum Llama {
     #[strum(
         serialize = "linux-vulkan",
         props(
-            asset = "llama-vulkan-ubuntu-24.04.tar.gz",
+            asset = "llama-vulkan-ubuntu-latest.tar.gz",
             libraries = "libllama.so,libmtmd.so"
         )
     )]
