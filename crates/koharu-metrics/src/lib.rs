@@ -140,16 +140,11 @@ impl Metrics {
             built_in.insert(BuiltInField::DebugMode, Value::from(true));
         }
 
-        if self
-            .sender
-            .send(Message::Event(Payload {
-                built_in,
-                event: fields,
-                user: self.user_properties.clone(),
-            }))
-            .is_err()
-        {
-        }
+        _ = self.sender.send(Message::Event(Payload {
+            built_in,
+            event: fields,
+            user: self.user_properties.clone(),
+        }))
     }
 
     fn focused(&mut self, focused: bool) {
