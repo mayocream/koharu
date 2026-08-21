@@ -43,7 +43,7 @@ Koharu は Windows と Linux で ROCm/HIP に対応しています。Koharu を�
 - 固定またはバージョン管理されたモデルファイル
 - ローカル翻訳で選択した GGUF 量子化
 
-ランタイムは OS のキャッシュディレクトリ下の `koharu/packages` に保存されます。プロジェクトは `Documents/Koharu`、設定は `~/.koharu/config.toml` に分離されています。
+ランタイムは OS のキャッシュディレクトリ下の `koharu/packages` に保存されます。プロジェクトはプロジェクトライブラリ（既定は `Documents/Koharu`）、設定は `~/.koharu/config.toml` に分離されています。
 
 ダウンロードは一時領域で完成させてからキャッシュへ公開します。失敗や中断があれば、次回の起動またはモデル使用時に再試行できます。
 

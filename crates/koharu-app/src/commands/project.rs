@@ -196,10 +196,11 @@ impl ProjectLibrary {
         })
     }
 
-    /// Resolves the configured root, creating it on demand. The configuration
-    /// file is read once per process, so an edited root applies at the next
-    /// launch; a root changed in process applies to the following operation.
-    fn root(&self) -> Result<PathBuf> {
+    /// Resolves the configured root without touching the filesystem. The
+    /// configuration file is read once per process, so an edited root applies
+    /// at the next launch; a root changed in process applies to the following
+    /// operation.
+    fn configured_root(&self) -> Result<PathBuf> {
         let root = match self.config.read()?.root.clone() {
             Some(root) => expand_home(root)?,
             None => dirs::document_dir()
@@ -212,6 +213,12 @@ impl ProjectLibrary {
                 root.display()
             );
         }
+        Ok(root)
+    }
+
+    /// Resolves the configured root, creating it on demand.
+    fn root(&self) -> Result<PathBuf> {
+        let root = self.configured_root()?;
         std::fs::create_dir_all(&root)
             .with_context(|| format!("failed to create {}", root.display()))?;
         Ok(root)
@@ -1377,6 +1384,66 @@ mod tests {
         );
         let absolute = home.join("Elsewhere");
         assert_eq!(expand_home(absolute.clone()).expect("unchanged"), absolute);
+    }
+
+    /// A library backed by an in-memory configuration, so root resolution can
+    /// be exercised without the shared `~/.koharu/config.toml`.
+    fn library(root: Option<PathBuf>) -> ProjectLibrary {
+        ProjectLibrary {
+            config: ProjectsConfig { root }.into(),
+        }
+    }
+
+    #[test]
+    fn an_unset_root_falls_back_to_the_documents_directory() {
+        let Some(documents) = dirs::document_dir() else {
+            return;
+        };
+        assert_eq!(
+            library(None).configured_root().expect("resolved"),
+            documents.join("Koharu")
+        );
+    }
+
+    #[test]
+    fn a_configured_root_expands_a_leading_tilde() {
+        let home = dirs::home_dir().expect("home directory");
+        assert_eq!(
+            library(Some(PathBuf::from("~/Manga")))
+                .configured_root()
+                .expect("resolved"),
+            home.join("Manga")
+        );
+    }
+
+    #[test]
+    fn a_relative_root_is_rejected() {
+        let error = library(Some(PathBuf::from("projects")))
+            .configured_root()
+            .expect_err("relative root");
+        assert!(error.to_string().contains("must be an absolute path"));
+    }
+
+    #[test]
+    fn a_configured_root_is_created_on_demand() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let root = directory.path().join("library").join("Koharu");
+        let library = library(Some(root.clone()));
+        assert!(!root.exists());
+
+        assert_eq!(library.root().expect("resolved"), root);
+        assert!(root.is_dir());
+    }
+
+    #[test]
+    fn projects_resolve_below_the_configured_root() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let library = library(Some(directory.path().to_path_buf()));
+
+        let (name, path) = library.resolve("My Project").expect("resolved");
+
+        assert_eq!(name, "My Project");
+        assert_eq!(path, directory.path().join("My Project.khrproj"));
     }
 
     #[test]

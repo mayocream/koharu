@@ -9,7 +9,7 @@ This tutorial follows the shortest complete desktop workflow. Start with one rea
 
 ## 1. Create a project
 
-Launch Koharu, enter a project name in **New project**, and choose **Create**. Koharu creates a self-contained `.khrproj` directory under `Documents/Koharu` and opens the editor.
+Launch Koharu, enter a project name in **New project**, and choose **Create**. Koharu creates a self-contained `.khrproj` directory in your project library (`Documents/Koharu` by default) and opens the editor.
 
 ## 2. Import the page
 

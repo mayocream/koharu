@@ -9,13 +9,15 @@ A Koharu project owns its pages, source images, analysis, translations, artwork 
 
 ## Project library
 
-The start screen lists projects found under your operating system's Documents directory:
+The start screen lists projects found in your project library, which defaults to `Koharu` under your operating system's Documents directory:
 
 ```text
 Documents/
   Koharu/
     My Project.khrproj/
 ```
+
+Set `[projects] root` in `~/.koharu/config.toml` to keep the library elsewhere; see the [Settings reference](/reference/settings/).
 
 Create, open, or permanently delete projects from this screen. A project name becomes its directory name, so it cannot contain path separators or operating-system-reserved characters.
 
@@ -49,4 +51,4 @@ Page order controls project processing order and the numeric prefix used for exp
 
 ## Back up a project
 
-Close the project, then copy the complete `.khrproj` directory. Do not copy only its state file or only its blob directory: both are part of the project. Restore it by placing the complete directory back under `Documents/Koharu` while Koharu is closed.
+Close the project, then copy the complete `.khrproj` directory. Do not copy only its state file or only its blob directory: both are part of the project. Restore it by placing the complete directory back into your project library root while Koharu is closed.

@@ -18,7 +18,7 @@ A PSD export is not a Koharu project backup. Keep the `.khrproj` directory for c
 
 ## Projects
 
-Projects live below the operating system Documents directory:
+Projects live in your project library, which defaults to the operating system Documents directory:
 
 ```text
 Documents/Koharu/<project-name>.khrproj/

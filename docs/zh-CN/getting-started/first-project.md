@@ -9,7 +9,7 @@ description: 创建项目、处理页面、审校结果并导出。
 
 ## 1. 创建项目
 
-启动 Koharu，在**新建项目**中输入名称并选择**创建**。Koharu 会在 `Documents/Koharu` 下建立自包含的 `.khrproj` 目录，然后打开编辑器。
+启动 Koharu，在**新建项目**中输入名称并选择**创建**。Koharu 会在项目库（默认为 `Documents/Koharu`）中建立自包含的 `.khrproj` 目录，然后打开编辑器。
 
 ## 2. 导入页面
 

@@ -480,7 +480,7 @@
     "projectList": "프로젝트",
     "projectName": "프로젝트 이름",
     "projectNamePlaceholder": "새 프로젝트",
-    "storageHint": "프로젝트는 이 기기에 로컬로 저장됩니다.",
+    "storageHint": "프로젝트는 프로젝트 라이브러리에 저장됩니다.",
     "title": "프로젝트",
     "yourProjects": "내 프로젝트"
   },
