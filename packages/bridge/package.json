@@ -21,6 +21,6 @@
   "devDependencies": {
     "nodemon": "^3.1.14",
     "oxlint": "^1.79.0",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
