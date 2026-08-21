@@ -65,7 +65,9 @@ impl Hardware {
                 let mut cuda = devices
                     .iter()
                     .enumerate()
-                    .filter(|(_, device)| device.backend == Backend::Cuda)
+                    .filter(|(_, device)| {
+                        device.backend == Backend::Cuda && device.compute_capability >= 75
+                    })
                     .collect::<Vec<_>>();
                 cuda.sort_by_key(|(_, device)| {
                     (
