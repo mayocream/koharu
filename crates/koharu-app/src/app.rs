@@ -13,6 +13,12 @@ use crate::commands::{
     project::{CurrentProject, ProjectLibrary},
 };
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "app_started",
+    skip_all,
+    fields(phase = "initialization")
+)]
 pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
     koharu_ml::init()
         .await
@@ -55,11 +61,6 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
     } else {
         desktop.clear().await;
     }
-    tracing::info!(
-        target: "koharu_metrics",
-        metric = "app_started",
-        startup_duration_ms = koharu_metrics::elapsed_milliseconds(),
-    );
     Ok(())
 }
 
@@ -165,6 +166,11 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                         Ok(event) => {
                             let download = match event {
                                 koharu_runtime::downloads::Event::Started { id, name } => {
+                                    tracing::info!(
+                                        target: "koharu_metrics",
+                                        metric = "download_start",
+                                        resource = "runtime",
+                                    );
                                     Download {
                                         id,
                                         state: DownloadState::Running,
@@ -179,23 +185,46 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                                     name,
                                     completed,
                                     total,
-                                } => Download {
-                                    id,
-                                    state: DownloadState::Running,
-                                    name: Some(name),
-                                    completed,
-                                    total,
-                                    error: None,
-                                },
-                                koharu_runtime::downloads::Event::Finished { id } => Download {
-                                    id,
-                                    state: DownloadState::Finished,
-                                    name: None,
-                                    completed: 0,
-                                    total: 0,
-                                    error: None,
-                                },
+                                } => {
+                                    tracing::info!(
+                                        target: "koharu_metrics",
+                                        metric = "download_progress",
+                                        resource = "runtime",
+                                        used_bytes = completed,
+                                        total_bytes = total,
+                                    );
+                                    Download {
+                                        id,
+                                        state: DownloadState::Running,
+                                        name: Some(name),
+                                        completed,
+                                        total,
+                                        error: None,
+                                    }
+                                }
+                                koharu_runtime::downloads::Event::Finished { id } => {
+                                    tracing::info!(
+                                        target: "koharu_metrics",
+                                        metric = "download_result",
+                                        resource = "runtime",
+                                        outcome = "completed",
+                                    );
+                                    Download {
+                                        id,
+                                        state: DownloadState::Finished,
+                                        name: None,
+                                        completed: 0,
+                                        total: 0,
+                                        error: None,
+                                    }
+                                }
                                 koharu_runtime::downloads::Event::Failed { id, name, error } => {
+                                    tracing::info!(
+                                        target: "koharu_metrics",
+                                        metric = "download_result",
+                                        resource = "runtime",
+                                        outcome = "failed",
+                                    );
                                     Download {
                                         id,
                                         state: DownloadState::Failed,
@@ -236,6 +265,14 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                 processing.stops.lock().clear();
                 processing.jobs.lock().clear();
                 window.state::<AgentState>().cancel_all();
+            }
+            if matches!(event, WindowEvent::Destroyed) {
+                tracing::info!(
+                    target: "koharu_metrics",
+                    metric = "app_closed",
+                    phase = "shutdown",
+                );
+                koharu_metrics::shutdown();
             }
         })
         .run(context)?;

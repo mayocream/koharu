@@ -115,6 +115,13 @@ impl Translator {
         generation: GenerationConfig,
         mut request: TranslationRequest,
     ) -> anyhow::Result<(&'static str, Vec<String>)> {
+        let _metric = tracing::info_span!(
+            target: "koharu_metrics",
+            "translation_request",
+            provider = %selection.provider,
+            model = selection.model.as_deref().unwrap_or("provider_default"),
+            target_language = request.target_language.tag(),
+        );
         let provider = selection.provider;
         let provider_id: &'static str = provider.into();
         if request.segments.is_empty() {
