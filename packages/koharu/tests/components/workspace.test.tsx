@@ -194,6 +194,47 @@ describe('canvas interaction adapter', () => {
     expect(useKoharuStore.getState().camera).toEqual(camera)
   })
 
+  it('moves to the next page with the right arrow key', async () => {
+    installProject()
+    queryClient.setQueryData(pagesKey, [
+      {
+        id: 'page',
+        label: 'Page',
+        size: { width: 1000, height: 1000 },
+        source_asset: null,
+        layer_count: 1,
+      },
+      {
+        id: 'next',
+        label: 'Next',
+        size: { width: 1000, height: 1000 },
+        source_asset: null,
+        layer_count: 1,
+      },
+    ])
+    const selectPage = vi.spyOn(commands, 'selectPage').mockResolvedValue({
+      project: {
+        name: 'Book',
+        revision: 1,
+        active_page: 'next',
+        can_undo: false,
+        can_redo: false,
+      },
+      page: {
+        id: 'next',
+        label: 'Next',
+        size: { width: 1000, height: 1000 },
+        layers: [layer],
+        regions: [],
+      },
+    })
+
+    renderWorkspace()
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+
+    await waitFor(() => expect(selectPage).toHaveBeenCalledWith('next'))
+  })
+
   it('suppresses Alt browser handling while an editor input retains focus', () => {
     installProject()
     renderWorkspace()
