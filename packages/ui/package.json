@@ -40,6 +40,6 @@
     "oxlint": "^1.79.0",
     "shadcn": "^4.19.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
