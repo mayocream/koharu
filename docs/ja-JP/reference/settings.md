@@ -38,4 +38,15 @@ Local、Atlas Cloud、OpenAI、Gemini、Claude、DeepSeek、OpenAI-compatible、
 
 選択、テキスト、描画、消しゴム、カラーピッカー、削除、移動、ウィンドウに合わせるへ 1 文字を割り当てます。現在のショートカット編集は実行中 UI セッションを更新し、`~/.koharu/config.toml` には含まれません。
 
+## プロジェクトの保存先
+
+プロジェクトは OS の Documents ディレクトリ下の `Documents/Koharu` に保存されます。別の場所に保存するには `~/.koharu/config.toml` でルートを設定します。
+
+```toml
+[projects]
+root = "D:/Manga/Koharu"
+```
+
+パスは絶対パスで指定し、先頭の `~` はホームディレクトリに解決されます。ディレクトリが無い場合は作成します。設定ファイルは起動時に一度だけ読み込むため、ルートを変更したら Koharu を再起動してください。既存プロジェクトは移動されません。Koharu を閉じた状態で `.khrproj` ディレクトリを新しいルートへコピーしてください。
+
 パイプライン、プロバイダー、翻訳、組版、Agent の設定は `~/.koharu/config.toml` の所有セクションに保存されます。認証情報はこのファイルへ書かないでください。

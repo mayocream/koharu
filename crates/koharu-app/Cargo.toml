@@ -20,6 +20,7 @@ futures = { workspace = true }
 hayro = { workspace = true }
 image = { workspace = true }
 koharu-agent = { workspace = true }
+koharu-config = { workspace = true }
 koharu-desktop = { workspace = true }
 koharu-ml = { workspace = true }
 koharu-metrics = { workspace = true }
@@ -56,3 +57,6 @@ uuid = { workspace = true }
 walkdir = { workspace = true }
 webp = { workspace = true }
 zip = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

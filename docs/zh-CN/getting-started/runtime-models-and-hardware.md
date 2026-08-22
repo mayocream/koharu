@@ -43,7 +43,7 @@ Koharu 在 Windows 和 Linux 上支持 ROCm/HIP。启动 Koharu 前，请为你�
 - 固定版本或受版本管理的模型文件
 - 本地翻译选择的 GGUF 量化文件
 
-运行时包位于操作系统缓存目录下的 `koharu/packages`。项目数据位于 `Documents/Koharu`，设置位于 `~/.koharu/config.toml`。
+运行时包位于操作系统缓存目录下的 `koharu/packages`。项目数据位于项目库（默认为 `Documents/Koharu`），设置位于 `~/.koharu/config.toml`。
 
 下载先在临时位置完成，再发布到缓存。失败或中断后，可以在下次启动或再次使用模型时重试。
 

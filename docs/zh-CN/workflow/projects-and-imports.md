@@ -9,13 +9,15 @@ Koharu 项目拥有页面、原稿图像、分析结果、翻译、画面修改�
 
 ## 项目库
 
-开始页面列出操作系统 Documents 目录下的项目：
+开始页面列出项目库中的项目，默认位于操作系统 Documents 目录下的 `Koharu`：
 
 ```text
 Documents/
   Koharu/
     My Project.khrproj/
 ```
+
+要把项目库放在其他位置，请设置 `~/.koharu/config.toml` 中的 `[projects] root`，详见[设置参考](/zh-CN/reference/settings/)。
 
 你可以在这里创建、打开或永久删除项目。项目名同时是目录名，不能包含路径分隔符或操作系统保留字符。
 
@@ -39,4 +41,4 @@ Documents/
 
 ## 备份项目
 
-关闭项目后复制整个 `.khrproj` 目录。只复制状态文件或 blob 目录都不完整。恢复时请先关闭 Koharu，再把完整目录放回 `Documents/Koharu`。
+关闭项目后复制整个 `.khrproj` 目录。只复制状态文件或 blob 目录都不完整。恢复时请先关闭 Koharu，再把完整目录放回项目库根目录。

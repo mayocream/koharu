@@ -38,4 +38,15 @@ description: 所有设置页面及其持久化行为的参考。
 
 为选择、文本、绘画、橡皮擦、取色器、移除、平移和适应窗口分配一个字符。当前快捷键编辑只更新正在运行的 UI 会话，不属于 `~/.koharu/config.toml`。
 
+## 项目保存位置
+
+项目保存在操作系统 Documents 目录下的 `Documents/Koharu`。要保存到其他位置，请在 `~/.koharu/config.toml` 中设置根目录：
+
+```toml
+[projects]
+root = "D:/Manga/Koharu"
+```
+
+路径必须是绝对路径，开头的 `~` 会解析为主目录。目录不存在时 Koharu 会创建它。配置文件只在启动时读取一次，因此修改根目录后请重启 Koharu。已有项目不会被移动：请在关闭 Koharu 后把 `.khrproj` 目录复制到新的根目录。
+
 流水线、服务商、翻译、排字与智能体配置分别使用 `~/.koharu/config.toml` 中的所有者区段。不要把凭据写入该文件。

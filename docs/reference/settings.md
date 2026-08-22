@@ -53,6 +53,17 @@ This is a fallback policy; individual text layers can still choose their own fon
 
 Assign one character to Select, Text, Brush, Eraser, Color picker, Remove, Pan, and Fit Window. The current shortcut editor updates the running UI session; custom tool bindings are not part of `~/.koharu/config.toml`.
 
+## Project library
+
+Projects are saved under the operating system Documents directory in `Documents/Koharu`. To keep them elsewhere, set the root in `~/.koharu/config.toml`:
+
+```toml
+[projects]
+root = "D:/Manga/Koharu"
+```
+
+The path must be absolute; a leading `~` resolves to your home directory. Koharu creates the directory when it is missing. The configuration file is read once at startup, so restart Koharu after editing the root. Existing projects are not moved: copy the `.khrproj` directories into the new root while Koharu is closed.
+
 ## Storage
 
 Pipeline, provider, translation, typesetting, and agent configuration use sections of:

@@ -22,6 +22,8 @@ PSD 不是 Koharu 项目备份。继续语义编辑需要保留 `.khrproj`。
 Documents/Koharu/<project-name>.khrproj/
 ```
 
+根目录可通过 `~/.koharu/config.toml` 中的 `[projects] root` 修改，详见[设置参考](/zh-CN/reference/settings/)。
+
 目录包含交替使用的持久状态文件与内容寻址 blob 数据。原稿、生成画面和手工栅格都可能由状态引用。项目打开期间不要重命名、删除或编辑内部文件。
 
 从开始页面删除项目会递归移除整个目录，无法撤销。

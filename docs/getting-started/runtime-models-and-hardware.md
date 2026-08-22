@@ -45,7 +45,7 @@ Koharu resolves three kinds of data on demand:
 - pinned or versioned model files;
 - local GGUF quantizations selected for translation.
 
-Runtime packages are stored under the operating system cache directory in `koharu/packages`. Project data is stored separately under `Documents/Koharu`, and settings are stored in `~/.koharu/config.toml`.
+Runtime packages are stored under the operating system cache directory in `koharu/packages`. Project data is stored separately in your project library (`Documents/Koharu` by default), and settings are stored in `~/.koharu/config.toml`.
 
 Downloads are staged and then published into the cache. A failed or interrupted download can be retried on the next launch or model use.
 

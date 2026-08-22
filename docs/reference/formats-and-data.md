@@ -18,11 +18,13 @@ A PSD export is not a Koharu project backup. Keep the `.khrproj` directory for c
 
 ## Projects
 
-Projects live below the operating system Documents directory:
+Projects live in your project library, which defaults to the operating system Documents directory:
 
 ```text
 Documents/Koharu/<project-name>.khrproj/
 ```
+
+The root is configurable with `[projects] root` in `~/.koharu/config.toml`; see the [Settings reference](/reference/settings/).
 
 The directory contains alternating durable state files and content-addressed blob data. Imported sources, generated artwork, and authored raster content can be referenced by those states. Do not rename, delete, or edit internal files while the project is open.
 
