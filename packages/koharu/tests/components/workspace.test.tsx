@@ -38,12 +38,14 @@ const canvasState = vi.hoisted(() => ({
   status: 'ready' as 'loading' | 'switching' | 'ready' | 'recovering' | 'error',
 }))
 const prefetchCanvasPages = vi.hoisted(() => vi.fn(async () => []))
+const showCanvasPage = vi.hoisted(() => vi.fn(() => true))
 
 vi.mock('@/components/editor/useCanvas', () => ({
   useCanvas: () => canvasState,
 }))
 vi.mock('@koharu/bridge/canvas', () => ({
   prefetchCanvasPages,
+  showCanvasPage,
   workspaceColor: () => [245, 245, 245],
 }))
 
@@ -90,6 +92,7 @@ beforeEach(() => {
   canvasState.hasFrame = true
   canvasState.status = 'ready'
   prefetchCanvasPages.mockClear()
+  showCanvasPage.mockClear()
 })
 
 afterEach(() => vi.unstubAllGlobals())
@@ -196,6 +199,7 @@ describe('canvas interaction adapter', () => {
 
   it('moves to the next page with the right arrow key', async () => {
     installProject()
+    showCanvasPage.mockReturnValue(false)
     queryClient.setQueryData(pagesKey, [
       {
         id: 'page',
