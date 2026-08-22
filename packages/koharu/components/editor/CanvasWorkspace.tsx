@@ -38,8 +38,21 @@ import {
   useKoharuStore,
   type CanvasTool,
 } from '@/lib/store'
-import { prefetchCanvasPages, workspaceColor, type CanvasColor } from '@koharu/bridge/canvas'
-import { commands, type Frame, type Point, type TransformFrame } from '@koharu/bridge/protocol'
+import {
+  prefetchCanvasPages,
+  showCanvasPage,
+  workspaceColor,
+  type CanvasColor,
+} from '@koharu/bridge/canvas'
+import {
+  commands,
+  type Frame,
+  type Page,
+  type PageSummary,
+  type Point,
+  type ProjectInfo,
+  type TransformFrame,
+} from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
 
 const BRUSH_DIAMETER_STEP = 4
@@ -123,6 +136,33 @@ export function CanvasWorkspace() {
     selected.length === 1
       ? page?.layers.find((layer) => layer.id === selected[0] && layer.type === 'raster')
       : undefined
+
+  const moveToPage = useCallback(
+    (nextPage: PageSummary) => {
+      const previousProject = queryClient.getQueryData<ProjectInfo | null>(projectKey)
+      const previousPage = queryClient.getQueryData<Page | null>(pageKey)
+      const activated = showCanvasPage(nextPage.id, previousProject?.revision ?? null)
+      const synchronize = () => {
+        void call(commands.selectPage, nextPage.id)
+          .then((selection) => {
+            queryClient.setQueryData(projectKey, selection.project)
+            queryClient.setQueryData(pageKey, selection.page)
+          })
+          .catch(() => {
+            if (queryClient.getQueryData<ProjectInfo | null>(projectKey)?.active_page === nextPage.id) {
+              queryClient.setQueryData(projectKey, previousProject)
+              queryClient.setQueryData(pageKey, previousPage)
+            }
+          })
+      }
+      if (activated) {
+        requestAnimationFrame(() => window.setTimeout(synchronize, 0))
+      } else {
+        synchronize()
+      }
+    },
+    [],
+  )
 
   const enqueue = useCallback(<Result,>(operation: () => Promise<Result>): Promise<Result> => {
     const pending = commandQueue.current.then(operation)
@@ -356,6 +396,19 @@ export function CanvasWorkspace() {
         requestCanvasFit()
         return
       }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (!pages || pages.length === 0 || !page) return
+        const currentIndex = pages.findIndex((candidate) => candidate.id === page.id)
+        if (currentIndex === -1) return
+        const direction = event.key === 'ArrowRight' ? 1 : -1
+        const nextIndex = Math.min(pages.length - 1, Math.max(0, currentIndex + direction))
+        const nextPage = pages[nextIndex]
+        if (nextPage && nextPage.id !== page.id) {
+          event.preventDefault()
+          moveToPage(nextPage)
+        }
+        return
+      }
       if (event.key === 'Escape') {
         cancelGesture()
         colorSampling?.cancel()
@@ -385,7 +438,7 @@ export function CanvasWorkspace() {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
     }
-  }, [cancelGesture, colorSampling, page, requestCanvasFit, selectLayers, setTool])
+  }, [cancelGesture, colorSampling, moveToPage, page, pages, requestCanvasFit, selectLayers, setTool])
 
   const clientPagePoint = (clientX: number, clientY: number) =>
     pagePoint(
