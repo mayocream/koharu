@@ -3,7 +3,16 @@
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import type { TFunction } from 'i18next'
 import { ChevronDown, ListFilter, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useFontPreview } from '@/lib/queries'
@@ -45,6 +54,10 @@ type Filters = {
   useCase: string
 }
 
+interface FontListHandle {
+  focusRelative: (direction: -1 | 1) => void
+}
+
 const emptyFilters: Filters = { source: '', script: '', category: '', useCase: '' }
 
 export function FontPicker({
@@ -69,6 +82,8 @@ export function FontPicker({
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState<Filters>(emptyFilters)
   const input = useRef<HTMLInputElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const fontList = useRef<FontListHandle>(null)
   const orderedFamilies = useMemo(
     () =>
       [...families].sort(
@@ -109,6 +124,7 @@ export function FontPicker({
     [orderedFamilies, value],
   )
   const activeFilterCount = Object.values(filters).filter(Boolean).length
+  const handleFocus = (family: string) => onChange(family)
 
   return (
     <Popover
@@ -161,6 +177,11 @@ export function FontPicker({
               placeholder={t('fontPicker.search')}
               className='h-6 px-0 text-[11px]'
               onChange={(event) => setQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+                event.preventDefault()
+                fontList.current?.focusRelative(event.key === 'ArrowDown' ? 1 : -1)
+              }}
             />
             <InputGroupAddon align='inline-end' className='gap-0.5 pr-0.5'>
               {query && (
@@ -185,9 +206,12 @@ export function FontPicker({
         <Separator />
         {open && (
           <FontList
+            ref={fontList}
             key={`${query}:${filters.source}:${filters.script}:${filters.category}:${filters.useCase}`}
             families={results}
             value={value}
+            viewportRef={list}
+            onFocus={handleFocus}
             onSelect={(family) => {
               onChange(family)
               setOpen(false)
@@ -339,15 +363,16 @@ function FontResultSummary({
   )
 }
 
-function FontList({
-  families,
-  value,
-  onSelect,
-}: {
-  families: FontFamily[]
-  value: string
-  onSelect: (family: string) => void
-}) {
+const FontList = forwardRef<
+  FontListHandle,
+  {
+    families: FontFamily[]
+    value: string
+    viewportRef: RefObject<HTMLDivElement | null>
+    onFocus: (family: string) => void
+    onSelect: (family: string) => void
+  }
+>(({ families, value, viewportRef, onFocus, onSelect }, ref) => {
   const { t } = useTranslation()
   const list = useRef<HTMLDivElement>(null)
   const selectedIndex = families.findIndex(
@@ -370,11 +395,46 @@ function FontList({
       ),
   })
 
+  const focusIndex = (index: number) => {
+    if (index < 0 || index >= families.length) return
+    virtualizer.scrollToIndex(index)
+    requestAnimationFrame(() => {
+      viewportRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-font-index="${index}"]`)
+        ?.focus()
+    })
+  }
+
+  useImperativeHandle(ref, () => ({
+    focusRelative: (direction) => {
+      const start = selectedIndex < 0 ? (direction === 1 ? -1 : families.length) : selectedIndex
+      focusIndex(start + direction)
+    },
+  }))
+
+  const moveFocus = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const target = event.target as HTMLElement
+    const currentIndex = Number(target.dataset.fontIndex)
+    if (!Number.isInteger(currentIndex)) return
+    const nextIndex = Math.min(
+      families.length - 1,
+      Math.max(0, currentIndex + (event.key === 'ArrowDown' ? 1 : -1)),
+    )
+    if (nextIndex === currentIndex) return
+    event.preventDefault()
+    focusIndex(nextIndex)
+  }
+
   return (
     <ScrollArea
-      viewportRef={list}
+      viewportRef={(element) => {
+        list.current = element
+        viewportRef.current = element
+      }}
       role='listbox'
       aria-label={t('fontPicker.fonts')}
+      onKeyDown={moveFocus}
       className='relative'
       viewportClassName='overflow-x-hidden'
       style={{
@@ -401,11 +461,13 @@ function FontList({
               role='option'
               aria-label={t('fontPicker.fontLabel', { family: family.name, source })}
               aria-selected={selected}
+              data-font-index={virtualRow.index}
               className={cn(
                 'absolute inset-x-0 top-0 flex h-9.5 w-full items-center px-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
                 selected && 'bg-accent text-accent-foreground',
               )}
               style={{ transform: `translateY(${virtualRow.start}px)` }}
+              onFocus={() => onFocus(family.name)}
               onClick={() => onSelect(family.name)}
             >
               <div className='flex min-w-0 flex-1 flex-col justify-center gap-px'>
@@ -428,7 +490,7 @@ function FontList({
       )}
     </ScrollArea>
   )
-}
+})
 
 function FontPreviewLabel({ family, className }: { family: FontFamily; className?: string }) {
   const previewQuery = useFontPreview(family)
