@@ -7,8 +7,7 @@ use anyhow::{Context, Result};
 use strum::IntoEnumIterator;
 
 use crate::{
-    Hardware, Store,
-    downloads::Transfer,
+    Hardware, Store, download,
     runtime::{Package, RuntimePackage, loader, sealed},
     source::extract,
 };
@@ -298,7 +297,6 @@ impl Package for Rocm {
             path,
             move |path| self.complete(path),
             move |stage| async move {
-                let transfer = Transfer::new()?;
                 for (url, pattern) in [
                     (
                         format!("{INDEX}/rocm_sdk_core-{VERSION}-py3-none-{platform}.whl"),
@@ -314,7 +312,7 @@ impl Package for Rocm {
                     ),
                 ] {
                     let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
-                    transfer.fetch(&url, archive.path()).await?;
+                    download::fetch(&url, archive.path()).await?;
                     extract(archive.path(), &stage, &[pattern])?;
                 }
                 Ok(())

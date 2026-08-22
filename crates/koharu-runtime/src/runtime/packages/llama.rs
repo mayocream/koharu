@@ -4,8 +4,7 @@ use anyhow::{Context, Result};
 use strum::EnumProperty;
 
 use crate::{
-    Hardware, Store,
-    downloads::Transfer,
+    Hardware, Store, download,
     runtime::{
         DiscoverablePackage, Package, RuntimePackage,
         graph::Component,
@@ -111,7 +110,7 @@ impl Package for Llama {
                     "https://github.com/mayocream/koharu/releases/download/{RELEASE}/{asset}"
                 );
                 let archive = tempfile::Builder::new().suffix(".tar.gz").tempfile()?;
-                Transfer::new()?.fetch(&url, archive.path()).await?;
+                download::fetch(&url, archive.path()).await?;
                 extract(
                     archive.path(),
                     &stage,

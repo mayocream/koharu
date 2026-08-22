@@ -5,8 +5,7 @@ use strum::EnumProperty;
 use walkdir::WalkDir;
 
 use crate::{
-    Store,
-    downloads::Transfer,
+    Store, download,
     runtime::{Package, RuntimePackage, loader, sealed},
     source::{Platform, extract, wheel},
 };
@@ -193,7 +192,7 @@ impl Package for Cuda {
             move |stage| async move {
                 let url = wheel(project, Platform::host()?).await?;
                 let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
-                Transfer::new()?.fetch(&url, archive.path()).await?;
+                download::fetch(&url, archive.path()).await?;
                 extract(
                     archive.path(),
                     &stage,
