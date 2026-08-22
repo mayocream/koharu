@@ -99,7 +99,7 @@ jobs:
 
       - name: Set up Python for ROCm
         if: matrix.backend == 'hip'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
