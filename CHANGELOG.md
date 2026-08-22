@@ -1,3 +1,14 @@
+## [0.78.1](https://github.com/mayocream/koharu/compare/0.78.0..0.78.1) - 2026-08-22
+
+### 🐛 Bug Fixes
+
+- *(ml)* Disambiguate image buffer access - ([e4c976b](https://github.com/mayocream/koharu/commit/e4c976b96ec7c33089ea1a9dcc1f5184c53ab574))
+
+### 🚜 Refactor
+
+- *(runtime)* Simplify downloads - ([7834852](https://github.com/mayocream/koharu/commit/7834852e9258a43af626cbc2d626c46b69446ce2))
+
+
 ## [0.78.0](https://github.com/mayocream/koharu/compare/0.77.5..0.78.0) - 2026-08-22
 
 ### ⛰️  Features
