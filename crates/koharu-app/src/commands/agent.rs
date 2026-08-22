@@ -88,6 +88,12 @@ pub(crate) async fn get_agent_status(
     Ok(state.status().await?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "agent_login",
+    skip_all,
+    fields(provider = "codex")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn login_agent(
@@ -122,6 +128,12 @@ pub(crate) async fn login_agent(
     Ok(state.status().await?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "agent_logout",
+    skip_all,
+    fields(provider = "codex")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn logout_agent(
@@ -132,13 +144,25 @@ pub(crate) async fn logout_agent(
     Ok(state.status().await?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "preferences_saved",
+    skip_all,
+    fields(setting = "agent")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn save_agent_config(
     config: Config,
     state: State<'_, AgentState>,
 ) -> std::result::Result<Config, Error> {
-    Ok(state.agent.save_config(config)?)
+    let config = state.agent.save_config(config)?;
+    tracing::info!(
+        target: "koharu_metrics",
+        metric = "preference_changed",
+        setting = "agent",
+    );
+    Ok(config)
 }
 
 #[tauri::command]
@@ -167,6 +191,12 @@ pub(crate) async fn run_agent(
     }
     let agent = state.agent.clone();
     drop(tauri::async_runtime::spawn(async move {
+        let _metric = tracing::info_span!(
+            target: "koharu_metrics",
+            "agent_run",
+            provider = "codex",
+            character_count = prompt.chars().count(),
+        );
         let publish_control = control.clone();
         let result = agent
             .run(run, prompt, control, |event| {
@@ -185,6 +215,12 @@ pub(crate) async fn run_agent(
     Ok(run)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "agent_cancel",
+    skip_all,
+    fields(provider = "codex", state = "requested")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn cancel_agent(

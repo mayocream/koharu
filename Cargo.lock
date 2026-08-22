@@ -892,11 +892,10 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.8.6"
+version = "1.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ae7bad254120e9e4c63bafc385310756f90c484eac0e36b8317cf09cb92a77"
+checksum = "6d9e454fc11f76977dc803893aff6304ed33d6a26efae8696573bea74baa27ae"
 dependencies = [
- "arrayref",
  "arrayvec",
  "cc",
  "cfg-if",
@@ -1220,9 +1219,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.4.3"
+version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "509591b7bcd67f4ef775afad7662703b4935daaa6ec0e5605cfb1090b32a2b6d"
+checksum = "0ad534f4357a5264cce5019c989cf66a4f0dc4e0d1b1d15f8aacec0ff7360273"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -2299,9 +2298,9 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "either"
-version = "1.17.0"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
+checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
 name = "embed-resource"
@@ -3139,9 +3138,9 @@ checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
 
 [[package]]
 name = "glam"
-version = "0.33.3"
+version = "0.33.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7360bd2cd76e0cd9032d42cf2922155cecea2685b0cfa4630c3246df030bcfd6"
+checksum = "c426daf70099baff33fac0ba85151c42424861c56828cef9ba02dacb78eb6b26"
 
 [[package]]
 name = "glib"
@@ -3343,9 +3342,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.15"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cb093c84e8bd9b188d4c4a8cb6579fc016968d14c99882163cd3ff402a4f155"
+checksum = "839c0e8a181239723652be9062bb56ca5bf5f64011f73b623f6f4fc59086a228"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -3380,7 +3379,7 @@ checksum = "1ddc6e68be24399b1a9d489f71fd43f6954558294882234c90a322b857e10c63"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
- "read-fonts 0.43.0",
+ "read-fonts 0.43.1",
  "smallvec",
 ]
 
@@ -3899,9 +3898,9 @@ checksum = "e590f038c1464a96894fd6d10127e90a8be4509f56ff7ecef851b15cee0b7caa"
 
 [[package]]
 name = "icu_provider"
-version = "2.3.0"
+version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92a7ed671a6aad807a8651a2e1782a6598fda9ce5185dd8158549e95a91c6428"
+checksum = "d27bbb9d3abbefac45d55f647c9de1d44aafcd1186eb91879afef17c396c3e73"
 dependencies = [
  "displaydoc",
  "icu_locale_core",
@@ -4505,7 +4504,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "koharu"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "clap",
  "console",
@@ -4529,7 +4528,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-agent"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4550,7 +4549,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-app"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "alphanumeric-sort",
  "anyhow",
@@ -4603,7 +4602,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-bindgen"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4616,7 +4615,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-canvas"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "futures-channel",
  "js-sys",
@@ -4631,7 +4630,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-config"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "atomicwrites",
@@ -4645,7 +4644,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-desktop"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "koharu-rasterizer",
@@ -4660,7 +4659,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "image",
  "koharu-diffusion-sys",
@@ -4670,7 +4669,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-diffusion-sys"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4680,7 +4679,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "encoding_rs",
  "enumflags2",
@@ -4695,7 +4694,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-llama-sys"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "koharu-bindgen",
@@ -4705,7 +4704,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-metrics"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4713,6 +4712,10 @@ dependencies = [
  "parking_lot",
  "reqwest",
  "serde_json",
+ "strum",
+ "sys-locale",
+ "sysinfo",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -4721,7 +4724,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-ml"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "ab_glyph",
  "anyhow",
@@ -4751,7 +4754,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-pipeline"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4780,7 +4783,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-psd"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "image",
  "koharu-rasterizer",
@@ -4793,7 +4796,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-rasterizer"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "blake3",
@@ -4809,7 +4812,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-renderer"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4830,7 +4833,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "skrifa 0.46.0",
+ "skrifa 0.46.1",
  "specta",
  "thiserror 2.0.20",
  "tokio",
@@ -4842,7 +4845,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-runtime"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "backon",
@@ -4873,7 +4876,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-scene"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "blake3",
  "bytes",
@@ -4895,7 +4898,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-secrets"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "keyring",
@@ -4907,7 +4910,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-storage"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "blake3",
  "bytes",
@@ -4927,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "half",
  "image",
@@ -4943,7 +4946,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-torch-sys"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "cmake",
@@ -4956,7 +4959,7 @@ dependencies = [
 
 [[package]]
 name = "koharu-translator"
-version = "0.77.3"
+version = "0.77.5"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -5522,7 +5525,7 @@ dependencies = [
  "glam 0.30.10",
  "glam 0.31.1",
  "glam 0.32.1",
- "glam 0.33.3",
+ "glam 0.33.5",
  "matrixmultiply",
  "num-complex",
  "num-rational",
@@ -6235,9 +6238,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "5.3.0"
+version = "5.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
+checksum = "c860fd3227ca4ac3cc032e2cd20cba3f02ccdf4b610538f8ee6584d56bb62e96"
 dependencies = [
  "num-traits",
 ]
@@ -7054,9 +7057,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.16"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f4bfc015262b9df63c8845072ce59068853ff5872180c2ce2f13038b970e560"
+checksum = "04759210543be93709136e28212294a659ef5001836ff4eab4d663e4529bba83"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -7424,9 +7427,9 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.43.0"
+version = "0.43.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6b5cae85882cfb0167038e7726a426f47ebd808e67af78c2d6bcbb02acbf3ce"
+checksum = "5392b77572406d2c6af4690942ad048665d062b85aafd69914c94cf4e8857de8"
 dependencies = [
  "bytemuck",
  "font-types 0.12.3",
@@ -7470,18 +7473,18 @@ dependencies = [
 
 [[package]]
 name = "ref-cast"
-version = "1.0.26"
+version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "216e8f773d7923bcba9ceb86a86c93cabb3903a11872fc3f138c49630e50b96d"
+checksum = "7e440fb4e4b4147295338efb76001ab9e4efc0e5839df2c47fc5ac2381d365c3"
 dependencies = [
  "ref-cast-impl",
 ]
 
 [[package]]
 name = "ref-cast-impl"
-version = "1.0.26"
+version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c9283685feec7d69af75fb0e858d5e7378f33fe4fc699383b2916ab9273e03c"
+checksum = "92ecd8964f8453721699a1ed72037b0db49ce2f5a5138486ee89bed6f67cdf3a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7862,9 +7865,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.14"
+version = "0.103.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0527518605e68109d875e248ea259b6758801cf165e4b2c2733ae3b51f12535a"
+checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -8572,12 +8575,12 @@ dependencies = [
 
 [[package]]
 name = "skrifa"
-version = "0.46.0"
+version = "0.46.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de0bbcc507e438bfe765692ae5228059959781db7430fe36e1cfd569e7c88c89"
+checksum = "48ad1e42a3802c87684faf3a5c5aa9eb630658d64c056660bb5158ec166d47bb"
 dependencies = [
  "bytemuck",
- "read-fonts 0.43.0",
+ "read-fonts 0.43.1",
 ]
 
 [[package]]
@@ -8904,9 +8907,9 @@ checksum = "0193cc4331cfd2f3d2011ef287590868599a2f33c3e69bc22c1a3d3acf9e02fb"
 
 [[package]]
 name = "swift-rs"
-version = "1.0.7"
+version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4057c98e2e852d51fdcfca832aac7b571f6b351ad159f9eda5db1655f8d0c4d7"
+checksum = "e45c444e496845d3f2a351146bff59aae4975b2280238df1dfaa0c7d1846f38e"
 dependencies = [
  "base64 0.21.7",
  "serde",
@@ -8964,6 +8967,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "sys-locale"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -9086,7 +9098,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 [[package]]
 name = "tauri"
 version = "2.11.5"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "anyhow",
  "bytes",
@@ -9137,7 +9149,7 @@ dependencies = [
 [[package]]
 name = "tauri-build"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -9157,7 +9169,7 @@ dependencies = [
 [[package]]
 name = "tauri-codegen"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "base64 0.22.1",
  "brotli",
@@ -9183,7 +9195,7 @@ dependencies = [
 [[package]]
 name = "tauri-macros"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -9196,7 +9208,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#8c204b8621026177562932a11622a72b8758011c"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "anyhow",
  "glob",
@@ -9321,7 +9333,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime"
 version = "2.11.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "cookie",
  "dpi",
@@ -9342,7 +9354,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -9377,7 +9389,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-wry"
 version = "2.11.4"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "gtk",
  "http 1.5.0",
@@ -9434,7 +9446,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "2.9.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#fb2dcae84cba9af15cfd4bf7c01d5ebef6292d2d"
+source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
 dependencies = [
  "anyhow",
  "brotli",
@@ -12066,9 +12078,9 @@ dependencies = [
 
 [[package]]
 name = "zerovec"
-version = "0.11.7"
+version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94b5c6b5976d66c1d703c4fd17d3f5e43c8cedaacf604961b171adc7130896d8"
+checksum = "bb0464e17806c1d976d5cba29399c7f08e516e279e2ba493f63123b5fca67dd8"
 dependencies = [
  "serde",
  "yoke",
@@ -12078,9 +12090,9 @@ dependencies = [
 
 [[package]]
 name = "zerovec-derive"
-version = "0.11.4"
+version = "0.11.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47402523226a02bfe5230160dc3ccc089aa6f6f19e7fcbb4e6f824bbb1b4aa62"
+checksum = "34df6fc39dbd26ddc9c10e6a2984476e13acce22e64e4487636ef494369225da"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -12204,9 +12216,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant"
-version = "5.14.0"
+version = "5.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e28c25bd8bb8da5a1f3e7065d0c156b9ee9a7973adf78b0e35eaefdf3b1b5c"
+checksum = "c1d34c27cc6cdd1f458427519dd6b8612f7b7e3f7b9a0b2355d041dda9869147"
 dependencies = [
  "endi",
  "enumflags2",
@@ -12219,9 +12231,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "5.14.0"
+version = "5.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d496a145685283b67e232bd9e47377f6b60ad9d51e3601b23867f77c42477f96"
+checksum = "864155e69b4352db0c7f374917bf45d1e0c8d17659c8b3dbf9795f3673f8c497"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
@@ -12232,9 +12244,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_utils"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b84ebb462416c27cdb97f2e7f5f0ccc844da1fe2ecc7121e1b690b41318bf42"
+checksum = "bad0294361a320b694a328460dc73add56c306150f5cb6bfafc44446120008a3"
 dependencies = [
  "proc-macro2",
  "quote",

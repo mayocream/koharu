@@ -1,3 +1,35 @@
+## [0.77.5](https://github.com/mayocream/koharu/compare/0.77.4..0.77.5) - 2026-08-21
+
+### 🐛 Bug Fixes
+
+- *(metrics)* Exclude telemetry from logs - ([299e883](https://github.com/mayocream/koharu/commit/299e883538402a092364457b7a383f0b209b79de))
+- *(runtime)* Isolate system HIP discovery - ([c1fce14](https://github.com/mayocream/koharu/commit/c1fce14c4f914b309fdc0acef29f3ecee45e69ea))
+- *(runtime)* Reject unsupported CUDA architectures - ([dc2c044](https://github.com/mayocream/koharu/commit/dc2c0442cc7d768e7b1ef37a75c463081d75f0c8))
+- *(translator)* Map Gemini thinking controls - ([f53631b](https://github.com/mayocream/koharu/commit/f53631b402f6a7fc981638f00176f1d5517796b5))
+- *(ui)* Preserve quick settings across navigation - ([5b38393](https://github.com/mayocream/koharu/commit/5b38393633be7b7cafbdf20de49c839c48632769))
+
+### 🚜 Refactor
+
+- Refine metrics - ([5f87445](https://github.com/mayocream/koharu/commit/5f87445e8739c17c627d403060d61bf58ba1067a))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused params - ([c7d635c](https://github.com/mayocream/koharu/commit/c7d635c59f5608088eb28e41a7c23e1ced15854c))
+- Fix lint - ([68be117](https://github.com/mayocream/koharu/commit/68be11737b14e573928639e8e547612f08340428))
+
+
+## [0.77.4](https://github.com/mayocream/koharu/compare/0.77.3..0.77.4) - 2026-08-20
+
+### 📚 Documentation
+
+- Describe agent resources - ([dff193d](https://github.com/mayocream/koharu/commit/dff193de9fdbd6e40b3ec9995358b40572cb8164))
+- Make contribution guidance more welcoming - ([765d327](https://github.com/mayocream/koharu/commit/765d327170ae8330a54ef4755465467f956cef70))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(runtime)* Update native runtimes - ([6df4ded](https://github.com/mayocream/koharu/commit/6df4ded508658019e3b969ac9dc863d8fdccc9e1))
+
+
 ## [0.77.3](https://github.com/mayocream/koharu/compare/0.77.2..0.77.3) - 2026-08-19
 
 ### 🐛 Bug Fixes

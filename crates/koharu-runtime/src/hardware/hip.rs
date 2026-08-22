@@ -21,10 +21,7 @@ pub(super) fn probe() -> Vec<Device> {
     } else {
         &[]
     };
-    let Some(library) = names
-        .iter()
-        .find_map(|name| unsafe { Library::new(*name).ok() })
-    else {
+    let Some(library) = names.iter().find_map(|name| unsafe { open_library(name) }) else {
         return Vec::new();
     };
     unsafe {
@@ -93,6 +90,29 @@ pub(super) fn probe() -> Vec<Device> {
         }
         devices
     }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+unsafe fn open_library(name: &str) -> Option<Library> {
+    let name = std::ffi::CString::new(name).ok()?;
+    // System HIP discovery must not share linker state with Koharu's managed ROCm runtime.
+    let handle = unsafe {
+        libc::dlmopen(
+            libc::LM_ID_NEWLM,
+            name.as_ptr(),
+            libc::RTLD_LAZY | libc::RTLD_LOCAL,
+        )
+    };
+    if handle.is_null() {
+        return None;
+    }
+
+    Some(unsafe { libloading::os::unix::Library::from_raw(handle) }.into())
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+unsafe fn open_library(name: &str) -> Option<Library> {
+    unsafe { Library::new(name).ok() }
 }
 
 fn target(properties: &[u8]) -> Option<&str> {

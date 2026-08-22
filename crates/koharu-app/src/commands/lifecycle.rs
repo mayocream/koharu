@@ -255,6 +255,12 @@ pub(crate) async fn list_projects(
     Ok(library.list()?)
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "project_created",
+    skip_all,
+    fields(origin = "user")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn create_project(
@@ -267,6 +273,12 @@ pub(crate) async fn create_project(
     Ok(())
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "project_opened",
+    skip_all,
+    fields(origin = "user")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn open_project(
@@ -279,6 +291,12 @@ pub(crate) async fn open_project(
     Ok(())
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "project_closed",
+    skip_all,
+    fields(origin = "user")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn close_project(handle: AppHandle<Cef>) -> std::result::Result<(), Error> {
@@ -286,6 +304,12 @@ pub(crate) async fn close_project(handle: AppHandle<Cef>) -> std::result::Result
     Ok(())
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "project_deleted",
+    skip_all,
+    fields(origin = "user")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn delete_project(
@@ -331,6 +355,12 @@ async fn close_current_project(handle: &AppHandle<Cef>) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "import",
+    skip_all,
+    fields(origin = "user", method = ?source),
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn import_pages(
@@ -427,15 +457,16 @@ pub(crate) async fn import_pages(
     desktop.synchronize(&commit.snapshot, page, &commit).await?;
     let canvas = desktop.canvas_state();
     canvas_channel.channel.publish(canvas);
-    tracing::info!(
-        target: "koharu_metrics",
-        metric = "import",
-        import_source = ?source,
-        page_count,
-    );
+    tracing::info!(target: "koharu_metrics", metric = "page_imported", page_count);
     Ok(())
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "page_selected",
+    skip_all,
+    fields(origin = "user")
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn select_page(

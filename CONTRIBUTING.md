@@ -1,21 +1,17 @@
 # Contributing
 
-Thank you for your interest in contributing to Koharu!
+Thank you for helping improve Koharu. Bug fixes, documentation, translations, model-port corrections, and focused product improvements are all welcome.
 
-> [!IMPORTANT]
-> Please read the complete contributing guide on the [website](https://koharu.rs/development/contributing/).
+## Getting started
 
-Please check out our [good first issues](https://github.com/mayocream/koharu/contribute) or ask for guidance on [Discord](https://discord.gg/mHvHkxGnUY).
+- Browse the [good first issues](https://github.com/mayocream/koharu/contribute) or search existing [issues](https://github.com/mayocream/koharu/issues) and pull requests.
+- Open an issue before starting a large behavior or architecture change.
+- Ask for guidance on [Discord](https://discord.gg/mHvHkxGnUY) if you are unsure where to begin.
 
-We welcome and appreciate any form of contributions.
+Keep your change focused, review the complete diff, and run the relevant checks before opening a pull request. Explain what changed and include the verification results so reviewers can help efficiently.
 
-## AI Usage Policy
+## AI-assisted contributions
 
-When using AI tools (including LLMs like ChatGPT, Claude, Copilot, etc.) to contribute to Koharu:
+AI tools may be used to assist development. Please understand, review, and test everything you submit, and adapt generated material to Koharu's codebase and conventions.
 
-- **Please disclose AI usage** to reduce maintainer fatigue
-- **You are responsible** for all AI-generated issues or PRs you submit
-- **Low-quality or unreviewed AI content will be closed immediately**
-- **Contributors who submit repeated low-quality ("slop") PRs will be banned without prior warning.** Bans may be lifted if you commit to contributing to Koharu in accordance with this policy. You may request an unban via our [Discord](https://discord.gg/mHvHkxGnUY).
-
-We encourage the use of AI tools to assist with development, but all contributions must be thoroughly reviewed and tested by the contributor before submission. AI-generated code should be understood, validated, and adapted to meet Koharu's standards.
+For more details, read the complete [contributing guide](https://koharu.rs/development/contributing/).

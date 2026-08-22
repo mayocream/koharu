@@ -1,0 +1,4 @@
+interface:
+  display_name: "Runtime"
+  short_description: "Sync llama.cpp and stable-diffusion.cpp"
+  default_prompt: "Use $runtime to sync Koharu’s llama.cpp and stable-diffusion.cpp runtimes, headers, and bindings."

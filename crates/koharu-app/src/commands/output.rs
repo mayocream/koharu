@@ -35,6 +35,12 @@ pub enum ExportFormat {
     Psd,
 }
 
+#[tracing::instrument(
+    target = "koharu_metrics",
+    name = "export",
+    skip_all,
+    fields(origin = "user", format = ?format),
+)]
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn export_pages(
@@ -65,7 +71,6 @@ pub(crate) async fn export_pages(
     if pages.is_empty() {
         return Err(anyhow::anyhow!("there are no pages to export").into());
     }
-    let page_count = pages.len();
     let renderer = desktop.renderer();
     let rasterizer = desktop.rasterizer().await?;
     let jobs = pages
@@ -143,18 +148,17 @@ pub(crate) async fn export_pages(
                         tokio::fs::write(directory.join(format!("{stem}.psd")), bytes).await?;
                     }
                 }
+                tracing::info!(
+                    target: "koharu_metrics",
+                    metric = "page_exported",
+                    format = ?format,
+                );
                 Ok::<_, anyhow::Error>(())
             }
         })
         .buffer_unordered(4)
         .try_collect::<Vec<_>>()
         .await?;
-    tracing::info!(
-        target: "koharu_metrics",
-        metric = "export",
-        export_format = ?format,
-        page_count,
-    );
     Ok(())
 }
 

@@ -943,6 +943,76 @@ pub(super) static MODELS: &[LocalModelDescriptor] = &[
         projector: Some("mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf"),
         target_languages: SupportedLanguages::All,
     },
+    LocalModelDescriptor {
+        id: "qwen3.8-27b-uncensored",
+        reasoning: true,
+        name: "Qwen 3.8 27B Uncensored",
+        quantizations: &[
+            QuantizationDefinition::new(
+                "Q4_K_P",
+                "Q4_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ2_M",
+                "IQ2 M",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ3_M",
+                "IQ3 M",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_M.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ3_XS",
+                "IQ3 XS",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_XS.gguf",
+            ),
+            QuantizationDefinition::new(
+                "IQ4_XS",
+                "IQ4 XS",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ4_XS.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q2_K_P",
+                "Q2_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q2_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q3_K_P",
+                "Q3_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q3_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q5_K_P",
+                "Q5_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q5_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q6_K_P",
+                "Q6_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q6_K_P.gguf",
+            ),
+            QuantizationDefinition::new(
+                "Q8_K_P",
+                "Q8_K P",
+                "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf",
+            ),
+        ],
+        generation: ModelGeneration {
+            temperature: Some(0.2),
+            top_k: Some(20),
+            top_p: Some(0.8),
+            min_p: Some(0.05),
+            max_tokens: Some(1000),
+            repeat_penalty: Some(1.2),
+            frequency_penalty: None,
+            presence_penalty: None,
+        },
+        repository: "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF",
+        projector: Some("mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf"),
+        target_languages: SupportedLanguages::All,
+    },
 ];
 
 pub(crate) struct ResolvedLocalModel {
@@ -996,7 +1066,7 @@ mod tests {
 
     #[test]
     fn local_catalog_has_unique_complete_entries() {
-        assert_eq!(MODELS.len(), 26);
+        assert_eq!(MODELS.len(), 27);
         for (index, model) in MODELS.iter().enumerate() {
             let id = model.id;
             assert!(!model.repository.is_empty());
