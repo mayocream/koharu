@@ -267,7 +267,7 @@ impl RuntimePackage for Torch {
     async fn activate(self) -> Result<()> {
         let directory = self.install().await?.join("libtorch/lib");
         for library in self.library_names()? {
-            loader::load(directory.join(library))?;
+            loader::load(directory.join(library), false)?;
         }
         Ok(())
     }

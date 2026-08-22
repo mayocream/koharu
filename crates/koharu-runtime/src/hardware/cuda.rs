@@ -1,4 +1,7 @@
-use std::ffi::{CStr, c_char, c_int, c_uint};
+use std::{
+    ffi::{CStr, c_char, c_int, c_uint},
+    sync::OnceLock,
+};
 
 use libloading::Library;
 
@@ -13,16 +16,32 @@ type DeviceTotalMemory = unsafe extern "C" fn(*mut usize, c_int) -> c_int;
 type DriverGetVersion = unsafe extern "C" fn(*mut c_int) -> c_int;
 
 pub(super) fn probe() -> Option<(i32, Vec<Device>)> {
-    let names: &[&str] = if cfg!(target_os = "windows") {
-        &["nvcuda.dll"]
-    } else if cfg!(target_os = "linux") {
-        &["libcuda.so.1", "libcuda.so"]
-    } else {
-        return None;
-    };
-    let library = names
-        .iter()
-        .find_map(|name| unsafe { Library::new(*name).ok() })?;
+    static LIBRARY: OnceLock<Option<Library>> = OnceLock::new();
+    let library = LIBRARY
+        .get_or_init(|| unsafe {
+            #[cfg(target_os = "windows")]
+            {
+                // Restrict discovery to the system driver. Loading by bare name would allow a
+                // working-directory or application-directory DLL to be selected instead.
+                libloading::os::windows::Library::load_with_flags(
+                    "nvcuda.dll",
+                    libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
+                )
+                .ok()
+                .map(Into::into)
+            }
+            #[cfg(target_os = "linux")]
+            {
+                // The unversioned name can resolve to a toolkit stub rather than the installed
+                // driver, so only accept the loader-managed soname.
+                Library::new("libcuda.so.1").ok()
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+            {
+                None
+            }
+        })
+        .as_ref()?;
     unsafe {
         let init = *library.get::<Init>(b"cuInit\0").ok()?;
         let get_device_count = *library.get::<DeviceGetCount>(b"cuDeviceGetCount\0").ok()?;

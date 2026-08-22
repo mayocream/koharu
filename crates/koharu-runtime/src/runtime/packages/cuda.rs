@@ -211,7 +211,7 @@ impl RuntimePackage for Cuda {
     async fn activate(self) -> Result<()> {
         let directory = self.install().await?;
         for library in self.library_paths(&directory)? {
-            loader::load(library)?;
+            loader::load(library, false)?;
         }
         Ok(())
     }

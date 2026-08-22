@@ -170,6 +170,6 @@ impl RuntimePackage for Diffusion {
 
     async fn activate(self) -> Result<()> {
         let root = self.install().await?;
-        loader::load(root.join(self.library()))
+        loader::load(root.join(self.library()), false)
     }
 }

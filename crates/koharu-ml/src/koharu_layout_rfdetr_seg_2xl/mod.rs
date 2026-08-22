@@ -25,7 +25,7 @@ pub use self::{
 
 use self::model::Model;
 
-model_repository!("mayocream/koharu-layout-rfdetr-seg-2xl-1152" @ "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2" {
+crate::model_repository!("mayocream/koharu-layout-rfdetr-seg-2xl-1152" @ "aed55fdb8ca953c6bec33cf6ed6dd52a9b72bfa2" {
     CONFIG = "inference_config.json",
     WEIGHTS = "model.safetensors",
 });

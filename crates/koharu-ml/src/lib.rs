@@ -3,25 +3,6 @@ use koharu_llama::llama_backend::LlamaBackend;
 use koharu_runtime::{Feature, Hardware, Runtime};
 use tokio::sync::OnceCell;
 
-macro_rules! model_repository {
-    ($repository:literal @ $revision:literal { $($name:ident = $filename:literal),+ $(,)? }) => {
-        $(
-            const $name: koharu_runtime::HuggingFaceFile<'static> =
-                koharu_runtime::HuggingFaceFile::pinned(
-                    $repository,
-                    $revision,
-                    $filename,
-                );
-        )+
-    };
-    ($repository:literal { $($name:ident = $filename:literal),+ $(,)? }) => {
-        $(
-            const $name: koharu_runtime::HuggingFaceFile<'static> =
-                koharu_runtime::HuggingFaceFile::latest($repository, $filename);
-        )+
-    };
-}
-
 mod backend;
 
 pub mod aot_inpainting;
@@ -65,8 +46,7 @@ pub async fn init() -> anyhow::Result<()> {
     READY
         .get_or_try_init(|| async {
             let runtime = Runtime::discover([Feature::Torch, Feature::Llama, Feature::Diffusion])?;
-            let device = runtime.device().cloned().unwrap_or_else(Device::cpu);
-            runtime
+            let device = runtime
                 .initialize()
                 .await
                 .context("failed to initialize runtimes")?;
@@ -110,3 +90,18 @@ pub fn device(cpu: bool) -> Device {
 pub fn llama_backend() -> Option<&'static LlamaBackend> {
     LLAMA.get()
 }
+
+macro_rules! model_repository {
+    ($repository:literal @ $revision:literal { $($name:ident = $filename:literal),+ $(,)? }) => {
+        $(
+            const $name: koharu_runtime::HuggingFaceFile<'static> =
+                koharu_runtime::HuggingFaceFile::pinned(
+                    $repository,
+                    $revision,
+                    $filename,
+                );
+        )+
+    };
+}
+
+pub(crate) use model_repository;
