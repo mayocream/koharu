@@ -73,6 +73,19 @@ import {
 } from '@koharu/ui/components/select'
 import { Slider } from '@koharu/ui/components/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
+import {
+  DndContext,
+  useDraggable,
+  useDroppable,
+  DragEndEvent,
+  DragMoveEvent,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  pointerWithin,
+} from '@dnd-kit/core'
 
 const defaultFont: FontFamily = {
   name: 'CCWildWords',
@@ -475,48 +488,6 @@ function normalizeFontName(value: string): string {
   return value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
-function isDescendant(layers: Layer[], parentId: EntityId, childId: EntityId): boolean {
-  const layerMap = new Map<EntityId, Layer>()
-  for (let i = 0; i < layers.length; i++) {
-    const l = layers[i]
-    layerMap.set(l.id, l)
-  }
-
-  let current = layerMap.get(childId)
-  while (current && current.parent) {
-    if (current.parent === parentId) return true
-    current = layerMap.get(current.parent)
-  }
-  return false
-}
-
-function isValidDrop(
-  layers: Layer[],
-  draggedId: EntityId,
-  targetId: EntityId,
-  pos: 'before' | 'after' | 'inside',
-  pageId: EntityId,
-): boolean {
-  if (draggedId === targetId || isDescendant(layers, draggedId, targetId)) return false
-
-  const draggedLayer = layers.find((l) => l.id === draggedId)
-  const targetLayer = layers.find((l) => l.id === targetId)
-  if (!draggedLayer || !targetLayer || isLockedLayer(targetLayer) || isLockedLayer(draggedLayer))
-    return false
-
-  const parent = pos === 'inside' ? targetId : (targetLayer.parent ?? pageId)
-  const parentLayer = layers.find((l) => l.id === parent)
-  const isParentTextGroup = parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
-
-  const isDraggedText = isTextLayer(draggedLayer)
-  const hasTextGroup = layers.some((l) => isGroupLayer(l) && l.role === 'text')
-
-  if (isDraggedText && hasTextGroup && !isParentTextGroup) return false
-  if (!isDraggedText && isParentTextGroup) return false
-
-  return true
-}
-
 function displayedLayers(layers: Layer[], page: EntityId) {
   const indexes = new Map(layers.map((layer, index) => [layer.id, index]))
   const rows: { layer: Layer; index: number; depth: number }[] = []
@@ -532,6 +503,49 @@ function displayedLayers(layers: Layer[], page: EntityId) {
   return rows
 }
 
+export function isDescendant(layerMap: Map<EntityId, Layer>, parentId: EntityId, childId: EntityId): boolean {
+  let current = layerMap.get(childId)
+  while (current && current.parent) {
+    if (current.parent === parentId) return true
+    current = layerMap.get(current.parent)
+  }
+  return false
+}
+
+export function isValidDrop(
+  layerMap: Map<EntityId, Layer>,
+  draggedId: EntityId,
+  targetId: EntityId,
+  pos: 'before' | 'after' | 'inside',
+  pageId: EntityId,
+): boolean {
+  if (draggedId === targetId || isDescendant(layerMap, draggedId, targetId)) return false
+
+  const draggedLayer = layerMap.get(draggedId)
+  const targetLayer = layerMap.get(targetId)
+  if (!draggedLayer || !targetLayer || isLockedLayer(targetLayer) || isLockedLayer(draggedLayer))
+    return false
+
+  const parent = pos === 'inside' ? targetId : (targetLayer.parent ?? pageId)
+  const parentLayer = layerMap.get(parent)
+  const isParentTextGroup = parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+
+  const isDraggedText = isTextLayer(draggedLayer)
+  
+  let hasTextGroup = false
+  for (const l of layerMap.values()) {
+    if (isGroupLayer(l) && l.role === 'text') {
+      hasTextGroup = true
+      break
+    }
+  }
+
+  if (isDraggedText && hasTextGroup && !isParentTextGroup) return false
+  if (!isDraggedText && isParentTextGroup) return false
+
+  return true
+}
+
 function LayersInspector() {
   const { t } = useTranslation()
   const page = usePage().data
@@ -545,116 +559,108 @@ function LayersInspector() {
   const [draggedId, setDraggedId] = useState<EntityId | null>(null)
   const [dragOverId, setDragOverId] = useState<EntityId | null>(null)
   const [dropPos, setDropPos] = useState<'before' | 'after' | 'inside' | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const lastDragOverRef = useRef<{ id: EntityId; pos: 'before' | 'after' | 'inside' } | null>(null)
-  const scrollIntervalRef = useRef<number | null>(null)
-  const lastClientYRef = useRef<number | null>(null)
+
+  const pointerCoordinatesRef = useRef<{ x: number; y: number } | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  )
 
   useEffect(() => {
     setExpandedLayer(selected.length === 1 ? (selected[0] ?? null) : null)
   }, [selected])
 
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      pointerCoordinatesRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    return () => window.removeEventListener('pointermove', handlePointerMove)
+  }, [])
+
   const layers = useMemo(() => (page ? displayedLayers(page.layers, page.id) : []), [page])
+  const layerMap = useMemo(() => {
+    const map = new Map<EntityId, Layer>()
+    if (page) {
+      for (const layer of page.layers) {
+        map.set(layer.id, layer)
+      }
+    }
+    return map
+  }, [page])
 
   if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
-  const move = (layer: Layer, displayDelta: number) => {
-    if (movingLayer !== null || isLockedLayer(layer)) return
-    const parent = layer.parent ?? page.id
-    const storedSiblings = page.layers.filter(
-      (candidate) => (candidate.parent ?? page.id) === parent,
-    )
-    const parentLayer = page.layers.find((candidate) => candidate.id === parent)
-    const shownSiblings =
-      parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
-        ? storedSiblings
-        : [...storedSiblings].reverse()
-    const shownSource = shownSiblings.findIndex((candidate) => candidate.id === layer.id)
-    const shownTarget = shownSource + displayDelta
-    const targetLayer = shownSiblings[shownTarget]
-    if (shownSource < 0 || !targetLayer) return
-    const target = storedSiblings.findIndex((candidate) => candidate.id === targetLayer.id)
-
-    setMovingLayer(layer.id)
-    void call(commands.moveLayer, layer.id, parent, target).then(
-      (next) => {
-        queryClient.setQueryData(pageKey, next)
-        setMovingLayer(null)
-        void refresh(projectKey, pageKey)
-      },
-      () => setMovingLayer(null),
-    )
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggedId(event.active.id as EntityId)
   }
 
-  const deleteLayer = (layer: EntityId) =>
-    void call(commands.deleteLayers, [layer])
-      .then(() => {
-        if (selected.includes(layer)) {
-          selectLayers(selected.filter((selectedLayer) => selectedLayer !== layer))
-        }
-        setExpandedLayer((current) => (current === layer ? null : current))
-        return refresh(projectKey, pageKey)
-      })
-      .catch(() => undefined)
-
-  const selectLayer = (layer: EntityId) => {
-    if (selected.length === 1 && selected[0] === layer) {
-      setExpandedLayer((current) => (current === layer ? null : layer))
-      return
-    }
-    selectLayers([layer])
-    setExpandedLayer(layer)
-  }
-
-  const handleDragStart = (id: EntityId) => {
-    setDraggedId(id)
-  }
-
-  const handleDragEnd = (e: React.DragEvent) => {
-    if (scrollIntervalRef.current !== null) {
-      clearInterval(scrollIntervalRef.current)
-      scrollIntervalRef.current = null
-    }
-    lastClientYRef.current = null
-
-    const isCanceled = e.clientX === 0 && e.clientY === 0
-    let isInside = false
-    if (!isCanceled && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect()
-      isInside =
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom
-    }
-
-    if (draggedId && lastDragOverRef.current && isInside && movingLayer === null) {
-      handleDrop(draggedId, lastDragOverRef.current.id, lastDragOverRef.current.pos)
-    }
-
-    setTimeout(() => {
-      setDraggedId(null)
+  const handleDragMove = (event: DragMoveEvent) => {
+    const { active, over } = event
+    const pointerCoordinates = pointerCoordinatesRef.current
+    if (!over || !pointerCoordinates) {
       setDragOverId(null)
       setDropPos(null)
-      lastDragOverRef.current = null
-    }, 0)
-  }
+      return
+    }
 
-  const handleDragOver = (id: EntityId, pos: 'before' | 'after' | 'inside') => {
-    lastDragOverRef.current = { id, pos }
-    setDragOverId((prev) => (prev === id ? prev : id))
+    const overId = over.id as EntityId
+    if (active.id === overId) {
+      setDragOverId(null)
+      setDropPos(null)
+      return
+    }
+
+    const overElement = document.getElementById(`layer-row-${overId}`)
+    if (!overElement) return
+
+    const overLayer = layerMap.get(overId)
+    if (!overLayer) return
+
+    const rect = overElement.getBoundingClientRect()
+    const hoverY = pointerCoordinates.y - rect.top
+    const height = rect.height
+    const isGroup = isGroupLayer(overLayer)
+
+    let pos: 'before' | 'after' | 'inside'
+    if (isGroup && hoverY > height * 0.25 && hoverY < height * 0.75) {
+      pos = 'inside'
+    } else if (hoverY < height / 2) {
+      pos = 'before'
+    } else {
+      pos = 'after'
+    }
+
+    if (!isValidDrop(layerMap, active.id as EntityId, overId, pos, page.id)) {
+      setDragOverId(null)
+      setDropPos(null)
+      return
+    }
+
+    setDragOverId((prev) => (prev === overId ? prev : overId))
     setDropPos((prev) => (prev === pos ? prev : pos))
   }
 
-  const handleInvalidDragOver = () => {
-    lastDragOverRef.current = null
-    setDragOverId((prev) => (prev === null ? prev : null))
-    setDropPos((prev) => (prev === null ? prev : null))
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active } = event
+
+    if (active && dragOverId && dropPos && movingLayer === null) {
+      handleDrop(active.id as EntityId, dragOverId, dropPos)
+    }
+
+    setDraggedId(null)
+    setDragOverId(null)
+    setDropPos(null)
   }
 
-  const handleDragLeave = () => {
-    setDragOverId((prev) => (prev === null ? prev : null))
-    setDropPos((prev) => (prev === null ? prev : null))
+  const handleDragCancel = () => {
+    setDraggedId(null)
+    setDragOverId(null)
+    setDropPos(null)
   }
 
   const handleDrop = (
@@ -662,10 +668,10 @@ function LayersInspector() {
     targetId: EntityId,
     calculatedDropPos: 'before' | 'after' | 'inside',
   ) => {
-    if (!isValidDrop(page.layers, sourceId, targetId, calculatedDropPos, page.id)) return
+    if (!isValidDrop(layerMap, sourceId, targetId, calculatedDropPos, page.id)) return
 
-    const sourceLayer = page.layers.find((l) => l.id === sourceId)
-    const targetLayer = page.layers.find((l) => l.id === targetId)
+    const sourceLayer = layerMap.get(sourceId)
+    const targetLayer = layerMap.get(targetId)
     if (!sourceLayer || !targetLayer) return
 
     let parent = targetLayer.parent ?? page.id
@@ -677,7 +683,7 @@ function LayersInspector() {
       (c) => (c.parent ?? page.id) === parent && c.id !== sourceId,
     )
 
-    const parentLayer = page.layers.find((candidate) => candidate.id === parent)
+    const parentLayer = layerMap.get(parent)
     const isTextGroup = parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
 
     let targetStoredIndex = 0
@@ -705,7 +711,7 @@ function LayersInspector() {
     void call(commands.moveLayer, sourceId, parent, targetStoredIndex)
       .then((next) => {
         queryClient.setQueryData(pageKey, next)
-        void refresh(projectKey, pageKey)
+        void refresh(projectKey)
       })
       .finally(() => {
         setMovingLayer(null)
@@ -715,8 +721,56 @@ function LayersInspector() {
       })
   }
 
+  const move = (layer: Layer, displayDelta: number) => {
+    if (movingLayer !== null || isLockedLayer(layer)) return
+    const parent = layer.parent ?? page.id
+    const storedSiblings = page.layers.filter(
+      (candidate) => !isLockedLayer(candidate) && (candidate.parent ?? page.id) === parent,
+    )
+    const parentLayer = layerMap.get(parent)
+    const shownSiblings =
+      parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+        ? storedSiblings
+        : [...storedSiblings].reverse()
+    const shownSource = shownSiblings.findIndex((candidate) => candidate.id === layer.id)
+    const shownTarget = shownSource + displayDelta
+    const targetLayer = shownSiblings[shownTarget]
+    if (shownSource < 0 || !targetLayer) return
+    const target = storedSiblings.findIndex((candidate) => candidate.id === targetLayer.id)
+
+    setMovingLayer(layer.id)
+    void call(commands.moveLayer, layer.id, parent, target).then(
+      (next) => {
+        queryClient.setQueryData(pageKey, next)
+        setMovingLayer(null)
+        void refresh(projectKey)
+      },
+      () => setMovingLayer(null),
+    )
+  }
+
+  const deleteLayer = (layer: EntityId) =>
+    void call(commands.deleteLayers, [layer])
+      .then(() => {
+        if (selected.includes(layer)) {
+          selectLayers(selected.filter((selectedLayer) => selectedLayer !== layer))
+        }
+        setExpandedLayer((current) => (current === layer ? null : current))
+        return refresh(projectKey, pageKey)
+      })
+      .catch(() => undefined)
+
+  const selectLayer = (layer: EntityId) => {
+    if (selected.length === 1 && selected[0] === layer) {
+      setExpandedLayer((current) => (current === layer ? null : layer))
+      return
+    }
+    selectLayers([layer])
+    setExpandedLayer(layer)
+  }
+
   return (
-    <div ref={containerRef} className='flex min-h-0 flex-1 flex-col'>
+    <div className='flex min-h-0 flex-1 flex-col'>
       <header className='flex h-8 shrink-0 items-center gap-1.5 border-b border-border/80 px-2'>
         <Layers3 className='size-3 text-primary' />
         <h2 className='text-[10px] font-semibold'>{t('layers.title')}</h2>
@@ -725,99 +779,86 @@ function LayersInspector() {
         </span>
       </header>
 
-      <ScrollArea
-        className='min-h-0 flex-1'
-        onDragOver={(e) => {
-          if (draggedId) {
-            if (!e.defaultPrevented) {
-              handleInvalidDragOver()
-            }
-            e.preventDefault()
-            if (e.dataTransfer) {
-              e.dataTransfer.dropEffect = 'move'
-            }
-          }
-          lastClientYRef.current = e.clientY
-          const container = e.currentTarget
-          if (scrollIntervalRef.current === null && draggedId) {
-            scrollIntervalRef.current = window.setInterval(() => {
-              const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')
-              if (!viewport || lastClientYRef.current === null) return
-              const rect = viewport.getBoundingClientRect()
-              const relativeY = lastClientYRef.current - rect.top
-              const threshold = 50
-              let scrollDelta = 0
-              if (relativeY < threshold) {
-                const ratio = (threshold - relativeY) / threshold
-                scrollDelta = -Math.max(1, Math.floor(ratio * 15))
-              } else if (relativeY > rect.height - threshold) {
-                const ratio = (relativeY - (rect.height - threshold)) / threshold
-                scrollDelta = Math.max(1, Math.floor(ratio * 15))
-              }
-
-              if (scrollDelta !== 0) {
-                viewport.scrollTop += scrollDelta
-              } else if (scrollIntervalRef.current !== null) {
-                clearInterval(scrollIntervalRef.current)
-                scrollIntervalRef.current = null
-              }
-            }, 16)
-          }
-        }}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        <div className='py-0.5'>
-          {layers.map(({ layer, index, depth }) => {
-            const locked = isLockedLayer(layer)
-            const storedSiblings = page.layers.filter(
-              (candidate) => (candidate.parent ?? page.id) === (layer.parent ?? page.id),
-            )
-            const parentLayer = page.layers.find((candidate) => candidate.id === layer.parent)
-            const siblings =
-              parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
-                ? storedSiblings
-                : [...storedSiblings].reverse()
-            const position = siblings.findIndex((candidate) => candidate.id === layer.id)
+        <ScrollArea className='min-h-0 flex-1'>
+          <div className='py-0.5'>
+            {layers.map(({ layer, index, depth }) => {
+              const locked = isLockedLayer(layer)
+              const storedSiblings = page.layers.filter(
+                (candidate) =>
+                  !isLockedLayer(candidate) &&
+                  (candidate.parent ?? page.id) === (layer.parent ?? page.id),
+              )
+              const parentLayer = layer.parent ? layerMap.get(layer.parent) : undefined
+              const siblings =
+                parentLayer && isGroupLayer(parentLayer) && parentLayer.role === 'text'
+                  ? storedSiblings
+                  : [...storedSiblings].reverse()
+              const position = siblings.findIndex((candidate) => candidate.id === layer.id)
+              return (
+                <LayerRow
+                  key={`${layer.type}:${layer.id}`}
+                  layer={layer}
+                  index={index}
+                  depth={depth}
+                  selected={selected.includes(layer.id)}
+                  expanded={!locked && expandedLayer === layer.id}
+                  locked={locked}
+                  onSelect={() => selectLayer(layer.id)}
+                  onToggle={() =>
+                    void call(commands.setVisibility, [layer.id], !layer.visibility.visible, null)
+                      .then(() => refresh(projectKey, pageKey))
+                      .catch(() => undefined)
+                  }
+                  onMove={(delta) => move(layer, delta)}
+                  canMoveUp={!locked && position > 0}
+                  canMoveDown={!locked && position >= 0 && position < siblings.length - 1}
+                  reordering={movingLayer !== null}
+                  onDelete={isGroupLayer(layer) ? undefined : () => deleteLayer(layer.id)}
+                  isDragOver={dragOverId === layer.id}
+                  activeDropPos={dragOverId === layer.id ? dropPos : null}
+                />
+              )
+            })}
+            {layers.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
+          </div>
+        </ScrollArea>
+        <DragOverlay adjustScale={false} dropAnimation={null}>
+          {draggedId ? (() => {
+            const dragLayerIndex = layers.findIndex(l => l.layer.id === draggedId)
+            const dragLayerInfo = layers[dragLayerIndex]
+            if (!dragLayerInfo) return null
             return (
-              <LayerRow
-                key={`${layer.type}:${layer.id}`}
-                layer={layer}
-                index={index}
-                depth={depth}
-                selected={selected.includes(layer.id)}
-                expanded={!locked && expandedLayer === layer.id}
-                locked={locked}
-                onSelect={() => selectLayer(layer.id)}
-                onToggle={() =>
-                  void call(commands.setVisibility, [layer.id], !layer.visibility.visible, null)
-                    .then(() => refresh(projectKey, pageKey))
-                    .catch(() => undefined)
-                }
-                onMove={(delta) => move(layer, delta)}
-                canMoveUp={!locked && position > 0 && !isLockedLayer(siblings[position - 1])}
-                canMoveDown={
-                  !locked &&
-                  position >= 0 &&
-                  position < siblings.length - 1 &&
-                  !isLockedLayer(siblings[position + 1])
-                }
-                reordering={movingLayer !== null}
-                onDelete={isGroupLayer(layer) ? undefined : () => deleteLayer(layer.id)}
-                draggedId={draggedId}
-                dragOverId={dragOverId}
-                dropPos={dropPos}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                layersList={page.layers}
-                pageId={page.id}
-              />
+              <div className='opacity-80 pointer-events-none'>
+                <LayerRow
+                  layer={dragLayerInfo.layer}
+                  index={dragLayerInfo.index}
+                  depth={dragLayerInfo.depth}
+                  selected={selected.includes(draggedId)}
+                  expanded={expandedLayer === draggedId}
+                  locked={isLockedLayer(dragLayerInfo.layer)}
+                  onSelect={() => {}}
+                  onToggle={() => {}}
+                  onMove={() => {}}
+                  canMoveUp={false}
+                  canMoveDown={false}
+                  reordering={false}
+                  isDragOver={false}
+                  activeDropPos={null}
+                  isOverlay={true}
+                />
+              </div>
             )
-          })}
-          {layers.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
-        </div>
-      </ScrollArea>
+          })() : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   )
 }
@@ -836,16 +877,9 @@ function LayerRow({
   canMoveDown,
   reordering,
   onDelete,
-  draggedId,
-  dragOverId,
-  dropPos,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  layersList,
-  pageId,
+  isDragOver,
+  activeDropPos,
+  isOverlay = false,
 }: {
   layer: Layer
   index: number
@@ -860,135 +894,54 @@ function LayerRow({
   canMoveDown: boolean
   reordering: boolean
   onDelete?: () => void
-  draggedId: EntityId | null
-  dragOverId: EntityId | null
-  dropPos: 'before' | 'after' | 'inside' | null
-  onDragStart: (id: EntityId) => void
-  onDragEnd: (e: React.DragEvent) => void
-  onDragOver: (id: EntityId, pos: 'before' | 'after' | 'inside') => void
-  onDragLeave: () => void
-  onDrop: (sourceId: EntityId, targetId: EntityId, pos: 'before' | 'after' | 'inside') => void
-  layersList: Layer[]
-  pageId: EntityId
+  isDragOver: boolean
+  activeDropPos: 'before' | 'after' | 'inside' | null
+  isOverlay?: boolean
 }) {
   const { t } = useTranslation()
   const name = localizedLayerName(layer, index, t)
   const detail = localizedLayerKind(layer, t)
   const Icon = layerIcon(layer)
 
+  const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
+    id: layer.id,
+    disabled: locked || reordering || isOverlay,
+  })
+
+  const { setNodeRef: setDroppableRef } = useDroppable({
+    id: layer.id,
+    disabled: locked || isOverlay,
+  })
+
+  const setCombinedRef = (node: HTMLDivElement | null) => {
+    setDraggableRef(node)
+    setDroppableRef(node)
+  }
+
   return (
     <div
+      id={`layer-row-${layer.id}`}
+      ref={setCombinedRef}
       className='group min-w-0 px-1 py-px'
-      style={{ paddingLeft: `${depth * 10 + 4}px` }}
-      draggable={!locked && !reordering}
-      onDragStart={(e) => {
-        if (e.dataTransfer) {
-          e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('text/plain', layer.id)
-        }
-        onDragStart(layer.id)
+      style={{
+        paddingLeft: `${depth * 10 + 4}px`,
+        opacity: isDragging ? 0.3 : 1,
       }}
-      onDragEnd={(e) => {
-        onDragEnd(e)
-      }}
-      onDragEnter={(e) => {
-        const dragged = draggedId
-        if (!dragged) return
-
-        const rect = e.currentTarget.getBoundingClientRect()
-        const hoverY = e.clientY - rect.top
-        const isGroup = isGroupLayer(layer)
-
-        let pos: 'before' | 'after' | 'inside'
-        if (isGroup && hoverY > rect.height * 0.25 && hoverY < rect.height * 0.75) {
-          pos = 'inside'
-        } else if (hoverY < rect.height / 2) {
-          pos = 'before'
-        } else {
-          pos = 'after'
-        }
-
-        if (!isValidDrop(layersList, dragged, layer.id, pos, pageId)) return
-
-        if (e.dataTransfer) {
-          e.dataTransfer.dropEffect = 'move'
-        }
-        e.preventDefault()
-      }}
-      onDragOver={(e) => {
-        const dragged = draggedId
-        if (!dragged) return
-
-        const rect = e.currentTarget.getBoundingClientRect()
-        const hoverY = e.clientY - rect.top
-        const isGroup = isGroupLayer(layer)
-
-        let pos: 'before' | 'after' | 'inside'
-        if (isGroup && hoverY > rect.height * 0.25 && hoverY < rect.height * 0.75) {
-          pos = 'inside'
-        } else if (hoverY < rect.height / 2) {
-          pos = 'before'
-        } else {
-          pos = 'after'
-        }
-
-        if (!isValidDrop(layersList, dragged, layer.id, pos, pageId)) return
-
-        if (e.dataTransfer) {
-          e.dataTransfer.dropEffect = 'move'
-        }
-        e.preventDefault()
-        onDragOver(layer.id, pos)
-      }}
-      onDragLeave={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        if (
-          e.clientX < rect.left ||
-          e.clientX >= rect.right ||
-          e.clientY < rect.top ||
-          e.clientY >= rect.bottom
-        ) {
-          onDragLeave()
-        }
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        const dragged = draggedId
-        if (dragged) {
-          const rect = e.currentTarget.getBoundingClientRect()
-          const hoverY = e.clientY - rect.top
-          const isGroup = isGroupLayer(layer)
-
-          let pos: 'before' | 'after' | 'inside'
-          if (isGroup && hoverY > rect.height * 0.25 && hoverY < rect.height * 0.75) {
-            pos = 'inside'
-          } else if (hoverY < rect.height / 2) {
-            pos = 'before'
-          } else {
-            pos = 'after'
-          }
-
-          if (isValidDrop(layersList, dragged, layer.id, pos, pageId)) {
-            onDrop(dragged, layer.id, pos)
-          }
-        }
-      }}
+      {...listeners}
+      {...attributes}
     >
       <div
         data-selected={selected}
         data-expanded={expanded}
         className={`min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none ${
-          dragOverId === layer.id && dropPos
-            ? dropPos === 'before'
+          isDragOver && activeDropPos
+            ? activeDropPos === 'before'
               ? 'rounded-t-none shadow-[inset_0_2px_0_0_var(--primary)]'
-              : dropPos === 'after'
+              : activeDropPos === 'after'
                 ? 'rounded-b-none shadow-[inset_0_-2px_0_0_var(--primary)]'
                 : 'bg-primary/10 ring-1 ring-primary'
             : ''
         }`}
-        style={{
-          pointerEvents: draggedId !== null ? 'none' : 'auto',
-        }}
       >
         <div className='relative flex min-w-0 items-center gap-0.5'>
           <button
