@@ -35,7 +35,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag=$(gh api repos/ggml-org/llama.cpp/releases/latest --jq .tag_name)
+          tag=$(gh api repos/ggml-org/llama.cpp/releases --jq '.[0].tag_name')
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
   build:
