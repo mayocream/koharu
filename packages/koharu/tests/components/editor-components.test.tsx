@@ -813,7 +813,7 @@ describe('greenfield editor', () => {
       type: 'group',
       id: 'group1',
       parent: 'page',
-      geometry: { points: [] },
+      name: 'Group 1',
       visibility: { visible: true, opacity: 1 },
       role: 'text',
     }
@@ -833,6 +833,7 @@ describe('greenfield editor', () => {
       parent: 'page',
       geometry: { points: [] },
       visibility: { visible: true, opacity: 1 },
+      image: 'image1.png',
     }
 
     const map = new Map<string, Layer>([
