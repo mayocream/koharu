@@ -266,7 +266,7 @@ jobs:
 
     steps:
       - name: Download stable-diffusion builds
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: stable-diffusion-*
           path: release
