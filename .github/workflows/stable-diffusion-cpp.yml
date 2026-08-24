@@ -42,13 +42,13 @@ jobs:
           - backend: cuda
             os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: cuda
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-2xlarge
           - backend: hip
             os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: hip
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-2xlarge
           - backend: vulkan
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-2xlarge
           - backend: vulkan
             os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: metal
