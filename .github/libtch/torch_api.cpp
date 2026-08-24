@@ -834,24 +834,24 @@ bool at_context_has_mps() {
   return 0;
 }
 
-module atm_load(const char *filename) {
+::module atm_load(const char *filename) {
   PROTECT(return new torch::jit::script::Module(torch::jit::load(filename));)
   return nullptr;
 }
 
-module atm_load_on_device(const char *filename, int device) {
+::module atm_load_on_device(const char *filename, int device) {
   PROTECT(return new torch::jit::script::Module(
                      torch::jit::load(filename, device_of_int(device)));)
   return nullptr;
 }
 
-module atm_load_str(const char *data, size_t sz) {
+::module atm_load_str(const char *data, size_t sz) {
   PROTECT(std::istringstream stream(std::string(data, sz));
           return new torch::jit::script::Module(torch::jit::load(stream));)
   return nullptr;
 }
 
-module atm_load_str_on_device(const char *data, size_t sz, int device) {
+::module atm_load_str_on_device(const char *data, size_t sz, int device) {
   PROTECT(std::istringstream stream(std::string(data, sz));
           return new torch::jit::script::Module(
               torch::jit::load(stream, device_of_int(device)));)
@@ -947,7 +947,7 @@ bool atm_fuser_cuda_is_enabled() {
   return false;
 }
 
-module atm_create_for_tracing(const char *modl_name, const tensor *inputs, int ninputs) {
+::module atm_create_for_tracing(const char *modl_name, const tensor *inputs, int ninputs) {
   PROTECT(torch::jit::script::Module modl(modl_name);
           if (torch::jit::tracer::isTracing()) throw std::invalid_argument(
               "cannot nest tracing calls");
