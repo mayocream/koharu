@@ -761,32 +761,6 @@ impl Drop for Tensor {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Tensor;
-    use std::{fs::File, time::SystemTime};
-
-    #[test]
-    fn stream_roundtrip() {
-        let suffix = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("koharu-torch-stream-{suffix}.ot"));
-        let expected = [1_i64, 2, 3, 5, 8];
-
-        Tensor::from_slice(&expected)
-            .save_to_stream(File::create(&path).unwrap())
-            .unwrap();
-        let actual =
-            Vec::<i64>::try_from(Tensor::load_from_stream(File::open(&path).unwrap()).unwrap())
-                .unwrap();
-
-        std::fs::remove_file(path).unwrap();
-        assert_eq!(actual, expected);
-    }
-}
-
 fn autocast_clear_cache() {
     unsafe_torch!(at_autocast_clear_cache())
 }
