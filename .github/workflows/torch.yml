@@ -322,7 +322,7 @@ jobs:
 
       - name: Build Torch
         shell: bash
-        timeout-minutes: 300
+        timeout-minutes: 350
         run: cmake --build build --target install --config Release --parallel
 
       - name: Build koharu-torch shim

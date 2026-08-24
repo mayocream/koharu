@@ -210,7 +210,7 @@ jobs:
 
       - name: Build llama and MTMD
         shell: bash
-        timeout-minutes: 300
+        timeout-minutes: 350
         run: cmake --build build --target llama mtmd --config Release --parallel
 
       - name: Package llama and MTMD
