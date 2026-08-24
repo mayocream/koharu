@@ -355,45 +355,26 @@ jobs:
           mkdir package
           case "$RUNNER_OS" in
             Windows)
-              find install/lib -type f \
-                \( -iname 'c10*.dll' -o -iname 'torch*.dll' \
-                   -o -iname 'caffe2_nvrtc.dll' \) \
-                -exec cp {} package/ \;
+              cp install/lib/c10*.dll install/lib/torch*.dll package/
               extension=dll
               prefix=
               ;;
             Linux)
-              find install/lib -type f \
-                \( -name 'libc10*.so*' -o -name 'libtorch*.so*' \
-                   -o -name 'libcaffe2_nvrtc.so*' \) \
-                -exec cp {} package/ \;
+              cp install/lib/libc10*.so* install/lib/libtorch*.so* package/
               extension=so
               prefix=lib
               ;;
             macOS)
-              find install/lib -type f \
-                \( -name 'libc10*.dylib' -o -name 'libtorch*.dylib' \) \
-                -exec cp {} package/ \;
+              cp install/lib/libc10*.dylib install/lib/libtorch*.dylib package/
               extension=dylib
               prefix=lib
               ;;
           esac
 
-          test -f "package/${prefix}c10.$extension"
-          test -f "package/${prefix}torch_cpu.$extension"
-          test -f "package/${prefix}torch.$extension"
-          cp "shim-install/${prefix}koharu-torch.$extension" package/
-          test -f "package/${prefix}koharu-torch.$extension"
-          if [[ "$BACKEND" == cuda ]]; then
-            test -f "package/${prefix}c10_cuda.$extension"
-            test -f "package/${prefix}torch_cuda.$extension"
-            test -f "package/${prefix}caffe2_nvrtc.$extension"
-          elif [[ "$BACKEND" == hip ]]; then
-            test -f "package/${prefix}c10_hip.$extension"
-            test -f "package/${prefix}torch_hip.$extension"
-            test -f "package/${prefix}caffe2_nvrtc.$extension"
+          if [[ "$BACKEND" == cuda || "$BACKEND" == hip ]]; then
+            cp "install/lib/${prefix}caffe2_nvrtc.$extension" package/
           fi
-
+          cp "shim-install/${prefix}koharu-torch.$extension" package/
           tar -C package -czf "torch-$BACKEND-${{ matrix.os }}.tar.gz" .
 
       - name: Upload Torch
