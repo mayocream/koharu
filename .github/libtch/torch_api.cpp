@@ -269,7 +269,110 @@ char *at_to_string(tensor t, int line_size) {
 
 void at_copy_(tensor dst, tensor src) { PROTECT(dst->copy_(*src);) }
 
+namespace {
+tch_stream_destructor_callback tch_write_stream_destructor = nullptr;
+tch_write_stream_callback tch_write_stream_write = nullptr;
+tch_stream_destructor_callback tch_read_stream_destructor = nullptr;
+tch_stream_position_callback tch_read_stream_stream_position = nullptr;
+tch_stream_seek_start_callback tch_read_stream_seek_start = nullptr;
+tch_stream_seek_end_callback tch_read_stream_seek_end = nullptr;
+tch_read_stream_callback tch_read_stream_read = nullptr;
+
+class WriteStreamAdapter {
+private:
+  void *_stream_ptr;
+
+public:
+  WriteStreamAdapter(void *stream_ptr) : _stream_ptr(stream_ptr) {}
+
+  ~WriteStreamAdapter() { tch_write_stream_destructor(_stream_ptr); }
+
+  size_t save(const void *data, size_t size) {
+    size_t out_size = 0;
+    if (!tch_write_stream_write(_stream_ptr, static_cast<const uint8_t *>(data),
+                                size, &out_size)) {
+      throw std::ios_base::failure("tch_write_stream_write has returned error");
+    }
+    return out_size;
+  }
+};
+
+class ReadStreamAdapter : public caffe2::serialize::ReadAdapterInterface {
+private:
+  void *_stream_ptr;
+
+public:
+  ReadStreamAdapter(void *stream_ptr) : _stream_ptr(stream_ptr) {}
+
+  virtual ~ReadStreamAdapter() { tch_read_stream_destructor(_stream_ptr); }
+
+  virtual size_t size() const {
+    uint64_t current = 0;
+    if (!tch_read_stream_stream_position(_stream_ptr, &current)) {
+      throw std::ios_base::failure(
+          "tch_read_stream_stream_position has returned error");
+    }
+
+    uint64_t size = 0;
+    if (!tch_read_stream_seek_end(_stream_ptr, 0, &size)) {
+      throw std::ios_base::failure(
+          "tch_read_stream_seek_end has returned error");
+    }
+
+    uint64_t dummy = 0;
+    if (!tch_read_stream_seek_start(_stream_ptr, current, &dummy)) {
+      throw std::ios_base::failure(
+          "tch_read_stream_seek_start has returned error");
+    }
+
+    return size;
+  }
+
+  virtual size_t read(uint64_t pos, void *buf, size_t n,
+                      const char *what) const {
+    uint64_t dummy = 0;
+    if (!tch_read_stream_seek_start(_stream_ptr, pos, &dummy)) {
+      throw std::ios_base::failure(
+          "tch_read_stream_seek_start has returned error");
+    }
+
+    size_t size = 0;
+    if (!tch_read_stream_read(_stream_ptr, static_cast<uint8_t *>(buf), n,
+                              &size)) {
+      throw std::ios_base::failure("tch_read_stream_read has returned error");
+    }
+
+    return size;
+  }
+};
+} // namespace
+
+void at_set_stream_callbacks(
+    tch_stream_destructor_callback write_destructor,
+    tch_write_stream_callback write,
+    tch_stream_destructor_callback read_destructor,
+    tch_stream_position_callback stream_position,
+    tch_stream_seek_start_callback seek_start,
+    tch_stream_seek_end_callback seek_end,
+    tch_read_stream_callback read) {
+  tch_write_stream_destructor = write_destructor;
+  tch_write_stream_write = write;
+  tch_read_stream_destructor = read_destructor;
+  tch_read_stream_stream_position = stream_position;
+  tch_read_stream_seek_start = seek_start;
+  tch_read_stream_seek_end = seek_end;
+  tch_read_stream_read = read;
+}
+
 void at_save(tensor t, const char *filename) { PROTECT(torch::save(*t, filename);) }
+
+void at_save_to_stream(tensor t, void *stream_ptr) {
+  PROTECT(auto adapter = std::shared_ptr<WriteStreamAdapter>(
+              new WriteStreamAdapter(stream_ptr));
+          torch::save(*t, [adapter](const void *data, size_t size) {
+            return adapter->save(data, size);
+          });)
+}
 
 void at_save_multi(const tensor *tensors, const char *const *tensor_names, int ntensors,
                    const char *filename) {
@@ -277,6 +380,19 @@ void at_save_multi(const tensor *tensors, const char *const *tensor_names, int n
           for (int i = 0; i < ntensors; ++i) archive.write(
               std::string(tensor_names[i]), *(tensors[i]), /* buffer=*/false);
           archive.save_to(filename);)
+}
+
+void at_save_multi_to_stream(const tensor *tensors,
+                             const char *const *tensor_names, int ntensors,
+                             void *stream_ptr) {
+  PROTECT(auto adapter = std::shared_ptr<WriteStreamAdapter>(
+              new WriteStreamAdapter(stream_ptr));
+          torch::serialize::OutputArchive archive;
+          for (int i = 0; i < ntensors; ++i) archive.write(
+              std::string(tensor_names[i]), *(tensors[i]), /* buffer=*/false);
+          archive.save_to([adapter](const void *data, size_t size) {
+            return adapter->save(data, size);
+          });)
 }
 
 void at_load_multi(tensor *tensors, const char *const *tensor_names, int ntensors,
@@ -329,6 +445,21 @@ void at_load_callback_with_device(const char *filename, void *data,
           })
 }
 
+void at_load_from_stream_callback(void *stream_ptr, void *data,
+                                  void (*f)(void *, const char *, tensor),
+                                  bool enable_device_id, int device_id) {
+  PROTECT(
+      auto adapter = std::shared_ptr<caffe2::serialize::ReadAdapterInterface>(
+          new ReadStreamAdapter(stream_ptr));
+      auto module = enable_device_id
+                        ? torch::jit::load(adapter, device_of_int(device_id))
+                        : torch::jit::load(adapter);
+      for (const auto &p : module.named_parameters()) {
+        auto v = p.value;
+        f(data, p.name.c_str(), new torch::Tensor(v));
+      })
+}
+
 void at_load_multi_(const tensor *tensors, const char *const *tensor_names, int ntensors,
                     const char *filename) {
   PROTECT(torch::NoGradGuard no_grad; torch::serialize::InputArchive archive;
@@ -347,6 +478,21 @@ void at_load_multi_(const tensor *tensors, const char *const *tensor_names, int 
 
 tensor at_load(const char *filename) {
   PROTECT(torch::Tensor tensor; torch::load(tensor, filename);
+          return new torch::Tensor(tensor);)
+  return nullptr;
+}
+
+tensor at_load_from_stream(void *stream_ptr) {
+  PROTECT(torch::NoGradGuard no_grad; torch::Tensor tensor;
+          auto adapter =
+              std::shared_ptr<caffe2::serialize::ReadAdapterInterface>(
+                  new ReadStreamAdapter(stream_ptr));
+          torch::load(
+              tensor,
+              [adapter](uint64_t pos, void *buf, size_t nbytes) {
+                return adapter->read(pos, buf, nbytes, "tensor");
+              },
+              [adapter]() { return adapter->size(); });
           return new torch::Tensor(tensor);)
   return nullptr;
 }

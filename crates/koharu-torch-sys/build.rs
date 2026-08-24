@@ -39,16 +39,7 @@ fn generate_bindings(out_dir: &Path) -> Result<()> {
         })
         .write_to_file(out_dir.join("torch_api.rs"))?;
 
-    let generated_header = out_dir.join("torch_api_generated_bindgen.h");
-    let generated_source = fs::read_to_string(TORCH_API_GENERATED_HEADER)
-        .with_context(|| format!("failed to read {TORCH_API_GENERATED_HEADER}"))?;
-    fs::write(
-        &generated_header,
-        bindgen_generated_header_compat(generated_source),
-    )
-    .with_context(|| format!("failed to write {}", generated_header.display()))?;
-
-    generator(&generated_header)
+    generator(TORCH_API_GENERATED_HEADER)
         .with_bindgen(|builder| builder.clang_arg("-Ilibtch").allowlist_function("^atg_.*"))
         .write_to_file(out_dir.join("torch_api_generated.rs"))?;
 
@@ -58,20 +49,6 @@ fn generate_bindings(out_dir: &Path) -> Result<()> {
 fn generator(header: impl AsRef<Path>) -> Generator {
     Generator::from_header(header, SHIM_LIBRARY_NAME)
         .with_bindgen(|builder| builder.layout_tests(false).blocklist_type(OPAQUE_TYPES))
-}
-
-fn bindgen_generated_header_compat(mut source: String) -> String {
-    // The generated Rust wrappers pass byte strings as u8 slices and tensor
-    // pointer arrays by shared reference. Keep that compatibility isolated to
-    // the bindgen view instead of changing the compiled C++ signatures.
-    source = source.replace("char **", "__KOHARU_CHAR_PTR_PTR__");
-    source = source.replace("char*", "__KOHARU_CHAR_PTR__");
-    source = source.replace("char *", "__KOHARU_CHAR_PTR__");
-    source = source.replace("int64_t *", "const int64_t *");
-    source = source.replace("double *", "const double *");
-    source = source.replace("tensor *", "const tensor *");
-    source = source.replace("__KOHARU_CHAR_PTR_PTR__", "const uint8_t *const *");
-    source.replace("__KOHARU_CHAR_PTR__", "const uint8_t *")
 }
 
 async fn build_shim() -> Result<()> {
