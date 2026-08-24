@@ -64,6 +64,10 @@ jobs:
       SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
     steps:
+      - name: Enable Git long paths
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
       - name: Check out PyTorch
         uses: actions/checkout@v7
         with:
