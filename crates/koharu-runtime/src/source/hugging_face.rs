@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::OnceLock};
 
-use anyhow::Context;
 use hf_hub::{HFClient, repository::download::HFByteStream, split_id};
 
 use crate::{Store, download, network};
@@ -19,12 +18,6 @@ fn client() -> anyhow::Result<HFClient> {
         .retry_max_attempts(max_retries)
         .build()?;
     Ok(CLIENT.get_or_init(|| client).clone())
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum Revision<'a> {
-    Pinned(&'a str),
-    Latest,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -53,29 +46,6 @@ impl RepositoryKind {
             Self::Model => "models",
             Self::Dataset => "datasets",
         }
-    }
-
-    async fn latest_revision(self, repository: Repository<'_>) -> anyhow::Result<String> {
-        let client = client()?;
-        let sha = match self {
-            Self::Model => {
-                client
-                    .model(repository.owner, repository.name)
-                    .info()
-                    .send()
-                    .await?
-                    .sha
-            }
-            Self::Dataset => {
-                client
-                    .dataset(repository.owner, repository.name)
-                    .info()
-                    .send()
-                    .await?
-                    .sha
-            }
-        };
-        sha.with_context(|| format!("{} metadata omitted its commit", repository.id))
     }
 
     async fn download(
@@ -110,14 +80,11 @@ impl RepositoryKind {
 }
 
 /// An immutable file snapshot hosted by Hugging Face.
-///
-/// A latest file resolves the current repository head before locating its
-/// snapshot.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct HuggingFaceFile<'a> {
     kind: RepositoryKind,
     repository: &'a str,
-    revision: Revision<'a>,
+    revision: &'a str,
     filename: &'a str,
 }
 
@@ -127,27 +94,7 @@ impl<'a> HuggingFaceFile<'a> {
         Self {
             kind: RepositoryKind::Model,
             repository,
-            revision: Revision::Pinned(revision),
-            filename,
-        }
-    }
-
-    #[must_use]
-    pub const fn latest(repository: &'a str, filename: &'a str) -> Self {
-        Self {
-            kind: RepositoryKind::Model,
-            repository,
-            revision: Revision::Latest,
-            filename,
-        }
-    }
-
-    #[must_use]
-    pub const fn latest_dataset(repository: &'a str, filename: &'a str) -> Self {
-        Self {
-            kind: RepositoryKind::Dataset,
-            repository,
-            revision: Revision::Latest,
+            revision,
             filename,
         }
     }
@@ -157,7 +104,7 @@ impl<'a> HuggingFaceFile<'a> {
         Self {
             kind: RepositoryKind::Dataset,
             repository,
-            revision: Revision::Pinned(revision),
+            revision,
             filename,
         }
     }
@@ -165,10 +112,7 @@ impl<'a> HuggingFaceFile<'a> {
     #[tracing::instrument(skip_all)]
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
         let repository = Repository::new(self.repository);
-        let revision = match self.revision {
-            Revision::Pinned(revision) => revision.to_owned(),
-            Revision::Latest => self.kind.latest_revision(repository).await?,
-        };
+        let revision = self.revision.to_owned();
         let repository_name = repository.id.replace(['/', '\\'], "--");
         let target = Store::root()
             .join("hugging-face")
