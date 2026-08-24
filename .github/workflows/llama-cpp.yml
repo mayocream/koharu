@@ -43,42 +43,42 @@ jobs:
           - backend: cuda
             os: windows
             runs-on:
-              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
               - image:windows-1.0
               - instance-size:large
               - cuda-windows
           - backend: cuda
             os: linux
             runs-on:
-              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
               - image:ubuntu-8.0
               - instance-size:large
               - cuda-linux
           - backend: hip
             os: windows
             runs-on:
-              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
               - image:windows-1.0
               - instance-size:large
               - hip-windows
           - backend: hip
             os: linux
             runs-on:
-              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
               - image:ubuntu-8.0
               - instance-size:large
               - hip-linux
           - backend: vulkan
             os: linux
             runs-on:
-              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
               - image:ubuntu-8.0
               - instance-size:large
               - vulkan-linux
           - backend: vulkan
             os: windows
             runs-on:
-              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
               - image:windows-1.0
               - instance-size:large
               - vulkan-windows
