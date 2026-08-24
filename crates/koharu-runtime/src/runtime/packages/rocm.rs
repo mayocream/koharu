@@ -327,18 +327,6 @@ impl RuntimePackage for Rocm {
 
     async fn activate(self) -> Result<()> {
         let root = self.install().await?;
-        if cfg!(target_os = "windows") && self == Self::Gfx1032 {
-            // The ROCm 7.14 package's MIOpen 3.5.2 selects F3x2 and F2x3 Winograd assembly kernels
-            // that COMGR cannot build for gfx1032 on Windows. Disable only those solvers while
-            // preserving other Winograd paths.
-            // SAFETY: ROCm activation is restricted to Windows, where changing the process
-            // environment is safe even in a multithreaded process.
-            unsafe {
-                std::env::set_var("MIOPEN_DEBUG_AMD_WINOGRAD_RXS_F3X2", "0");
-                std::env::set_var("MIOPEN_DEBUG_AMD_WINOGRAD_RXS_F2X3_G1", "0");
-            }
-        }
-
         if !cfg!(any(target_os = "windows", target_os = "linux")) {
             anyhow::bail!("ROCm packages support only Windows and Linux")
         }
