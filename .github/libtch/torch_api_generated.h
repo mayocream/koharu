@@ -597,8 +597,6 @@ void atg_affine_grid_generator_out(tensor *, tensor out, tensor theta, int64_t *
 void atg_alias(tensor *, tensor self);
 void atg_alias_copy(tensor *, tensor self);
 void atg_alias_copy_out(tensor *, tensor out, tensor self);
-void atg_align_as(tensor *, tensor self, tensor other);
-tensor *atg_align_tensors(tensor *tensors_data, int tensors_len);
 void atg_all(tensor *, tensor self);
 void atg_all_all_out(tensor *, tensor out, tensor self);
 void atg_all_dim(tensor *, tensor self, int64_t dim, int keepdim);

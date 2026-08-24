@@ -4312,26 +4312,6 @@ void atg_alias_copy_out(tensor *out__, tensor out, tensor self) {
   )
 }
 
-void atg_align_as(tensor *out__, tensor self, tensor other) {
-  PROTECT(
-    auto outputs__ = self->align_as(*other);
-    out__[0] = new torch::Tensor(outputs__);
-  )
-}
-
-tensor *atg_align_tensors(tensor *tensors_data, int tensors_len) {
-  PROTECT(
-    auto outputs__ = torch::align_tensors(of_carray_tensor(tensors_data, tensors_len));
-    int sz = outputs__.size();
-    torch::Tensor **out__ = (torch::Tensor**)malloc((sz + 1) * sizeof(torch::Tensor*));
-    for (int i = 0; i < sz; ++i)
-      out__[i] = new torch::Tensor(outputs__[i]);
-    out__[sz] = nullptr;
-    return out__;
-  )
-  return nullptr;
-}
-
 void atg_all(tensor *out__, tensor self) {
   PROTECT(
     auto outputs__ = torch::all(*self);
@@ -19190,4 +19170,3 @@ void atg_zeros_out(tensor *out__, tensor out, int64_t *size_data, int size_len) 
     out__[0] = new torch::Tensor(outputs__);
   )
 }
-

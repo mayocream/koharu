@@ -274,7 +274,6 @@ jobs:
             -DBUILD_BINARY=OFF \
             -DBUILD_FUNCTORCH=OFF \
             -DBUILD_JNI=OFF \
-            -DBUILD_LAZY_TS_BACKEND=OFF \
             -DBUILD_MOBILE_AUTOGRAD=OFF \
             -DBUILD_MOBILE_BENCHMARK=OFF \
             -DBUILD_MOBILE_TEST=OFF \
