@@ -35,22 +35,23 @@ jobs:
   build:
     needs: source
     name: ${{ matrix.backend }} / ${{ matrix.os }}
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
         include:
           - backend: cuda
-            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
+            os: windows-2022
           - backend: cuda
-            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+            os: ubuntu-latest
           - backend: hip
-            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
+            os: windows-2022
           - backend: hip
-            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+            os: ubuntu-latest
           - backend: vulkan
-            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+            os: ubuntu-latest
           - backend: vulkan
-            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
+            os: windows-2022
           - backend: metal
             os: macos-latest
 
@@ -241,6 +242,7 @@ jobs:
 
       - name: Build stable-diffusion
         shell: bash
+        timeout-minutes: 300
         run: cmake --build build --target stable-diffusion --config Release --parallel
 
       - name: Package stable-diffusion
