@@ -41,21 +41,53 @@ jobs:
       matrix:
         include:
           - backend: cuda
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-large
+            os: windows
+            runs-on:
+              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - image:windows-1.0
+              - instance-size:large
+              - cuda-windows
           - backend: cuda
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-large
+            os: linux
+            runs-on:
+              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - image:ubuntu-8.0
+              - instance-size:large
+              - cuda-linux
           - backend: hip
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-large
+            os: windows
+            runs-on:
+              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - image:windows-1.0
+              - instance-size:large
+              - hip-windows
           - backend: hip
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-large
+            os: linux
+            runs-on:
+              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - image:ubuntu-8.0
+              - instance-size:large
+              - hip-linux
           - backend: vulkan
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-large
+            os: linux
+            runs-on:
+              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - image:ubuntu-8.0
+              - instance-size:large
+              - vulkan-linux
           - backend: vulkan
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-large
+            os: windows
+            runs-on:
+              - codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}
+              - image:windows-1.0
+              - instance-size:large
+              - vulkan-windows
           - backend: metal
-            os: macos-latest
+            os: macos
+            runs-on:
+              - macos-latest
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
     env:
       BACKEND: ${{ matrix.backend }}
       REF: ${{ needs.source.outputs.tag }}
