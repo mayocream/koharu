@@ -378,7 +378,6 @@ jobs:
           retention-days: 3
 
   release:
-    if: github.event_name != 'pull_request'
     needs: [source, build]
     runs-on: ubuntu-latest
     permissions:
@@ -388,7 +387,7 @@ jobs:
       - name: Download Torch builds
         uses: actions/download-artifact@v8
         with:
-          pattern: torch-*
+          pattern: '*'
           path: release
           merge-multiple: true
 

@@ -3,12 +3,8 @@ name: stable-diffusion.cpp
 on:
   workflow_dispatch:
   schedule:
-    - cron: '47 3 * * *'
+    - cron: '47 3 * * 0'
   push:
-    branches: ['main']
-    paths:
-      - '.github/workflows/stable-diffusion-cpp.yml'
-  pull_request:
     branches: ['main']
     paths:
       - '.github/workflows/stable-diffusion-cpp.yml'
@@ -44,17 +40,17 @@ jobs:
       matrix:
         include:
           - backend: cuda
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: cuda
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: hip
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: hip
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: vulkan
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: vulkan
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: metal
             os: macos-latest
 
@@ -72,7 +68,7 @@ jobs:
         with:
           key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
           variant: sccache
-          max-size: 2G
+          max-size: 10G
 
       - name: Clone stable-diffusion.cpp
         shell: bash
@@ -245,26 +241,24 @@ jobs:
 
       - name: Build stable-diffusion
         shell: bash
-        run: cmake --build build --target stable-diffusion --config Release --parallel 4
+        run: cmake --build build --target stable-diffusion --config Release --parallel
 
       - name: Package stable-diffusion
         shell: bash
         run: |
           mkdir package
           cp build/bin/*stable-diffusion.* package/
-          tar -C package -czf \
-            "stable-diffusion-$BACKEND-${{ matrix.os }}.tar.gz" .
+          tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
 
       - name: Upload stable-diffusion
         uses: actions/upload-artifact@v7
         with:
-          name: stable-diffusion-${{ matrix.backend }}-${{ matrix.os }}
-          path: stable-diffusion-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
+          name: ${{ runner.os }}-${{ matrix.backend }}
+          path: ${{ runner.os }}-${{ matrix.backend }}.tar.gz
           if-no-files-found: error
           retention-days: 3
 
   release:
-    if: github.event_name != 'pull_request'
     needs: [source, build]
     runs-on: ubuntu-latest
     permissions:
@@ -274,7 +268,7 @@ jobs:
       - name: Download stable-diffusion builds
         uses: actions/download-artifact@v8
         with:
-          pattern: stable-diffusion-*
+          pattern: '*'
           path: release
           merge-multiple: true
 

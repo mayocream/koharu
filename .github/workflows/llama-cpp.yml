@@ -3,13 +3,8 @@ name: llama.cpp
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 3 * * *'
+    - cron: '17 3 * * 0'
   push:
-    branches: ['main']
-    paths:
-      - '.github/llama.cpp/**'
-      - '.github/workflows/llama-cpp.yml'
-  pull_request:
     branches: ['main']
     paths:
       - '.github/llama.cpp/**'
@@ -46,17 +41,17 @@ jobs:
       matrix:
         include:
           - backend: cuda
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: cuda
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: hip
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: hip
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: vulkan
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: vulkan
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: metal
             os: macos-latest
 
@@ -74,7 +69,7 @@ jobs:
         with:
           key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
           variant: sccache
-          max-size: 2G
+          max-size: 10G
 
       - name: Clone llama.cpp
         shell: bash
@@ -214,7 +209,7 @@ jobs:
 
       - name: Build llama and MTMD
         shell: bash
-        run: cmake --build build --target llama mtmd --config Release --parallel 4
+        run: cmake --build build --target llama mtmd --config Release --parallel
 
       - name: Package llama and MTMD
         shell: bash
@@ -222,18 +217,17 @@ jobs:
           mkdir package
           cp build/bin/*llama.* package/
           cp build/bin/*mtmd.* package/
-          tar -C package -czf "llama-$BACKEND-${{ matrix.os }}.tar.gz" .
+          tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
 
       - name: Upload llama
         uses: actions/upload-artifact@v7
         with:
-          name: llama-${{ matrix.backend }}-${{ matrix.os }}
-          path: llama-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
+          name: ${{ runner.os }}-${{ matrix.backend }}
+          path: ${{ runner.os }}-${{ matrix.backend }}.tar.gz
           if-no-files-found: error
           retention-days: 3
 
   release:
-    if: github.event_name != 'pull_request'
     needs: [source, build]
     runs-on: ubuntu-latest
     permissions:
@@ -243,7 +237,7 @@ jobs:
       - name: Download llama builds
         uses: actions/download-artifact@v8
         with:
-          pattern: llama-*
+          pattern: '*'
           path: release
           merge-multiple: true
 
