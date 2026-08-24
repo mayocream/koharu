@@ -74,18 +74,13 @@ import {
 import { Slider } from '@koharu/ui/components/slider'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@koharu/ui/components/tooltip'
 import {
-  DndContext,
-  useDraggable,
-  useDroppable,
-  DragEndEvent,
-  DragMoveEvent,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
+  DragDropProvider,
   DragOverlay,
-  pointerWithin,
-} from '@dnd-kit/core'
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+} from '@dnd-kit/react'
+import { useSortable } from '@dnd-kit/react/sortable'
 
 const defaultFont: FontFamily = {
   name: 'CCWildWords',
@@ -518,6 +513,7 @@ export function isValidDrop(
   targetId: EntityId,
   pos: 'before' | 'after' | 'inside',
   pageId: EntityId,
+  hasTextGroup?: boolean,
 ): boolean {
   if (draggedId === targetId || isDescendant(layerMap, draggedId, targetId)) return false
 
@@ -532,11 +528,13 @@ export function isValidDrop(
 
   const isDraggedText = isTextLayer(draggedLayer)
   
-  let hasTextGroup = false
-  for (const l of layerMap.values()) {
-    if (isGroupLayer(l) && l.role === 'text') {
-      hasTextGroup = true
-      break
+  if (hasTextGroup === undefined) {
+    hasTextGroup = false
+    for (const l of layerMap.values()) {
+      if (isGroupLayer(l) && l.role === 'text') {
+        hasTextGroup = true
+        break
+      }
     }
   }
 
@@ -562,13 +560,7 @@ function LayersInspector() {
 
   const pointerCoordinatesRef = useRef<{ x: number; y: number } | null>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  )
+
 
   useEffect(() => {
     setExpandedLayer(selected.length === 1 ? (selected[0] ?? null) : null)
@@ -593,23 +585,33 @@ function LayersInspector() {
     return map
   }, [page])
 
+  const hasTextGroup = useMemo(() => {
+    for (const l of layerMap.values()) {
+      if (isGroupLayer(l) && l.role === 'text') return true
+    }
+    return false
+  }, [layerMap])
+
   if (!page) return <EmptyInspector>{t('inspector.selectPage')}</EmptyInspector>
 
   const handleDragStart = (event: DragStartEvent) => {
-    setDraggedId(event.active.id as EntityId)
+    const activeId = event.operation.source?.id as EntityId | undefined
+    if (activeId) {
+      setDraggedId(activeId)
+    }
   }
 
   const handleDragMove = (event: DragMoveEvent) => {
-    const { active, over } = event
+    const activeId = event.operation.source?.id as EntityId | undefined
+    const overId = event.operation.target?.id as EntityId | undefined
     const pointerCoordinates = pointerCoordinatesRef.current
-    if (!over || !pointerCoordinates) {
+    if (!activeId || !overId || !pointerCoordinates) {
       setDragOverId(null)
       setDropPos(null)
       return
     }
 
-    const overId = over.id as EntityId
-    if (active.id === overId) {
+    if (activeId === overId) {
       setDragOverId(null)
       setDropPos(null)
       return
@@ -635,7 +637,7 @@ function LayersInspector() {
       pos = 'after'
     }
 
-    if (!isValidDrop(layerMap, active.id as EntityId, overId, pos, page.id)) {
+    if (!isValidDrop(layerMap, activeId, overId, pos, page.id, hasTextGroup)) {
       setDragOverId(null)
       setDropPos(null)
       return
@@ -646,10 +648,9 @@ function LayersInspector() {
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active } = event
-
-    if (active && dragOverId && dropPos && movingLayer === null) {
-      handleDrop(active.id as EntityId, dragOverId, dropPos)
+    const activeId = event.operation.source?.id as EntityId | undefined
+    if (activeId && dragOverId && dropPos && movingLayer === null) {
+      handleDrop(activeId, dragOverId, dropPos)
     }
 
     setDraggedId(null)
@@ -657,18 +658,14 @@ function LayersInspector() {
     setDropPos(null)
   }
 
-  const handleDragCancel = () => {
-    setDraggedId(null)
-    setDragOverId(null)
-    setDropPos(null)
-  }
+
 
   const handleDrop = (
     sourceId: EntityId,
     targetId: EntityId,
     calculatedDropPos: 'before' | 'after' | 'inside',
   ) => {
-    if (!isValidDrop(layerMap, sourceId, targetId, calculatedDropPos, page.id)) return
+    if (!isValidDrop(layerMap, sourceId, targetId, calculatedDropPos, page.id, hasTextGroup)) return
 
     const sourceLayer = layerMap.get(sourceId)
     const targetLayer = layerMap.get(targetId)
@@ -779,13 +776,10 @@ function LayersInspector() {
         </span>
       </header>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
+      <DragDropProvider
         onDragStart={handleDragStart}
         onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
       >
         <ScrollArea className='min-h-0 flex-1'>
           <div className='py-0.5'>
@@ -830,10 +824,9 @@ function LayersInspector() {
             {layers.length === 0 && <EmptyInspector>{t('layers.empty')}</EmptyInspector>}
           </div>
         </ScrollArea>
-        <DragOverlay adjustScale={false} dropAnimation={null}>
+        <DragOverlay dropAnimation={null}>
           {draggedId ? (() => {
-            const dragLayerIndex = layers.findIndex(l => l.layer.id === draggedId)
-            const dragLayerInfo = layers[dragLayerIndex]
+            const dragLayerInfo = layers.find(l => l.layer.id === draggedId)
             if (!dragLayerInfo) return null
             return (
               <div className='opacity-80 pointer-events-none'>
@@ -858,7 +851,7 @@ function LayersInspector() {
             )
           })() : null}
         </DragOverlay>
-      </DndContext>
+      </DragDropProvider>
     </div>
   )
 }
@@ -903,32 +896,22 @@ function LayerRow({
   const detail = localizedLayerKind(layer, t)
   const Icon = layerIcon(layer)
 
-  const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({
+  const { ref: sortableRef, isDragging: sortableIsDragging } = useSortable({
     id: layer.id,
+    index,
     disabled: locked || reordering || isOverlay,
   })
-
-  const { setNodeRef: setDroppableRef } = useDroppable({
-    id: layer.id,
-    disabled: locked || isOverlay,
-  })
-
-  const setCombinedRef = (node: HTMLDivElement | null) => {
-    setDraggableRef(node)
-    setDroppableRef(node)
-  }
+  const isDragging = isOverlay ? false : sortableIsDragging
 
   return (
     <div
-      id={`layer-row-${layer.id}`}
-      ref={setCombinedRef}
+      id={isOverlay ? undefined : `layer-row-${layer.id}`}
+      ref={isOverlay ? undefined : sortableRef}
       className='group min-w-0 px-1 py-px'
       style={{
         paddingLeft: `${depth * 10 + 4}px`,
-        opacity: isDragging ? 0.3 : 1,
+        opacity: isDragging ? 0 : 1,
       }}
-      {...listeners}
-      {...attributes}
     >
       <div
         data-selected={selected}
@@ -944,13 +927,26 @@ function LayerRow({
         }`}
       >
         <div className='relative flex min-w-0 items-center gap-0.5'>
-          <button
-            type='button'
+          <div
+            role='button'
+            tabIndex={locked ? undefined : 0}
             aria-label={t('layers.edit', { name })}
             aria-expanded={locked ? undefined : expanded}
-            disabled={locked}
-            className='flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1.5 py-1 text-left hover:bg-foreground/[0.05] focus-visible:ring-2 focus-visible:ring-ring/25'
-            onClick={onSelect}
+            aria-disabled={locked ? true : undefined}
+            className={`flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1 text-left hover:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 ${
+              locked ? 'pointer-events-none opacity-50' : ''
+            }`}
+            onClick={locked ? undefined : onSelect}
+            onKeyDown={
+              locked
+                ? undefined
+                : (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelect()
+                    }
+                  }
+            }
           >
             <Icon className='size-3.5 shrink-0 text-muted-foreground' />
             <span className='min-w-0 flex-1'>
@@ -959,7 +955,7 @@ function LayerRow({
                 {detail}
               </span>
             </span>
-          </button>
+          </div>
           {!locked && (
             <div
               className={`pointer-events-none absolute top-1/2 z-10 flex -translate-y-1/2 rounded-md bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/40 backdrop-blur-md transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 motion-reduce:transition-none ${expanded ? 'right-7' : 'right-[3.25rem]'}`}
