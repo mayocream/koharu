@@ -41,53 +41,21 @@ jobs:
       matrix:
         include:
           - backend: cuda
-            os: windows
-            runs-on:
-              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:windows-1.0
-              - instance-size:large
-              - cuda-windows
+            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: cuda
-            os: linux
-            runs-on:
-              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:ubuntu-8.0
-              - instance-size:large
-              - cuda-linux
+            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: hip
-            os: windows
-            runs-on:
-              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:windows-1.0
-              - instance-size:large
-              - hip-windows
+            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: hip
-            os: linux
-            runs-on:
-              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:ubuntu-8.0
-              - instance-size:large
-              - hip-linux
+            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: vulkan
-            os: linux
-            runs-on:
-              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:ubuntu-8.0
-              - instance-size:large
-              - vulkan-linux
+            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: vulkan
-            os: windows
-            runs-on:
-              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:windows-1.0
-              - instance-size:large
-              - vulkan-windows
+            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: metal
-            os: macos
-            runs-on:
-              - macos-latest
+            os: macos-latest
 
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.os }}
     env:
       BACKEND: ${{ matrix.backend }}
       REF: ${{ needs.source.outputs.tag }}

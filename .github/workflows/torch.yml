@@ -39,53 +39,21 @@ jobs:
       matrix:
         include:
           - backend: cpu
-            os: windows
-            runs-on:
-              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:windows-1.0
-              - instance-size:large
-              - cpu-windows
+            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: cpu
-            os: linux
-            runs-on:
-              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:ubuntu-8.0
-              - instance-size:large
-              - cpu-linux
+            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: cuda
-            os: windows
-            runs-on:
-              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:windows-1.0
-              - instance-size:large
-              - cuda-windows
+            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: cuda
-            os: linux
-            runs-on:
-              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:ubuntu-8.0
-              - instance-size:large
-              - cuda-linux
+            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: hip
-            os: windows
-            runs-on:
-              - codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:windows-1.0
-              - instance-size:large
-              - hip-windows
+            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: hip
-            os: linux
-            runs-on:
-              - codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
-              - image:ubuntu-8.0
-              - instance-size:large
-              - hip-linux
+            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
           - backend: metal
-            os: macos
-            runs-on:
-              - macos-latest
+            os: macos-latest
 
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.os }}
     env:
       BACKEND: ${{ matrix.backend }}
       SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
