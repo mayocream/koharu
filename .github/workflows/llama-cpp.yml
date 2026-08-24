@@ -41,17 +41,17 @@ jobs:
       matrix:
         include:
           - backend: cuda
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-large
           - backend: cuda
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-large
           - backend: hip
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-large
           - backend: hip
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-large
           - backend: vulkan
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-7.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-large
           - backend: vulkan
-            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-large
           - backend: metal
             os: macos-latest
 
