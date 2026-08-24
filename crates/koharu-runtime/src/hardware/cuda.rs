@@ -18,23 +18,25 @@ type DriverGetVersion = unsafe extern "C" fn(*mut c_int) -> c_int;
 pub(super) fn probe() -> Option<(i32, Vec<Device>)> {
     static LIBRARY: OnceLock<Option<Library>> = OnceLock::new();
     let library = LIBRARY
-        .get_or_init(|| unsafe {
+        .get_or_init(|| {
             #[cfg(target_os = "windows")]
             {
                 // Restrict discovery to the system driver. Loading by bare name would allow a
                 // working-directory or application-directory DLL to be selected instead.
-                libloading::os::windows::Library::load_with_flags(
-                    "nvcuda.dll",
-                    libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
-                )
-                .ok()
-                .map(Into::into)
+                unsafe {
+                    libloading::os::windows::Library::load_with_flags(
+                        "nvcuda.dll",
+                        libloading::os::windows::LOAD_LIBRARY_SEARCH_SYSTEM32,
+                    )
+                    .ok()
+                    .map(Into::into)
+                }
             }
             #[cfg(target_os = "linux")]
             {
                 // The unversioned name can resolve to a toolkit stub rather than the installed
                 // driver, so only accept the loader-managed soname.
-                Library::new("libcuda.so.1").ok()
+                unsafe { Library::new("libcuda.so.1").ok() }
             }
             #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             {
