@@ -102,8 +102,8 @@ jobs:
           method: network
           sub-packages: >-
             ${{ runner.os == 'Linux'
-              && '["nvcc", "cudart", "cudart-dev", "crt", "thrust", "nvrtc", "nvrtc-dev", "nvtx"]'
-              || '["nvcc", "cudart", "crt", "thrust", "nvvm", "nvrtc", "nvrtc_dev", "nvtx", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "cusolver", "cusolver_dev", "cusparse", "cusparse_dev", "nvjitlink", "nvjitlink_dev"]' }}
+              && '["nvcc", "cudart", "cudart-dev", "crt", "thrust", "nvml-dev", "nvrtc", "nvrtc-dev", "nvtx"]'
+              || '["nvcc", "cudart", "crt", "thrust", "nvml_dev", "nvvm", "nvrtc", "nvrtc_dev", "nvtx", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "cusolver", "cusolver_dev", "cusparse", "cusparse_dev", "nvjitlink"]' }}
           non-cuda-sub-packages: >-
             ${{ runner.os == 'Linux'
               && '["libcublas", "libcublas-dev", "libcufft", "libcufft-dev", "libcurand", "libcurand-dev", "libcusolver", "libcusolver-dev", "libcusparse", "libcusparse-dev", "libnvjitlink", "libnvjitlink-dev"]'
@@ -152,11 +152,22 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r upstream/pytorch/requirements-build.txt
 
-      - name: Install Linux compiler
+      - name: Generate HIP sources
+        if: matrix.backend == 'hip'
+        shell: bash
+        working-directory: upstream/pytorch
+        run: python tools/amd_build/build_amd.py
+
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
+        shell: bash
         run: |
+          packages=(build-essential)
+          if [[ "$BACKEND" == hip ]]; then
+            packages+=(libdrm-dev)
+          fi
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential
+          sudo apt-get install -y --no-install-recommends "${packages[@]}"
 
       - name: Configure
         shell: bash
