@@ -80,7 +80,7 @@ jobs:
           git clone --depth 1 --branch "$REF" \
             https://github.com/leejet/stable-diffusion.cpp upstream/stable-diffusion.cpp
           git -C upstream/stable-diffusion.cpp submodule update --init --depth 1 \
-            ggml thirdparty/libwebp thirdparty/libwebm
+            ggml
           commit=$(git -C upstream/stable-diffusion.cpp rev-parse HEAD)
           printf 'stable-diffusion.cpp commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
 
@@ -230,8 +230,14 @@ jobs:
             -DSD_BUILD_SHARED_LIBS=ON \
             -DSD_BUILD_SHARED_GGML_LIB=OFF \
             -DSD_BUILD_EXAMPLES=OFF \
+            -DSD_WEBP=OFF \
+            -DSD_WEBM=OFF \
             -DGGML_BACKEND_DL=OFF \
             -DGGML_CPU_ALL_VARIANTS=OFF \
+            -DGGML_CPU_REPACK=OFF \
+            -DGGML_CUDA_NCCL=OFF \
+            -DGGML_HIP_RCCL=OFF \
+            -DGGML_METAL_NDEBUG=ON \
             -DGGML_NATIVE=OFF \
             -DGGML_OPENMP=OFF \
             "${platform_args[@]}" \

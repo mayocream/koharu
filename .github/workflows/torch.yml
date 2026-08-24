@@ -7,11 +7,13 @@ on:
   push:
     branches: ['main']
     paths:
-      - '.github/workflows/torch.yaml'
+      - '.github/libtch/**'
+      - '.github/workflows/torch.yml'
   pull_request:
     branches: ['main']
     paths:
-      - '.github/workflows/torch.yaml'
+      - '.github/libtch/**'
+      - '.github/workflows/torch.yml'
 
 permissions:
   contents: read
@@ -68,6 +70,9 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --global core.longpaths true
 
+      - name: Check out Koharu
+        uses: actions/checkout@v7
+
       - name: Check out PyTorch
         uses: actions/checkout@v7
         with:
@@ -113,6 +118,31 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+
+      - name: Install cuDNN 9.20
+        if: matrix.backend == 'cuda'
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              curl --fail --location --retry 2 \
+                --output "$RUNNER_TEMP/cudnn.tar.xz" \
+                https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.20.0.48_cuda13-archive.tar.xz
+              tar -xJf "$RUNNER_TEMP/cudnn.tar.xz" -C "$RUNNER_TEMP"
+              printf 'CUDNN_ROOT=%s\n' \
+                "$RUNNER_TEMP/cudnn-linux-x86_64-9.20.0.48_cuda13-archive" \
+                >> "$GITHUB_ENV"
+              ;;
+            Windows)
+              curl --fail --location --retry 2 \
+                --output "$(cygpath -u "$RUNNER_TEMP")/cudnn.zip" \
+                https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.20.0.48_cuda13-archive.zip
+              7z x -y "-o$RUNNER_TEMP" "$RUNNER_TEMP\\cudnn.zip" > /dev/null
+              printf 'CUDNN_ROOT=%s\n' \
+                "$RUNNER_TEMP\\cudnn-windows-x86_64-9.20.0.48_cuda13-archive" \
+                >> "$GITHUB_ENV"
+              ;;
+          esac
 
       - name: Install ROCm 7.14
         if: matrix.backend == 'hip'
@@ -195,6 +225,9 @@ jobs:
                 -DUSE_ROCM=OFF
                 -DUSE_MPS=OFF
                 -DUSE_NVRTC=ON
+                -DUSE_CUDNN=ON
+                -DUSE_FLASH_ATTENTION=ON
+                -DUSE_MEM_EFF_ATTENTION=ON
               )
               ;;
             hip)
@@ -220,6 +253,7 @@ jobs:
               ;;
             metal)
               backend_args=(
+                -DBLAS=vecLib
                 -DUSE_CUDA=OFF
                 -DUSE_ROCM=OFF
                 -DUSE_MPS=ON
@@ -249,7 +283,6 @@ jobs:
             -DBUILD_STATIC_RUNTIME_BENCHMARK=OFF \
             -DBUILD_TEST=OFF \
             -DINSTALL_TEST=OFF \
-            -DINTERN_DISABLE_AUTOGRAD=ON \
             -DUSE_COREML_DELEGATE=OFF \
             -DUSE_CUPTI_SO=OFF \
             -DUSE_CUDNN=OFF \
@@ -264,7 +297,6 @@ jobs:
             -DUSE_KINETO=OFF \
             -DUSE_MAGMA=OFF \
             -DUSE_MEM_EFF_ATTENTION=OFF \
-            -DUSE_MIMALLOC=OFF \
             -DUSE_MKLDNN=OFF \
             -DUSE_MPI=OFF \
             -DUSE_MSLK=OFF \
@@ -296,6 +328,26 @@ jobs:
       - name: Build Torch
         shell: bash
         run: cmake --build build --target install --config Release --parallel 4
+
+      - name: Build koharu-torch shim
+        shell: bash
+        run: |
+          compiler_args=()
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            compiler_args+=(
+              -DCMAKE_C_COMPILER=clang-cl.exe
+              -DCMAKE_CXX_COMPILER=clang-cl.exe
+            )
+          fi
+
+          cmake -S .github/libtch -B shim-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/shim-install" \
+            -DCMAKE_PREFIX_PATH="$PWD/install" \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            "${compiler_args[@]}"
+          cmake --build shim-build --target install --config Release --parallel 4
 
       - name: Package Torch
         shell: bash
@@ -330,6 +382,8 @@ jobs:
           test -f "package/${prefix}c10.$extension"
           test -f "package/${prefix}torch_cpu.$extension"
           test -f "package/${prefix}torch.$extension"
+          cp "shim-install/${prefix}koharu-torch.$extension" package/
+          test -f "package/${prefix}koharu-torch.$extension"
           if [[ "$BACKEND" == cuda ]]; then
             test -f "package/${prefix}c10_cuda.$extension"
             test -f "package/${prefix}torch_cuda.$extension"
