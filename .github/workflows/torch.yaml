@@ -102,7 +102,7 @@ jobs:
           method: network
           sub-packages: >-
             ${{ runner.os == 'Linux'
-              && '["nvcc", "cudart", "cudart-dev", "crt", "thrust", "nvvm", "nvrtc", "nvrtc-dev", "nvtx"]'
+              && '["nvcc", "cudart", "cudart-dev", "crt", "thrust", "nvrtc", "nvrtc-dev", "nvtx"]'
               || '["nvcc", "cudart", "crt", "thrust", "nvvm", "nvrtc", "nvrtc_dev", "nvtx", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "cusolver", "cusolver_dev", "cusparse", "cusparse_dev", "nvjitlink", "nvjitlink_dev"]' }}
           non-cuda-sub-packages: >-
             ${{ runner.os == 'Linux'
