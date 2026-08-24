@@ -2,14 +2,7 @@ name: Torch
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 4 * * *'
   push:
-    branches: ['main']
-    paths:
-      - '.github/libtch/**'
-      - '.github/workflows/torch.yml'
-  pull_request:
     branches: ['main']
     paths:
       - '.github/libtch/**'
@@ -46,17 +39,17 @@ jobs:
       matrix:
         include:
           - backend: cpu
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: cpu
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: cuda
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: cuda
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: hip
-            os: windows-2022
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-windows-1.0-2xlarge
           - backend: hip
-            os: ubuntu-latest
+            os: codebuild-koharu-${{ github.run_id }}-${{ github.run_attempt }}-ubuntu-8.0-2xlarge
           - backend: metal
             os: macos-latest
 
@@ -93,7 +86,7 @@ jobs:
         with:
           key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
           variant: sccache
-          max-size: 2G
+          max-size: 10G
 
       - name: Enable MSVC
         if: runner.os == 'Windows'
@@ -326,7 +319,7 @@ jobs:
 
       - name: Build Torch
         shell: bash
-        run: cmake --build build --target install --config Release --parallel 4
+        run: cmake --build build --target install --config Release --parallel
 
       - name: Build koharu-torch shim
         shell: bash
@@ -346,7 +339,7 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
             "${compiler_args[@]}"
-          cmake --build shim-build --target install --config Release --parallel 4
+          cmake --build shim-build --target install --config Release --parallel
 
       - name: Package Torch
         shell: bash
@@ -374,13 +367,13 @@ jobs:
             cp "install/lib/${prefix}caffe2_nvrtc.$extension" package/
           fi
           cp "shim-install/${prefix}koharu-torch.$extension" package/
-          tar -C package -czf "torch-$BACKEND-${{ matrix.os }}.tar.gz" .
+          tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
 
       - name: Upload Torch
         uses: actions/upload-artifact@v7
         with:
-          name: torch-${{ matrix.backend }}-${{ matrix.os }}
-          path: torch-${{ matrix.backend }}-${{ matrix.os }}.tar.gz
+          name: ${{ runner.os }}-${{ matrix.backend }}
+          path: ${{ runner.os }}-${{ matrix.backend }}.tar.gz
           if-no-files-found: error
           retention-days: 3
 
