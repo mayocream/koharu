@@ -75,14 +75,7 @@ jobs:
           repository: pytorch/pytorch
           ref: ${{ needs.source.outputs.tag }}
           path: upstream/pytorch
-          fetch-depth: 0
           submodules: recursive
-
-      - name: Record PyTorch source
-        shell: bash
-        run: |
-          commit=$(git -C upstream/pytorch rev-parse HEAD)
-          printf 'PyTorch commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restore build checkpoint
         id: cache
