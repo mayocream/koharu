@@ -158,14 +158,14 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                 initialization_handle.state::<Initialization>().ready();
             }));
 
-            let mut downloads = koharu_runtime::downloads::subscribe();
+            let mut downloads = koharu_runtime::download::subscribe();
             let download_handle = handle.clone();
             drop(tauri::async_runtime::spawn(async move {
                 loop {
                     match downloads.recv().await {
                         Ok(event) => {
                             let download = match event {
-                                koharu_runtime::downloads::Event::Started { id, name } => {
+                                koharu_runtime::download::Event::Started { id, name } => {
                                     tracing::info!(
                                         target: "koharu_metrics",
                                         metric = "download_start",
@@ -180,7 +180,7 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                                         error: None,
                                     }
                                 }
-                                koharu_runtime::downloads::Event::Progress {
+                                koharu_runtime::download::Event::Progress {
                                     id,
                                     name,
                                     completed,
@@ -202,7 +202,7 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                                         error: None,
                                     }
                                 }
-                                koharu_runtime::downloads::Event::Finished { id } => {
+                                koharu_runtime::download::Event::Finished { id } => {
                                     tracing::info!(
                                         target: "koharu_metrics",
                                         metric = "download_result",
@@ -218,7 +218,7 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
                                         error: None,
                                     }
                                 }
-                                koharu_runtime::downloads::Event::Failed { id, name, error } => {
+                                koharu_runtime::download::Event::Failed { id, name, error } => {
                                     tracing::info!(
                                         target: "koharu_metrics",
                                         metric = "download_result",

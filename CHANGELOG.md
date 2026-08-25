@@ -1,3 +1,25 @@
+## [0.78.1](https://github.com/mayocream/koharu/compare/0.78.0..0.78.1) - 2026-08-22
+
+### 🐛 Bug Fixes
+
+- *(ml)* Disambiguate image buffer access - ([e4c976b](https://github.com/mayocream/koharu/commit/e4c976b96ec7c33089ea1a9dcc1f5184c53ab574))
+
+### 🚜 Refactor
+
+- *(runtime)* Simplify downloads - ([7834852](https://github.com/mayocream/koharu/commit/7834852e9258a43af626cbc2d626c46b69446ce2))
+
+
+## [0.78.0](https://github.com/mayocream/koharu/compare/0.77.5..0.78.0) - 2026-08-22
+
+### ⛰️  Features
+
+- *(translator)* Add uncensored Qwen 3.8 model - ([e4c3d06](https://github.com/mayocream/koharu/commit/e4c3d069f3c9221575ed20e28a6e4693b39dec2a))
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Improve accelerator detection - ([e7f0cbc](https://github.com/mayocream/koharu/commit/e7f0cbced69e7d621b06f32286d4105b70979409))
+
+
 ## [0.77.5](https://github.com/mayocream/koharu/compare/0.77.4..0.77.5) - 2026-08-21
 
 ### 🐛 Bug Fixes

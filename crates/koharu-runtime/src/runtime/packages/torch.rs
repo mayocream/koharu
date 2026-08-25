@@ -7,8 +7,7 @@ use anyhow::{Context, Result};
 use strum::EnumProperty;
 
 use crate::{
-    Hardware, Store,
-    downloads::Transfer,
+    Hardware, Store, download,
     runtime::{
         DiscoverablePackage, Package, RuntimePackage,
         graph::Component,
@@ -193,11 +192,10 @@ impl Package for Torch {
             path,
             move |path| self.complete(path),
             move |stage| async move {
-                let transfer = Transfer::new()?;
                 let patterns = patterns.iter().map(String::as_str).collect::<Vec<_>>();
                 for url in urls {
                     let archive = tempfile::Builder::new().suffix(".whl").tempfile()?;
-                    transfer.fetch(&url, archive.path()).await?;
+                    download::fetch(&url, archive.path()).await?;
                     extract(archive.path(), &stage, &patterns)?;
                 }
                 std::fs::rename(stage.join("torch"), stage.join("libtorch"))?;
@@ -267,7 +265,7 @@ impl RuntimePackage for Torch {
     async fn activate(self) -> Result<()> {
         let directory = self.install().await?.join("libtorch/lib");
         for library in self.library_names()? {
-            loader::load(directory.join(library))?;
+            loader::load(directory.join(library), false)?;
         }
         Ok(())
     }

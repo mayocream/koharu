@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-use crate::downloads::Transfer;
+use crate::network;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Platform {
@@ -41,7 +41,8 @@ struct Distribution {
 
 pub(crate) async fn wheel(project: &str, platform: Platform) -> Result<String> {
     let url = format!("https://pypi.org/pypi/{project}/json");
-    let metadata: Metadata = Transfer::new()?
+    let client = network::http()?;
+    let metadata: Metadata = client
         .get(&url)
         .send()
         .await

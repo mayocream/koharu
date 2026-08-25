@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+mod mallinfo;
+
 use clap::Parser as _;
 use koharu::panic;
 use koharu::sentry;

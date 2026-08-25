@@ -4,8 +4,7 @@ use anyhow::{Context, Result};
 use strum::EnumProperty;
 
 use crate::{
-    Hardware, Store,
-    downloads::Transfer,
+    Hardware, Store, download,
     runtime::{
         DiscoverablePackage, Package, RuntimePackage,
         graph::Component,
@@ -16,7 +15,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "llama.cpp-b10488";
+const RELEASE: &str = "llama.cpp-b10603";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Llama {
@@ -111,7 +110,7 @@ impl Package for Llama {
                     "https://github.com/mayocream/koharu/releases/download/{RELEASE}/{asset}"
                 );
                 let archive = tempfile::Builder::new().suffix(".tar.gz").tempfile()?;
-                Transfer::new()?.fetch(&url, archive.path()).await?;
+                download::fetch(&url, archive.path()).await?;
                 extract(
                     archive.path(),
                     &stage,
@@ -171,7 +170,7 @@ impl RuntimePackage for Llama {
     async fn activate(self) -> Result<()> {
         let root = self.install().await?;
         for library in self.libraries() {
-            loader::load(root.join(library))
+            loader::load(root.join(library), false)
                 .with_context(|| format!("failed to activate llama library {library}"))?;
         }
         Ok(())

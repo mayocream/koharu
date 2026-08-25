@@ -1,0 +1,413 @@
+name: Torch
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 0'
+  push:
+    branches: ['main']
+    paths:
+      - '.github/libtch/**'
+      - '.github/workflows/torch.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    name: Resolve latest release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+
+    steps:
+      - name: Resolve latest PyTorch release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api repos/pytorch/pytorch/releases/latest --jq .tag_name)
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: source
+    name: ${{ matrix.backend }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cpu
+            os: windows-2022
+          - backend: cpu
+            os: ubuntu-latest
+          - backend: cuda
+            os: windows-2022
+          - backend: cuda
+            os: ubuntu-latest
+          - backend: hip
+            os: windows-2022
+          - backend: hip
+            os: ubuntu-latest
+          - backend: metal
+            os: macos-latest
+
+    runs-on: ${{ matrix.os }}
+    env:
+      BACKEND: ${{ matrix.backend }}
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+
+    steps:
+      - name: Enable Git long paths
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
+      - name: Check out Koharu
+        uses: actions/checkout@v7
+
+      - name: Check out PyTorch
+        uses: actions/checkout@v7
+        with:
+          repository: pytorch/pytorch
+          ref: ${{ needs.source.outputs.tag }}
+          path: upstream/pytorch
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Record PyTorch source
+        shell: bash
+        run: |
+          commit=$(git -C upstream/pytorch rev-parse HEAD)
+          printf 'PyTorch commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.16.0
+          disable_annotations: true
+
+      - name: Enable MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install CUDA 13.0
+        if: matrix.backend == 'cuda'
+        uses: Jimver/cuda-toolkit@master
+        with:
+          cuda: '13.0.0'
+          method: network
+          sub-packages: >-
+            ${{ runner.os == 'Linux'
+              && '["nvcc", "cudart", "cudart-dev", "crt", "thrust", "nvml-dev", "nvrtc", "nvrtc-dev", "nvtx"]'
+              || '["nvcc", "cudart", "crt", "thrust", "nvml_dev", "nvvm", "nvrtc", "nvrtc_dev", "nvtx", "cublas", "cublas_dev", "cufft", "cufft_dev", "curand", "curand_dev", "cusolver", "cusolver_dev", "cusparse", "cusparse_dev", "nvjitlink"]' }}
+          non-cuda-sub-packages: >-
+            ${{ runner.os == 'Linux'
+              && '["libcublas", "libcublas-dev", "libcufft", "libcufft-dev", "libcurand", "libcurand-dev", "libcusolver", "libcusolver-dev", "libcusparse", "libcusparse-dev", "libnvjitlink", "libnvjitlink-dev"]'
+              || '[]' }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install cuDNN 9.20
+        if: matrix.backend == 'cuda'
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              curl --fail --location --retry 2 \
+                --output "$RUNNER_TEMP/cudnn.tar.xz" \
+                https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/linux-x86_64/cudnn-linux-x86_64-9.20.0.48_cuda13-archive.tar.xz
+              tar -xJf "$RUNNER_TEMP/cudnn.tar.xz" -C "$RUNNER_TEMP"
+              printf 'CUDNN_ROOT=%s\n' \
+                "$RUNNER_TEMP/cudnn-linux-x86_64-9.20.0.48_cuda13-archive" \
+                >> "$GITHUB_ENV"
+              ;;
+            Windows)
+              curl --fail --location --retry 2 \
+                --output "$(cygpath -u "$RUNNER_TEMP")/cudnn.zip" \
+                https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/windows-x86_64/cudnn-windows-x86_64-9.20.0.48_cuda13-archive.zip
+              7z x -y "-o$RUNNER_TEMP" "$RUNNER_TEMP\\cudnn.zip" > /dev/null
+              printf 'CUDNN_ROOT=%s\n' \
+                "$RUNNER_TEMP\\cudnn-windows-x86_64-9.20.0.48_cuda13-archive" \
+                >> "$GITHUB_ENV"
+              ;;
+          esac
+
+      - name: Install ROCm 7.14
+        if: matrix.backend == 'hip'
+        shell: bash
+        run: |
+          python -m pip install \
+            --index-url https://repo.amd.com/rocm/whl-multi-arch/ \
+            "rocm[libraries,devel]==7.14.0"
+          rocm-sdk init
+
+          rocm_root=$(rocm-sdk path --root)
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            rocm_root=$(cygpath -w "$rocm_root")
+            rocm_bin="$rocm_root\\bin"
+            llvm_root="$rocm_root\\lib\\llvm"
+            llvm_bin="$llvm_root\\bin"
+            device_lib="$llvm_root\\amdgcn\\bitcode"
+          else
+            rocm_bin="$rocm_root/bin"
+            llvm_root="$rocm_root/lib/llvm"
+            llvm_bin="$llvm_root/bin"
+            device_lib="$llvm_root/amdgcn/bitcode"
+          fi
+          {
+            printf 'ROCM_PATH=%s\n' "$rocm_root"
+            printf 'ROCM_HOME=%s\n' "$rocm_root"
+            printf 'HIP_PATH=%s\n' "$rocm_root"
+            printf 'HIP_PLATFORM=amd\n'
+            printf 'HIP_DEVICE_LIB_PATH=%s\n' "$device_lib"
+            printf 'LLVM_PATH=%s\n' "$llvm_root"
+          } >> "$GITHUB_ENV"
+          printf '%s\n%s\n' "$rocm_bin" "$llvm_bin" >> "$GITHUB_PATH"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r upstream/pytorch/requirements-build.txt
+
+      - name: Generate HIP sources
+        if: matrix.backend == 'hip'
+        shell: bash
+        working-directory: upstream/pytorch
+        run: python tools/amd_build/build_amd.py
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          packages=(build-essential)
+          if [[ "$BACKEND" == hip ]]; then
+            packages+=(libdrm-dev)
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "${packages[@]}"
+
+      - name: Configure
+        shell: bash
+        run: |
+          platform_args=()
+          backend_args=(
+            -DUSE_CUDA=OFF
+            -DUSE_ROCM=OFF
+            -DUSE_MPS=OFF
+            -DUSE_NVRTC=OFF
+          )
+
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            platform_args+=(
+              -DCMAKE_C_COMPILER=cl.exe
+              -DCMAKE_CXX_COMPILER=cl.exe
+            )
+          fi
+
+          case "$BACKEND" in
+            cuda)
+              export TORCH_CUDA_ARCH_LIST='7.5;8.0;8.6;8.9;9.0;10.0;12.0+PTX'
+              backend_args=(
+                -DUSE_CUDA=ON
+                -DUSE_ROCM=OFF
+                -DUSE_MPS=OFF
+                -DUSE_NVRTC=ON
+                -DUSE_CUDNN=ON
+                -DUSE_FLASH_ATTENTION=ON
+                -DUSE_MEM_EFF_ATTENTION=ON
+              )
+              ;;
+            hip)
+              export PYTORCH_ROCM_ARCH='gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201;gfx908;gfx90a'
+              printf 'PYTORCH_ROCM_ARCH=%s\n' "$PYTORCH_ROCM_ARCH" >> "$GITHUB_ENV"
+              backend_args=(
+                -DUSE_CUDA=OFF
+                -DUSE_ROCM=ON
+                -DUSE_MPS=OFF
+                -DUSE_NVRTC=OFF
+              )
+              if [[ "$RUNNER_OS" == Windows ]]; then
+                platform_args=(
+                  -DCMAKE_C_COMPILER=clang-cl.exe
+                  -DCMAKE_CXX_COMPILER=clang-cl.exe
+                )
+              else
+                platform_args=(
+                  -DCMAKE_C_COMPILER=clang
+                  -DCMAKE_CXX_COMPILER=clang++
+                )
+              fi
+              ;;
+            metal)
+              backend_args=(
+                -DBLAS=vecLib
+                -DUSE_CUDA=OFF
+                -DUSE_ROCM=OFF
+                -DUSE_MPS=ON
+                -DUSE_NVRTC=OFF
+              )
+              platform_args+=(-DCMAKE_OSX_ARCHITECTURES=arm64)
+              ;;
+          esac
+
+          cmake -S upstream/pytorch -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/install" \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CUDA_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_HIP_COMPILER_LAUNCHER=sccache \
+            -DBLAS=Eigen \
+            -DBUILD_BINARY=OFF \
+            -DBUILD_FUNCTORCH=OFF \
+            -DBUILD_JNI=OFF \
+            -DBUILD_MOBILE_AUTOGRAD=OFF \
+            -DBUILD_MOBILE_BENCHMARK=OFF \
+            -DBUILD_MOBILE_TEST=OFF \
+            -DBUILD_PYTHON=OFF \
+            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_STATIC_RUNTIME_BENCHMARK=OFF \
+            -DBUILD_TEST=OFF \
+            -DINSTALL_TEST=OFF \
+            -DUSE_COREML_DELEGATE=OFF \
+            -DUSE_CUPTI_SO=OFF \
+            -DUSE_CUDNN=OFF \
+            -DUSE_CUFILE=OFF \
+            -DUSE_CUSPARSELT=OFF \
+            -DUSE_CUDSS=OFF \
+            -DUSE_DISTRIBUTED=OFF \
+            -DUSE_FBGEMM=OFF \
+            -DUSE_FLASH_ATTENTION=OFF \
+            -DUSE_GLOO=OFF \
+            -DUSE_ITT=OFF \
+            -DUSE_KINETO=OFF \
+            -DUSE_MAGMA=OFF \
+            -DUSE_MEM_EFF_ATTENTION=OFF \
+            -DUSE_MKLDNN=OFF \
+            -DUSE_MPI=OFF \
+            -DUSE_MSLK=OFF \
+            -DUSE_NCCL=OFF \
+            -DUSE_NNAPI=OFF \
+            -DUSE_NNPACK=OFF \
+            -DUSE_NUMA=OFF \
+            -DUSE_NUMPY=OFF \
+            -DUSE_NVSHMEM=OFF \
+            -DUSE_OBSERVERS=OFF \
+            -DUSE_OPENCL=OFF \
+            -DUSE_OPENMP=OFF \
+            -DUSE_PROF=OFF \
+            -DUSE_PYTORCH_METAL=OFF \
+            -DUSE_PYTORCH_METAL_EXPORT=OFF \
+            -DUSE_PYTORCH_QNNPACK=OFF \
+            -DUSE_RELATIVE_PATHS=ON \
+            -DUSE_ROCM_CK_GEMM=OFF \
+            -DUSE_ROCM_CK_SDPA=OFF \
+            -DUSE_ROCM_KERNEL_ASSERT=OFF \
+            -DUSE_TENSORPIPE=OFF \
+            -DUSE_VALGRIND=OFF \
+            -DUSE_VULKAN=OFF \
+            -DUSE_XNNPACK=OFF \
+            -DUSE_XPU=OFF \
+            "${platform_args[@]}" \
+            "${backend_args[@]}"
+
+      - name: Build Torch
+        shell: bash
+        timeout-minutes: 300
+        run: cmake --build build --target install --config Release --parallel
+
+      - name: Build koharu-torch shim
+        shell: bash
+        run: |
+          compiler_args=()
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            compiler_args+=(
+              -DCMAKE_C_COMPILER=clang-cl.exe
+              -DCMAKE_CXX_COMPILER=clang-cl.exe
+            )
+          fi
+
+          cmake -S .github/libtch -B shim-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/shim-install" \
+            -DCMAKE_PREFIX_PATH="$PWD/install" \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            "${compiler_args[@]}"
+          cmake --build shim-build --target install --config Release --parallel
+
+      - name: Package Torch
+        shell: bash
+        run: |
+          mkdir package
+          case "$RUNNER_OS" in
+            Windows)
+              cp install/lib/c10*.dll install/lib/torch*.dll package/
+              extension=dll
+              prefix=
+              ;;
+            Linux)
+              cp install/lib/libc10*.so* install/lib/libtorch*.so* package/
+              extension=so
+              prefix=lib
+              ;;
+            macOS)
+              cp install/lib/libc10*.dylib install/lib/libtorch*.dylib package/
+              extension=dylib
+              prefix=lib
+              ;;
+          esac
+
+          if [[ "$BACKEND" == cuda || "$BACKEND" == hip ]]; then
+            cp "install/lib/${prefix}caffe2_nvrtc.$extension" package/
+          fi
+          cp "shim-install/${prefix}koharu-torch.$extension" package/
+          tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
+
+      - name: Stop sccache
+        if: always()
+        shell: bash
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server || true
+
+      - name: Upload Torch
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ runner.os }}-${{ matrix.backend }}
+          path: ${{ runner.os }}-${{ matrix.backend }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    needs: [source, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Torch builds
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*'
+          path: release
+          merge-multiple: true
+
+      - name: Publish Torch release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: torch-${{ needs.source.outputs.tag }}
+          target_commitish: ${{ github.event.repository.default_branch }}
+          name: Torch ${{ needs.source.outputs.tag }}
+          body: Koharu runtime dependency.
+          make_latest: 'false'
+          fail_on_unmatched_files: true
+          files: release/*.tar.gz

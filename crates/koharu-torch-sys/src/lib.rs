@@ -7,6 +7,7 @@
 
 pub mod c_generated;
 pub mod cuda;
+pub mod io;
 mod traits;
 
 pub use traits::{DoubleList, IntList, IntListOption};
