@@ -1,4 +1,4 @@
-name: llama.cpp
+name: Llama
 
 on:
   workflow_dispatch:

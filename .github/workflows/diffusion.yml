@@ -1,4 +1,4 @@
-name: stable-diffusion.cpp
+name: Diffusion
 
 on:
   workflow_dispatch:
