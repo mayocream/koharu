@@ -41,17 +41,17 @@ jobs:
       matrix:
         include:
           - backend: cpu
-            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
+            os: windows-2022
           - backend: cpu
-            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+            os: ubuntu-latest
           - backend: cuda
-            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
+            os: windows-2022
           - backend: cuda
-            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+            os: ubuntu-latest
           - backend: hip
-            os: codebuild-koharu-windows-${{ github.run_id }}-${{ github.run_attempt }}
+            os: windows-2022
           - backend: hip
-            os: codebuild-koharu-ubuntu-${{ github.run_id }}-${{ github.run_attempt }}
+            os: ubuntu-latest
           - backend: metal
             os: macos-latest
 
