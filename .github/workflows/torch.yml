@@ -36,7 +36,6 @@ jobs:
   build:
     needs: source
     name: ${{ matrix.backend }} / ${{ matrix.os }}
-    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +58,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       BACKEND: ${{ matrix.backend }}
+      SCCACHE_GHA_ENABLED: 'true'
       SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
     steps:
@@ -84,12 +84,11 @@ jobs:
           commit=$(git -C upstream/pytorch rev-parse HEAD)
           printf 'PyTorch commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Cache compilation
-        uses: ggml-org/ccache-action@v1.2.21
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
-          variant: sccache
-          max-size: 10G
+          version: v0.16.0
+          disable_annotations: true
 
       - name: Enable MSVC
         if: runner.os == 'Windows'
@@ -322,7 +321,7 @@ jobs:
 
       - name: Build Torch
         shell: bash
-        timeout-minutes: 350
+        timeout-minutes: 300
         run: cmake --build build --target install --config Release --parallel
 
       - name: Build koharu-torch shim
@@ -372,6 +371,13 @@ jobs:
           fi
           cp "shim-install/${prefix}koharu-torch.$extension" package/
           tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
+
+      - name: Stop sccache
+        if: always()
+        shell: bash
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server || true
 
       - name: Upload Torch
         uses: actions/upload-artifact@v7

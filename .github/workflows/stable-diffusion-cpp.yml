@@ -35,7 +35,6 @@ jobs:
   build:
     needs: source
     name: ${{ matrix.backend }} / ${{ matrix.os }}
-    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -59,17 +58,17 @@ jobs:
     env:
       BACKEND: ${{ matrix.backend }}
       REF: ${{ needs.source.outputs.tag }}
+      SCCACHE_GHA_ENABLED: 'true'
       SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache compilation
-        uses: ggml-org/ccache-action@v1.2.21
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
-          variant: sccache
-          max-size: 10G
+          version: v0.16.0
+          disable_annotations: true
 
       - name: Clone stable-diffusion.cpp
         shell: bash
@@ -224,6 +223,10 @@ jobs:
 
           cmake -S upstream/stable-diffusion.cpp -B build "${generator[@]}" \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CUDA_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_HIP_COMPILER_LAUNCHER=sccache \
             -DSD_BUILD_SHARED_LIBS=ON \
             -DSD_BUILD_SHARED_GGML_LIB=OFF \
             -DSD_BUILD_EXAMPLES=OFF \
@@ -251,6 +254,13 @@ jobs:
           mkdir package
           cp build/bin/*stable-diffusion.* package/
           tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
+
+      - name: Stop sccache
+        if: always()
+        shell: bash
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server || true
 
       - name: Upload stable-diffusion
         uses: actions/upload-artifact@v7

@@ -36,7 +36,6 @@ jobs:
   build:
     needs: source
     name: ${{ matrix.backend }} / ${{ matrix.os }}
-    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -60,17 +59,17 @@ jobs:
     env:
       BACKEND: ${{ matrix.backend }}
       REF: ${{ needs.source.outputs.tag }}
+      SCCACHE_GHA_ENABLED: 'true'
       SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Cache compilation
-        uses: ggml-org/ccache-action@v1.2.21
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
         with:
-          key: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.backend }}
-          variant: sccache
-          max-size: 10G
+          version: v0.16.0
+          disable_annotations: true
 
       - name: Clone llama.cpp
         shell: bash
@@ -206,11 +205,15 @@ jobs:
             -DLLAMA_CPP_SOURCE_DIR="$PWD/upstream/llama.cpp" \
             -DLLAMA_BACKEND="$BACKEND" \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CUDA_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_HIP_COMPILER_LAUNCHER=sccache \
             "${backend_args[@]}"
 
       - name: Build llama and MTMD
         shell: bash
-        timeout-minutes: 350
+        timeout-minutes: 300
         run: cmake --build build --target llama mtmd --config Release --parallel
 
       - name: Package llama and MTMD
@@ -220,6 +223,13 @@ jobs:
           cp build/bin/*llama.* package/
           cp build/bin/*mtmd.* package/
           tar -C package -czf "$RUNNER_OS-$BACKEND.tar.gz" .
+
+      - name: Stop sccache
+        if: always()
+        shell: bash
+        run: |
+          sccache --show-stats || true
+          sccache --stop-server || true
 
       - name: Upload llama
         uses: actions/upload-artifact@v7
