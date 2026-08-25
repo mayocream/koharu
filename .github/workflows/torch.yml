@@ -84,6 +84,14 @@ jobs:
           commit=$(git -C upstream/pytorch rev-parse HEAD)
           printf 'PyTorch commit: %s\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Restore build checkpoint
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: build
+          key: torch-${{ runner.os }}-${{ matrix.backend }}-${{ needs.source.outputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: torch-${{ runner.os }}-${{ matrix.backend }}-${{ needs.source.outputs.tag }}-
+
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
         with:
@@ -378,6 +386,13 @@ jobs:
         run: |
           sccache --show-stats || true
           sccache --stop-server || true
+
+      - name: Save build checkpoint
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: build
+          key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Upload Torch
         uses: actions/upload-artifact@v7
