@@ -10,14 +10,14 @@ impl TryIntoDevice<koharu_torch::Device> for Device {
     fn try_into_device(self) -> Result<koharu_torch::Device> {
         match &self.backend {
             Backend::Cpu => Ok(koharu_torch::Device::Cpu),
-            Backend::Rocm if cfg!(windows) && self.target().unwrap_or("").starts_with("gfx10") => {
-                // Windows gfx10 MIOpen requires unreliable runtime compilation paths for
-                // convolution and batch normalization, so use Torch's native kernels instead.
-                Cuda::set_user_enabled_cudnn(false);
-                Ok(koharu_torch::Device::Cuda(self.index))
-            }
             Backend::Cuda | Backend::Rocm => {
-                Cuda::set_user_enabled_cudnn(true);
+                // PyTorch's cuDNN switch controls MIOpen on ROCm. MIOpen is not reliable
+                // on Windows and causes runtime issues, so disable it there.
+                Cuda::set_user_enabled_cudnn(if cfg!(windows) {
+                    matches!(&self.backend, Backend::Cuda)
+                } else {
+                    true
+                });
                 Ok(koharu_torch::Device::Cuda(self.index))
             }
             Backend::Vulkan if self.index == 0 => Ok(if koharu_torch::utils::has_vulkan() {
