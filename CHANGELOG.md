@@ -1,3 +1,15 @@
+## [0.79.0](https://github.com/mayocream/koharu/compare/0.78.2..0.79.0) - 2026-08-26
+
+### ⛰️  Features
+
+- Add Hayai OCR model ([#988](https://github.com/mayocream/koharu/issues/988)) - ([156c5fc](https://github.com/mayocream/koharu/commit/156c5fcf6222030521fc5963e75d826c17c7e546))
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Restore macOS Torch load order - ([10c440a](https://github.com/mayocream/koharu/commit/10c440aa960a714647094ad331f5f8c772fc56ee))
+- Inpaint preview mask transparency ([#987](https://github.com/mayocream/koharu/issues/987)) - ([023bf7a](https://github.com/mayocream/koharu/commit/023bf7a6496dbf13344da9ddf39649987efb4609))
+
+
 ## [0.78.2](https://github.com/mayocream/koharu/compare/0.78.1..0.78.2) - 2026-08-26
 
 ### 🐛 Bug Fixes
