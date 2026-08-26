@@ -19,12 +19,14 @@ const RELEASE: &str = "v2.13.0";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub enum Torch {
+    // Keep macOS root-first so dyld resolves LibTorch's weak C++ symbols inside
+    // one private RTLD_LOCAL image group instead of publishing them globally.
     #[cfg_attr(target_os = "macos", strum(serialize = "metal"))]
     #[cfg_attr(not(target_os = "macos"), strum(serialize = "cpu"))]
     #[strum(props(
         windows = "c10.dll,torch_global_deps.dll,torch_cpu.dll,torch.dll,koharu-torch.dll",
         linux = "libc10.so,libtorch_global_deps.so,libtorch_cpu.so,libtorch.so,libkoharu-torch.so",
-        macos = "libc10.dylib,libtorch_global_deps.dylib,libtorch_cpu.dylib,libtorch.dylib,libkoharu-torch.dylib"
+        macos = "libtorch.dylib,libtorch_global_deps.dylib,libtorch_cpu.dylib,libc10.dylib,libkoharu-torch.dylib"
     ))]
     Cpu,
     #[strum(
