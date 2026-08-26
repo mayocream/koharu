@@ -42,7 +42,7 @@ pub type tensor = *mut C_tensor;
 pub type scalar = *mut C_scalar;
 pub type optimizer = *mut C_optimizer;
 pub type ivalue = *mut CIValue;
-pub type module = *mut CModule_;
+pub type torch_module = *mut CModule_;
 
 include!(concat!(env!("OUT_DIR"), "/torch_api.rs"));
 

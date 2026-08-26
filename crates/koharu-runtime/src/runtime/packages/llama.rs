@@ -15,62 +15,44 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "llama.cpp-b10603";
+const RELEASE: &str = "v0.3.0";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Llama {
     #[strum(
         serialize = "windows-cuda",
-        props(
-            asset = "llama-cuda-windows-2022.tar.gz",
-            libraries = "llama.dll,mtmd.dll"
-        )
+        props(asset = "Windows-cuda.tar.gz", libraries = "llama.dll,mtmd.dll")
     )]
     WindowsCuda,
     #[strum(
         serialize = "linux-cuda",
-        props(
-            asset = "llama-cuda-ubuntu-latest.tar.gz",
-            libraries = "libllama.so,libmtmd.so"
-        )
+        props(asset = "Linux-cuda.tar.gz", libraries = "libllama.so,libmtmd.so")
     )]
     LinuxCuda,
     #[strum(
         serialize = "windows-hip",
-        props(
-            asset = "llama-hip-windows-2022.tar.gz",
-            libraries = "llama.dll,mtmd.dll"
-        )
+        props(asset = "Windows-hip.tar.gz", libraries = "llama.dll,mtmd.dll")
     )]
     WindowsHip,
     #[strum(
         serialize = "linux-hip",
-        props(
-            asset = "llama-hip-ubuntu-latest.tar.gz",
-            libraries = "libllama.so,libmtmd.so"
-        )
+        props(asset = "Linux-hip.tar.gz", libraries = "libllama.so,libmtmd.so")
     )]
     LinuxHip,
     #[strum(
         serialize = "windows-vulkan",
-        props(
-            asset = "llama-vulkan-windows-2022.tar.gz",
-            libraries = "llama.dll,mtmd.dll"
-        )
+        props(asset = "Windows-vulkan.tar.gz", libraries = "llama.dll,mtmd.dll")
     )]
     WindowsVulkan,
     #[strum(
         serialize = "linux-vulkan",
-        props(
-            asset = "llama-vulkan-ubuntu-latest.tar.gz",
-            libraries = "libllama.so,libmtmd.so"
-        )
+        props(asset = "Linux-vulkan.tar.gz", libraries = "libllama.so,libmtmd.so")
     )]
     LinuxVulkan,
     #[strum(
         serialize = "macos-metal",
         props(
-            asset = "llama-metal-macos-latest.tar.gz",
+            asset = "macOS-metal.tar.gz",
             libraries = "libllama.dylib,libmtmd.dylib"
         )
     )]
@@ -107,7 +89,7 @@ impl Package for Llama {
             move |stage| async move {
                 let asset = self.asset();
                 let url = format!(
-                    "https://github.com/mayocream/koharu/releases/download/{RELEASE}/{asset}"
+                    "https://github.com/koharu-org/llama/releases/download/{RELEASE}/{asset}"
                 );
                 let archive = tempfile::Builder::new().suffix(".tar.gz").tempfile()?;
                 download::fetch(&url, archive.path()).await?;

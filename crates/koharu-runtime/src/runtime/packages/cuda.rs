@@ -68,15 +68,6 @@ pub(crate) enum Cuda {
     )]
     Rtc13,
     #[strum(
-        serialize = "cupti-13",
-        props(
-            project = "nvidia-cuda-cupti/13.0.48",
-            windows = "nvperf_host.dll,cupti64_2025.3.0.dll",
-            linux = "libnvperf_host.so,libcupti.so.13"
-        )
-    )]
-    Profiler13,
-    #[strum(
         serialize = "nvjitlink-13",
         props(
             project = "nvidia-nvjitlink/13.0.39",
@@ -103,30 +94,6 @@ pub(crate) enum Cuda {
         )
     )]
     Solver12,
-    #[strum(
-        serialize = "cusparselt-0.8",
-        props(project = "nvidia-cusparselt-cu13/0.8.1", linux = "libcusparseLt.so.0")
-    )]
-    #[cfg(target_os = "linux")]
-    SparseLt08,
-    #[strum(
-        serialize = "cufile-1.15",
-        props(project = "nvidia-cufile/1.15.1.6", linux = "libcufile.so.0")
-    )]
-    #[cfg(target_os = "linux")]
-    File115,
-    #[strum(
-        serialize = "nccl-2.29",
-        props(project = "nvidia-nccl-cu13/2.29.7", linux = "libnccl.so.2")
-    )]
-    #[cfg(target_os = "linux")]
-    Collective229,
-    #[strum(
-        serialize = "nvshmem-3.4",
-        props(project = "nvidia-nvshmem-cu13/3.4.5", linux = "libnvshmem_host.so.3")
-    )]
-    #[cfg(target_os = "linux")]
-    SharedMemory34,
 }
 
 impl Cuda {
