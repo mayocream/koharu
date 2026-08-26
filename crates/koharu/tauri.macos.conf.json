@@ -23,8 +23,7 @@
   },
   "bundle": {
     "macOS": {
-      "entitlements": "./Entitlements.plist",
-      "frameworks": ["../../target/release/libkoharu-torch.dylib"]
+      "entitlements": "./Entitlements.plist"
     }
   }
 }

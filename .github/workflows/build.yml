@@ -55,7 +55,4 @@ jobs:
           name: koharu-${{ matrix.os }}
           path: |
             target/release/koharu*
-            target/release/koharu-torch.dll
-            target/release/libkoharu-torch.so
-            target/release/libkoharu-torch.dylib
           retention-days: 3
