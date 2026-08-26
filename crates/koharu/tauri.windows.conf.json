@@ -4,9 +4,6 @@
   "bundle": {
     "windows": {
       "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
-    },
-    "resources": {
-      "../../target/release/koharu-torch.dll": "koharu-torch.dll"
     }
   }
 }

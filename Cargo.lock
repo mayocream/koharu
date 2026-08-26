@@ -4699,7 +4699,6 @@ dependencies = [
  "console",
  "koharu-app",
  "koharu-metrics",
- "koharu-torch-sys",
  "log",
  "rfd",
  "sentry",
@@ -5137,12 +5136,9 @@ name = "koharu-torch-sys"
 version = "0.78.1"
 dependencies = [
  "anyhow",
- "cmake",
  "koharu-bindgen",
- "koharu-runtime",
  "libc",
  "libloading 0.9.0",
- "tokio",
 ]
 
 [[package]]
