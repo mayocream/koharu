@@ -100,6 +100,10 @@ name = "baberu_ocr"
 harness = false
 
 [[bench]]
+name = "hayai_ocr"
+harness = false
+
+[[bench]]
 name = "manga_text_mask"
 harness = false
 
