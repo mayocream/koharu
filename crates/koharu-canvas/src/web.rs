@@ -35,7 +35,6 @@ const MAX_BRUSH_DIAMETER: f32 = 128.0;
 const RESOURCE_CACHE_BUDGET: u64 = 512 * 1024 * 1024;
 const MAX_CACHED_RESOURCES: usize = 1_024;
 const SAMPLE_ROW_BYTES: u64 = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u64;
-const INPAINT_COLOR: [u8; 4] = [168, 85, 247, 116];
 static NEXT_DEVICE_ID: AtomicU32 = AtomicU32::new(1);
 
 thread_local! {
@@ -860,7 +859,7 @@ impl CanvasState {
         {
             let opacity = match stroke.kind {
                 StrokeKind::Paint => f32::from(stroke.color[3]) / 255.0,
-                StrokeKind::Inpaint => f32::from(INPAINT_COLOR[3]) / 255.0,
+                StrokeKind::Inpaint => 116.0 / 255.0,
                 StrokeKind::Erase => 1.0,
             };
             if opacity < 1.0 {
@@ -1561,7 +1560,7 @@ impl WebCanvas {
         }
         let preview_color = match kind {
             StrokeKind::Erase => [0, 0, 0, 255],
-            StrokeKind::Inpaint => [INPAINT_COLOR[0], INPAINT_COLOR[1], INPAINT_COLOR[2], 255],
+            StrokeKind::Inpaint => [168, 85, 247, 255],
             StrokeKind::Paint => [color[0], color[1], color[2], 255],
         };
         let mut preview = Scene::new();
@@ -1616,7 +1615,7 @@ impl WebCanvas {
             }
             let preview_color = match stroke.kind {
                 StrokeKind::Erase => [0, 0, 0, 255],
-                StrokeKind::Inpaint => [INPAINT_COLOR[0], INPAINT_COLOR[1], INPAINT_COLOR[2], 255],
+                StrokeKind::Inpaint => [168, 85, 247, 255],
                 StrokeKind::Paint => [stroke.color[0], stroke.color[1], stroke.color[2], 255],
             };
             draw_segment(
