@@ -112,8 +112,13 @@ impl Model {
         let total_length = m_vision + 1;
         // Block-causal prefill mask: bidirectional across visual tokens, causal
         // onto the text token (upstream `generate_block_causal_mask`).
-        let text_future =
-            Tensor::full([total_length, 1], f64::NEG_INFINITY, (kind, device)).triu(1);
+        let text_future = Tensor::cat(
+            &[
+                Tensor::full([m_vision, 1], f64::NEG_INFINITY, (kind, device)),
+                Tensor::zeros([1, 1], (kind, device)),
+            ],
+            0,
+        );
         let prefill_mask = Tensor::cat(
             &[
                 Tensor::zeros([total_length, m_vision], (kind, device)),
@@ -174,10 +179,10 @@ impl Model {
         for step in 1..MAX_NEW_TOKENS {
             let current_input = *tokens.last().expect("a token was generated");
             seen_ids.push(current_input);
-            let embedding = self
-                .decoder
-                .token_embeddings
-                .forward(&Tensor::from_slice(&[current_input]).view([1, 1]));
+            let current_input = Tensor::from_slice(&[current_input])
+                .view([1, 1])
+                .to_device(pixel_values.device());
+            let embedding = self.decoder.token_embeddings.forward(&current_input);
             let cos_step = self.text_rope_cos.narrow(0, step, 1).unsqueeze(0);
             let sin_step = self.text_rope_sin.narrow(0, step, 1).unsqueeze(0);
             hidden = embedding;
