@@ -1,3 +1,58 @@
+## [0.78.2](https://github.com/mayocream/koharu/compare/0.78.1..0.78.2) - 2026-08-26
+
+### 🐛 Bug Fixes
+
+- *(ci)* Extend native build timeout - ([19a7999](https://github.com/mayocream/koharu/commit/19a7999e3ba7a18b0036092990cbcff23ab4ec40))
+- *(ci)* Use CodeBuild project defaults - ([bbb2f42](https://github.com/mayocream/koharu/commit/bbb2f421be6e11a4bc67a1c9743583aa07592c4b))
+- *(ci)* Route CodeBuild jobs by platform - ([8a7472d](https://github.com/mayocream/koharu/commit/8a7472d4c920e51372543ec99185fe58183ab313))
+- *(ci)* Apply explicit CodeBuild overrides - ([d47413c](https://github.com/mayocream/koharu/commit/d47413c0c99afeef5b88f5b75136f1edd0ea6070))
+- *(ci)* Use CodeBuild large runners - ([b3730fa](https://github.com/mayocream/koharu/commit/b3730fa1b04be3d62de3279edcdbde9df8328ccd))
+- *(ci)* Use CodeBuild Ubuntu 7 image - ([44f9053](https://github.com/mayocream/koharu/commit/44f905360851dc9aa2e364017f052be43ee827e7))
+- *(ci)* Support PyTorch 2.13 Torch builds - ([12da3d9](https://github.com/mayocream/koharu/commit/12da3d947eeb8ebaaa3333582847263c07234535))
+- *(ci)* Persist Torch ROCm architectures - ([c434b7f](https://github.com/mayocream/koharu/commit/c434b7fa06e1560f3d91a9ea5e28a93ef414e214))
+- *(ci)* Repair Torch accelerator builds - ([16551b7](https://github.com/mayocream/koharu/commit/16551b7fba2d4578796003d2b1345014bb8270ca))
+- *(ci)* Use Linux CUDA package names - ([4a840e1](https://github.com/mayocream/koharu/commit/4a840e179719234cc462f809da0c1f2252e76410))
+- *(ci)* Enable long paths for Torch checkout - ([575b243](https://github.com/mayocream/koharu/commit/575b243b635ca2686bfda7ef4715256024d92068))
+- *(ci)* Include prerelease llama.cpp releases - ([ea545e3](https://github.com/mayocream/koharu/commit/ea545e31dbf99e6f1972537b736cc2713aded890))
+- *(linux)* Prevent CEF mallinfo overflow - ([67cffb8](https://github.com/mayocream/koharu/commit/67cffb8fc7826ab16bf6cd987c3b680fe70fe44c))
+- *(ml)* Disable MIOpen on Windows gfx10 - ([8818911](https://github.com/mayocream/koharu/commit/8818911f79b3909e4919b0acf2da987364c558b2))
+- *(ml)* Align RF-DETR inference with upstream - ([e09feb8](https://github.com/mayocream/koharu/commit/e09feb87b3c95896b95feb4ce78848f6be9108e0))
+- *(torch)* Restore stream serialization - ([9f73d2c](https://github.com/mayocream/koharu/commit/9f73d2c003d873ec00e34d0ae600d308f20053ff))
+- *(torch)* Disambiguate module handle in C++20 - ([ba313b4](https://github.com/mayocream/koharu/commit/ba313b476ad668bd3e57f45781d9b530159f7324))
+- Disable MIOpen on Windows - ([874ed98](https://github.com/mayocream/koharu/commit/874ed98c07bc34ef43d5a99e7e7232fa0c39fd2e))
+- Resolve clippy warnings - ([bcefc52](https://github.com/mayocream/koharu/commit/bcefc5219fc74c9d8b1ec9f4c4cd80d23c0273fe))
+
+### 🚜 Refactor
+
+- *(runtime)* Simplify Torch package variants - ([922f0f4](https://github.com/mayocream/koharu/commit/922f0f4840580b43b5c474272d54e926f62016de))
+- *(runtime)* Use bundled native releases - ([b5cfaba](https://github.com/mayocream/koharu/commit/b5cfaba989a19e4b4f519205dbd8c02a9c1077b9))
+- *(runtime)* Require pinned Hugging Face revisions - ([dbed34d](https://github.com/mayocream/koharu/commit/dbed34d8b5de8b6bbad39ae42852b1a13e06ba3f))
+- Refactor ci - ([5fdf2e7](https://github.com/mayocream/koharu/commit/5fdf2e74c0955dafc541cd385d3a4cd70980316d))
+
+### 📚 Documentation
+
+- Update screenshot - ([d66ffb9](https://github.com/mayocream/koharu/commit/d66ffb9edb4efd734a3bd0a08644d560ad2a513f))
+
+### 🧪 Testing
+
+- *(torch)* Remove runtime-dependent serialization tests - ([38fc352](https://github.com/mayocream/koharu/commit/38fc352fd01697dd2d938575e577b812bd18116b))
+- *(torch)* Align serialization tests with upstream - ([bf93005](https://github.com/mayocream/koharu/commit/bf930058dbd3f160c610979e66fabae20faaaf5a))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(runtime)* Restore GitHub-hosted runners - ([c1870af](https://github.com/mayocream/koharu/commit/c1870af0505411fb68a2513a852a232217456ff7))
+- *(runtime)* Use CodeBuild runners - ([db2539f](https://github.com/mayocream/koharu/commit/db2539f03efa1272c6e4d2cedefbfe5c6199158b))
+- *(runtime)* Update llama.cpp - ([d3ce865](https://github.com/mayocream/koharu/commit/d3ce865b39203be67a5ed7163d54f2c8fa0367a8))
+- *(torch)* Use CodeBuild runners - ([88565ea](https://github.com/mayocream/koharu/commit/88565ea2f7a2076abaa870941d3df685dc4ed9db))
+- Move runtime builds to dedicated repositories - ([a81c582](https://github.com/mayocream/koharu/commit/a81c5829ea99a45e04580ff97fd6affa81b2db34))
+- Rename workflows - ([904546a](https://github.com/mayocream/koharu/commit/904546a5cc00c84e8bf17de6c3337e652ad8acd0))
+- Use gha cache - ([36e21c3](https://github.com/mayocream/koharu/commit/36e21c3f394959703e29d743b8e60bfe44ea95a8))
+- Stream compiler cache to GitHub Actions - ([ddac1e4](https://github.com/mayocream/koharu/commit/ddac1e469bdd9de570a64b12bd35090ac2993f00))
+- Simplify Torch release packaging - ([eb2a66a](https://github.com/mayocream/koharu/commit/eb2a66aa31f4186a1eb028d19ed72438286a1100))
+- Optimize native runtimes and package Torch shim - ([93cc5f6](https://github.com/mayocream/koharu/commit/93cc5f66dbd4bd0a0345552f45030e1d2c00b9d9))
+- Build Torch runtime releases - ([c7daa73](https://github.com/mayocream/koharu/commit/c7daa7322fcba56e89803698129d40d327452679))
+
+
 ## [0.78.1](https://github.com/mayocream/koharu/compare/0.78.0..0.78.1) - 2026-08-22
 
 ### 🐛 Bug Fixes
