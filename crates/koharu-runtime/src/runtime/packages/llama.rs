@@ -89,7 +89,7 @@ impl Package for Llama {
             move |stage| async move {
                 let asset = self.asset();
                 let url = format!(
-                    "https://github.com/koharu-org/llama/releases/download/{RELEASE}/{asset}"
+                    "https://github.com/koharu-rs/llama/releases/download/{RELEASE}/{asset}"
                 );
                 let archive = tempfile::Builder::new().suffix(".tar.gz").tempfile()?;
                 download::fetch(&url, archive.path()).await?;

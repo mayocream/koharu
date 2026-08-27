@@ -98,7 +98,7 @@ impl Package for Torch {
             move |path| self.complete(path),
             move |stage| async move {
                 let url = format!(
-                    "https://github.com/koharu-org/torch/releases/download/{RELEASE}/{asset}"
+                    "https://github.com/koharu-rs/torch/releases/download/{RELEASE}/{asset}"
                 );
                 let archive = tempfile::Builder::new().suffix(".tar.gz").tempfile()?;
                 download::fetch(&url, archive.path()).await?;
