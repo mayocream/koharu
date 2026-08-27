@@ -25,6 +25,6 @@
     "kill-port": "^2.0.1",
     "oxfmt": "^0.56.0",
     "sponsorkit": "^17.1.1",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }

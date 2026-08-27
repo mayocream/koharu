@@ -49,7 +49,7 @@
     "jsdom": "^29.1.1",
     "oxlint": "^1.79.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }
 }
