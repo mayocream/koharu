@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
-    "oxlint": "^1.79.0",
+    "oxlint": "^1.80.0",
     "typescript": "^6.0.3"
   }
 }

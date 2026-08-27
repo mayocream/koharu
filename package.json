@@ -20,7 +20,7 @@
     "check": "oxfmt --check packages tests package.json .oxfmtrc.json .vscode"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "git-cliff": "^2.13.1",
     "kill-port": "^2.0.1",
     "oxfmt": "^0.56.0",
