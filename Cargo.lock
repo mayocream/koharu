@@ -5188,7 +5188,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "ndarray",
- "rand 0.9.5",
+ "rand 0.10.2",
  "safetensors",
  "thiserror 2.0.20",
  "zip 8.6.0",
