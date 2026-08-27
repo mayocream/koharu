@@ -54,7 +54,7 @@ The CUDA backend targets CUDA 13.0 on Windows and Linux. Make sure to install th
 
 ### ROCm / HIP
 
-ROCm / HIP is available for AMD GPUs on Windows and Linux. Make sure to install the official [ROCm Core SDK with HIP](https://rocm.docs.amd.com/projects/HIP/en/latest/install/install.html).
+ROCm / HIP is available for AMD GPUs on Windows and Linux. Make sure to install the [latest AMD driver](https://www.amd.com/en/support).
 
 ### Metal
 
