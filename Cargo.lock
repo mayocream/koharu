@@ -386,7 +386,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -397,7 +397,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -969,7 +969,7 @@ version = "3.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dee98b0db6a962de883bf5d20362dee4d7ca0d12fe39a7c6c73c844e1cd7c1f"
 dependencies = [
- "darling 0.23.0",
+ "darling 0.20.11",
  "ident_case",
  "prettyplease 0.2.37",
  "proc-macro2",
@@ -1276,9 +1276,9 @@ dependencies = [
 
 [[package]]
 name = "cef"
-version = "150.0.0+150.0.10"
+version = "151.1.0+151.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dd6aaa08e30ced80c7c18445807984243a06b7f4004c264922302b7e05d5c41"
+checksum = "caad62102995d33b08d9b3c3e03059b766e8ab94916dbb2f1394b74339a0b8dd"
 dependencies = [
  "anyhow",
  "cargo_metadata 0.23.1",
@@ -1296,9 +1296,9 @@ dependencies = [
 
 [[package]]
 name = "cef-dll-sys"
-version = "150.0.0+150.0.10"
+version = "151.1.0+151.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0ec349898441a7e9f91add53716d9c40f6fc381c9b41818241e4f63fb73f0b8"
+checksum = "7591a3d390902376f771c6635daad2246255d0e9b266dbfc0a860a759fa47083"
 dependencies = [
  "anyhow",
  "cmake",
@@ -1330,6 +1330,17 @@ dependencies = [
  "byteorder",
  "fnv",
  "uuid",
+]
+
+[[package]]
+name = "cfb"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a347dcabdae9c31b0825fd6a8bed285ec9c2acb89c47827126d52fa4f59cece3"
+dependencies = [
+ "fnv",
+ "uuid",
+ "web-time",
 ]
 
 [[package]]
@@ -1545,7 +1556,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1872,7 +1883,7 @@ version = "0.29.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f93d03419cb5950ccfd3daf3ff1c7a36ace64609a1a8746d493df1ca0afde0fa"
 dependencies = [
- "cssparser-macros",
+ "cssparser-macros 0.6.1",
  "dtoa-short",
  "itoa",
  "matches",
@@ -1885,11 +1896,11 @@ dependencies = [
 
 [[package]]
 name = "cssparser"
-version = "0.36.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dae61cf9c0abb83bd659dab65b7e4e38d8236824c85f0f804f173567bda257d2"
+checksum = "8c9cdaae01d5ed7882b04d795e7f752f46ff52d2fa3b50a20d28c464510bba98"
 dependencies = [
- "cssparser-macros",
+ "cssparser-macros 0.7.0",
  "dtoa-short",
  "itoa",
  "phf 0.13.1",
@@ -1901,6 +1912,16 @@ name = "cssparser-macros"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13b588ba4ac1a99f7f2964d24b3d896ddc6bf847ee3855dbd4366f058cfcd331"
+dependencies = [
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "cssparser-macros"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a2a99df6e410a8ff4245aa2006499ea662245f967cc7c0a38c83ef8eb44dbf"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -2233,7 +2254,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2302,16 +2323,16 @@ dependencies = [
 
 [[package]]
 name = "dom_query"
-version = "0.27.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "521e380c0c8afb8d9a1e83a1822ee03556fc3e3e7dbc1fd30be14e37f9cb3f89"
+checksum = "fac5fca71e65e94cc718a6e2af65d6e0f9c6027751c2aa562fbb5087fda639bc"
 dependencies = [
  "bit-set 0.8.0",
- "cssparser 0.36.0",
+ "cssparser 0.37.0",
  "foldhash 0.2.0",
- "html5ever 0.38.0",
+ "html5ever 0.39.0",
  "precomputed-hash",
- "selectors 0.36.1",
+ "selectors 0.38.0",
  "tendril 0.5.1",
 ]
 
@@ -2511,7 +2532,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3800,12 +3821,12 @@ dependencies = [
 
 [[package]]
 name = "html5ever"
-version = "0.38.0"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1054432bae2f14e0061e33d23402fbaa67a921d319d56adc6bcf887ddad1cbc2"
+checksum = "46a1761807faccc9a19e86944bbf40610014066306f96edcdedc2fb714bcb7b8"
 dependencies = [
  "log",
- "markup5ever 0.38.0",
+ "markup5ever 0.39.0",
 ]
 
 [[package]]
@@ -4326,7 +4347,16 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
 dependencies = [
- "cfb",
+ "cfb 0.7.3",
+]
+
+[[package]]
+name = "infer"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4200d433cbd5178df7797c9c2e75b348b728e39631cf14520d1e2fc424201f4"
+dependencies = [
+ "cfb 0.14.0",
 ]
 
 [[package]]
@@ -5503,9 +5533,9 @@ dependencies = [
 
 [[package]]
 name = "markup5ever"
-version = "0.38.0"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8983d30f2915feeaaab2d6babdd6bc7e9ed1a00b66b5e6d74df19aa9c0e91862"
+checksum = "7122d987ec5f704ee56f6e5b41a7d93722e9aae27ae07cafa4036c4d3f9757de"
 dependencies = [
  "log",
  "tendril 0.5.1",
@@ -5714,7 +5744,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.20",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5897,7 +5927,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7337,7 +7367,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8052,7 +8082,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8111,7 +8141,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8337,12 +8367,12 @@ dependencies = [
 
 [[package]]
 name = "selectors"
-version = "0.36.1"
+version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5d9c0c92a92d33f08817311cf3f2c29a3538a8240e94a6a3c622ce652d7e00c"
+checksum = "8adfa1c298912827b8a28b223b3b874357397ae706e6190acd9bf28cee99114d"
 dependencies = [
  "bitflags 2.13.1",
- "cssparser 0.36.0",
+ "cssparser 0.37.0",
  "derive_more 2.1.1",
  "log",
  "new_debug_unreachable",
@@ -8922,7 +8952,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -9333,9 +9363,9 @@ dependencies = [
 
 [[package]]
 name = "tao"
-version = "0.35.3"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1c93047acf68669466a34690ac58cca7010bd1b201e1ec86f1fd0a75d3dd4a9"
+checksum = "e9fa4618f999c4249db1681cba0a19b890718f274de7fa93c445d46bd3a8a999"
 dependencies = [
  "bitflags 2.13.1",
  "block2",
@@ -9353,6 +9383,7 @@ dependencies = [
  "libc",
  "log",
  "ndk",
+ "ndk-context",
  "ndk-sys",
  "objc2",
  "objc2-app-kit",
@@ -9402,7 +9433,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 [[package]]
 name = "tauri"
 version = "2.11.5"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "anyhow",
  "bytes",
@@ -9453,7 +9484,7 @@ dependencies = [
 [[package]]
 name = "tauri-build"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -9473,14 +9504,14 @@ dependencies = [
 [[package]]
 name = "tauri-codegen"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "base64 0.22.1",
  "brotli",
  "ico",
  "json-patch",
  "plist",
- "png 0.17.16",
+ "png 0.18.1",
  "proc-macro2",
  "quote",
  "semver",
@@ -9499,7 +9530,7 @@ dependencies = [
 [[package]]
 name = "tauri-macros"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -9512,7 +9543,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin"
 version = "2.6.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "anyhow",
  "glob",
@@ -9527,7 +9558,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-log"
 version = "2.8.0"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
 dependencies = [
  "android_logger",
  "fern",
@@ -9547,7 +9578,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-opener"
 version = "2.5.4"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
 dependencies = [
  "dunce",
  "glob",
@@ -9568,7 +9599,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-process"
 version = "2.3.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
 dependencies = [
  "tauri",
  "tauri-plugin",
@@ -9577,7 +9608,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-single-instance"
 version = "2.4.2"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
 dependencies = [
  "serde",
  "serde_json",
@@ -9591,14 +9622,14 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-updater"
 version = "2.10.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
 dependencies = [
  "base64 0.22.1",
  "dirs",
  "flate2",
  "futures-util",
  "http 1.5.0",
- "infer",
+ "infer 0.19.0",
  "log",
  "minisign-verify",
  "osakit",
@@ -9623,7 +9654,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-window-state"
 version = "2.4.1"
-source = "git+https://github.com/tauri-apps/plugins-workspace?branch=feat%2Fcef#1423992771e0b57582ca3b06a6adc46ec26aa784"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=1423992771e0b57582ca3b06a6adc46ec26aa784#1423992771e0b57582ca3b06a6adc46ec26aa784"
 dependencies = [
  "bitflags 2.13.1",
  "log",
@@ -9637,7 +9668,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime"
 version = "2.11.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "cookie",
  "dpi",
@@ -9658,7 +9689,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-cef"
 version = "0.1.0"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "base64 0.22.1",
  "cef",
@@ -9693,7 +9724,7 @@ dependencies = [
 [[package]]
 name = "tauri-runtime-wry"
 version = "2.11.4"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "gtk",
  "http 1.5.0",
@@ -9750,7 +9781,7 @@ dependencies = [
 [[package]]
 name = "tauri-utils"
 version = "2.9.3"
-source = "git+https://github.com/tauri-apps/tauri?branch=feat%2Fcef#f5bf953fe2a259f2d176491f50ec2930fb73e03d"
+source = "git+https://github.com/tauri-apps/tauri?rev=78b9e169eefcc6ff052f2e3e99225f7dce8144cd#78b9e169eefcc6ff052f2e3e99225f7dce8144cd"
 dependencies = [
  "anyhow",
  "brotli",
@@ -9761,7 +9792,7 @@ dependencies = [
  "glob",
  "html5ever 0.29.1",
  "http 1.5.0",
- "infer",
+ "infer 0.22.0",
  "json-patch",
  "kuchikiki",
  "log",
@@ -9807,7 +9838,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -10429,7 +10460,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -11404,7 +11435,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -12170,9 +12201,9 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "wry"
-version = "0.55.1"
+version = "0.56.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "186f9871daa55fd9c016578b810d149de58367113db7fb72b462d2323ce19514"
+checksum = "375becb4aded9913f736443cf88000c6311478db69814cc06070465e4cc44c98"
 dependencies = [
  "base64 0.22.1",
  "block2",
