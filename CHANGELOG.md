@@ -1,3 +1,10 @@
+## [0.79.1](https://github.com/mayocream/koharu/compare/0.79.0..0.79.1) - 2026-08-27
+
+### 🐛 Bug Fixes
+
+- *(build)* Pin Tauri CEF toolchain - ([a9ce05f](https://github.com/mayocream/koharu/commit/a9ce05f83465382ebe866ed8943510b90b50cef6))
+
+
 ## [0.79.0](https://github.com/mayocream/koharu/compare/0.78.2..0.79.0) - 2026-08-26
 
 ### ⛰️  Features
