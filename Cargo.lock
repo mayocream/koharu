@@ -7587,9 +7587,9 @@ checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
 
 [[package]]
 name = "rars"
-version = "0.6.0"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98c45121dc352402f6c2a047fefcfb8b9bac607400565e9b75754f33218bf492"
+checksum = "68ff174e95890b9e1c01601a93f35f60c017162fb1bd723dfef9f684ae2ffdb6"
 dependencies = [
  "aes 0.9.2",
  "aho-corasick",
