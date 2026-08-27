@@ -1,5 +1,5 @@
 // Ported from:
-// https://github.com/mayocream/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/claude.rs
+// https://github.com/koharu-rs/koharu/blob/f4ce03999ed1ae2faaec938dd52c2f41a87d03d9/crates/koharu-llm/src/providers/claude.rs
 // Model discovery:
 // https://platform.claude.com/docs/en/api/models/list
 

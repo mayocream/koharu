@@ -18,7 +18,7 @@ Linux では GTK 3 と各ディストリビューション向けの X11 デス�
 ## インストールと実行
 
 ```bash
-git clone https://github.com/mayocream/koharu.git
+git clone https://github.com/koharu-rs/koharu.git
 cd koharu
 bun install
 bun dev

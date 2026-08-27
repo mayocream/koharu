@@ -9,7 +9,7 @@ Use a release build unless you intend to modify Koharu itself. Current releases 
 
 ## Download a release
 
-Open the [latest GitHub release](https://github.com/mayocream/koharu/releases/latest) and choose the installer or package for your operating system.
+Open the [latest GitHub release](https://github.com/koharu-rs/koharu/releases/latest) and choose the installer or package for your operating system.
 
 On Windows, you can also install the published package with WinGet:
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-llama=$(gh api 'repos/mayocream/koharu/releases?per_page=100' \
+llama=$(gh api 'repos/koharu-rs/koharu/releases?per_page=100' \
     --jq 'map(select(.tag_name | startswith("llama.cpp-"))) | first | .tag_name' | sed 's/llama.cpp-//')
-diffusion=$(gh api 'repos/mayocream/koharu/releases?per_page=100' \
+diffusion=$(gh api 'repos/koharu-rs/koharu/releases?per_page=100' \
     --jq 'map(select(.tag_name | startswith("stable-diffusion.cpp-"))) | first | .tag_name' | sed 's/stable-diffusion.cpp-//')
 
 while read -r source target; do

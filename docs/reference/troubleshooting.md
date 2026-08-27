@@ -175,4 +175,4 @@ Before sharing the file, search it for API keys, credentials, private filenames,
 - the exact steps that made the problem happen;
 - the approximate time the problem appeared in the log.
 
-Attach the text log to a [GitHub issue](https://github.com/mayocream/koharu/issues) or ask for help on [Discord](https://discord.gg/mHvHkxGnUY). A text log is more useful than screenshots of part of the terminal.
+Attach the text log to a [GitHub issue](https://github.com/koharu-rs/koharu/issues) or ask for help on [Discord](https://discord.gg/mHvHkxGnUY). A text log is more useful than screenshots of part of the terminal.

@@ -14,7 +14,7 @@ authors = [
 ]
 readme = "README.md"
 homepage = "https://koharu.rs"
-repository = "https://github.com/mayocream/koharu"
+repository = "https://github.com/koharu-rs/koharu"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 

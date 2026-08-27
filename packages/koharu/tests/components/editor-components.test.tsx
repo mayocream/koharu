@@ -302,7 +302,7 @@ describe('greenfield editor', () => {
 
     await user.click(screen.getByRole('menuitem', { name: 'Help' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'GitHub' }))
-    expect(nativeOpenUrl).toHaveBeenLastCalledWith('https://github.com/mayocream/koharu')
+    expect(nativeOpenUrl).toHaveBeenLastCalledWith('https://github.com/koharu-rs/koharu')
   })
 
   it('shows the current version and author in About', async () => {

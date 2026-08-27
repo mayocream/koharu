@@ -9,8 +9,8 @@ Koharu の改善にご協力いただきありがとうございます。バグ�
 
 ## 貢献する内容を探す
 
-- [good first issues](https://github.com/mayocream/koharu/contribute) を確認します。
-- 関連する [Issue](https://github.com/mayocream/koharu/issues) と PR を検索します。
+- [good first issues](https://github.com/koharu-rs/koharu/contribute) を確認します。
+- 関連する [Issue](https://github.com/koharu-rs/koharu/issues) と PR を検索します。
 - Issue 選びや範囲の絞り方に迷ったら [Discord](https://discord.gg/mHvHkxGnUY) で相談してください。
 
 ## 変更を計画する

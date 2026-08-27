@@ -4,7 +4,7 @@ Thank you for helping improve Koharu. Bug fixes, documentation, translations, mo
 
 ## Getting started
 
-- Browse the [good first issues](https://github.com/mayocream/koharu/contribute) or search existing [issues](https://github.com/mayocream/koharu/issues) and pull requests.
+- Browse the [good first issues](https://github.com/koharu-rs/koharu/contribute) or search existing [issues](https://github.com/koharu-rs/koharu/issues) and pull requests.
 - Open an issue before starting a large behavior or architecture change.
 - Ask for guidance on [Discord](https://discord.gg/mHvHkxGnUY) if you are unsure where to begin.
 

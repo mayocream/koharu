@@ -18,7 +18,7 @@ Linux development also needs GTK 3 and the X11 desktop libraries for your distri
 ## Install and run
 
 ```bash
-git clone https://github.com/mayocream/koharu.git
+git clone https://github.com/koharu-rs/koharu.git
 cd koharu
 bun install
 bun dev

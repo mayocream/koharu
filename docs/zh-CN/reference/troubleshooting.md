@@ -54,4 +54,4 @@ $env:RUST_LOG='debug'
 koharu.exe
 ```
 
-分享日志前移除凭据与私密页面文字，然后在 [GitHub](https://github.com/mayocream/koharu/issues) 或 [Discord](https://discord.gg/mHvHkxGnUY) 报告。
+分享日志前移除凭据与私密页面文字，然后在 [GitHub](https://github.com/koharu-rs/koharu/issues) 或 [Discord](https://discord.gg/mHvHkxGnUY) 报告。

@@ -54,4 +54,4 @@ $env:RUST_LOG='debug'
 koharu.exe
 ```
 
-共有前に認証情報と非公開のページ文字を除き、[GitHub](https://github.com/mayocream/koharu/issues)または[Discord](https://discord.gg/mHvHkxGnUY)で報告してください。
+共有前に認証情報と非公開のページ文字を除き、[GitHub](https://github.com/koharu-rs/koharu/issues)または[Discord](https://discord.gg/mHvHkxGnUY)で報告してください。

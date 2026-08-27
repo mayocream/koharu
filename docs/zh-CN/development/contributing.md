@@ -9,8 +9,8 @@ description: 找到适合参与的工作，准备范围明确的修改，并提�
 
 ## 找到适合参与的工作
 
-- 浏览 [good first issues](https://github.com/mayocream/koharu/contribute)。
-- 搜索相关的[现有 Issue](https://github.com/mayocream/koharu/issues) 与 PR。
+- 浏览 [good first issues](https://github.com/koharu-rs/koharu/contribute)。
+- 搜索相关的[现有 Issue](https://github.com/koharu-rs/koharu/issues) 与 PR。
 - 如果需要帮助选择 Issue 或缩小范围，可以在 [Discord](https://discord.gg/mHvHkxGnUY) 中交流。
 
 ## 规划修改

@@ -9,8 +9,8 @@ Thank you for helping improve Koharu. Contributions of every size are welcome, i
 
 ## Find a place to help
 
-- Browse the [good first issues](https://github.com/mayocream/koharu/contribute).
-- Search [open issues](https://github.com/mayocream/koharu/issues) and pull requests for related work.
+- Browse the [good first issues](https://github.com/koharu-rs/koharu/contribute).
+- Search [open issues](https://github.com/koharu-rs/koharu/issues) and pull requests for related work.
 - Ask on [Discord](https://discord.gg/mHvHkxGnUY) if you need help choosing an issue or narrowing the scope.
 
 ## Plan the change

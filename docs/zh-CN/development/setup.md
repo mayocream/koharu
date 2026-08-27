@@ -18,7 +18,7 @@ Linux 还需要 GTK 3 与对应发行版的 X11 桌面库。Windows 使用 MSVC 
 ## 安装与运行
 
 ```bash
-git clone https://github.com/mayocream/koharu.git
+git clone https://github.com/koharu-rs/koharu.git
 cd koharu
 bun install
 bun dev

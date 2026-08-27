@@ -9,7 +9,7 @@ description: 安装发行版，完成首次启动并保持更新。
 
 ## 下载发行版
 
-打开[最新 GitHub Release](https://github.com/mayocream/koharu/releases/latest)，选择适合操作系统的安装程序或软件包。
+打开[最新 GitHub Release](https://github.com/koharu-rs/koharu/releases/latest)，选择适合操作系统的安装程序或软件包。
 
 Windows 也可以使用 WinGet：
 

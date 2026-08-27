@@ -3,15 +3,15 @@
 <p align="center">ML-powered manga translator, written in <b>Rust</b>.</p>
 
 <p align="center">
-<a href="https://github.com/mayocream/koharu/releases/latest" target="_blank"><img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/mayocream/koharu/total?style=for-the-badge&link=https%3A%2F%2Fgithub.com%2Fmayocream%2Fkoharu%2Freleases%2Flatest"></a>
+<a href="https://github.com/koharu-rs/koharu/releases/latest" target="_blank"><img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/koharu-rs/koharu/total?style=for-the-badge&link=https%3A%2F%2Fgithub.com%2Fkoharu-rs%2Fkoharu%2Freleases%2Flatest"></a>
 </p>
 
 <p align="center">
-<a href="https://trendshift.io/repositories/20649" target="_blank"><img src="https://trendshift.io/api/badge/repositories/20649" alt="mayocream%2Fkoharu | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/20649" target="_blank"><img src="https://trendshift.io/api/badge/repositories/20649" alt="koharu-rs%2Fkoharu | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
 <p align="center">
-<a href="https://koharu.rs/getting-started/install/" target="_blank">Getting Started</a> · <a href="https://koharu.rs/" target="_blank">Docs</a> · <a href="https://github.com/mayocream/koharu/issues" target="_blank">Bug reports</a> · <a href="https://discord.gg/mHvHkxGnUY" target="_blank">Discord</a>
+<a href="https://koharu.rs/getting-started/install/" target="_blank">Getting Started</a> · <a href="https://koharu.rs/" target="_blank">Docs</a> · <a href="https://github.com/koharu-rs/koharu/issues" target="_blank">Bug reports</a> · <a href="https://discord.gg/mHvHkxGnUY" target="_blank">Discord</a>
 </p>
 
 <p align="center">
@@ -138,7 +138,7 @@ OpenAI-compatible endpoints are also supported.
 
 ## Installation
 
-Download release builds from the [releases page](https://github.com/mayocream/koharu/releases/latest). [Installation requirements and first launch](https://koharu.rs/getting-started/install/) vary by operating system.
+Download release builds from the [releases page](https://github.com/koharu-rs/koharu/releases/latest). [Installation requirements and first launch](https://koharu.rs/getting-started/install/) vary by operating system.
 
 Builds are available for Windows, macOS, and Linux.
 
@@ -213,8 +213,8 @@ If Koharu is useful in your workflow, consider sponsoring the project.
 
 Thanks to all the contributors who have helped make Koharu better!
 
-<a href="https://github.com/mayocream/koharu/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=mayocream/koharu" />
+<a href="https://github.com/koharu-rs/koharu/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=koharu-rs/koharu" />
 </a>
 
 ## License

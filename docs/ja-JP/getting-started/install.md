@@ -9,7 +9,7 @@ Koharu 自体を変更する目的でなければ、リリース版を使用し�
 
 ## リリースを入手する
 
-[最新の GitHub リリース](https://github.com/mayocream/koharu/releases/latest)を開き、OS に合ったインストーラーまたはパッケージを選びます。
+[最新の GitHub リリース](https://github.com/koharu-rs/koharu/releases/latest)を開き、OS に合ったインストーラーまたはパッケージを選びます。
 
 Windows では WinGet も使用できます。
 
