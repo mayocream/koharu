@@ -1,3 +1,10 @@
+## [0.79.2](https://github.com/mayocream/koharu/compare/0.79.1..0.79.2) - 2026-08-27
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Use koharu-rs release repositories - ([559aab7](https://github.com/mayocream/koharu/commit/559aab7b1328e31191ef1356fdc57103329bc3b4))
+
+
 ## [0.79.1](https://github.com/mayocream/koharu/compare/0.79.0..0.79.1) - 2026-08-27
 
 ### 🐛 Bug Fixes
