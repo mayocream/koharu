@@ -1,3 +1,15 @@
+## [0.79.3](https://github.com/koharu-rs/koharu/compare/0.79.2..0.79.3) - 2026-08-27
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Use dedicated release repositories - ([86ff7f0](https://github.com/koharu-rs/koharu/commit/86ff7f0f8a2fd23d6d0d0658751a31bf9604bdc3))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update repository links - ([bf516a0](https://github.com/koharu-rs/koharu/commit/bf516a01f2c8a42d2c559410ef7070c67c81e227))
+- Update codeowners - ([52dfe1e](https://github.com/koharu-rs/koharu/commit/52dfe1e6984c631ebae63cabec71a5e4f12310ac))
+
+
 ## [0.79.2](https://github.com/koharu-rs/koharu/compare/0.79.1..0.79.2) - 2026-08-27
 
 ### 🐛 Bug Fixes
