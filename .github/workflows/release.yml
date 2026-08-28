@@ -37,7 +37,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: koharu-app
+          shared-key: koharu-app-${{ matrix.platform }}
           # Main-branch builds own the shared dependency cache.
           save-if: false
 

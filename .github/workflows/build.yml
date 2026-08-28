@@ -38,7 +38,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: koharu-app
+          shared-key: koharu-app-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install macOS CEF helper targets
         if: startsWith(matrix.os, 'macos')
