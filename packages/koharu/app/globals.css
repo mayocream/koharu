@@ -78,26 +78,23 @@
     @apply text-foreground select-none;
     background-color: transparent;
     overflow: hidden;
-    /* Han codepoints exist in every Noto CJK face; stack order selects regional glyph variants. */
-    font-family:
-      var(--font-noto-jp), var(--font-noto-sc), var(--font-noto-tc), ui-sans-serif, system-ui,
-      sans-serif;
+    font-family: var(--font-noto-sans-cjk), ui-sans-serif, system-ui, sans-serif;
     font-feature-settings:
       'cv02' 1,
       'cv03' 1,
       'cv04' 1;
   }
 
-  body:lang(zh-CN) {
-    font-family:
-      var(--font-noto-sc), var(--font-noto-jp), var(--font-noto-tc), ui-sans-serif, system-ui,
-      sans-serif;
+  html:lang(ja-JP) {
+    font-variant-east-asian: jis04;
   }
 
-  body:lang(zh-TW) {
-    font-family:
-      var(--font-noto-tc), var(--font-noto-jp), var(--font-noto-sc), ui-sans-serif, system-ui,
-      sans-serif;
+  html:lang(zh-CN) {
+    font-variant-east-asian: simplified;
+  }
+
+  html:lang(zh-TW) {
+    font-variant-east-asian: traditional;
   }
 
   input,
