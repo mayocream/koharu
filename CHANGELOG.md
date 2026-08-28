@@ -1,3 +1,15 @@
+## [0.79.4](https://github.com/koharu-rs/koharu/compare/0.79.3..0.79.4) - 2026-08-28
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Update Torch to v2.13.0.3 - ([fd0ca01](https://github.com/koharu-rs/koharu/commit/fd0ca01e0ceba2d198fde4b981da7efa8c0d32ed))
+- *(runtime)* Update Torch release - ([2f308fa](https://github.com/koharu-rs/koharu/commit/2f308fa2729f6fd34155ada2a1686851e7f1213b))
+
+### 📚 Documentation
+
+- Update readme - ([4932a9d](https://github.com/koharu-rs/koharu/commit/4932a9d02a925b014f8d7f8e5768bf6932c2f134))
+
+
 ## [0.79.3](https://github.com/koharu-rs/koharu/compare/0.79.2..0.79.3) - 2026-08-27
 
 ### 🐛 Bug Fixes
