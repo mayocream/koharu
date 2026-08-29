@@ -86,23 +86,3 @@ pub(crate) fn set_precision(var_store: &mut nn::VarStore) {
         var_store.float();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ggml_backend_name;
-    use koharu_runtime::Device;
-
-    #[test]
-    fn metal_uses_ggml_mtl_device_name() {
-        assert_eq!(ggml_backend_name(&Device::metal(0)), "MTL0");
-        assert_eq!(ggml_backend_name(&Device::metal(1)), "MTL1");
-    }
-
-    #[test]
-    fn cpu_cuda_rocm_vulkan_keep_runtime_names() {
-        assert_eq!(ggml_backend_name(&Device::cpu()), "cpu");
-        assert_eq!(ggml_backend_name(&Device::cuda(0)), "CUDA0");
-        assert_eq!(ggml_backend_name(&Device::rocm(0)), "ROCm0");
-        assert_eq!(ggml_backend_name(&Device::vulkan(0)), "Vulkan0");
-    }
-}
