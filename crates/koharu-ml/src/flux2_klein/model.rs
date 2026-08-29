@@ -64,7 +64,7 @@ fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
         diffusion_conv_direct: use_cuda,
         vae_conv_direct: use_cuda,
         vae_format: VaeFormat::Flux2,
-        backend: Some(crate::backend::ggml_backend_name(device)),
+        backend: Some(device.name.clone()),
         // The text encoder and denoiser run in separate phases. Cards with less
         // headroom keep source parameters in RAM; high-VRAM cards avoid repeated
         // staging by retaining both quantized models on the accelerator.

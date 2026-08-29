@@ -45,19 +45,6 @@ impl TryIntoDevice<koharu_torch::Device> for Device {
     }
 }
 
-/// ggml/stable-diffusion.cpp device name for `ContextParams.backend`.
-///
-/// Runtime accelerators are named `{Backend}{index}` (`Metal0`, `CUDA0`). ggml
-/// registers Metal as `MTL{index}`; lowercasing `Metal0` produced `metal0`,
-/// which ggml does not register.
-pub(crate) fn ggml_backend_name(device: &Device) -> String {
-    match device.backend {
-        Backend::Cpu => "cpu".to_owned(),
-        Backend::Metal => format!("MTL{}", device.index),
-        Backend::Cuda | Backend::Rocm | Backend::Vulkan | Backend::Other(_) => device.name.clone(),
-    }
-}
-
 pub(crate) fn set_precision(var_store: &mut nn::VarStore) {
     let hardware = Hardware::discover();
     let device_supports_bfloat16 = hardware

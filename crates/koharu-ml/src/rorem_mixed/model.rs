@@ -51,7 +51,6 @@ impl Model {
 }
 
 fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
-    let use_accelerator = device.backend != Backend::Cpu;
     let use_cuda = device.backend == Backend::Cuda;
     ContextParams {
         model_path: Some(paths.version_marker),
@@ -64,7 +63,7 @@ fn context_params(device: &crate::Device, paths: ModelPaths) -> ContextParams {
         diffusion_flash_attention: use_cuda,
         diffusion_conv_direct: use_cuda,
         vae_conv_direct: use_cuda,
-        backend: Some(crate::backend::ggml_backend_name(device)),
+        backend: Some(device.name.clone()),
         ..ContextParams::default()
     }
 }
