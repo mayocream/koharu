@@ -45,6 +45,19 @@ impl TryIntoDevice<koharu_torch::Device> for Device {
     }
 }
 
+/// ggml/stable-diffusion.cpp device name for `ContextParams.backend`.
+///
+/// Runtime accelerators are named `{Backend}{index}` (`Metal0`, `CUDA0`). ggml
+/// registers Metal as `MTL{index}`; lowercasing `Metal0` produced `metal0`,
+/// which ggml does not register.
+pub(crate) fn ggml_backend_name(device: &Device) -> String {
+    match device.backend {
+        Backend::Cpu => "cpu".to_owned(),
+        Backend::Metal => format!("MTL{}", device.index),
+        Backend::Cuda | Backend::Rocm | Backend::Vulkan | Backend::Other(_) => device.name.clone(),
+    }
+}
+
 pub(crate) fn set_precision(var_store: &mut nn::VarStore) {
     let hardware = Hardware::discover();
     let device_supports_bfloat16 = hardware
@@ -71,5 +84,25 @@ pub(crate) fn set_precision(var_store: &mut nn::VarStore) {
         var_store.bfloat16();
     } else {
         var_store.float();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ggml_backend_name;
+    use koharu_runtime::Device;
+
+    #[test]
+    fn metal_uses_ggml_mtl_device_name() {
+        assert_eq!(ggml_backend_name(&Device::metal(0)), "MTL0");
+        assert_eq!(ggml_backend_name(&Device::metal(1)), "MTL1");
+    }
+
+    #[test]
+    fn cpu_cuda_rocm_vulkan_keep_runtime_names() {
+        assert_eq!(ggml_backend_name(&Device::cpu()), "cpu");
+        assert_eq!(ggml_backend_name(&Device::cuda(0)), "CUDA0");
+        assert_eq!(ggml_backend_name(&Device::rocm(0)), "ROCm0");
+        assert_eq!(ggml_backend_name(&Device::vulkan(0)), "Vulkan0");
     }
 }
