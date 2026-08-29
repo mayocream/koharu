@@ -10,42 +10,54 @@ use crate::Language;
 const MAX_IMAGE_DIMENSION: u32 = 2048;
 const JPEG_QUALITY: u8 = 88;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TranslationRequest {
     pub segments: Vec<String>,
-    pub source_language: Option<Language>,
+    pub source_language: Language,
     pub target_language: Language,
+    pub system_prompt: Option<String>,
     pub instructions: Option<String>,
     pub context: Vec<TranslationContext>,
     pub image: Option<Arc<DynamicImage>>,
+    pub(crate) validator: Option<crate::TranslationValidator>,
+    pub(crate) retry_feedback: Option<String>,
 }
 
 impl TranslationRequest {
     #[must_use]
     pub fn new(
         segments: impl IntoIterator<Item = impl Into<String>>,
+        source_language: Language,
         target_language: Language,
     ) -> Self {
         Self {
             segments: segments.into_iter().map(Into::into).collect(),
-            source_language: None,
+            source_language,
             target_language,
+            system_prompt: None,
             instructions: None,
             context: Vec::new(),
             image: None,
+            validator: None,
+            retry_feedback: None,
         }
     }
 
-    #[cfg(test)]
     #[must_use]
-    pub fn with_source_language(mut self, language: Language) -> Self {
-        self.source_language = Some(language);
+    pub fn with_system_prompt(mut self, system_prompt: impl Into<String>) -> Self {
+        self.system_prompt = Some(system_prompt.into());
         self
     }
 
     #[must_use]
     pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_validator(mut self, validator: crate::TranslationValidator) -> Self {
+        self.validator = Some(validator);
         self
     }
 
@@ -59,6 +71,11 @@ impl TranslationRequest {
     #[must_use]
     pub fn with_context(mut self, context: impl IntoIterator<Item = TranslationContext>) -> Self {
         self.context = context.into_iter().collect();
+        self
+    }
+
+    pub(crate) fn with_retry_feedback(mut self, feedback: String) -> Self {
+        self.retry_feedback = Some(feedback);
         self
     }
 

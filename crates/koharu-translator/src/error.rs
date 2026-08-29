@@ -22,6 +22,12 @@ pub enum Error {
         expected: usize,
         actual: usize,
     },
+
+    #[error("{provider} output failed translation validation: {message}")]
+    Validation {
+        provider: &'static str,
+        message: String,
+    },
     #[error("{provider} quota or rate limit was exceeded")]
     QuotaExceeded { provider: &'static str },
     #[error("{provider} API request failed with HTTP {status}: {message}")]

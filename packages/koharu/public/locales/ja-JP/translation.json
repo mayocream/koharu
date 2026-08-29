@@ -267,6 +267,7 @@
     "baseUrl": "ベース URL",
     "default": "既定",
     "instructions": "翻訳指示",
+    "sourceLanguage": "原文の言語",
     "targetLanguage": "対象言語"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "翻訳指示",
     "instructionsPlaceholder": "文体、固有名詞、書式に関する任意の指示。",
+    "sourceLanguage": "原文の言語",
+    "systemPrompt": "システムプロンプト",
+    "systemPromptPlaceholder": "組み込みの翻訳プロンプトを任意で置き換えます。",
     "targetLanguage": "対象言語",
-    "title": "翻訳出力"
+    "title": "翻訳出力",
+    "validators": "自動バリデーター"
+  },
+  "translationValidators": {
+    "add": "ルールを追加",
+    "chinese": "中国語の漢字",
+    "customRule": "カスタム検証ルール",
+    "japanese": "日本語のかな",
+    "korean": "韓国語の文字",
+    "latin": "ラテン文字",
+    "name": "ルール名",
+    "namePlaceholder": "例: ラテン文字を禁止",
+    "pattern": "正規表現",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "文字種の禁止プリセット",
+    "remove": "ルールを削除"
   },
   "phase": {
     "detection": "検出",
@@ -444,6 +463,12 @@
       "quantization": "量子化",
       "quantizationDescription": "小さい形式はメモリ使用量を抑えますが、通常は品質とのトレードオフがあります。",
       "selectQuantization": "量子化方式を選択",
+      "sourceLanguageDescription": "原文テキストの言語を選択します。",
+      "systemPrompt": "システムプロンプト",
+      "systemPromptDescription": "Koharu の組み込み翻訳プロンプトを置き換えます。",
+      "systemPromptPlaceholder": "組み込みの翻訳プロンプトを使うには空のままにします。",
+      "validators": "自動バリデーター",
+      "validatorsDescription": "一致した翻訳テキストを拒否し、修正指示を付けて一度再生成します。",
       "targetLanguageDescription": "テキストの翻訳先言語を選択します。",
       "title": "翻訳",
       "translationModel": "翻訳モデル",

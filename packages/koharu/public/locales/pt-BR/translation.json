@@ -267,6 +267,7 @@
     "baseUrl": "URL base",
     "default": "Padrão",
     "instructions": "Instruções",
+    "sourceLanguage": "Idioma de origem",
     "targetLanguage": "Idioma de destino"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "Instruções de tradução",
     "instructionsPlaceholder": "Orientações opcionais sobre tom, nomes e formatação.",
+    "sourceLanguage": "Idioma de origem",
+    "systemPrompt": "Prompt do sistema",
+    "systemPromptPlaceholder": "Substituição opcional do prompt de tradução integrado.",
     "targetLanguage": "Idioma de destino",
-    "title": "Saída da tradução"
+    "title": "Saída de tradução",
+    "validators": "Validadores automáticos"
+  },
+  "translationValidators": {
+    "add": "Adicionar regra",
+    "chinese": "Caracteres han chineses",
+    "customRule": "Regra de validação personalizada",
+    "japanese": "Kana japonês",
+    "korean": "Caracteres coreanos",
+    "latin": "Letras latinas",
+    "name": "Nome da regra",
+    "namePlaceholder": "ex.: Sem letras latinas",
+    "pattern": "Expressão regular",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "Predefinições para bloquear escritas",
+    "remove": "Remover regra"
   },
   "phase": {
     "detection": "Detecção",
@@ -444,6 +463,12 @@
       "quantization": "Quantização",
       "quantizationDescription": "Formatos menores usam menos memória, geralmente com perda de qualidade.",
       "selectQuantization": "Selecionar uma quantização",
+      "sourceLanguageDescription": "Escolha o idioma em que o texto de origem está escrito.",
+      "systemPrompt": "Prompt do sistema",
+      "systemPromptDescription": "Substitui o prompt de tradução integrado do Koharu.",
+      "systemPromptPlaceholder": "Deixe em branco para usar o prompt de tradução integrado.",
+      "validators": "Validadores automáticos",
+      "validatorsDescription": "Rejeita o texto de tradução correspondente e o regenera uma vez com feedback corretivo.",
       "targetLanguageDescription": "Escolha o idioma para o qual o texto será traduzido.",
       "title": "Tradução",
       "translationModel": "Modelo de tradução",

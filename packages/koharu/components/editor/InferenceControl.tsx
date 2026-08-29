@@ -166,8 +166,11 @@ function RuntimeSelector({
       ...preferences.pipeline,
       translation: {
         ...translation,
+        source_language: draft.sourceLanguage,
         target_language: draft.targetLanguage,
+        system_prompt: draft.systemPrompt || null,
         instructions: draft.instructions || null,
+        validators: draft.validators,
       },
     }
     void savePreferences(pipeline, preferences.providers, preferences.typesetting)
@@ -333,8 +336,11 @@ function RuntimeSelector({
 
         {view === 'output' && translation && (
           <OutputPicker
+            sourceLanguage={translation.source_language}
             targetLanguage={translation.target_language}
+            systemPrompt={translation.system_prompt}
             instructions={translation.instructions}
+            validators={translation.validators}
             languages={languages}
             disabled={running}
             saving={savingOutput}

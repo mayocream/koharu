@@ -267,6 +267,7 @@
     "baseUrl": "Base URL",
     "default": "Default",
     "instructions": "Instructions",
+    "sourceLanguage": "Source language",
     "targetLanguage": "Target language"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "Translation instructions",
     "instructionsPlaceholder": "Optional guidance for tone, names, and formatting.",
+    "sourceLanguage": "Source language",
+    "systemPrompt": "System prompt",
+    "systemPromptPlaceholder": "Optional replacement for the built-in translation prompt.",
     "targetLanguage": "Target language",
-    "title": "Translation output"
+    "title": "Translation output",
+    "validators": "Automatic validators"
+  },
+  "translationValidators": {
+    "add": "Add rule",
+    "chinese": "Chinese Han characters",
+    "customRule": "Custom validation rule",
+    "japanese": "Japanese kana",
+    "korean": "Korean characters",
+    "latin": "Latin letters",
+    "name": "Rule name",
+    "namePlaceholder": "e.g. No Latin letters",
+    "pattern": "Regular expression",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "Block script presets",
+    "remove": "Remove rule"
   },
   "phase": {
     "detection": "Detection",
@@ -444,6 +463,12 @@
       "quantization": "Quantization",
       "quantizationDescription": "Smaller formats use less memory, usually with a quality tradeoff.",
       "selectQuantization": "Select a quantization",
+      "sourceLanguageDescription": "Choose the language the source text is written in.",
+      "systemPrompt": "System prompt",
+      "systemPromptDescription": "Replaces Koharu's built-in translation prompt.",
+      "systemPromptPlaceholder": "Leave empty to use the built-in translation prompt.",
+      "validators": "Automatic validators",
+      "validatorsDescription": "Reject matching translation text and regenerate once with corrective feedback.",
       "targetLanguageDescription": "Choose the language to translate text into.",
       "title": "Translation",
       "translationModel": "Translation model",

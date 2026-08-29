@@ -502,8 +502,16 @@ export type Translation = {
 export type TranslationConfig = {
 	model: ModelSelection,
 	generation: GenerationConfig,
+	source_language: string,
 	target_language: string,
+	system_prompt: string | null,
 	instructions: string | null,
+	validators: TranslationValidationRule[],
+};
+
+export type TranslationValidationRule = {
+	name: string,
+	pattern: string,
 };
 
 export type TypesettingConfig = {

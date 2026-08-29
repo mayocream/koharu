@@ -104,6 +104,7 @@ nvml-wrapper = "0.12.1"
 minijinja = "2.24.0"
 minijinja-contrib = { version = "2.24.0", features = ["pycompat"] }
 indoc = "2.0.7"
+regex = "1.13.1"
 windows = { version = "0.62.2", features = [
     "Win32",
     "Win32_System",

@@ -5219,6 +5219,7 @@ dependencies = [
  "koharu-ml",
  "koharu-runtime",
  "koharu-secrets",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

@@ -267,6 +267,7 @@
     "baseUrl": "基礎 URL",
     "default": "預設",
     "instructions": "翻譯說明",
+    "sourceLanguage": "來源語言",
     "targetLanguage": "目標語言"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "翻譯指示",
     "instructionsPlaceholder": "關於語氣、名稱和格式的選填說明。",
+    "sourceLanguage": "來源語言",
+    "systemPrompt": "系統提示詞",
+    "systemPromptPlaceholder": "選用地取代內建翻譯提示詞。",
     "targetLanguage": "目標語言",
-    "title": "翻譯輸出"
+    "title": "翻譯輸出",
+    "validators": "自動驗證器"
+  },
+  "translationValidators": {
+    "add": "新增規則",
+    "chinese": "中文漢字",
+    "customRule": "自訂驗證規則",
+    "japanese": "日文假名",
+    "korean": "韓文字符",
+    "latin": "拉丁字母",
+    "name": "規則名稱",
+    "namePlaceholder": "例如：禁止拉丁字母",
+    "pattern": "正規表示式",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "文字封鎖預設",
+    "remove": "刪除規則"
   },
   "phase": {
     "detection": "偵測",
@@ -444,6 +463,12 @@
       "quantization": "量化",
       "quantizationDescription": "較小的格式使用較少記憶體，但通常會犧牲一些品質。",
       "selectQuantization": "選擇量化方式",
+      "sourceLanguageDescription": "選擇原文文字所使用的語言。",
+      "systemPrompt": "系統提示詞",
+      "systemPromptDescription": "取代 Koharu 的內建翻譯提示詞。",
+      "systemPromptPlaceholder": "留空以使用內建翻譯提示詞。",
+      "validators": "自動驗證器",
+      "validatorsDescription": "拒絕符合規則的譯文，並附帶修正回饋重新生成一次。",
       "targetLanguageDescription": "選擇文字要翻譯成的語言。",
       "title": "譯文",
       "translationModel": "翻譯模型",

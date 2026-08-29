@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use koharu_scene::{Authored, LanguageTag, Origin, SourceText, Translation};
-use koharu_translator::{TranslationRequest, Translator};
+use koharu_translator::{TranslationRequest, TranslationValidator, Translator};
 
 use crate::TranslationConfig;
 
@@ -11,12 +11,18 @@ const PRODUCER: &str = "dev.koharu.pipeline.translation";
 
 pub(super) struct Processor {
     config: TranslationConfig,
+    validator: TranslationValidator,
     translator: Translator,
 }
 
 impl Processor {
-    pub(super) fn new(config: TranslationConfig, translator: Translator) -> Self {
-        Self { config, translator }
+    pub(super) fn new(config: TranslationConfig, translator: Translator) -> Result<Self> {
+        let validator = TranslationValidator::new(&config.validators)?;
+        Ok(Self {
+            config,
+            validator,
+            translator,
+        })
     }
 }
 
@@ -52,8 +58,13 @@ impl StageProcessor for Processor {
         }
         let mut request = TranslationRequest::new(
             targets.iter().map(|(_, source)| source.clone()),
+            self.config.source_language,
             self.config.target_language,
-        );
+        )
+        .with_validator(self.validator.clone());
+        if let Some(system_prompt) = self.config.system_prompt.as_deref() {
+            request = request.with_system_prompt(system_prompt);
+        }
         if let Some(instructions) = self.config.instructions.as_deref() {
             request = request.with_instructions(instructions);
         }

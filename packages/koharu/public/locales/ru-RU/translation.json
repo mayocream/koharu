@@ -267,6 +267,7 @@
     "baseUrl": "Базовый URL",
     "default": "По умолчанию",
     "instructions": "Инструкции",
+    "sourceLanguage": "Язык оригинала",
     "targetLanguage": "Язык перевода"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "Инструкции по переводу",
     "instructionsPlaceholder": "Необязательные указания по стилю, именам и форматированию.",
+    "sourceLanguage": "Язык оригинала",
+    "systemPrompt": "Системный промпт",
+    "systemPromptPlaceholder": "Необязательная замена встроенного промпта перевода.",
     "targetLanguage": "Язык перевода",
-    "title": "Вывод перевода"
+    "title": "Вывод перевода",
+    "validators": "Автоматические валидаторы"
+  },
+  "translationValidators": {
+    "add": "Добавить правило",
+    "chinese": "Китайские иероглифы",
+    "customRule": "Пользовательское правило валидации",
+    "japanese": "Японская кана",
+    "korean": "Корейские символы",
+    "latin": "Латинские буквы",
+    "name": "Название правила",
+    "namePlaceholder": "например, Без латинских букв",
+    "pattern": "Регулярное выражение",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "Пресеты запрета письменностей",
+    "remove": "Удалить правило"
   },
   "phase": {
     "detection": "Обнаружение",
@@ -444,6 +463,12 @@
       "quantization": "Квантование",
       "quantizationDescription": "Меньшие форматы используют меньше памяти, обычно за счёт качества.",
       "selectQuantization": "Выбрать квантование",
+      "sourceLanguageDescription": "Выберите язык исходного текста.",
+      "systemPrompt": "Системный промпт",
+      "systemPromptDescription": "Заменяет встроенный промпт перевода Koharu.",
+      "systemPromptPlaceholder": "Оставьте пустым, чтобы использовать встроенный промпт перевода.",
+      "validators": "Автоматические валидаторы",
+      "validatorsDescription": "Отклоняет совпавший текст перевода и один раз перегенерирует его с корректирующей инструкцией.",
       "targetLanguageDescription": "Выберите язык, на который нужно перевести текст.",
       "title": "Перевод",
       "translationModel": "Модель перевода",

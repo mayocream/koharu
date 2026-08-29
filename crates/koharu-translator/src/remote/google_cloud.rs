@@ -44,7 +44,7 @@ pub(super) async fn translate(
         client.post(url).json(&Request {
             q: &request.segments,
             target: request.target_language.tag(),
-            source: request.source_language.map(|language| language.tag()),
+            source: request.source_language.tag(),
             format: "text",
         }),
     )
@@ -61,8 +61,7 @@ pub(super) async fn translate(
 struct Request<'a> {
     q: &'a [String],
     target: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    source: Option<&'a str>,
+    source: &'a str,
     format: &'static str,
 }
 

@@ -212,8 +212,12 @@ mod tests {
 
     #[test]
     fn serializes_responses_schema_and_image_input() {
-        let request = TranslationRequest::new(["hello"], crate::Language::Japanese)
-            .with_image(std::sync::Arc::new(image::DynamicImage::new_rgb8(1, 1)));
+        let request = TranslationRequest::new(
+            ["hello"],
+            crate::Language::English,
+            crate::Language::Japanese,
+        )
+        .with_image(std::sync::Arc::new(image::DynamicImage::new_rgb8(1, 1)));
         let body = request_body(
             "grok-4.5",
             &GenerationConfig {

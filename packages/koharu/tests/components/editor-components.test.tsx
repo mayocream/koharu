@@ -101,8 +101,11 @@ const preferences: Preferences = {
         reasoning: true,
       },
       generation: { vision: true, reasoning: false },
+      source_language: 'ja-JP',
       target_language: 'en-US',
+      system_prompt: null,
       instructions: null,
+      validators: [],
     },
     inpainting: { model: 'lama' },
     processor: {},
@@ -853,8 +856,16 @@ describe('greenfield editor', () => {
         ...preferences.pipeline,
         translation: {
           ...preferences.pipeline.translation,
+          source_language: 'en-US',
           target_language: 'ja-JP',
+          system_prompt: 'Translate concise manga dialogue.',
           instructions: 'Keep character names unchanged.',
+          validators: [
+            { name: 'Latin-script letters', pattern: '[A-Za-z]' },
+            { name: 'Japanese kana', pattern: '[\\p{Hiragana}\\p{Katakana}]' },
+            { name: 'Chinese Han characters', pattern: '[\\p{Han}]' },
+            { name: 'Korean characters', pattern: '[\\p{Hangul}]' },
+          ],
         },
       },
     }
@@ -869,13 +880,27 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(commands.getTranslationModels).toHaveBeenCalled())
     await user.click(screen.getByRole('button', { name: /Output English/ }))
     const language = screen.getByRole('combobox', { name: 'Target language' })
+    const sourceLanguage = screen.getByRole('combobox', { name: 'Source language' })
     expect(language).toHaveTextContent('English')
+    expect(sourceLanguage).toHaveTextContent('Japanese')
     expect(language).not.toHaveTextContent('en-US')
+    await user.click(sourceLanguage)
+    await user.click(await screen.findByRole('option', { name: 'English' }))
     await user.click(language)
     await user.click(await screen.findByRole('option', { name: 'Japanese' }))
     const instructions = screen.getByRole('textbox', { name: 'Translation instructions' })
     expect(instructions).toHaveClass('max-h-20', 'overflow-y-auto')
     await user.type(instructions, 'Keep character names unchanged.')
+    const systemPrompt = screen.getByRole('textbox', { name: 'System prompt' })
+    await user.type(systemPrompt, 'Translate concise manga dialogue.')
+    const latinPreset = screen.getByRole('button', { name: 'Latin letters' })
+    const japanesePreset = screen.getByRole('button', { name: 'Japanese kana' })
+    const chinesePreset = screen.getByRole('button', { name: 'Chinese Han characters' })
+    const koreanPreset = screen.getByRole('button', { name: 'Korean characters' })
+    await user.click(latinPreset)
+    await user.click(japanesePreset)
+    await user.click(chinesePreset)
+    await user.click(koreanPreset)
     expect(screen.queryByRole('button', { name: 'Apply output' })).not.toBeInTheDocument()
 
     await waitFor(() =>
@@ -889,16 +914,15 @@ describe('greenfield editor', () => {
       screen.queryByLabelText(/Saving output settings|outputPicker\.saving/),
     ).not.toBeInTheDocument()
     expect(language).not.toBeDisabled()
-    expect(instructions).not.toBeDisabled()
-    expect(instructions).toHaveFocus()
+    expect(koreanPreset).toHaveFocus()
     await act(async () => finishSave(nextPreferences))
     await waitFor(() =>
       expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
         nextPreferences.pipeline.translation,
       ),
     )
-    expect(instructions).toBeInTheDocument()
-    expect(instructions).toHaveFocus()
+    expect(koreanPreset).toBeInTheDocument()
+    expect(koreanPreset).toHaveFocus()
   })
 
   it('preserves the runtime shortcuts while visiting settings', async () => {

@@ -267,6 +267,7 @@
     "baseUrl": "URL base",
     "default": "Predeterminado",
     "instructions": "Instrucciones",
+    "sourceLanguage": "Idioma de origen",
     "targetLanguage": "Idioma de destino"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "Instrucciones de traducción",
     "instructionsPlaceholder": "Indicaciones opcionales sobre el tono, los nombres y el formato.",
+    "sourceLanguage": "Idioma de origen",
+    "systemPrompt": "Prompt del sistema",
+    "systemPromptPlaceholder": "Sustitución opcional del prompt de traducción integrado.",
     "targetLanguage": "Idioma de destino",
-    "title": "Salida de traducción"
+    "title": "Salida de traducción",
+    "validators": "Validadores automáticos"
+  },
+  "translationValidators": {
+    "add": "Añadir regla",
+    "chinese": "Caracteres han chinos",
+    "customRule": "Regla de validación personalizada",
+    "japanese": "Kana japonés",
+    "korean": "Caracteres coreanos",
+    "latin": "Letras latinas",
+    "name": "Nombre de la regla",
+    "namePlaceholder": "p. ej., Sin letras latinas",
+    "pattern": "Expresión regular",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "Preajustes de bloqueo de escritura",
+    "remove": "Eliminar regla"
   },
   "phase": {
     "detection": "Detección",
@@ -444,6 +463,12 @@
       "quantization": "Cuantización",
       "quantizationDescription": "Los formatos más pequeños usan menos memoria, normalmente a cambio de calidad.",
       "selectQuantization": "Seleccionar una cuantización",
+      "sourceLanguageDescription": "Elige el idioma en el que está escrito el texto de origen.",
+      "systemPrompt": "Prompt del sistema",
+      "systemPromptDescription": "Sustituye el prompt de traducción integrado de Koharu.",
+      "systemPromptPlaceholder": "Déjalo vacío para usar el prompt de traducción integrado.",
+      "validators": "Validadores automáticos",
+      "validatorsDescription": "Rechaza el texto de traducción coincidente y regenera una vez con comentarios correctivos.",
       "targetLanguageDescription": "Elige el idioma al que se traducirá el texto.",
       "title": "Traducción",
       "translationModel": "Modelo de traducción",

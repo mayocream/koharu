@@ -267,6 +267,7 @@
     "baseUrl": "기본 URL",
     "default": "기본값",
     "instructions": "번역 지침",
+    "sourceLanguage": "원문 언어",
     "targetLanguage": "대상 언어"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "번역 지침",
     "instructionsPlaceholder": "말투, 이름, 서식에 관한 선택적 지침입니다.",
+    "sourceLanguage": "원문 언어",
+    "systemPrompt": "시스템 프롬프트",
+    "systemPromptPlaceholder": "기본 제공 번역 프롬프트를 선택적으로 대체합니다.",
     "targetLanguage": "대상 언어",
-    "title": "번역 출력"
+    "title": "번역 출력",
+    "validators": "자동 검증기"
+  },
+  "translationValidators": {
+    "add": "규칙 추가",
+    "chinese": "중국어 한자",
+    "customRule": "사용자 지정 검증 규칙",
+    "japanese": "일본어 가나",
+    "korean": "한글",
+    "latin": "라틴 문자",
+    "name": "규칙 이름",
+    "namePlaceholder": "예: 라틴 문자 금지",
+    "pattern": "정규식",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "문자 차단 프리셋",
+    "remove": "규칙 삭제"
   },
   "phase": {
     "detection": "감지",
@@ -444,6 +463,12 @@
       "quantization": "양자화",
       "quantizationDescription": "작은 형식은 메모리를 덜 사용하지만 일반적으로 품질이 낮아질 수 있습니다.",
       "selectQuantization": "양자화 선택",
+      "sourceLanguageDescription": "원문 텍스트의 언어를 선택합니다.",
+      "systemPrompt": "시스템 프롬프트",
+      "systemPromptDescription": "Koharu의 기본 번역 프롬프트를 대체합니다.",
+      "systemPromptPlaceholder": "기본 번역 프롬프트를 사용하려면 비워 둡니다.",
+      "validators": "자동 검증기",
+      "validatorsDescription": "일치하는 번역 텍스트를 거부하고 수정 피드백과 함께 한 번 다시 생성합니다.",
       "targetLanguageDescription": "텍스트를 번역할 언어를 선택합니다.",
       "title": "번역",
       "translationModel": "번역 모델",

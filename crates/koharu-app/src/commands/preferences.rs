@@ -161,6 +161,7 @@ pub(crate) async fn save_preferences(
     providers: ProviderPreferences,
     typesetting: TypesettingConfig,
 ) -> std::result::Result<Preferences, Error> {
+    pipeline.validate()?;
     remember_pipeline_profiles(&mut pipeline);
     let providers = providers.into_config()?;
     let pipeline_config = PipelineConfig::load()?;

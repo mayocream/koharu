@@ -267,6 +267,7 @@
     "baseUrl": "Temel URL",
     "default": "Varsayılan",
     "instructions": "Çeviri talimatları",
+    "sourceLanguage": "Kaynak dil",
     "targetLanguage": "Hedef dil"
   },
   "modelPicker": {
@@ -302,8 +303,26 @@
   "outputPicker": {
     "instructions": "Çeviri talimatları",
     "instructionsPlaceholder": "Üslup, adlar ve biçimlendirme için isteğe bağlı yönlendirme.",
+    "sourceLanguage": "Kaynak dil",
+    "systemPrompt": "Sistem istemi",
+    "systemPromptPlaceholder": "Yerleşik çeviri isteminin isteğe bağlı değişimi.",
     "targetLanguage": "Hedef dil",
-    "title": "Çeviri çıktısı"
+    "title": "Çeviri çıktısı",
+    "validators": "Otomatik doğrulayıcılar"
+  },
+  "translationValidators": {
+    "add": "Kural ekle",
+    "chinese": "Çince Han karakterleri",
+    "customRule": "Özel doğrulama kuralı",
+    "japanese": "Japonca kana",
+    "korean": "Korece karakterler",
+    "latin": "Latin harfleri",
+    "name": "Kural adı",
+    "namePlaceholder": "ör. Latin harfleri yasakla",
+    "pattern": "Düzenli ifade",
+    "patternPlaceholder": "[A-Za-z]",
+    "presets": "Yazı engelleme ön ayarları",
+    "remove": "Kuralı kaldır"
   },
   "phase": {
     "detection": "Algılama",
@@ -444,6 +463,12 @@
       "quantization": "Niceleme",
       "quantizationDescription": "Daha küçük biçimler daha az bellek kullanır, ancak genellikle kalite düşer.",
       "selectQuantization": "Niceleme seç",
+      "sourceLanguageDescription": "Kaynak metnin yazıldığı dili seçin.",
+      "systemPrompt": "Sistem istemi",
+      "systemPromptDescription": "Koharu'nun yerleşik çeviri istemini değiştirir.",
+      "systemPromptPlaceholder": "Yerleşik çeviri istemini kullanmak için boş bırakın.",
+      "validators": "Otomatik doğrulayıcılar",
+      "validatorsDescription": "Eşleşen çeviri metnini reddeder ve düzeltici geri bildirimle bir kez yeniden üretir.",
       "targetLanguageDescription": "Metnin çevrileceği dili seçin.",
       "title": "Çeviri",
       "translationModel": "Çeviri modeli",

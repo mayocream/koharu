@@ -9,6 +9,7 @@ mod model;
 mod prompt;
 mod provider;
 mod remote;
+mod validation;
 
 use std::sync::Arc;
 
@@ -22,6 +23,7 @@ pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
 pub use provider::{Provider, ProviderConfig, ProvidersConfig};
+pub use validation::{TranslationValidationRule, TranslationValidator};
 
 #[derive(Clone)]
 pub struct Translator {
@@ -42,6 +44,8 @@ impl LoadedLocal {
         self.model == selection.model && self.quantization == selection.quantization
     }
 }
+
+const MAX_VALIDATION_ATTEMPTS: usize = 2;
 
 impl Translator {
     pub fn from_config(
@@ -136,27 +140,56 @@ impl Translator {
         } else {
             request.remove_image();
         }
-
         let expected = request.segments.len();
-        let translated = if provider == Provider::Local {
-            self.local(selection)
+
+        let validator = request.validator.clone();
+        let mut feedback: Option<String> = None;
+        for attempt in 0..MAX_VALIDATION_ATTEMPTS {
+            let attempt_request = feedback
+                .as_ref()
+                .map(|feedback| request.clone().with_retry_feedback(feedback.clone()))
+                .unwrap_or_else(|| request.clone());
+            let translated = if provider == Provider::Local {
+                self.local(selection)
+                    .await?
+                    .translate(attempt_request, generation.clone())
+                    .await?
+            } else {
+                let providers = self.providers.read()?.clone();
+                remote::translate(
+                    &self.client,
+                    &providers,
+                    selection,
+                    &generation,
+                    &attempt_request,
+                )
                 .await?
-                .translate(request, generation)
-                .await?
-        } else {
-            let providers = self.providers.read()?.clone();
-            remote::translate(&self.client, &providers, selection, &generation, &request).await?
-        };
-        if translated.len() != expected {
-            return Err(Error::SegmentCount {
-                provider: provider_id,
-                expected,
-                actual: translated.len(),
+            };
+            if translated.len() != expected {
+                return Err(Error::SegmentCount {
+                    provider: provider_id,
+                    expected,
+                    actual: translated.len(),
+                }
+                .into());
             }
-            .into());
+            let Some(validation_feedback) = validator
+                .as_ref()
+                .and_then(|validator| validator.feedback(&translated, request.target_language))
+            else {
+                tracing::Span::current().record("outcome", "completed");
+                return Ok((provider_id, translated));
+            };
+            if attempt + 1 == MAX_VALIDATION_ATTEMPTS || !retries_with_feedback(provider) {
+                return Err(Error::Validation {
+                    provider: provider_id,
+                    message: validation_feedback,
+                }
+                .into());
+            }
+            feedback = Some(validation_feedback);
         }
-        tracing::Span::current().record("outcome", "completed");
-        Ok((provider_id, translated))
+        unreachable!("validation attempts are bounded and always return")
     }
 
     #[tracing::instrument(skip_all)]
@@ -188,6 +221,13 @@ impl Translator {
                 .translator,
         ))
     }
+}
+
+fn retries_with_feedback(provider: Provider) -> bool {
+    !matches!(
+        provider,
+        Provider::DeepL | Provider::GoogleCloudTranslation | Provider::Caiyun
+    )
 }
 
 #[cfg(test)]

@@ -25,11 +25,17 @@ struct Args {
     #[arg(long)]
     base_url: Option<Url>,
 
+    #[arg(long, default_value = "ja-JP")]
+    source: Language,
+
     #[arg(long)]
     target: Language,
 
     #[arg(long)]
     instructions: Option<String>,
+
+    #[arg(long)]
+    system_prompt: Option<String>,
 
     #[arg(long)]
     cpu: bool,
@@ -86,7 +92,10 @@ async fn main() -> Result<()> {
         vision: true,
         reasoning: true,
     };
-    let mut request = TranslationRequest::new(args.segments, args.target);
+    let mut request = TranslationRequest::new(args.segments, args.source, args.target);
+    if let Some(system_prompt) = args.system_prompt {
+        request = request.with_system_prompt(system_prompt);
+    }
     if let Some(instructions) = args.instructions {
         request = request.with_instructions(instructions);
     }

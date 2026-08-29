@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ModelPicker } from '@/components/controls/ModelPicker'
+import { TranslationValidationEditor } from '@/components/controls/TranslationValidationEditor'
 import { GenerationPreferences } from '@/components/preferences/GenerationPreferences'
 import {
   PreferencePage,
@@ -138,6 +139,35 @@ export function TranslationPreferences({
 
       <PreferenceSection title={t('settings.translation.output')}>
         <PreferenceRow
+          title={t('model.sourceLanguage')}
+          description={t('settings.translation.sourceLanguageDescription')}
+        >
+          <Select
+            value={value.source_language}
+            items={Object.fromEntries(
+              languageChoices.map((language) => [language.tag, language.name]),
+            )}
+            onValueChange={(source_language) =>
+              source_language && onChange({ ...value, source_language })
+            }
+          >
+            <SelectTrigger
+              aria-label={t('model.sourceLanguage')}
+              className='h-8 w-full text-[11px]'
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {languageChoices.map((language) => (
+                <SelectItem key={language.tag} value={language.tag}>
+                  {language.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </PreferenceRow>
+
+        <PreferenceRow
           title={t('model.targetLanguage')}
           description={t('settings.translation.targetLanguageDescription')}
         >
@@ -178,6 +208,32 @@ export function TranslationPreferences({
             onChange={(event) =>
               onChange({ ...value, instructions: event.currentTarget.value || null })
             }
+          />
+        </PreferenceRow>
+
+        <PreferenceRow
+          title={t('settings.translation.systemPrompt')}
+          description={t('settings.translation.systemPromptDescription')}
+          align='start'
+        >
+          <Textarea
+            aria-label={t('settings.translation.systemPrompt')}
+            value={value.system_prompt ?? ''}
+            className='field-sizing-fixed min-h-24 resize-y overflow-y-auto text-[12px] leading-5'
+            placeholder={t('settings.translation.systemPromptPlaceholder')}
+            onChange={(event) =>
+              onChange({ ...value, system_prompt: event.currentTarget.value || null })
+            }
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.validators')}
+          description={t('settings.translation.validatorsDescription')}
+          align='start'
+        >
+          <TranslationValidationEditor
+            value={value.validators}
+            onChange={(validators) => onChange({ ...value, validators })}
           />
         </PreferenceRow>
       </PreferenceSection>

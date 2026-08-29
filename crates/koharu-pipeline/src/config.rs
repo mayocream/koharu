@@ -1,5 +1,7 @@
 use anyhow::{Result, bail};
-use koharu_translator::{GenerationConfig, Language};
+use koharu_translator::{
+    GenerationConfig, Language, TranslationValidationRule, TranslationValidator,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use specta::Type;
 
@@ -176,8 +178,12 @@ pub struct TranslationConfig {
     pub model: koharu_translator::ModelSelection,
     pub generation: GenerationConfig,
     #[specta(type = String)]
+    pub source_language: Language,
+    #[specta(type = String)]
     pub target_language: Language,
+    pub system_prompt: Option<String>,
     pub instructions: Option<String>,
+    pub validators: Vec<TranslationValidationRule>,
 }
 
 impl Default for TranslationConfig {
@@ -185,8 +191,11 @@ impl Default for TranslationConfig {
         Self {
             model: koharu_translator::ModelSelection::default(),
             generation: GenerationConfig::default(),
+            source_language: Language::Japanese,
             target_language: Language::English,
+            system_prompt: None,
             instructions: None,
+            validators: Vec::new(),
         }
     }
 }
@@ -240,6 +249,7 @@ impl PipelineConfig {
         ) {
             bail!("unsupported OCR model")
         }
+        TranslationValidator::new(&self.translation.validators)?;
         Ok(())
     }
 }
@@ -302,6 +312,18 @@ mod tests {
         ));
         assert!(matches!(config.ocr, OcrModel::PaddleOcrVl1_6));
         assert!(matches!(config.inpainting, InpaintingModel::LaMa {}));
+        assert_eq!(config.translation.source_language, Language::Japanese);
+    }
+
+    #[test]
+    fn rejects_invalid_translation_validator_configuration() {
+        let mut config = PipelineConfig::default();
+        config.translation.validators = vec![TranslationValidationRule {
+            name: "Broken".to_owned(),
+            pattern: "[".to_owned(),
+        }];
+
+        assert!(config.validate().is_err());
     }
 
     #[test]

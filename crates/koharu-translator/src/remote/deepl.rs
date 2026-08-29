@@ -34,15 +34,10 @@ pub(super) async fn translate(
         provider: "deepl",
         language: request.target_language,
     })?;
-    let source = request
-        .source_language
-        .map(|language| {
-            source(language).ok_or(Error::UnsupportedSourceLanguage {
-                provider: "deepl",
-                language,
-            })
-        })
-        .transpose()?;
+    let source = source(request.source_language).ok_or(Error::UnsupportedSourceLanguage {
+        provider: "deepl",
+        language: request.source_language,
+    })?;
     let root = config.base_url.as_ref().map_or_else(
         || {
             if api_key.expose_secret().trim_end().ends_with(":fx") {
@@ -66,9 +61,7 @@ pub(super) async fn translate(
         .map(|text| ("text", text.as_str()))
         .collect::<Vec<_>>();
     form.push(("target_lang", target));
-    if let Some(source) = source {
-        form.push(("source_lang", source));
-    }
+    form.push(("source_lang", source));
     if !context.is_empty() {
         form.push(("context", &context));
     }

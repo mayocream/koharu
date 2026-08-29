@@ -37,11 +37,17 @@ struct Arguments {
     #[arg(long, value_enum, default_value = "lama")]
     inpainting: InpaintingChoice,
 
+    #[arg(long, default_value = "ja-JP")]
+    source_language: Language,
+
     #[arg(long, default_value = "en-US")]
     target_language: Language,
 
     #[arg(long)]
     translation_instructions: Option<String>,
+
+    #[arg(long)]
+    translation_system_prompt: Option<String>,
 
     #[arg(long, default_value = "gemma4-12b-it")]
     llm: String,
@@ -114,8 +120,11 @@ impl Arguments {
                     reasoning: true,
                 },
                 generation: GenerationConfig::default(),
+                source_language: self.source_language,
                 target_language: self.target_language,
+                system_prompt: self.translation_system_prompt.clone(),
                 instructions: self.translation_instructions.clone(),
+                validators: Vec::new(),
             },
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa {},
