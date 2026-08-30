@@ -135,8 +135,8 @@ function TypeInspector() {
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
   const availableFonts = useFonts().data
   const expandedSelection = page ? expandLayerSelection(page.layers, selectedIds) : []
-  const selected =
-    page?.layers.filter(isTextLayer).filter((layer) => expandedSelection.includes(layer.id)) ?? []
+  const textLayers = page?.layers.filter(isTextLayer) ?? []
+  const selected = textLayers.filter((layer) => expandedSelection.includes(layer.id))
   const current = selected[0]
   const [draft, setDraft] = useState<{
     layer: EntityId
@@ -147,8 +147,9 @@ function TypeInspector() {
   useEffect(() => setDraft(null), [current?.id])
 
   const apply = (update: (value: Typography) => Typography) => {
-    if (!selected.length) return
-    const updates = selected.map((layer) => ({
+    const targets = selected.length ? selected : textLayers
+    if (!targets.length) return
+    const updates = targets.map((layer) => ({
       layer: layer.id,
       typography: update(layer.typography ?? defaultTypography),
     }))
@@ -167,7 +168,7 @@ function TypeInspector() {
     current && draft?.layer === current.id
       ? draft.typography
       : (current?.typography ?? defaultTypography)
-  const disabled = !current
+  const disabled = textLayers.length === 0
   const families = useMemo(() => {
     const available = availableFonts ?? []
     return available.some(

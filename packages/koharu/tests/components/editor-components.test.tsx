@@ -551,6 +551,28 @@ describe('greenfield editor', () => {
     )
   })
 
+  it('applies font size to all text layers when none is selected', async () => {
+    const user = userEvent.setup()
+    installProject()
+    useKoharuStore.setState({ selectedLayers: [] })
+    const setTypography = vi.spyOn(commands, 'setTypography').mockResolvedValue(null)
+    render(<Inspector />)
+
+    expect(screen.getByTestId('type-size')).not.toBeDisabled()
+    await user.type(screen.getByTestId('type-size'), '20')
+    await user.tab()
+    await waitFor(() =>
+      expect(setTypography).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            layer: 'element',
+            typography: expect.objectContaining({ size: 20, auto_fit: false }),
+          }),
+        ]),
+      ),
+    )
+  })
+
   it('defaults vertical text alignment to top and maps end to bottom', async () => {
     const user = userEvent.setup()
     installProject()
