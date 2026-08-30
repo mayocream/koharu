@@ -11,6 +11,8 @@
     "downloadingFiles": "Скачивание файлов: {{count}}",
     "downloadingFiles_one": "Скачивание файлов: {{count}}",
     "downloadingFiles_other": "Скачивание файлов: {{count}}",
+    "exportFailed": "Ошибка экспорта.",
+    "exporting": "Экспорт",
     "modelDownload": "Скачивание модели",
     "processing": "Обработка",
     "processingFailed": "Ошибка обработки.",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "Koharu не может продолжить работу",
     "tryAgain": "Повторить"
+  },
+  "export": {
+    "cbzTitle": "Экспорт CBZ",
+    "cbzDescription": "Выберите, как кодировать страницы внутри архива.",
+    "start": "Экспорт",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "Без потерь. Самые большие файлы.",
+      "jpeg": "Самые маленькие файлы. Прозрачность сводится на белый.",
+      "webp": "Меньше PNG и сохраняет прозрачность."
+    }
   },
   "fontPicker": {
     "activeFilterCount": "Активных фильтров: {{count}}",
@@ -245,8 +262,10 @@
     "delete": "Удалить выбранное",
     "discord": "Discord",
     "edit": "Правка",
-    "exportPng": "Экспорт PNG…",
-    "exportPsd": "Экспорт PSD…",
+    "export": "Экспорт",
+    "exportCbz": "CBZ (все страницы)…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "Файл",
     "fit": "Вписать в окно",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "Оформление"
     },
     "backToEditor": "Вернуться в редактор",
+    "export": {
+      "title": "Экспорт",
+      "description": "Настройте кодирование страниц при экспорте архива.",
+      "quality": "Качество архива",
+      "qualityDescription": "Применяется к форматам с потерями при экспорте CBZ. PNG всегда без потерь.",
+      "qualityLabel": "Качество",
+      "jpegQuality": "Качество JPEG",
+      "jpegQualityDescription": "1-100. Выше — чище растр и больше файл.",
+      "webpQuality": "Качество WebP",
+      "webpQualityDescription": "1-100. Выше — чище растр и больше файл."
+    },
     "generation": {
       "description": "Настройте генерацию переведённого текста языковыми моделями.",
       "enableReasoning": "Включить рассуждение",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "Оформление",
+      "export": "Экспорт",
       "pipeline": "Конвейер",
       "providers": "Провайдеры",
       "shortcuts": "Сочетания клавиш",

@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Cpu,
+  FileDown,
   KeyRound,
   Keyboard,
   Languages,
@@ -16,6 +17,7 @@ import { useTheme } from 'next-themes'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ExportPreferences } from '@/components/preferences/ExportPreferences'
 import { PipelinePreferences } from '@/components/preferences/PipelinePreferences'
 import {
   PreferencePage,
@@ -29,6 +31,7 @@ import { refreshPreferences, refreshTranslationModels, savePreferences } from '@
 import { supportedLanguages } from '@/lib/i18n'
 import { receivePreferences, useKoharuStore, type ShortcutAction } from '@/lib/store'
 import {
+  type ExportConfig,
   type PipelineConfig,
   type Preferences,
   type ProviderPreferences as ProviderSettings,
@@ -51,6 +54,7 @@ const tabs = [
   ['providers', KeyRound],
   ['translation', Languages],
   ['typesetting', Type],
+  ['export', FileDown],
   ['shortcuts', Keyboard],
 ] as const
 type Tab = (typeof tabs)[number][0]
@@ -69,6 +73,7 @@ export function SettingsPage() {
   const [typesetting, setTypesetting] = useState<TypesettingConfig | null>(
     preferences?.typesetting ?? null,
   )
+  const [exportConfig, setExportConfig] = useState<ExportConfig | null>(preferences?.export ?? null)
   const translation = pipeline?.translation ?? null
   const lastSaved = useRef<string | null>(null)
   const lastSavedProviders = useRef<string | null>(null)
@@ -77,15 +82,18 @@ export function SettingsPage() {
   const lastPending = useRef<{ serialized: string; promise: Promise<Preferences> } | null>(null)
   const currentDraft = useRef<string | null>(null)
   currentDraft.current =
-    pipeline && providers && typesetting ? JSON.stringify([pipeline, providers, typesetting]) : null
+    pipeline && providers && typesetting && exportConfig
+      ? JSON.stringify([pipeline, providers, typesetting, exportConfig])
+      : null
 
   const saveDraft = useCallback(
     async (
       pipeline: PipelineConfig,
       providers: ProviderSettings,
       typesetting: TypesettingConfig,
+      exportConfig: ExportConfig,
     ) => {
-      const serialized = JSON.stringify([pipeline, providers, typesetting])
+      const serialized = JSON.stringify([pipeline, providers, typesetting, exportConfig])
       if (serialized === lastSaved.current) {
         const pending = lastPending.current
         if (pending?.serialized === serialized) await pending.promise
@@ -97,7 +105,7 @@ export function SettingsPage() {
       const generation = ++saveGeneration.current
       const pending = saveQueue.current
         .catch(() => undefined)
-        .then(() => savePreferences(pipeline, providers, typesetting))
+        .then(() => savePreferences(pipeline, providers, typesetting, exportConfig))
       lastPending.current = { serialized, promise: pending }
       saveQueue.current = pending.then(
         () => undefined,
@@ -131,25 +139,27 @@ export function SettingsPage() {
     setPipeline(preferences?.pipeline ?? null)
     setProviders(preferences?.providers ?? null)
     setTypesetting(preferences?.typesetting ?? null)
+    setExportConfig(preferences?.export ?? null)
     if (preferences) {
       lastSaved.current = JSON.stringify([
         preferences.pipeline,
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ])
       lastSavedProviders.current = JSON.stringify(preferences.providers)
     }
   }, [open, preferences])
 
   useEffect(() => {
-    if (!open || !pipeline || !providers || !typesetting) return
-    const serialized = JSON.stringify([pipeline, providers, typesetting])
+    if (!open || !pipeline || !providers || !typesetting || !exportConfig) return
+    const serialized = JSON.stringify([pipeline, providers, typesetting, exportConfig])
     if (serialized === lastSaved.current) return
     const timeout = window.setTimeout(() => {
-      void saveDraft(pipeline, providers, typesetting).catch(() => undefined)
+      void saveDraft(pipeline, providers, typesetting, exportConfig).catch(() => undefined)
     }, 260)
     return () => window.clearTimeout(timeout)
-  }, [open, pipeline, providers, saveDraft, typesetting])
+  }, [exportConfig, open, pipeline, providers, saveDraft, typesetting])
 
   if (!open) return null
 
@@ -161,11 +171,11 @@ export function SettingsPage() {
           variant='ghost'
           className='mb-5 h-9 justify-start gap-2 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground'
           onClick={() => {
-            if (!pipeline || !providers || !typesetting) {
+            if (!pipeline || !providers || !typesetting || !exportConfig) {
               setOpen(false)
               return
             }
-            void saveDraft(pipeline, providers, typesetting)
+            void saveDraft(pipeline, providers, typesetting, exportConfig)
               .then(() => setOpen(false))
               .catch(() => undefined)
           }}
@@ -227,6 +237,12 @@ export function SettingsPage() {
             {tab === 'typesetting' &&
               (typesetting ? (
                 <TypesettingPreferences value={typesetting} onChange={setTypesetting} />
+              ) : (
+                <LoadingPreferences />
+              ))}
+            {tab === 'export' &&
+              (exportConfig ? (
+                <ExportPreferences value={exportConfig} onChange={setExportConfig} />
               ) : (
                 <LoadingPreferences />
               ))}

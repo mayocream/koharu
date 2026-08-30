@@ -11,6 +11,8 @@
     "downloadingFiles": "{{count}} dosya indiriliyor",
     "downloadingFiles_one": "{{count}} dosya indiriliyor",
     "downloadingFiles_other": "{{count}} dosya indiriliyor",
+    "exportFailed": "Dışa aktarma başarısız oldu.",
+    "exporting": "Dışa aktarılıyor",
     "modelDownload": "Model indirme",
     "processing": "İşleniyor",
     "processingFailed": "İşleme başarısız oldu.",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "Koharu devam edemedi",
     "tryAgain": "Tekrar dene"
+  },
+  "export": {
+    "cbzTitle": "CBZ Dışa Aktar",
+    "cbzDescription": "Arşivdeki sayfaların nasıl kodlanacağını seçin.",
+    "start": "Dışa Aktar",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "Kayıpsız. En büyük dosyalar.",
+      "jpeg": "En küçük dosyalar. Saydamlık beyaz üzerine düzleştirilir.",
+      "webp": "PNG'den küçük ve saydamlığı korur."
+    }
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} etkin filtre",
@@ -245,8 +262,10 @@
     "delete": "Seçilenleri Sil",
     "discord": "Discord",
     "edit": "Düzenle",
-    "exportPng": "PNG Dışa Aktar…",
-    "exportPsd": "PSD Dışa Aktar…",
+    "export": "Dışa Aktar",
+    "exportCbz": "CBZ (Tüm Sayfalar)…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "Dosya",
     "fit": "Pencereye Sığdır",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "Görünüm"
     },
     "backToEditor": "Düzenleyiciye dön",
+    "export": {
+      "title": "Dışa Aktarma",
+      "description": "Bir arşivi dışa aktarırken sayfaların nasıl kodlanacağını denetleyin.",
+      "quality": "Arşiv kalitesi",
+      "qualityDescription": "CBZ dışa aktarımındaki kayıplı biçimler için geçerlidir. PNG her zaman kayıpsızdır.",
+      "qualityLabel": "Kalite",
+      "jpegQuality": "JPEG kalitesi",
+      "jpegQualityDescription": "1-100. Yüksek değer tramları korur ve dosyayı büyütür.",
+      "webpQuality": "WebP kalitesi",
+      "webpQualityDescription": "1-100. Yüksek değer tramları korur ve dosyayı büyütür."
+    },
     "generation": {
       "description": "Dil modellerinin çevrilmiş metni nasıl ürettiğini ayarlayın.",
       "enableReasoning": "Akıl yürütmeyi etkinleştir",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "Görünüm",
+      "export": "Dışa Aktarma",
       "pipeline": "İşlem hattı",
       "providers": "Sağlayıcılar",
       "shortcuts": "Kısayollar",

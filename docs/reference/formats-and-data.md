@@ -11,6 +11,7 @@ description: Supported import and export formats, project layout, settings, cred
 | --- | --- |
 | Page import | PNG, JPEG, WebP, CBZ, ZIP, RAR, PDF |
 | Flattened export | PNG |
+| Archive export | CBZ, with PNG, JPEG, or WebP pages |
 | Layered interchange export | PSD |
 | Koharu working project | `.khrproj` directory |
 

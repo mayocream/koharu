@@ -11,6 +11,8 @@
     "downloadingFiles": "正在下载 {{count}} 个文件",
     "downloadingFiles_one": "正在下载 {{count}} 个文件",
     "downloadingFiles_other": "正在下载 {{count}} 个文件",
+    "exportFailed": "导出失败。",
+    "exporting": "正在导出",
     "modelDownload": "模型下载",
     "processing": "正在处理",
     "processingFailed": "处理失败。",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "Koharu 无法继续运行",
     "tryAgain": "重试"
+  },
+  "export": {
+    "cbzTitle": "导出 CBZ",
+    "cbzDescription": "选择存档内页面的编码方式。",
+    "start": "导出",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "无损。文件最大。",
+      "jpeg": "文件最小。透明区域会合成到白色上。",
+      "webp": "比 PNG 更小，并保留透明度。"
+    }
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} 个启用的筛选条件",
@@ -245,8 +262,10 @@
     "delete": "删除所选项",
     "discord": "Discord",
     "edit": "编辑",
-    "exportPng": "导出 PNG…",
-    "exportPsd": "导出 PSD…",
+    "export": "导出",
+    "exportCbz": "CBZ（全部页面）…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "文件",
     "fit": "适应窗口",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "外观"
     },
     "backToEditor": "返回编辑器",
+    "export": {
+      "title": "导出",
+      "description": "控制导出存档时页面的编码方式。",
+      "quality": "存档质量",
+      "qualityDescription": "适用于导出 CBZ 时的有损格式。PNG 始终无损。",
+      "qualityLabel": "质量",
+      "jpegQuality": "JPEG 质量",
+      "jpegQualityDescription": "1-100。数值越高网点越清晰，文件越大。",
+      "webpQuality": "WebP 质量",
+      "webpQualityDescription": "1-100。数值越高网点越清晰，文件越大。"
+    },
     "generation": {
       "description": "微调语言模型生成译文的方式。",
       "enableReasoning": "启用推理",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "外观",
+      "export": "导出",
       "pipeline": "流水线",
       "providers": "提供商",
       "shortcuts": "快捷键",

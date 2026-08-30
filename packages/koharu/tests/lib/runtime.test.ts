@@ -46,6 +46,7 @@ const preferences: Preferences = {
   providers: {
     entries: [],
   },
+  export: { jpeg_quality: 90, webp_quality: 85 },
   typesetting: {
     font_families: ['CCWildWords', 'Adobe 黑体 Std'],
   },
@@ -118,6 +119,7 @@ describe('Tauri runtime', () => {
     act(() => {
       jobChannel.onmessage({
         id: 'job',
+        kind: 'processing',
         state: 'running',
         completed: 0,
         total: 4,
@@ -183,6 +185,7 @@ describe('Tauri runtime', () => {
     const [, jobChannel] = binding.mock.calls[0]
     jobChannel.onmessage({
       id: 'job',
+      kind: 'processing',
       state: 'running',
       completed: 1,
       total: 2,

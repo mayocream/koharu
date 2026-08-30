@@ -8,13 +8,14 @@ use koharu_translator::{Language, Model, Provider, ProviderConfig, ProvidersConf
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::Error;
+use super::{Error, output::ExportConfig};
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct Preferences {
     pub pipeline: PipelineConfig,
     pub providers: ProviderPreferences,
     pub typesetting: TypesettingConfig,
+    pub export: ExportConfig,
     pub languages: Vec<LanguageChoice>,
 }
 
@@ -23,13 +24,16 @@ impl Preferences {
         let pipeline = PipelineConfig::load()?;
         let providers = ProvidersConfig::load()?;
         let typesetting = TypesettingConfig::load()?;
+        let export = ExportConfig::load()?;
         let pipeline = pipeline.read()?;
         let providers = providers.read()?;
         let typesetting = typesetting.read()?;
+        let export = export.read()?;
         Ok(Self {
             pipeline: pipeline.clone(),
             providers: ProviderPreferences::from_config(&providers)?,
             typesetting: typesetting.clone(),
+            export: *export,
             languages: Language::ALL
                 .iter()
                 .map(|language| LanguageChoice {
@@ -160,12 +164,14 @@ pub(crate) async fn save_preferences(
     mut pipeline: PipelineConfig,
     providers: ProviderPreferences,
     typesetting: TypesettingConfig,
+    export_config: ExportConfig,
 ) -> std::result::Result<Preferences, Error> {
     remember_pipeline_profiles(&mut pipeline);
     let providers = providers.into_config()?;
     let pipeline_config = PipelineConfig::load()?;
     let providers_config = ProvidersConfig::load()?;
     let typesetting_config = TypesettingConfig::load()?;
+    let export_section = ExportConfig::load()?;
     {
         let mut current = pipeline_config.write()?;
         *current = pipeline;
@@ -179,6 +185,11 @@ pub(crate) async fn save_preferences(
     {
         let mut current = typesetting_config.write()?;
         *current = typesetting;
+        current.save()?;
+    }
+    {
+        let mut current = export_section.write()?;
+        *current = export_config;
         current.save()?;
     }
     let preferences = Preferences::load()?;

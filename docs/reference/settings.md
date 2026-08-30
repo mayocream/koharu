@@ -49,6 +49,15 @@ Configure the ordered default font-family stack. When a text layer has no usable
 
 This is a fallback policy; individual text layers can still choose their own font, weight, style, size, colors, alignment, and writing mode.
 
+## Export
+
+Quality for the lossy page formats offered when exporting a CBZ archive, from 1 to 100.
+
+- **JPEG quality** defaults to 90.
+- **WebP quality** defaults to 85.
+
+Both default higher than a typical photographic setting because screentone and fine line work compress poorly. PNG pages are always lossless and are not affected.
+
 ## Shortcuts
 
 Assign one character to Select, Text, Brush, Eraser, Color picker, Remove, Pan, and Fit Window. The current shortcut editor updates the running UI session; custom tool bindings are not part of `~/.koharu/config.toml`.

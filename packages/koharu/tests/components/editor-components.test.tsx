@@ -134,6 +134,7 @@ const preferences: Preferences = {
       },
     ],
   },
+  export: { jpeg_quality: 90, webp_quality: 85 },
   typesetting: {
     font_families: ['Noto Sans'],
   },
@@ -883,6 +884,7 @@ describe('greenfield editor', () => {
         nextPreferences.pipeline,
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ),
     )
     expect(
@@ -906,11 +908,12 @@ describe('greenfield editor', () => {
     const user = userEvent.setup()
     const save = vi
       .spyOn(commands, 'savePreferences')
-      .mockImplementation(async (pipeline, providers, typesetting) => ({
+      .mockImplementation(async (pipeline, providers, typesetting, exportConfig) => ({
         ...preferences,
         pipeline,
         providers,
         typesetting,
+        export: exportConfig,
       }))
     render(
       <ThemeProvider attribute='class'>
@@ -1004,6 +1007,7 @@ describe('greenfield editor', () => {
         nextPreferences.pipeline,
         currentPreferences.providers,
         currentPreferences.typesetting,
+        currentPreferences.export,
       ),
     )
     expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
@@ -1059,6 +1063,7 @@ describe('greenfield editor', () => {
         nextPreferences.pipeline,
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ),
     )
     expect(useKoharuStore.getState().preferences?.pipeline.translation).toEqual(
@@ -1123,6 +1128,7 @@ describe('greenfield editor', () => {
         }),
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Providers' }))
@@ -1151,6 +1157,7 @@ describe('greenfield editor', () => {
         }),
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ),
     )
     const vision = screen.getByRole('switch', { name: 'Vision' })
@@ -1167,6 +1174,7 @@ describe('greenfield editor', () => {
         }),
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ),
     )
     expect(screen.getByLabelText('Translation model')).toHaveTextContent('Gemma 4 E2B Instruct')
@@ -1249,6 +1257,7 @@ describe('greenfield editor', () => {
         }),
         configured.providers,
         configured.typesetting,
+        configured.export,
       ),
     )
   })
@@ -1356,6 +1365,7 @@ describe('greenfield editor', () => {
         }),
         preferences.providers,
         preferences.typesetting,
+        preferences.export,
       ),
     )
   })
@@ -1484,11 +1494,12 @@ describe('greenfield editor', () => {
     ])
     const save = vi
       .spyOn(commands, 'savePreferences')
-      .mockImplementation(async (pipeline, providers, typesetting) => ({
+      .mockImplementation(async (pipeline, providers, typesetting, exportConfig) => ({
         ...preferences,
         pipeline,
         providers,
         typesetting,
+        export: exportConfig,
       }))
     render(
       <ThemeProvider attribute='class'>
@@ -1502,15 +1513,21 @@ describe('greenfield editor', () => {
     await user.click(await screen.findByRole('option', { name: 'Arial, System' }))
 
     await waitFor(() =>
-      expect(save).toHaveBeenLastCalledWith(preferences.pipeline, preferences.providers, {
-        font_families: ['Noto Sans', 'Arial'],
-      }),
+      expect(save).toHaveBeenLastCalledWith(
+        preferences.pipeline,
+        preferences.providers,
+        { font_families: ['Noto Sans', 'Arial'] },
+        preferences.export,
+      ),
     )
     await user.click(screen.getByRole('button', { name: 'Remove Noto Sans' }))
     await waitFor(() =>
-      expect(save).toHaveBeenLastCalledWith(preferences.pipeline, preferences.providers, {
-        font_families: ['Arial'],
-      }),
+      expect(save).toHaveBeenLastCalledWith(
+        preferences.pipeline,
+        preferences.providers,
+        { font_families: ['Arial'] },
+        preferences.export,
+      ),
     )
   })
 
@@ -1541,6 +1558,7 @@ describe('greenfield editor', () => {
     useKoharuStore.setState({
       jobs: {
         job: {
+          kind: 'processing',
           state: 'running',
           id: 'job',
           completed: 1,
@@ -1557,6 +1575,54 @@ describe('greenfield editor', () => {
     expect(screen.getByText('25%')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     await waitFor(() => expect(stop).toHaveBeenCalledWith('job'))
+  })
+
+  it('describes an export job as exporting and keeps it stoppable', async () => {
+    installProject()
+    useKoharuStore.setState({
+      jobs: {
+        export: {
+          kind: 'export',
+          state: 'running',
+          id: 'export',
+          completed: 3,
+          total: 12,
+          page: null,
+          stage: null,
+          model: null,
+          error: null,
+        },
+      },
+    })
+    const stop = vi.spyOn(commands, 'stopJob').mockResolvedValue(null)
+    render(<ActivityCenter />)
+    expect(screen.getByText('Exporting')).toBeInTheDocument()
+    expect(screen.queryByText('Processing')).not.toBeInTheDocument()
+    expect(screen.getByText('3 / 12')).toBeInTheDocument()
+    expect(screen.getByText('25%')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    await waitFor(() => expect(stop).toHaveBeenCalledWith('export'))
+  })
+
+  it('reports a failed export with the export wording', () => {
+    installProject()
+    useKoharuStore.setState({
+      jobs: {
+        export: {
+          kind: 'export',
+          state: 'failed',
+          id: 'export',
+          completed: 0,
+          total: 4,
+          page: null,
+          stage: null,
+          model: null,
+          error: null,
+        },
+      },
+    })
+    render(<ActivityCenter />)
+    expect(screen.getByText('Export failed.')).toBeInTheDocument()
   })
 
   it('combines concurrent downloads into one progress bar', () => {

@@ -38,6 +38,7 @@ impl fmt::Display for JobId {
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct Job {
     pub id: JobId,
+    pub kind: JobKind,
     pub state: JobState,
     #[specta(type = f64)]
     pub completed: usize,
@@ -58,9 +59,22 @@ pub enum JobState {
     Stopped,
 }
 
+/// What kind of work a job represents, so the activity view can describe it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum JobKind {
+    Processing,
+    Export,
+}
+
 #[derive(Default)]
 pub(crate) struct Processing {
+    /// Pipeline runs. These are mutually exclusive with each other and with
+    /// imports, which is why `process` refuses to start while this is not empty.
     pub(crate) stops: Mutex<HashMap<JobId, StopToken>>,
+    /// Export runs. Exports read an immutable snapshot, so they neither block
+    /// nor are blocked by a pipeline run and are tracked separately.
+    pub(crate) exports: Mutex<HashMap<JobId, StopToken>>,
     pub(crate) jobs: Mutex<HashMap<JobId, Job>>,
     pub(crate) inpainting_mask: Mutex<Option<koharu_pipeline::InpaintingMask>>,
 }
@@ -99,6 +113,7 @@ pub(crate) async fn process(
     }
     let job = Job {
         id,
+        kind: JobKind::Processing,
         state: JobState::Running,
         completed: 0,
         total: 0,
@@ -289,9 +304,12 @@ pub(crate) async fn stop_job(
     job: JobId,
     processing: State<'_, Processing>,
 ) -> std::result::Result<(), Error> {
-    let stops = processing.stops.lock();
-    let stop = stops
+    let stop = processing
+        .stops
+        .lock()
         .get(&job)
+        .cloned()
+        .or_else(|| processing.exports.lock().get(&job).cloned())
         .with_context(|| format!("job {job} is not running"))?;
     stop.stop();
     Ok(())

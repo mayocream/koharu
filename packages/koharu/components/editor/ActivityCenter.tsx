@@ -76,10 +76,11 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
 function JobItem({ job }: { job: Job }) {
   const { t } = useTranslation()
   const dismiss = useKoharuStore((state) => state.dismissJob)
+  const exporting = job.kind === 'export'
   if (job.state === 'failed') {
     return (
       <Failure
-        message={job.error || t('activity.processingFailed')}
+        message={job.error || t(exporting ? 'activity.exportFailed' : 'activity.processingFailed')}
         onDismiss={() => dismiss(job.id)}
       />
     )
@@ -91,11 +92,15 @@ function JobItem({ job }: { job: Job }) {
         <span className='mt-1.5 size-1.5 justify-self-center rounded-full bg-primary' />
         <div className='min-w-0'>
           <span className='block truncate text-[12px] font-medium capitalize'>
-            {job.stage
-              ? t(`phase.${job.stage}`, { defaultValue: job.stage })
-              : t('activity.processing')}
+            {exporting
+              ? t('activity.exporting')
+              : job.stage
+                ? t(`phase.${job.stage}`, { defaultValue: job.stage })
+                : t('activity.processing')}
           </span>
-          <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>{job.model}</p>
+          <p className='mt-0.5 truncate text-[10px] text-muted-foreground'>
+            {exporting ? `${job.completed} / ${job.total}` : job.model}
+          </p>
         </div>
         <span className='pt-0.5 text-right text-[10px] tabular-nums'>
           {percent !== null ? `${percent}%` : null}

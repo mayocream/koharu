@@ -7,6 +7,7 @@ import { useState, type ComponentProps } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AboutDialog } from '@/components/app/AboutDialog'
+import { ExportCbzDialog } from '@/components/app/ExportCbzDialog'
 import { useMacOS, WindowControls } from '@/components/app/WindowChrome'
 import { call } from '@/lib/backend'
 import { selectableLayer } from '@/lib/geometry'
@@ -39,6 +40,7 @@ import { cn } from '@koharu/ui/lib/utils'
 export function TitleBar() {
   const { t } = useTranslation()
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [cbzOpen, setCbzOpen] = useState(false)
   const macOS = useMacOS()
   const project = useProject().data
   const pagesQuery = usePages(Boolean(project))
@@ -102,22 +104,39 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'png')
-                }
-              >
-                {t('menu.exportPng')}
-              </MenubarItem>
-              <MenubarItem
-                disabled={!project || pages.length === 0}
-                onClick={() =>
-                  void call(commands.exportPages, exportSelection(selectedPages, page?.id), 'psd')
-                }
-              >
-                {t('menu.exportPsd')}
-              </MenubarItem>
+              <MenubarSub>
+                <MenubarSubTrigger
+                  disabled={!project || pages.length === 0}
+                  className='min-h-8 gap-1.5 px-2 py-1 text-xs'
+                >
+                  {t('menu.export')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-40 p-1'>
+                  <MenubarItem
+                    onClick={() =>
+                      void call(
+                        commands.exportPages,
+                        exportSelection(selectedPages, page?.id),
+                        'png',
+                      )
+                    }
+                  >
+                    {t('menu.exportPng')}
+                  </MenubarItem>
+                  <MenubarItem
+                    onClick={() =>
+                      void call(
+                        commands.exportPages,
+                        exportSelection(selectedPages, page?.id),
+                        'psd',
+                      )
+                    }
+                  >
+                    {t('menu.exportPsd')}
+                  </MenubarItem>
+                  <MenubarItem onClick={() => setCbzOpen(true)}>{t('menu.exportCbz')}</MenubarItem>
+                </MenubarSubContent>
+              </MenubarSub>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={closeProject}>
                 {t('menu.closeProject')}
@@ -271,6 +290,11 @@ export function TitleBar() {
         {!macOS && <WindowControls />}
       </header>
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+      <ExportCbzDialog
+        open={cbzOpen}
+        onOpenChange={setCbzOpen}
+        onConfirm={(encoding) => void call(commands.exportPages, [], { cbz: encoding })}
+      />
     </>
   )
 }

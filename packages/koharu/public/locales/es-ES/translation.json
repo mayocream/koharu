@@ -11,6 +11,8 @@
     "downloadingFiles": "Descargando {{count}} archivos",
     "downloadingFiles_one": "Descargando {{count}} archivos",
     "downloadingFiles_other": "Descargando {{count}} archivos",
+    "exportFailed": "Error de exportación.",
+    "exporting": "Exportando",
     "modelDownload": "Descarga del modelo",
     "processing": "Procesando",
     "processingFailed": "Error de procesamiento.",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "Koharu no pudo continuar",
     "tryAgain": "Intentar de nuevo"
+  },
+  "export": {
+    "cbzTitle": "Exportar CBZ",
+    "cbzDescription": "Elige cómo se codifican las páginas dentro del archivo.",
+    "start": "Exportar",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "Sin pérdidas. Archivos más grandes.",
+      "jpeg": "Archivos más pequeños. La transparencia se aplana sobre blanco.",
+      "webp": "Más pequeño que PNG y conserva la transparencia."
+    }
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} filtros activos",
@@ -245,8 +262,10 @@
     "delete": "Eliminar selección",
     "discord": "Discord",
     "edit": "Editar",
-    "exportPng": "Exportar PNG…",
-    "exportPsd": "Exportar PSD…",
+    "export": "Exportar",
+    "exportCbz": "CBZ (todas las páginas)…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "Archivo",
     "fit": "Ajustar a la ventana",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "Apariencia"
     },
     "backToEditor": "Volver al editor",
+    "export": {
+      "title": "Exportación",
+      "description": "Controla cómo se codifican las páginas al exportar un archivo.",
+      "quality": "Calidad del archivo",
+      "qualityDescription": "Se aplica a los formatos con pérdidas al exportar un CBZ. PNG siempre es sin pérdidas.",
+      "qualityLabel": "Calidad",
+      "jpegQuality": "Calidad JPEG",
+      "jpegQualityDescription": "1-100. Un valor mayor conserva mejor las tramas y aumenta el tamaño.",
+      "webpQuality": "Calidad WebP",
+      "webpQualityDescription": "1-100. Un valor mayor conserva mejor las tramas y aumenta el tamaño."
+    },
     "generation": {
       "description": "Ajusta cómo los modelos de lenguaje generan el texto traducido.",
       "enableReasoning": "Activar razonamiento",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "Apariencia",
+      "export": "Exportación",
       "pipeline": "Canalización",
       "providers": "Proveedores",
       "shortcuts": "Atajos",

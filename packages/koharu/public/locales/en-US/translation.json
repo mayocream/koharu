@@ -11,6 +11,8 @@
     "downloadingFiles": "Downloading {{count}} files",
     "downloadingFiles_one": "Downloading {{count}} file",
     "downloadingFiles_other": "Downloading {{count}} files",
+    "exportFailed": "Export failed.",
+    "exporting": "Exporting",
     "modelDownload": "Model download",
     "processing": "Processing",
     "processingFailed": "Processing failed.",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "Koharu could not continue",
     "tryAgain": "Try again"
+  },
+  "export": {
+    "cbzTitle": "Export CBZ",
+    "cbzDescription": "Choose how the pages inside the archive are encoded.",
+    "start": "Export",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "Lossless. Largest files.",
+      "jpeg": "Smallest files. Transparency is flattened onto white.",
+      "webp": "Smaller than PNG and keeps transparency."
+    }
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} active filters",
@@ -245,8 +262,10 @@
     "delete": "Delete Selected",
     "discord": "Discord",
     "edit": "Edit",
-    "exportPng": "Export PNG…",
-    "exportPsd": "Export PSD…",
+    "export": "Export",
+    "exportCbz": "CBZ (All Pages)…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "File",
     "fit": "Fit Window",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "Appearance"
     },
     "backToEditor": "Back to editor",
+    "export": {
+      "title": "Export",
+      "description": "Control how pages are encoded when you export an archive.",
+      "quality": "Archive quality",
+      "qualityDescription": "Applies to the lossy formats offered when exporting a CBZ. PNG is always lossless.",
+      "qualityLabel": "Quality",
+      "jpegQuality": "JPEG quality",
+      "jpegQualityDescription": "1-100. Higher keeps screentone cleaner and files larger.",
+      "webpQuality": "WebP quality",
+      "webpQualityDescription": "1-100. Higher keeps screentone cleaner and files larger."
+    },
     "generation": {
       "description": "Fine-tune how language models generate translated text.",
       "enableReasoning": "Enable reasoning",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "Appearance",
+      "export": "Export",
       "pipeline": "Pipeline",
       "providers": "Providers",
       "shortcuts": "Shortcuts",

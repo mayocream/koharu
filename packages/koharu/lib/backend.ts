@@ -2,6 +2,7 @@
 
 import { commands } from '@koharu/bridge/protocol'
 import type {
+  ExportConfig,
   PipelineConfig,
   Preferences,
   ProviderPreferences,
@@ -46,11 +47,12 @@ export function savePreferences(
   pipeline: PipelineConfig,
   providers: ProviderPreferences,
   typesetting: TypesettingConfig,
+  exportConfig: ExportConfig,
 ): Promise<Preferences> {
   preferencesWriteGeneration += 1
   const pending = preferencesWriteQueue
     .catch(() => undefined)
-    .then(() => call(commands.savePreferences, pipeline, providers, typesetting))
+    .then(() => call(commands.savePreferences, pipeline, providers, typesetting, exportConfig))
   preferencesWriteQueue = pending.then(
     () => undefined,
     () => undefined,

@@ -11,6 +11,8 @@
     "downloadingFiles": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_one": "{{count}}件のファイルをダウンロード中",
     "downloadingFiles_other": "{{count}}件のファイルをダウンロード中",
+    "exportFailed": "書き出しに失敗しました。",
+    "exporting": "書き出し中",
     "modelDownload": "モデルのダウンロード",
     "processing": "処理中",
     "processingFailed": "処理に失敗しました。",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "Koharuを続行できませんでした",
     "tryAgain": "再試行"
+  },
+  "export": {
+    "cbzTitle": "CBZを書き出す",
+    "cbzDescription": "アーカイブ内のページの形式を選択します。",
+    "start": "書き出す",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "可逆圧縮。ファイルは最大です。",
+      "jpeg": "ファイルは最小です。透明部分は白で塗り潰されます。",
+      "webp": "PNGより小さく、透明部分を保持します。"
+    }
   },
   "fontPicker": {
     "activeFilterCount": "有効なフィルター: {{count}}件",
@@ -245,8 +262,10 @@
     "delete": "選択項目を削除",
     "discord": "Discord",
     "edit": "編集",
-    "exportPng": "PNGを書き出す…",
-    "exportPsd": "PSDを書き出す…",
+    "export": "書き出す",
+    "exportCbz": "CBZ（全ページ）…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "ファイル",
     "fit": "ウィンドウに合わせる",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "外観"
     },
     "backToEditor": "エディターに戻る",
+    "export": {
+      "title": "書き出し",
+      "description": "アーカイブを書き出すときのページの符号化方法を設定します。",
+      "quality": "アーカイブの品質",
+      "qualityDescription": "CBZ書き出し時の非可逆形式に適用されます。PNGは常に可逆です。",
+      "qualityLabel": "品質",
+      "jpegQuality": "JPEG品質",
+      "jpegQualityDescription": "1〜100。高いほどスクリーントーンが綺麗になり、ファイルは大きくなります。",
+      "webpQuality": "WebP品質",
+      "webpQualityDescription": "1〜100。高いほどスクリーントーンが綺麗になり、ファイルは大きくなります。"
+    },
     "generation": {
       "description": "言語モデルによる翻訳文の生成方法を調整します。",
       "enableReasoning": "推論を有効化",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "外観",
+      "export": "書き出し",
       "pipeline": "パイプライン",
       "providers": "プロバイダー",
       "shortcuts": "ショートカット",

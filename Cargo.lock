@@ -4811,6 +4811,7 @@ dependencies = [
  "hayro",
  "image",
  "koharu-agent",
+ "koharu-config",
  "koharu-desktop",
  "koharu-metrics",
  "koharu-ml",

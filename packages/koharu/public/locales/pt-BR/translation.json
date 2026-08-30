@@ -11,6 +11,8 @@
     "downloadingFiles": "Baixando {{count}} arquivos",
     "downloadingFiles_one": "Baixando {{count}} arquivos",
     "downloadingFiles_other": "Baixando {{count}} arquivos",
+    "exportFailed": "Falha na exportação.",
+    "exporting": "Exportando",
     "modelDownload": "Download do modelo",
     "processing": "Processando",
     "processingFailed": "Falha no processamento.",
@@ -74,6 +76,21 @@
   "errors": {
     "fatalTitle": "O Koharu não pôde continuar",
     "tryAgain": "Tentar novamente"
+  },
+  "export": {
+    "cbzTitle": "Exportar CBZ",
+    "cbzDescription": "Escolha como as páginas dentro do arquivo são codificadas.",
+    "start": "Exportar",
+    "format": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "webp": "WebP"
+    },
+    "formatHint": {
+      "png": "Sem perdas. Arquivos maiores.",
+      "jpeg": "Arquivos menores. A transparência é achatada sobre branco.",
+      "webp": "Menor que PNG e mantém a transparência."
+    }
   },
   "fontPicker": {
     "activeFilterCount": "{{count}} filtros ativos",
@@ -245,8 +262,10 @@
     "delete": "Excluir seleção",
     "discord": "Discord",
     "edit": "Editar",
-    "exportPng": "Exportar PNG…",
-    "exportPsd": "Exportar PSD…",
+    "export": "Exportar",
+    "exportCbz": "CBZ (todas as páginas)…",
+    "exportPng": "PNG…",
+    "exportPsd": "PSD…",
     "file": "Arquivo",
     "fit": "Ajustar à janela",
     "github": "GitHub",
@@ -359,6 +378,17 @@
       "title": "Aparência"
     },
     "backToEditor": "Voltar ao editor",
+    "export": {
+      "title": "Exportação",
+      "description": "Controle como as páginas são codificadas ao exportar um arquivo.",
+      "quality": "Qualidade do arquivo",
+      "qualityDescription": "Vale para os formatos com perdas ao exportar um CBZ. PNG é sempre sem perdas.",
+      "qualityLabel": "Qualidade",
+      "jpegQuality": "Qualidade JPEG",
+      "jpegQualityDescription": "1-100. Valores altos preservam melhor as retículas e aumentam o tamanho.",
+      "webpQuality": "Qualidade WebP",
+      "webpQualityDescription": "1-100. Valores altos preservam melhor as retículas e aumentam o tamanho."
+    },
     "generation": {
       "description": "Ajuste como os modelos de linguagem geram o texto traduzido.",
       "enableReasoning": "Ativar raciocínio",
@@ -425,6 +455,7 @@
     },
     "tabs": {
       "appearance": "Aparência",
+      "export": "Exportação",
       "pipeline": "Pipeline",
       "providers": "Provedores",
       "shortcuts": "Atalhos",
