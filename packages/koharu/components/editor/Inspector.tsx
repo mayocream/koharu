@@ -544,6 +544,31 @@ export function isValidDrop(
   return true
 }
 
+function computeDropPos(
+  targetId: EntityId,
+  positionY: number,
+  layerMap: Map<EntityId, Layer>,
+): 'before' | 'after' | 'inside' | null {
+  const overElement = document.getElementById(`layer-row-${targetId}`)
+  if (!overElement) return null
+
+  const overLayer = layerMap.get(targetId)
+  if (!overLayer) return null
+
+  const rect = overElement.getBoundingClientRect()
+  const hoverY = positionY - rect.top
+  const height = rect.height
+  const isGroup = isGroupLayer(overLayer)
+
+  if (isGroup && hoverY > height * 0.25 && hoverY < height * 0.75) {
+    return 'inside'
+  } else if (hoverY < height / 2) {
+    return 'before'
+  } else {
+    return 'after'
+  }
+}
+
 function LayersInspector() {
   const { t } = useTranslation()
   const page = usePage().data
@@ -558,21 +583,9 @@ function LayersInspector() {
   const [dragOverId, setDragOverId] = useState<EntityId | null>(null)
   const [dropPos, setDropPos] = useState<'before' | 'after' | 'inside' | null>(null)
 
-  const pointerCoordinatesRef = useRef<{ x: number; y: number } | null>(null)
-
-
-
   useEffect(() => {
     setExpandedLayer(selected.length === 1 ? (selected[0] ?? null) : null)
   }, [selected])
-
-  useEffect(() => {
-    const handlePointerMove = (e: PointerEvent) => {
-      pointerCoordinatesRef.current = { x: e.clientX, y: e.clientY }
-    }
-    window.addEventListener('pointermove', handlePointerMove)
-    return () => window.removeEventListener('pointermove', handlePointerMove)
-  }, [])
 
   const layers = useMemo(() => (page ? displayedLayers(page.layers, page.id) : []), [page])
   const layerMap = useMemo(() => {
@@ -602,42 +615,23 @@ function LayersInspector() {
   }
 
   const handleDragMove = (event: DragMoveEvent) => {
-    const activeId = event.operation.source?.id as EntityId | undefined
-    const overId = event.operation.target?.id as EntityId | undefined
-    const pointerCoordinates = pointerCoordinatesRef.current
-    if (!activeId || !overId || !pointerCoordinates) {
+    if (event.operation?.canceled) {
       setDragOverId(null)
       setDropPos(null)
       return
     }
 
-    if (activeId === overId) {
+    const activeId = event.operation?.source?.id as EntityId | undefined
+    const overId = event.operation?.target?.id as EntityId | undefined
+    if (!activeId || !overId || activeId === overId) {
       setDragOverId(null)
       setDropPos(null)
       return
     }
 
-    const overElement = document.getElementById(`layer-row-${overId}`)
-    if (!overElement) return
-
-    const overLayer = layerMap.get(overId)
-    if (!overLayer) return
-
-    const rect = overElement.getBoundingClientRect()
-    const hoverY = pointerCoordinates.y - rect.top
-    const height = rect.height
-    const isGroup = isGroupLayer(overLayer)
-
-    let pos: 'before' | 'after' | 'inside'
-    if (isGroup && hoverY > height * 0.25 && hoverY < height * 0.75) {
-      pos = 'inside'
-    } else if (hoverY < height / 2) {
-      pos = 'before'
-    } else {
-      pos = 'after'
-    }
-
-    if (!isValidDrop(layerMap, activeId, overId, pos, page.id, hasTextGroup)) {
+    const positionY = event.operation?.position?.current?.y ?? event.operation?.position?.y ?? 0
+    const pos = computeDropPos(overId, positionY, layerMap)
+    if (!pos || !isValidDrop(layerMap, activeId, overId, pos, page.id, hasTextGroup)) {
       setDragOverId(null)
       setDropPos(null)
       return
@@ -648,14 +642,24 @@ function LayersInspector() {
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const activeId = event.operation.source?.id as EntityId | undefined
-    if (activeId && dragOverId && dropPos && movingLayer === null) {
-      handleDrop(activeId, dragOverId, dropPos)
-    }
+    const isCanceled = Boolean(event.canceled || event.operation?.canceled)
 
     setDraggedId(null)
     setDragOverId(null)
     setDropPos(null)
+
+    if (isCanceled || movingLayer !== null) return
+
+    const activeId = event.operation?.source?.id as EntityId | undefined
+    const overId = event.operation?.target?.id as EntityId | undefined
+    if (!activeId || !overId || activeId === overId) return
+
+    const positionY = event.operation?.position?.current?.y ?? event.operation?.position?.y ?? 0
+    const pos = computeDropPos(overId, positionY, layerMap)
+
+    if (pos && isValidDrop(layerMap, activeId, overId, pos, page.id, hasTextGroup)) {
+      handleDrop(activeId, overId, pos)
+    }
   }
 
 
@@ -826,7 +830,7 @@ function LayersInspector() {
         </ScrollArea>
         <DragOverlay dropAnimation={null}>
           {draggedId ? (() => {
-            const dragLayerInfo = layers.find(l => l.layer.id === draggedId)
+            const dragLayerInfo = layers.find((l) => l.layer.id === draggedId)
             if (!dragLayerInfo) return null
             return (
               <div className='opacity-80 pointer-events-none'>
@@ -835,7 +839,7 @@ function LayersInspector() {
                   index={dragLayerInfo.index}
                   depth={dragLayerInfo.depth}
                   selected={selected.includes(draggedId)}
-                  expanded={expandedLayer === draggedId}
+                  expanded={false}
                   locked={isLockedLayer(dragLayerInfo.layer)}
                   onSelect={() => {}}
                   onToggle={() => {}}
@@ -902,11 +906,11 @@ function LayerRow({
     disabled: locked || reordering || isOverlay,
   })
   const isDragging = isOverlay ? false : sortableIsDragging
+  const isRowExpanded = isOverlay ? false : expanded
 
   return (
     <div
       id={isOverlay ? undefined : `layer-row-${layer.id}`}
-      ref={isOverlay ? undefined : sortableRef}
       className='group min-w-0 px-1 py-px'
       style={{
         paddingLeft: `${depth * 10 + 4}px`,
@@ -915,7 +919,7 @@ function LayerRow({
     >
       <div
         data-selected={selected}
-        data-expanded={expanded}
+        data-expanded={isRowExpanded}
         className={`min-w-0 overflow-hidden rounded-lg transition-colors duration-150 data-[selected=true]:bg-accent motion-reduce:transition-none ${
           isDragOver && activeDropPos
             ? activeDropPos === 'before'
@@ -926,12 +930,15 @@ function LayerRow({
             : ''
         }`}
       >
-        <div className='relative flex min-w-0 items-center gap-0.5'>
+        <div
+          ref={isOverlay ? undefined : sortableRef}
+          className='relative flex min-w-0 items-center gap-0.5'
+        >
           <div
             role='button'
             tabIndex={locked ? undefined : 0}
             aria-label={t('layers.edit', { name })}
-            aria-expanded={locked ? undefined : expanded}
+            aria-expanded={locked ? undefined : isRowExpanded}
             aria-disabled={locked ? true : undefined}
             className={`flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-1 text-left hover:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 ${
               locked ? 'pointer-events-none opacity-50' : ''
@@ -958,7 +965,7 @@ function LayerRow({
           </div>
           {!locked && (
             <div
-              className={`pointer-events-none absolute top-1/2 z-10 flex -translate-y-1/2 rounded-md bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/40 backdrop-blur-md transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 motion-reduce:transition-none ${expanded ? 'right-7' : 'right-[3.25rem]'}`}
+              className={`pointer-events-none absolute top-1/2 z-10 flex -translate-y-1/2 rounded-md bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/40 backdrop-blur-md transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 motion-reduce:transition-none ${isRowExpanded ? 'right-7' : 'right-[3.25rem]'}`}
             >
               <button
                 type='button'
@@ -980,7 +987,7 @@ function LayerRow({
               </button>
             </div>
           )}
-          {!expanded && (
+          {!isRowExpanded && (
             <span className='w-7 shrink-0 text-right text-[9px] text-muted-foreground tabular-nums'>
               {Math.round(layer.visibility.opacity * 100)}%
             </span>
@@ -1017,7 +1024,7 @@ function LayerRow({
             </button>
           )}
         </div>
-        {expanded && (
+        {isRowExpanded && (
           <div className='animate-in duration-150 fade-in slide-in-from-top-1 motion-reduce:animate-none'>
             <LayerEditor layer={layer} onDelete={onDelete} />
           </div>
