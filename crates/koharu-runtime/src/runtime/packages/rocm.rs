@@ -141,20 +141,50 @@ pub(crate) fn wheel_platform() -> Result<&'static str> {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumString)]
 pub(crate) enum Rocm {
+    #[strum(serialize = "gfx908")]
+    Gfx908,
+    #[strum(serialize = "gfx90a")]
+    Gfx90a,
+    #[strum(serialize = "gfx942")]
+    Gfx942,
+    #[strum(serialize = "gfx950")]
+    Gfx950,
+    #[strum(serialize = "gfx1010")]
+    Gfx1010,
+    #[strum(serialize = "gfx1011")]
+    Gfx1011,
+    #[strum(serialize = "gfx1012")]
+    Gfx1012,
     #[strum(serialize = "gfx1030")]
     Gfx1030,
     #[strum(serialize = "gfx1031")]
     Gfx1031,
     #[strum(serialize = "gfx1032")]
     Gfx1032,
+    #[strum(serialize = "gfx1033")]
+    Gfx1033,
+    #[strum(serialize = "gfx1034")]
+    Gfx1034,
+    #[strum(serialize = "gfx1035")]
+    Gfx1035,
+    #[strum(serialize = "gfx1036")]
+    Gfx1036,
     #[strum(serialize = "gfx1100")]
     Gfx1100,
     #[strum(serialize = "gfx1101")]
     Gfx1101,
     #[strum(serialize = "gfx1102")]
     Gfx1102,
+    #[strum(serialize = "gfx1103")]
+    Gfx1103,
+    #[strum(serialize = "gfx1150")]
+    Gfx1150,
     #[strum(serialize = "gfx1151")]
     Gfx1151,
+    #[strum(serialize = "gfx1152")]
+    Gfx1152,
+    #[strum(serialize = "gfx1153")]
+    Gfx1153,
     #[strum(serialize = "gfx1200")]
     Gfx1200,
     #[strum(serialize = "gfx1201")]
@@ -319,6 +349,8 @@ mod tests {
     #[test]
     fn parses_supported_targets() {
         assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
+        assert_eq!("gfx908".parse(), Ok(Rocm::Gfx908));
+        assert_eq!("gfx1150".parse(), Ok(Rocm::Gfx1150));
         assert!("gfx1250".parse::<Rocm>().is_err());
     }
 }
