@@ -311,11 +311,12 @@ mod tests {
     fn system_prompt_encodes_invariants_and_custom_instructions() {
         let request = TranslationRequest::new(["hello"], Language::Korean)
             .with_source_language(Language::Japanese)
-            .with_instructions("Use informal speech.");
+            .with_instructions("용어 지침: お茶会는 반드시 다과회로 번역한다.");
         let prompt = translation_system_prompt(&request);
         assert!(prompt.contains("from Japanese into natural Korean"));
         assert!(prompt.contains("Copy every input ID exactly once"));
-        assert!(prompt.contains("Use informal speech."));
+        assert!(prompt.contains("Additional instructions:"));
+        assert!(prompt.contains("お茶会는 반드시 다과회로 번역한다."));
     }
 
     #[test]

@@ -44,9 +44,7 @@ impl Processor {
     }
 
     pub(super) fn batch_pages(&self) -> usize {
-        if !Translator::supports_context_memory(&self.config.model)
-            || Translator::supports_vision(&self.config.model, &self.config.generation)
-        {
+        if !Translator::supports_context_memory(&self.config.model) {
             1
         } else {
             self.config.memory.batch_pages()
@@ -311,5 +309,46 @@ impl StageProcessor for Processor {
         self.store_cached(input.run_id, completed)?;
         self.patch(&input, current.targets, current.translations, provider)
             .context("failed to apply translated page")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use koharu_translator::{GenerationConfig, ModelSelection, Provider, ProvidersConfig};
+
+    use super::*;
+    use crate::TranslationMemoryConfig;
+
+    fn processor(batch_pages: u8) -> Processor {
+        let config = TranslationConfig {
+            model: ModelSelection {
+                provider: Provider::LmStudio,
+                model: Some("vision-model".to_owned()),
+                quantization: None,
+                vision: true,
+                reasoning: false,
+            },
+            generation: GenerationConfig {
+                vision: Some(true),
+                ..GenerationConfig::default()
+            },
+            memory: TranslationMemoryConfig {
+                batch_pages,
+                ..TranslationMemoryConfig::default()
+            },
+            ..TranslationConfig::default()
+        };
+        let translator = Translator::from_config(
+            koharu_ml::Device::cpu(),
+            koharu_config::Config::memory(ProvidersConfig::default()),
+        )
+        .unwrap();
+        Processor::new(config, translator)
+    }
+
+    #[test]
+    fn vision_uses_the_configured_page_batch() {
+        assert_eq!(processor(4).batch_pages(), 4);
+        assert_eq!(processor(1).batch_pages(), 1);
     }
 }

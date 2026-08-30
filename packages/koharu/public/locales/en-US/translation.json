@@ -435,7 +435,7 @@
     "translation": {
       "description": "Choose any configured provider model, then apply one shared set of translation and generation options.",
       "batchPages": "Pages per request",
-      "batchPagesDescription": "Set how many adjacent pages are translated in one text LLM request. Use 1 for the original behavior; vision stays single-page.",
+      "batchPagesDescription": "Set how many adjacent pages are translated in one LLM request. With vision, only the first page image is attached. Use 1 for the original behavior.",
       "contextPages": "Previous pages as hints",
       "contextPagesDescription": "Set how many preceding pages of completed translations are sent as references.",
       "instructionsDescription": "Names, tone, terminology, or formatting guidance.",

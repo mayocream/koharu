@@ -325,23 +325,25 @@ mod tests {
 
     #[test]
     fn translation_batches_are_not_overlapped_when_cached_pages_are_scheduled() {
-        let pages = pages(3);
+        let pages = pages(5);
         let mut scheduler =
-            Scheduler::new(&pages, &[Stage::Translation]).with_translation_batch_pages(2);
+            Scheduler::new(&pages, &[Stage::Translation]).with_translation_batch_pages(4);
         let busy = BTreeSet::new();
 
         let first = scheduler.start_next_batch(&busy).unwrap();
         assert_eq!(first.page, pages[0]);
-        assert_eq!(first.batch_pages, pages[..2]);
+        assert_eq!(first.batch_pages, pages[..4]);
         assert!(scheduler.complete_stage(pages[0], Stage::Translation));
 
-        let cached = scheduler.start_next_batch(&busy).unwrap();
-        assert_eq!(cached.page, pages[1]);
-        assert_eq!(cached.batch_pages, [pages[1]]);
-        assert!(scheduler.complete_stage(pages[1], Stage::Translation));
+        for page in &pages[1..4] {
+            let cached = scheduler.start_next_batch(&busy).unwrap();
+            assert_eq!(cached.page, *page);
+            assert_eq!(cached.batch_pages, [*page]);
+            assert!(scheduler.complete_stage(*page, Stage::Translation));
+        }
 
         let tail = scheduler.start_next_batch(&busy).unwrap();
-        assert_eq!(tail.page, pages[2]);
-        assert_eq!(tail.batch_pages, [pages[2]]);
+        assert_eq!(tail.page, pages[4]);
+        assert_eq!(tail.batch_pages, [pages[4]]);
     }
 }

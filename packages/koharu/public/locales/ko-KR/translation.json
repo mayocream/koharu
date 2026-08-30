@@ -435,7 +435,7 @@
     "translation": {
       "description": "설정된 제공자의 모델을 선택하고 공통 번역 및 생성 옵션을 적용합니다.",
       "batchPages": "요청당 페이지 수",
-      "batchPagesDescription": "한 번의 텍스트 LLM 요청으로 번역할 인접 페이지 수입니다. 1이면 기존 방식이며, 이미지는 단일 페이지로 처리합니다.",
+      "batchPagesDescription": "한 번의 LLM 요청으로 번역할 인접 페이지 수입니다. 비전 사용 시 묶음의 첫 페이지 이미지만 첨부하며, 1이면 기존 방식입니다.",
       "contextPages": "힌트로 보낼 이전 페이지 수",
       "contextPagesDescription": "완료된 번역 중 참고 자료로 보낼 이전 페이지 수를 설정합니다.",
       "instructionsDescription": "이름, 어조, 용어 또는 서식 지침입니다.",
