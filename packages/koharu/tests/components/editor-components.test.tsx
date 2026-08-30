@@ -1559,6 +1559,39 @@ describe('greenfield editor', () => {
     await waitFor(() => expect(stop).toHaveBeenCalledWith('job'))
   })
 
+  it('shows how many pages are selected above the filter', async () => {
+    installProject()
+    act(() => {
+      useKoharuStore.setState({ selectedPages: ['page-1'] })
+    })
+    render(<PageRail />)
+
+    // A single selection is not worth announcing.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    // The rail subscribes to the store, so no re-render is needed.
+    act(() => {
+      useKoharuStore.setState({ selectedPages: ['page-1', 'page-2', 'page-3'] })
+    })
+
+    expect(await screen.findByRole('status')).toHaveTextContent('3 selected')
+  })
+
+  it('tells the export items how many pages they will write', async () => {
+    installProject()
+    const user = userEvent.setup()
+    act(() => {
+      useKoharuStore.setState({ selectedPages: ['page-1', 'page-2'] })
+    })
+    render(<TitleBar />)
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }))
+    const png = await screen.findByRole('menuitem', { name: /Export PNG/ })
+    const psd = await screen.findByRole('menuitem', { name: /Export PSD/ })
+    expect(png).toHaveTextContent('2 pages')
+    expect(psd).toHaveTextContent('2 pages')
+  })
+
   it('combines concurrent downloads into one progress bar', () => {
     useKoharuStore.setState({
       downloads: {

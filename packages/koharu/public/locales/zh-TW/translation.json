@@ -247,6 +247,7 @@
     "edit": "編輯",
     "exportPng": "匯出 PNG…",
     "exportPsd": "匯出 PSD…",
+    "exportSelection": "{{count}} 頁",
     "file": "檔案",
     "fit": "適應視窗",
     "github": "GitHub",
@@ -297,7 +298,8 @@
     "pages": "頁面",
     "rename": "重新命名",
     "renameDescription": "為此頁面選擇新名稱。",
-    "renameTitle": "重新命名頁面"
+    "renameTitle": "重新命名頁面",
+    "selected": "已選擇 {{count}}"
   },
   "outputPicker": {
     "instructions": "翻譯指示",

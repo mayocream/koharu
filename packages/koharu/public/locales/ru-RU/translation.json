@@ -247,6 +247,7 @@
     "edit": "Правка",
     "exportPng": "Экспорт PNG…",
     "exportPsd": "Экспорт PSD…",
+    "exportSelection": "{{count}} стр.",
     "file": "Файл",
     "fit": "Вписать в окно",
     "github": "GitHub",
@@ -297,7 +298,8 @@
     "pages": "Страницы",
     "rename": "Переименовать",
     "renameDescription": "Выберите новое имя для страницы.",
-    "renameTitle": "Переименовать страницу"
+    "renameTitle": "Переименовать страницу",
+    "selected": "Выбрано: {{count}}"
   },
   "outputPicker": {
     "instructions": "Инструкции по переводу",

@@ -247,6 +247,7 @@
     "edit": "Editar",
     "exportPng": "Exportar PNG…",
     "exportPsd": "Exportar PSD…",
+    "exportSelection": "{{count}} páginas",
     "file": "Arquivo",
     "fit": "Ajustar à janela",
     "github": "GitHub",
@@ -297,7 +298,8 @@
     "pages": "Páginas",
     "rename": "Renomear",
     "renameDescription": "Escolha um novo nome para esta página.",
-    "renameTitle": "Renomear página"
+    "renameTitle": "Renomear página",
+    "selected": "{{count}} selecionadas"
   },
   "outputPicker": {
     "instructions": "Instruções de tradução",

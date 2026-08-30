@@ -247,6 +247,7 @@
     "edit": "Düzenle",
     "exportPng": "PNG Dışa Aktar…",
     "exportPsd": "PSD Dışa Aktar…",
+    "exportSelection": "{{count}} sayfa",
     "file": "Dosya",
     "fit": "Pencereye Sığdır",
     "github": "GitHub",
@@ -297,7 +298,8 @@
     "pages": "Sayfalar",
     "rename": "Yeniden adlandır",
     "renameDescription": "Bu sayfa için yeni bir ad seçin.",
-    "renameTitle": "Sayfayı yeniden adlandır"
+    "renameTitle": "Sayfayı yeniden adlandır",
+    "selected": "{{count}} seçili"
   },
   "outputPicker": {
     "instructions": "Çeviri talimatları",

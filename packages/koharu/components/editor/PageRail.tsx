@@ -231,13 +231,22 @@ export function PageRail() {
   return (
     <>
       <aside className='flex h-full min-h-0 flex-col bg-[var(--surface-sidebar)]'>
-        <header className='flex h-10 shrink-0 items-center px-2.5'>
+        <header className='flex h-10 shrink-0 items-center justify-between gap-2 px-2.5'>
           <div className='flex min-w-0 items-center gap-2'>
             <h2 className='text-[11px] font-semibold'>{t('navigator.pages')}</h2>
             <span className='rounded-full bg-primary/[0.07] px-1.5 py-0.5 text-[9px] text-muted-foreground tabular-nums'>
               {pages.length}
             </span>
           </div>
+          {selected.length > 1 && (
+            <span
+              role='status'
+              aria-live='polite'
+              className='shrink-0 text-[9px] text-muted-foreground tabular-nums'
+            >
+              {t('navigator.selected', { count: selected.length })}
+            </span>
+          )}
         </header>
 
         {importing && (
