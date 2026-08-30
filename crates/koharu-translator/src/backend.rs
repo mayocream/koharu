@@ -13,11 +13,13 @@ const JPEG_QUALITY: u8 = 88;
 #[derive(Debug, Clone, PartialEq)]
 pub struct TranslationRequest {
     pub segments: Vec<String>,
+    pub page_lengths: Vec<usize>,
     pub source_language: Option<Language>,
     pub target_language: Language,
     pub instructions: Option<String>,
     pub context: Vec<TranslationContext>,
     pub image: Option<Arc<DynamicImage>>,
+    pub prefix_cache: bool,
 }
 
 impl TranslationRequest {
@@ -26,13 +28,17 @@ impl TranslationRequest {
         segments: impl IntoIterator<Item = impl Into<String>>,
         target_language: Language,
     ) -> Self {
+        let segments = segments.into_iter().map(Into::into).collect::<Vec<_>>();
+        let page_lengths = vec![segments.len()];
         Self {
-            segments: segments.into_iter().map(Into::into).collect(),
+            segments,
+            page_lengths,
             source_language: None,
             target_language,
             instructions: None,
             context: Vec::new(),
             image: None,
+            prefix_cache: false,
         }
     }
 
@@ -55,10 +61,21 @@ impl TranslationRequest {
         self
     }
 
-    #[cfg(test)]
     #[must_use]
     pub fn with_context(mut self, context: impl IntoIterator<Item = TranslationContext>) -> Self {
         self.context = context.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_page_lengths(mut self, page_lengths: impl IntoIterator<Item = usize>) -> Self {
+        self.page_lengths = page_lengths.into_iter().collect();
+        self
+    }
+
+    #[must_use]
+    pub fn with_prefix_cache(mut self, enabled: bool) -> Self {
+        self.prefix_cache = enabled;
         self
     }
 
@@ -128,7 +145,6 @@ pub struct TranslationContext {
 }
 
 impl TranslationContext {
-    #[cfg(test)]
     #[must_use]
     pub fn new(source: impl Into<String>, translation: impl Into<String>) -> Self {
         Self {

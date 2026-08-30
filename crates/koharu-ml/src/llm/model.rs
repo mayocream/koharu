@@ -8,7 +8,7 @@
 use std::{
     num::NonZeroU32,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
@@ -17,6 +17,7 @@ use koharu_llama::{
     context::{
         LlamaContext,
         params::{LlamaAttentionType, LlamaContextParams},
+        session::{LlamaSequenceState, LlamaStateSeqFlags},
     },
     llama_backend::LlamaBackend,
     llama_batch::LlamaBatch,
@@ -35,6 +36,7 @@ use super::{
 use crate::Backend;
 
 const DEFAULT_MAX_UBATCH: u32 = 512;
+const MIN_PREFIX_CACHE_TOKENS: usize = 32;
 const CHAT_TEMPLATE_NAME: &str = "chat";
 
 #[derive(Debug)]
@@ -45,6 +47,13 @@ pub(super) struct Model {
     capabilities: Capabilities,
     eos_token: LlamaToken,
     chat_template: ChatTemplate,
+    prefix_cache: Mutex<Option<PrefixCache>>,
+}
+
+#[derive(Debug)]
+struct PrefixCache {
+    tokens: Vec<LlamaToken>,
+    state: Arc<LlamaSequenceState>,
 }
 
 #[derive(Debug)]
@@ -193,6 +202,7 @@ impl Model {
             capabilities,
             eos_token,
             chat_template,
+            prefix_cache: Mutex::new(None),
         })
     }
 
@@ -251,14 +261,34 @@ impl Model {
         let mut sampler = self.build_sampler(options, json_schema, &prepared.history_tokens)?;
 
         let prompt_start = Instant::now();
+        let context_size = usize::try_from(context.n_ctx()).unwrap_or(usize::MAX);
+        let reused_prefix = if options.prefix_cache && mtmd.is_none() && !self.model.has_encoder() {
+            match &prepared.kind {
+                PreparedPromptKind::Text(tokens) => {
+                    self.restore_prefix(&mut context, tokens, context_size)?
+                }
+                PreparedPromptKind::Multimodal { .. } => 0,
+            }
+        } else {
+            0
+        };
         let (mut next_token, mut position) = self.prefill(
             &prepared,
             mtmd.as_deref(),
             &mut context,
             &mut sampler,
             context_config.n_batch,
+            reused_prefix,
         )?;
+        if options.prefix_cache
+            && mtmd.is_none()
+            && !self.model.has_encoder()
+            && let PreparedPromptKind::Text(tokens) = &prepared.kind
+        {
+            self.store_prefix(&context, tokens)?;
+        }
         let prompt_duration = prompt_start.elapsed();
+        tracing::debug!(reused_prefix, "prepared llama.cpp prompt");
         drop(mtmd);
 
         let generation_start = Instant::now();
@@ -419,13 +449,23 @@ impl Model {
         context: &mut LlamaContext<'_>,
         sampler: &mut LlamaSampler,
         n_batch: u32,
+        reused_prefix: usize,
     ) -> Result<(LlamaToken, i32)> {
         match &prepared.kind {
             PreparedPromptKind::Text(tokens) => {
-                let mut batch = LlamaBatch::new(tokens.len(), 1);
-                batch
-                    .add_sequence(tokens, 0, false)
-                    .context("failed to build prompt batch")?;
+                ensure!(
+                    reused_prefix < tokens.len(),
+                    "cached prefix covers the full prompt"
+                );
+                let suffix = &tokens[reused_prefix..];
+                let mut batch = LlamaBatch::new(suffix.len(), 1);
+                for (offset, token) in suffix.iter().enumerate() {
+                    let position = i32::try_from(reused_prefix + offset)
+                        .context("prompt position exceeds i32")?;
+                    batch
+                        .add(*token, position, &[0], offset + 1 == suffix.len())
+                        .context("failed to build prompt batch")?;
+                }
                 if self.model.has_encoder() {
                     context
                         .encode(&mut batch)
@@ -458,6 +498,61 @@ impl Model {
                 }
             }
         }
+    }
+
+    fn restore_prefix(
+        &self,
+        context: &mut LlamaContext<'_>,
+        tokens: &[LlamaToken],
+        context_size: usize,
+    ) -> Result<usize> {
+        let cached = self
+            .prefix_cache
+            .lock()
+            .map_err(|_| anyhow::anyhow!("prefix cache lock is poisoned"))?;
+        let Some(cached) = cached.as_ref() else {
+            return Ok(0);
+        };
+        if cached.tokens.len() > context_size {
+            return Ok(0);
+        }
+        let common = common_prefix_len(&cached.tokens, tokens);
+        let reused = if common == tokens.len() {
+            common.saturating_sub(1)
+        } else {
+            common
+        };
+        if reused < MIN_PREFIX_CACHE_TOKENS {
+            return Ok(0);
+        }
+        if !context.restore_sequence_state(&cached.state, 0, LlamaStateSeqFlags::empty()) {
+            return Ok(0);
+        }
+        let removed = context
+            .clear_kv_cache_seq(Some(0), Some(u32::try_from(reused)?), None)
+            .context("failed to trim restored prefix cache")?;
+        if !removed {
+            context.clear_kv_cache();
+            return Ok(0);
+        }
+        Ok(reused)
+    }
+
+    fn store_prefix(&self, context: &LlamaContext<'_>, tokens: &[LlamaToken]) -> Result<()> {
+        if tokens.len() < MIN_PREFIX_CACHE_TOKENS {
+            return Ok(());
+        }
+        let Some(state) = context.sequence_state(0, LlamaStateSeqFlags::empty()) else {
+            return Ok(());
+        };
+        *self
+            .prefix_cache
+            .lock()
+            .map_err(|_| anyhow::anyhow!("prefix cache lock is poisoned"))? = Some(PrefixCache {
+            tokens: tokens.to_vec(),
+            state: Arc::new(state),
+        });
+        Ok(())
     }
 
     fn start_decoder(
@@ -735,6 +830,13 @@ fn text_chunk_tokens(chunks: &MtmdInputChunks) -> Vec<LlamaToken> {
     tokens
 }
 
+fn common_prefix_len(left: &[LlamaToken], right: &[LlamaToken]) -> usize {
+    left.iter()
+        .zip(right)
+        .take_while(|(left, right)| left == right)
+        .count()
+}
+
 fn token_text(model: &LlamaModel, token: LlamaToken) -> Result<String> {
     let mut decoder = encoding_rs::UTF_8.new_decoder();
     model
@@ -824,5 +926,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.n_ubatch, 1024);
+    }
+
+    #[test]
+    fn common_prefix_stops_at_the_first_changed_token() {
+        let previous = [LlamaToken(1), LlamaToken(2), LlamaToken(3)];
+        let next = [LlamaToken(1), LlamaToken(2), LlamaToken(4), LlamaToken(5)];
+        assert_eq!(common_prefix_len(&previous, &next), 2);
     }
 }

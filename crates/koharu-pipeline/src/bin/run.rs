@@ -116,6 +116,7 @@ impl Arguments {
                 generation: GenerationConfig::default(),
                 target_language: self.target_language,
                 instructions: self.translation_instructions.clone(),
+                memory: Default::default(),
             },
             inpainting: match self.inpainting {
                 InpaintingChoice::LaMa => InpaintingModel::LaMa {},

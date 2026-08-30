@@ -32,6 +32,10 @@ impl StageRunner {
         })
     }
 
+    pub(crate) fn translation_batch_pages(&self) -> usize {
+        self.stages.translation_batch_pages()
+    }
+
     #[tracing::instrument(skip_all)]
     pub(crate) async fn run(&self, job: StageJob) -> StageCompletion {
         let started = Instant::now();

@@ -6,16 +6,40 @@ use serde_json::{Value, json};
 use crate::{Language, TranslationContext, TranslationRequest};
 
 pub(crate) fn prompts(request: &TranslationRequest) -> anyhow::Result<(String, String)> {
+    anyhow::ensure!(
+        request.page_lengths.iter().sum::<usize>() == request.segments.len(),
+        "translation page lengths do not match the segment count"
+    );
+    let mut offset = 0;
+    let pages = request
+        .page_lengths
+        .iter()
+        .enumerate()
+        .map(|(page, &length)| {
+            let segments = request.segments[offset..offset + length]
+                .iter()
+                .enumerate()
+                .map(|(index, text)| TranslationInputSegment {
+                    id: offset + index,
+                    text,
+                })
+                .collect();
+            offset += length;
+            TranslationInputPage { page, segments }
+        })
+        .collect::<Vec<_>>();
+    let scope = if pages.len() == 1 {
+        TranslationInputScope::Segments {
+            segments: pages.into_iter().next().unwrap().segments,
+        }
+    } else {
+        TranslationInputScope::Pages { pages }
+    };
     let input = TranslationInput {
         source_language: request.source_language,
         target_language: request.target_language,
         context: &request.context,
-        segments: request
-            .segments
-            .iter()
-            .enumerate()
-            .map(|(id, text)| TranslationInputSegment { id, text })
-            .collect(),
+        scope,
     };
     let user = serde_json::to_string(&input).context("failed to serialize translation input")?;
     Ok((translation_system_prompt(request), user))
@@ -137,6 +161,24 @@ struct TranslationInput<'a> {
     source_language: Option<Language>,
     target_language: Language,
     context: &'a [TranslationContext],
+    #[serde(flatten)]
+    scope: TranslationInputScope<'a>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum TranslationInputScope<'a> {
+    Segments {
+        segments: Vec<TranslationInputSegment<'a>>,
+    },
+    Pages {
+        pages: Vec<TranslationInputPage<'a>>,
+    },
+}
+
+#[derive(Serialize)]
+struct TranslationInputPage<'a> {
+    page: usize,
     segments: Vec<TranslationInputSegment<'a>>,
 }
 
@@ -249,6 +291,20 @@ mod tests {
         assert_eq!(input["context"][0]["translation"], "previous");
         assert_eq!(input["segments"][0]["id"], 0);
         assert_eq!(input["segments"][0]["text"], "new");
+    }
+
+    #[test]
+    fn multi_page_payload_preserves_page_boundaries_and_global_ids() {
+        let request = TranslationRequest::new(["one", "two", "three"], Language::English)
+            .with_page_lengths([2, 1]);
+        let (_, user) = prompts(&request).unwrap();
+        let input: serde_json::Value = serde_json::from_str(&user).unwrap();
+
+        assert!(input.get("segments").is_none());
+        assert_eq!(input["pages"][0]["page"], 0);
+        assert_eq!(input["pages"][0]["segments"][1]["id"], 1);
+        assert_eq!(input["pages"][1]["page"], 1);
+        assert_eq!(input["pages"][1]["segments"][0]["id"], 2);
     }
 
     #[test]

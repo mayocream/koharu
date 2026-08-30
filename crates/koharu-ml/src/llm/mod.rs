@@ -261,6 +261,8 @@ pub struct GenerationOptions {
     pub n_ubatch: Option<u32>,
     pub n_threads: Option<i32>,
     pub n_threads_batch: Option<i32>,
+    /// Reuse the longest matching prompt prefix from the previous text-only inference.
+    pub prefix_cache: bool,
 }
 
 impl Default for GenerationOptions {
@@ -282,6 +284,7 @@ impl Default for GenerationOptions {
             n_ubatch: None,
             n_threads: None,
             n_threads_batch: None,
+            prefix_cache: false,
         }
     }
 }

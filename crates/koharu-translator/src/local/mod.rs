@@ -74,13 +74,15 @@ impl LocalTranslator {
         }
 
         let image = request.image.clone();
+        let prefix_cache = request.prefix_cache && image.is_none();
         let prompt = self.render_prompt(
             &request,
             generation.reasoning.unwrap_or(false) && self.descriptor.reasoning,
         )?;
         let schema = prompt::output_schema(expected);
         let llm = Arc::clone(&self.llm);
-        let generation = self.descriptor.generation.options(generation);
+        let mut generation = self.descriptor.generation.options(generation);
+        generation.prefix_cache = prefix_cache;
         let output = tokio::task::spawn_blocking(move || {
             let input = image.as_deref().map_or_else(
                 || Input::new(&prompt),

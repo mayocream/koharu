@@ -41,6 +41,19 @@ impl Default for LlamaStateSeqFlags {
     }
 }
 
+/// Opaque serialized state for one llama.cpp sequence.
+#[derive(Clone)]
+pub struct LlamaSequenceState(Vec<u8>);
+
+impl std::fmt::Debug for LlamaSequenceState {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LlamaSequenceState")
+            .field("bytes", &self.0.len())
+            .finish()
+    }
+}
+
 /// Failed to save a sequence state file
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum SaveSeqStateError {
@@ -538,5 +551,45 @@ impl LlamaContext<'_> {
                 flags.0,
             ) > 0
         }
+    }
+
+    /// Captures an opaque sequence state that can be restored into another context for the same model.
+    #[must_use]
+    pub fn sequence_state(
+        &self,
+        seq_id: i32,
+        flags: LlamaStateSeqFlags,
+    ) -> Option<LlamaSequenceState> {
+        let size = self.state_seq_get_size_ext(seq_id, flags);
+        if size == 0 {
+            return None;
+        }
+        let mut data = vec![0; size];
+        // SAFETY: the destination pointer is valid for `data.len()` writable bytes.
+        let written = unsafe {
+            koharu_llama_sys::llama_state_seq_get_data_ext(
+                self.context.as_ptr(),
+                data.as_mut_ptr(),
+                data.len(),
+                seq_id,
+                flags.0,
+            )
+        };
+        if written == 0 || written > data.len() {
+            return None;
+        }
+        data.truncate(written);
+        Some(LlamaSequenceState(data))
+    }
+
+    /// Restores a sequence state previously returned by [`Self::sequence_state`].
+    pub fn restore_sequence_state(
+        &mut self,
+        state: &LlamaSequenceState,
+        dest_seq_id: i32,
+        flags: LlamaStateSeqFlags,
+    ) -> bool {
+        // SAFETY: `LlamaSequenceState` can only be constructed from llama.cpp state bytes.
+        unsafe { self.state_seq_set_data_ext(&state.0, dest_seq_id, flags) }
     }
 }

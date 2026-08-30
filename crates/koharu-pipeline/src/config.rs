@@ -178,6 +178,8 @@ pub struct TranslationConfig {
     #[specta(type = String)]
     pub target_language: Language,
     pub instructions: Option<String>,
+    #[serde(default)]
+    pub memory: TranslationMemoryConfig,
 }
 
 impl Default for TranslationConfig {
@@ -187,6 +189,40 @@ impl Default for TranslationConfig {
             generation: GenerationConfig::default(),
             target_language: Language::English,
             instructions: None,
+            memory: TranslationMemoryConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+pub struct TranslationMemoryConfig {
+    pub prefix_cache: bool,
+    pub translation_hints: bool,
+    pub batch_pages: u8,
+    pub context_pages: u8,
+}
+
+impl Default for TranslationMemoryConfig {
+    fn default() -> Self {
+        Self {
+            prefix_cache: false,
+            translation_hints: false,
+            batch_pages: 1,
+            context_pages: 2,
+        }
+    }
+}
+
+impl TranslationMemoryConfig {
+    pub(crate) fn batch_pages(self) -> usize {
+        usize::from(self.batch_pages.clamp(1, 8))
+    }
+
+    pub(crate) fn context_pages(self) -> usize {
+        if self.translation_hints {
+            usize::from(self.context_pages.min(20))
+        } else {
+            0
         }
     }
 }
@@ -454,5 +490,38 @@ mod tests {
             restored.inpainting().unwrap(),
             InpaintingModel::Flux2Klein(config) if config.prompt == "Keep the line art."
         ));
+    }
+
+    #[test]
+    fn translation_memory_controls_are_independent_and_bounded() {
+        let disabled = TranslationMemoryConfig::default();
+        assert!(!disabled.prefix_cache);
+        assert!(!disabled.translation_hints);
+        assert_eq!(disabled.batch_pages(), 1);
+        assert_eq!(disabled.context_pages(), 0);
+
+        let enabled = TranslationMemoryConfig {
+            prefix_cache: true,
+            translation_hints: true,
+            batch_pages: u8::MAX,
+            context_pages: u8::MAX,
+        };
+        assert_eq!(enabled.batch_pages(), 8);
+        assert_eq!(enabled.context_pages(), 20);
+    }
+
+    #[test]
+    fn existing_translation_configuration_defaults_missing_memory() {
+        let mut document = toml::Value::try_from(PipelineConfig::default()).unwrap();
+        document["translation"]
+            .as_table_mut()
+            .unwrap()
+            .remove("memory");
+
+        let restored = document.try_into::<PipelineConfig>().unwrap();
+        assert_eq!(
+            restored.translation.memory,
+            TranslationMemoryConfig::default()
+        );
     }
 }

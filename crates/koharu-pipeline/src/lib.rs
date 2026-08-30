@@ -19,6 +19,7 @@ mod stages;
 
 pub use config::{
     DetectionModel, InpaintingModel, OcrModel, PipelineConfig, ProcessorConfig, TranslationConfig,
+    TranslationMemoryConfig,
 };
 pub use error::{ErrorKind, PipelineError};
 pub use pipeline::Pipeline;

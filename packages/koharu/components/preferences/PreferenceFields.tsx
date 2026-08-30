@@ -119,6 +119,7 @@ export function NumberField({
   min,
   max,
   step,
+  disabled,
   onChange,
 }: {
   label: string
@@ -126,6 +127,7 @@ export function NumberField({
   min?: number
   max?: number
   step?: number
+  disabled?: boolean
   onChange: (value: number | null) => void
 }) {
   const { t } = useTranslation()
@@ -140,6 +142,7 @@ export function NumberField({
         min={min}
         max={max}
         step={step}
+        disabled={disabled}
         placeholder={t('model.default')}
         className='h-8 text-[12px] text-foreground'
         onChange={(event) => onChange(parseBounded(event.currentTarget.value, min, max))}

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { ModelPicker } from '@/components/controls/ModelPicker'
 import { GenerationPreferences } from '@/components/preferences/GenerationPreferences'
 import {
+  NumberField,
   PreferencePage,
   PreferenceRow,
   PreferenceSection,
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from '@koharu/ui/components/select'
 import { Textarea } from '@koharu/ui/components/textarea'
+import { Switch } from '@koharu/ui/components/switch'
 
 export function TranslationPreferences({
   value,
@@ -57,6 +59,12 @@ export function TranslationPreferences({
   const choices = selected ? modelChoices : [current, ...modelChoices]
   const quantizations = current.quantizations
   const languageChoices = useMemo(() => orderedLanguageChoices(languages), [languages])
+  const memory = value.memory ?? {
+    prefix_cache: false,
+    translation_hints: false,
+    batch_pages: 1,
+    context_pages: 2,
+  }
   return (
     <PreferencePage
       title={t('settings.translation.title')}
@@ -135,6 +143,73 @@ export function TranslationPreferences({
         value={value.generation}
         onChange={(generation) => onChange({ ...value, generation })}
       />
+
+      <PreferenceSection
+        title={t('settings.translation.memory')}
+        description={t('settings.translation.memoryDescription')}
+      >
+        <PreferenceRow
+          title={t('settings.translation.prefixCache')}
+          description={t('settings.translation.prefixCacheDescription')}
+        >
+          <div className='flex h-8 items-center justify-end'>
+            <Switch
+              aria-label={t('settings.translation.prefixCache')}
+              checked={memory.prefix_cache}
+              onCheckedChange={(prefix_cache) =>
+                onChange({ ...value, memory: { ...memory, prefix_cache } })
+              }
+            />
+          </div>
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.translationHints')}
+          description={t('settings.translation.translationHintsDescription')}
+        >
+          <div className='flex h-8 items-center justify-end'>
+            <Switch
+              aria-label={t('settings.translation.translationHints')}
+              checked={memory.translation_hints}
+              onCheckedChange={(translation_hints) =>
+                onChange({ ...value, memory: { ...memory, translation_hints } })
+              }
+            />
+          </div>
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.batchPages')}
+          description={t('settings.translation.batchPagesDescription')}
+        >
+          <NumberField
+            label={t('settings.translation.batchPages')}
+            value={memory.batch_pages}
+            min={1}
+            max={8}
+            step={1}
+            onChange={(batch_pages) =>
+              batch_pages !== null &&
+              onChange({ ...value, memory: { ...memory, batch_pages } })
+            }
+          />
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.translation.contextPages')}
+          description={t('settings.translation.contextPagesDescription')}
+        >
+          <NumberField
+            label={t('settings.translation.contextPages')}
+            value={memory.context_pages}
+            min={0}
+            max={20}
+            step={1}
+            disabled={!memory.translation_hints}
+            onChange={(context_pages) =>
+              context_pages !== null &&
+              onChange({ ...value, memory: { ...memory, context_pages } })
+            }
+          />
+        </PreferenceRow>
+      </PreferenceSection>
 
       <PreferenceSection title={t('settings.translation.output')}>
         <PreferenceRow

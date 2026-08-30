@@ -504,6 +504,14 @@ export type TranslationConfig = {
 	generation: GenerationConfig,
 	target_language: string,
 	instructions: string | null,
+	memory?: TranslationMemoryConfig,
+};
+
+export type TranslationMemoryConfig = {
+	prefix_cache: boolean,
+	translation_hints: boolean,
+	batch_pages: number,
+	context_pages: number,
 };
 
 export type TypesettingConfig = {

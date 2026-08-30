@@ -68,6 +68,14 @@ impl Translator {
     }
 
     #[must_use]
+    pub fn supports_context_memory(selection: &ModelSelection) -> bool {
+        !matches!(
+            selection.provider,
+            Provider::DeepL | Provider::GoogleCloudTranslation | Provider::Caiyun
+        )
+    }
+
+    #[must_use]
     pub fn loaded(&self, selection: &ModelSelection) -> bool {
         if selection.provider != Provider::Local {
             return true;
@@ -115,6 +123,10 @@ impl Translator {
         generation: GenerationConfig,
         mut request: TranslationRequest,
     ) -> anyhow::Result<(&'static str, Vec<String>)> {
+        anyhow::ensure!(
+            request.page_lengths.iter().sum::<usize>() == request.segments.len(),
+            "translation page lengths do not match the segment count"
+        );
         let _metric = tracing::info_span!(
             target: "koharu_metrics",
             "translation_request",

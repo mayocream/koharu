@@ -1,8 +1,11 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
+    sync::atomic::{AtomicU64, Ordering},
     time::Instant,
 };
+
+static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 use anyhow::{Context as _, Result, ensure};
 use futures::{StreamExt as _, stream::FuturesUnordered};
@@ -36,6 +39,7 @@ pub(crate) struct Execution<'a> {
     base: koharu_scene::Revision,
     started: Instant,
     inpainting_mask: Option<crate::InpaintingMask>,
+    run_id: u64,
 }
 
 impl<'a> Execution<'a> {
@@ -72,6 +76,7 @@ impl<'a> Execution<'a> {
             },
         );
 
+        let translation_batch_pages = runner.translation_batch_pages();
         Ok(Self {
             runner,
             resources,
@@ -79,7 +84,8 @@ impl<'a> Execution<'a> {
             stop: request.stop,
             progress: request.progress,
             scope,
-            scheduler: Scheduler::new(&pages, &stages),
+            scheduler: Scheduler::new(&pages, &stages)
+                .with_translation_batch_pages(translation_batch_pages),
             scene: snapshot,
             images: BTreeMap::new(),
             busy_stages: BTreeSet::new(),
@@ -88,6 +94,7 @@ impl<'a> Execution<'a> {
             base,
             started,
             inpainting_mask: request.inpainting_mask,
+            run_id: NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed),
         })
     }
 
@@ -125,26 +132,34 @@ impl<'a> Execution<'a> {
         if self.stopped() || self.failure.is_some() {
             return None;
         }
-        let (page, stage) = self.scheduler.start_next(&self.busy_stages)?;
+        let scheduled = self.scheduler.start_next_batch(&self.busy_stages)?;
+        let page = scheduled.page;
+        let stage = scheduled.stage;
         self.busy_stages.insert(stage);
         let images = self
             .images
             .entry(page)
             .or_insert_with(|| Arc::new(ImageCache::default()))
             .clone();
+        let input = StageInput::new(
+            self.scene.clone(),
+            page,
+            self.scope.entities(),
+            self.scope.region(page),
+            images,
+            self.inpainting_mask
+                .as_ref()
+                .filter(|mask| stage == Stage::Inpainting && mask.page == page)
+                .cloned(),
+        );
+        let input = if stage == Stage::Translation {
+            input.with_translation_batch(self.run_id, scheduled.batch_pages.into())
+        } else {
+            input
+        };
         Some(StageJob::new(
             stage,
-            StageInput::new(
-                self.scene.clone(),
-                page,
-                self.scope.entities(),
-                self.scope.region(page),
-                images,
-                self.inpainting_mask
-                    .as_ref()
-                    .filter(|mask| stage == Stage::Inpainting && mask.page == page)
-                    .cloned(),
-            ),
+            input,
             self.stop.clone(),
             self.progress.clone(),
         ))

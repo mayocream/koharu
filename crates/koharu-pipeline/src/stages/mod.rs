@@ -22,6 +22,8 @@ pub(crate) struct StageInput {
     region: Option<Bounds>,
     images: Arc<ImageCache>,
     inpainting_mask: Option<InpaintingMask>,
+    run_id: u64,
+    batch_pages: Arc<[EntityId]>,
 }
 
 impl StageInput {
@@ -40,7 +42,15 @@ impl StageInput {
             region,
             images,
             inpainting_mask,
+            run_id: 0,
+            batch_pages: Arc::from([page]),
         }
+    }
+
+    pub(crate) fn with_translation_batch(mut self, run_id: u64, pages: Arc<[EntityId]>) -> Self {
+        self.run_id = run_id;
+        self.batch_pages = pages;
+        self
     }
 
     pub(crate) fn page(&self) -> EntityId {
@@ -53,6 +63,16 @@ impl StageInput {
             self.page,
             self.entities.as_deref(),
             self.region,
+            entity,
+        )
+    }
+
+    fn contains_entity_on(&self, page: EntityId, entity: EntityId) -> Result<bool> {
+        crate::scope::contains_entity(
+            &self.scene,
+            page,
+            self.entities.as_deref(),
+            (page == self.page).then_some(self.region).flatten(),
             entity,
         )
     }
@@ -117,6 +137,10 @@ impl Stages {
 
     pub(crate) fn unload(&self, stage: Stage) -> bool {
         self.processor(stage).unload()
+    }
+
+    pub(crate) fn translation_batch_pages(&self) -> usize {
+        self.translation.batch_pages()
     }
 }
 

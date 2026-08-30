@@ -103,6 +103,12 @@ const preferences: Preferences = {
       generation: { vision: true, reasoning: false },
       target_language: 'en-US',
       instructions: null,
+      memory: {
+        prefix_cache: false,
+        translation_hints: false,
+        batch_pages: 1,
+        context_pages: 2,
+      },
     },
     inpainting: { model: 'lama' },
     processor: {},
@@ -1163,6 +1169,57 @@ describe('greenfield editor', () => {
         expect.objectContaining({
           translation: expect.objectContaining({
             generation: expect.objectContaining({ vision: false }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+    const prefixCache = screen.getByRole('switch', { name: 'Prefix KV cache' })
+    const translationHints = screen.getByRole('switch', {
+      name: 'Use previous translation hints',
+    })
+    const batchPages = screen.getByRole('spinbutton', { name: 'Pages per request' })
+    const contextPages = screen.getByRole('spinbutton', {
+      name: 'Previous pages as hints',
+    })
+    expect(prefixCache).not.toBeChecked()
+    expect(translationHints).not.toBeChecked()
+    expect(batchPages).toHaveValue(1)
+    expect(contextPages).toBeDisabled()
+    save.mockClear()
+    await user.click(prefixCache)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            memory: expect.objectContaining({ prefix_cache: true }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+    save.mockClear()
+    await user.click(translationHints)
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            memory: expect.objectContaining({ translation_hints: true }),
+          }),
+        }),
+        preferences.providers,
+        preferences.typesetting,
+      ),
+    )
+    save.mockClear()
+    fireEvent.change(batchPages, { target: { value: '3' } })
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          translation: expect.objectContaining({
+            memory: expect.objectContaining({ batch_pages: 3 }),
           }),
         }),
         preferences.providers,
