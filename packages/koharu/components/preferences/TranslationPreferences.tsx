@@ -28,8 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@koharu/ui/components/select'
-import { Textarea } from '@koharu/ui/components/textarea'
 import { Switch } from '@koharu/ui/components/switch'
+import { Textarea } from '@koharu/ui/components/textarea'
 
 export function TranslationPreferences({
   value,
@@ -187,8 +187,7 @@ export function TranslationPreferences({
             max={8}
             step={1}
             onChange={(batch_pages) =>
-              batch_pages !== null &&
-              onChange({ ...value, memory: { ...memory, batch_pages } })
+              batch_pages !== null && onChange({ ...value, memory: { ...memory, batch_pages } })
             }
           />
         </PreferenceRow>
@@ -204,8 +203,7 @@ export function TranslationPreferences({
             step={1}
             disabled={!memory.translation_hints}
             onChange={(context_pages) =>
-              context_pages !== null &&
-              onChange({ ...value, memory: { ...memory, context_pages } })
+              context_pages !== null && onChange({ ...value, memory: { ...memory, context_pages } })
             }
           />
         </PreferenceRow>
