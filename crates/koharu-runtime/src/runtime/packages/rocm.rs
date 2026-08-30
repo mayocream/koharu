@@ -149,26 +149,8 @@ pub(crate) enum Rocm {
     Gfx942,
     #[strum(serialize = "gfx950")]
     Gfx950,
-    #[strum(serialize = "gfx1010")]
-    Gfx1010,
-    #[strum(serialize = "gfx1011")]
-    Gfx1011,
-    #[strum(serialize = "gfx1012")]
-    Gfx1012,
     #[strum(serialize = "gfx1030")]
     Gfx1030,
-    #[strum(serialize = "gfx1031")]
-    Gfx1031,
-    #[strum(serialize = "gfx1032")]
-    Gfx1032,
-    #[strum(serialize = "gfx1033")]
-    Gfx1033,
-    #[strum(serialize = "gfx1034")]
-    Gfx1034,
-    #[strum(serialize = "gfx1035")]
-    Gfx1035,
-    #[strum(serialize = "gfx1036")]
-    Gfx1036,
     #[strum(serialize = "gfx1100")]
     Gfx1100,
     #[strum(serialize = "gfx1101")]
@@ -349,8 +331,6 @@ mod tests {
     #[test]
     fn parses_supported_targets() {
         assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
-        assert_eq!("gfx908".parse(), Ok(Rocm::Gfx908));
-        assert_eq!("gfx1150".parse(), Ok(Rocm::Gfx1150));
         assert!("gfx1250".parse::<Rocm>().is_err());
     }
 }
