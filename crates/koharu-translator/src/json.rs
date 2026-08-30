@@ -54,7 +54,7 @@ impl<'a> Parser<'a> {
             Some('{') => self.parse_object(depth + 1),
             Some('[') => self.parse_array(depth + 1),
             Some(character) if quote_end(character).is_some() => {
-                self.parse_string().map(Value::String)
+                self.parse_string(true).map(Value::String)
             }
             Some(character) if character.is_ascii_digit() || matches!(character, '-' | '+') => {
                 Ok(self.parse_number_or_string())
@@ -115,7 +115,7 @@ impl<'a> Parser<'a> {
         if self.peek().and_then(quote_end).is_some() {
             // Trimmed because a dropped colon leaves the space inside the key:
             // `"text "value"` parses as the key `text ` rather than `text`.
-            return Ok(self.parse_string()?.trim().to_owned());
+            return Ok(self.parse_string(false)?.trim().to_owned());
         }
 
         let start = self.position;
@@ -132,7 +132,7 @@ impl<'a> Parser<'a> {
         Ok(key.to_owned())
     }
 
-    fn parse_string(&mut self) -> anyhow::Result<String> {
+    fn parse_string(&mut self, heal: bool) -> anyhow::Result<String> {
         let opening = self
             .advance()
             .ok_or_else(|| anyhow!("expected a string at byte {}", self.position))?;
@@ -149,6 +149,10 @@ impl<'a> Parser<'a> {
                     output.push(character);
                     continue;
                 }
+                if closing != '\'' && heal && !self.closes_string() {
+                    output.push(character);
+                    continue;
+                }
                 return Ok(output);
             }
             if character == '\\' {
@@ -159,6 +163,22 @@ impl<'a> Parser<'a> {
         }
 
         Ok(output)
+    }
+
+    /// Whether a quote here really ends the string.
+    ///
+    /// Models routinely leave quotes inside a value unescaped, as in
+    /// `"that's "kindness.""`. A quote glued to more text cannot be the end of
+    /// the value, so it is kept as content. Whitespace still ends the string,
+    /// which leaves two adjacent strings with a missing comma parsing as two
+    /// strings rather than one run-on.
+    fn closes_string(&self) -> bool {
+        match self.peek() {
+            None => true,
+            Some(character) => {
+                character.is_whitespace() || matches!(character, ',' | '}' | ']' | ':')
+            }
+        }
     }
 
     fn parse_escape(&mut self, output: &mut String) {
@@ -388,6 +408,29 @@ mod tests {
             from_str::<Shaped>(response).expect_err("missing text should fail")
         );
         assert!(error.contains("missing field `text`"), "{error}");
+    }
+
+    #[test]
+    fn repairs_unescaped_quotes_inside_a_value() {
+        // A model quoting a word inside a translation without escaping it.
+        let response = concat!(
+            "{\n  \"translations\": [\n",
+            "    {\n      \"id\": 0,\n",
+            "      \"text\": \"I don't think that's \"kindness.\"\"\n    },\n",
+            "    {\n      \"id\": 1,\n",
+            "      \"text\": \"That thing you call \"kindness\"...\"\n    }\n",
+            "  ]\n}"
+        );
+
+        let output = from_str::<Shaped>(response).expect("response should be repaired");
+        assert_eq!(
+            output.translations[0].text,
+            "I don't think that's \"kindness.\""
+        );
+        assert_eq!(
+            output.translations[1].text,
+            "That thing you call \"kindness\"..."
+        );
     }
 
     #[test]
