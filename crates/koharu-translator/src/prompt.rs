@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use anyhow::Context;
 use indoc::indoc;
 use serde::{Deserialize, Deserializer, Serialize, de};
@@ -48,13 +50,34 @@ pub(crate) fn translations(
 
 /// Keeps a model response readable in a log line without truncating so hard
 /// that the shape of the failure is lost.
+///
+/// Responses are usually pretty-printed, so line breaks and other control
+/// characters are escaped rather than passed through: the snippet is formatted
+/// into an error context, and one failure should stay one line.
 pub(crate) fn snippet(text: &str) -> String {
     const LIMIT: usize = 2000;
     let trimmed = text.trim();
-    match trimmed.char_indices().nth(LIMIT) {
-        Some((end, _)) => format!("{}… ({} bytes total)", &trimmed[..end], trimmed.len()),
-        None => trimmed.to_owned(),
+    let (visible, elided) = match trimmed.char_indices().nth(LIMIT) {
+        Some((end, _)) => (&trimmed[..end], true),
+        None => (trimmed, false),
+    };
+
+    let mut output = String::with_capacity(visible.len());
+    for character in visible.chars() {
+        match character {
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            control if control.is_control() => {
+                let _ = write!(output, "\\u{{{:04x}}}", control as u32);
+            }
+            character => output.push(character),
+        }
     }
+    if elided {
+        let _ = write!(output, "… ({} bytes total)", trimmed.len());
+    }
+    output
 }
 
 pub(crate) fn output_schema(expected: usize) -> Value {
@@ -194,6 +217,31 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snippet_keeps_a_response_on_one_line() {
+        let flattened = snippet("{\n  \"translations\": [\n\t\"hello\"\n  ]\n}");
+
+        assert!(!flattened.contains('\n'), "{flattened}");
+        assert!(!flattened.contains('\t'), "{flattened}");
+        assert_eq!(flattened, r#"{\n  "translations": [\n\t"hello"\n  ]\n}"#);
+    }
+
+    #[test]
+    fn snippet_escapes_other_control_characters() {
+        assert_eq!(snippet("before\u{7}after"), r"before\u{0007}after");
+    }
+
+    #[test]
+    fn snippet_reports_the_length_it_elided() {
+        let flattened = snippet(&"x".repeat(2_500));
+
+        assert!(flattened.starts_with(&"x".repeat(2_000)));
+        assert!(
+            flattened.ends_with("\u{2026} (2500 bytes total)"),
+            "{flattened}"
+        );
+    }
 
     #[test]
     fn parses_plain_json_and_markdown_fences() {
