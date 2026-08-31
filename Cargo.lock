@@ -4988,6 +4988,7 @@ dependencies = [
  "koharu-llama",
  "koharu-runtime",
  "koharu-torch",
+ "llguidance",
  "minijinja",
  "minijinja-contrib",
  "rayon",
