@@ -26,8 +26,13 @@ pub(crate) fn translations(
     text: &str,
     source_segments: &[String],
 ) -> anyhow::Result<Vec<String>> {
-    let output = crate::json::from_str::<TranslationOutput>(text)
-        .with_context(|| format!("{provider} returned invalid translation JSON"))?;
+    let output = crate::json::from_str::<TranslationOutput>(text).with_context(|| {
+        format!(
+            "{provider} returned invalid translation JSON for {} segments; response was: {}",
+            source_segments.len(),
+            snippet(text),
+        )
+    })?;
     let mut translations = source_segments.to_vec();
     let mut translated = vec![false; source_segments.len()];
 
@@ -39,6 +44,17 @@ pub(crate) fn translations(
     }
 
     Ok(translations)
+}
+
+/// Keeps a model response readable in a log line without truncating so hard
+/// that the shape of the failure is lost.
+pub(crate) fn snippet(text: &str) -> String {
+    const LIMIT: usize = 2000;
+    let trimmed = text.trim();
+    match trimmed.char_indices().nth(LIMIT) {
+        Some((end, _)) => format!("{}… ({} bytes total)", &trimmed[..end], trimmed.len()),
+        None => trimmed.to_owned(),
+    }
 }
 
 pub(crate) fn output_schema(expected: usize) -> Value {

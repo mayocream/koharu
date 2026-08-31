@@ -11,7 +11,7 @@ pub(crate) fn from_str<T: DeserializeOwned>(input: &str) -> anyhow::Result<T> {
         Err(error) => error,
     };
 
-    let mut last_error = None;
+    let mut root_error = None;
     for (position, _) in input
         .char_indices()
         .filter(|(_, character)| matches!(character, '{' | '['))
@@ -22,11 +22,11 @@ pub(crate) fn from_str<T: DeserializeOwned>(input: &str) -> anyhow::Result<T> {
             .and_then(|value| serde_json::from_value(value).map_err(Into::into));
         match result {
             Ok(value) => return Ok(value),
-            Err(error) => last_error = Some(error),
+            Err(error) => root_error = root_error.or(Some(error)),
         }
     }
 
-    Err(last_error.unwrap_or_else(|| strict_error.into())).context("failed to parse or repair JSON")
+    Err(root_error.unwrap_or_else(|| strict_error.into())).context("failed to parse or repair JSON")
 }
 
 struct Parser<'a> {
@@ -113,7 +113,9 @@ impl<'a> Parser<'a> {
 
     fn parse_key(&mut self) -> anyhow::Result<String> {
         if self.peek().and_then(quote_end).is_some() {
-            return self.parse_string();
+            // Trimmed because a dropped colon leaves the space inside the key:
+            // `"text "value"` parses as the key `text ` rather than `text`.
+            return Ok(self.parse_string()?.trim().to_owned());
         }
 
         let start = self.position;
@@ -329,6 +331,17 @@ mod tests {
         translations: Vec<String>,
     }
 
+    #[derive(Debug, serde::Deserialize)]
+    struct Segment {
+        id: usize,
+        text: String,
+    }
+
+    #[derive(Debug, serde::Deserialize)]
+    struct Shaped {
+        translations: Vec<Segment>,
+    }
+
     fn expected() -> Output {
         Output {
             translations: vec!["hello".to_owned(), "world".to_owned()],
@@ -345,6 +358,36 @@ mod tests {
         ] {
             assert_eq!(from_str::<Output>(input).unwrap(), expected());
         }
+    }
+
+    #[test]
+    fn repairs_a_key_that_swallowed_its_colon() {
+        // A model dropped the colon after "text", so the key absorbed the
+        // space and the value followed it directly.
+        let response = concat!(
+            "```json\n{\n  \"translations\": [\n",
+            "    {\n      \"id\": 0,\n      \"text\": \"first\"\n    },\n",
+            "    {\n      \"id\": 1,\n      \"text \"second\"\n    }\n",
+            "  ]\n}\n```"
+        );
+
+        let output = from_str::<Shaped>(response).expect("response should be repaired");
+        assert_eq!(output.translations.len(), 2);
+        assert_eq!(output.translations[1].id, 1);
+        assert!(output.translations[1].text.starts_with("second"));
+    }
+
+    #[test]
+    fn reports_the_outermost_failure_not_a_fragment() {
+        // The outer object is the one the model meant to return, so its error
+        // is the useful one. Reporting the last candidate described an inner
+        // segment instead, which pointed at the wrong field entirely.
+        let response = r#"{"translations": [{"id": 0}]}"#;
+        let error = format!(
+            "{:#}",
+            from_str::<Shaped>(response).expect_err("missing text should fail")
+        );
+        assert!(error.contains("missing field `text`"), "{error}");
     }
 
     #[test]
