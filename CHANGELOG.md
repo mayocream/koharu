@@ -1,3 +1,27 @@
+## [0.79.5](https://github.com/koharu-rs/koharu/compare/0.79.4..0.79.5) - 2026-08-31
+
+### 🐛 Bug Fixes
+
+- *(ci)* Separate runner image caches - ([5ba1d97](https://github.com/koharu-rs/koharu/commit/5ba1d974ed81f8e40a3afc5d7673b52b5f650f72))
+- *(ml)* Pass ggml Metal backend name MTL0 to FLUX.2 ([#1006](https://github.com/koharu-rs/koharu/issues/1006)) - ([01ba67a](https://github.com/koharu-rs/koharu/commit/01ba67a6e0686d2d39b456eeeab4e13a0e08b652))
+- *(runtime)* Update native dependencies - ([1c736f7](https://github.com/koharu-rs/koharu/commit/1c736f70ffbc19cc23c37f92bbc99beb6d354f37))
+- *(runtime)* Update ROCm to 10.0 - ([0147de1](https://github.com/koharu-rs/koharu/commit/0147de13c2f09375b2888a18f0ad84f4e34f600e))
+- *(ui)* Select CJK glyph variants from the interface language ([#999](https://github.com/koharu-rs/koharu/issues/999)) - ([d22757d](https://github.com/koharu-rs/koharu/commit/d22757d0f8f7db85f0ef9ccb3306824b32eab919))
+
+### 📚 Documentation
+
+- Clarify hardware acceleration requirements - ([ba43b2d](https://github.com/koharu-rs/koharu/commit/ba43b2dc23687eecc8c141e2ffe8a13573386b38))
+
+### ⚙️ Miscellaneous Tasks
+
+- Use latest Windows runners - ([13d52c0](https://github.com/koharu-rs/koharu/commit/13d52c0a3e72ba05fb7aa7bd2f350afe43c3076c))
+
+### Runtime
+
+- Limit ROCm devices to official ROCm 10 - ([ccfdf34](https://github.com/koharu-rs/koharu/commit/ccfdf340c930601e814bdc790dbb017382ee1282))
+- Support every ROCm 10 device target - ([f282f22](https://github.com/koharu-rs/koharu/commit/f282f22528218092d93a4453beb4619adc77c16c))
+
+
 ## [0.79.4](https://github.com/koharu-rs/koharu/compare/0.79.3..0.79.4) - 2026-08-28
 
 ### 🐛 Bug Fixes
