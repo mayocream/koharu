@@ -5,7 +5,11 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FontPicker } from '@/components/controls/FontPicker'
-import { PreferencePage } from '@/components/preferences/PreferenceFields'
+import {
+  PreferencePage,
+  PreferenceRow,
+  PreferenceSection,
+} from '@/components/preferences/PreferenceFields'
 import { useFonts } from '@/lib/queries'
 import type { TypesettingConfig } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
@@ -133,6 +137,121 @@ export function TypesettingPreferences({
           </p>
         )}
       </section>
+
+      {}
+      <PreferenceSection
+        title={t('settings.typesetting.overrides.title')}
+        description={t('settings.typesetting.overrides.description')}
+      >
+        <PreferenceRow
+          title={t('settings.typesetting.overrides.fontColor')}
+          description={t('settings.typesetting.overrides.fontColorDescription')}
+        >
+          <Button
+            type='button'
+            variant={value.force_black_text ? 'default' : 'outline'}
+            className='h-8 text-[11px]'
+            onClick={() =>
+              onChange({
+                ...value,
+                force_black_text: !value.force_black_text,
+              })
+            }
+          >
+            {value.force_black_text ? t('settings.typesetting.overrides.revertAuto') : t('settings.typesetting.overrides.forceBlack')}
+          </Button>
+        </PreferenceRow>
+
+        <PreferenceRow
+          title={t('settings.typesetting.overrides.borderWidth')}
+          description={t('settings.typesetting.overrides.borderWidthDescription')}
+        >
+          <div className='flex items-center gap-2'>
+            {value.force_border_width !== null && value.force_border_width !== undefined && (
+              <div className='flex items-center gap-1.5'>
+                <input
+                  type='number'
+                  min='0'
+                  step='0.1'
+                  className='h-8 w-16 rounded-md border border-input bg-transparent px-2 py-1 text-right text-[11px] tabular-nums shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                  value={value.force_border_width}
+                  onChange={(e) => {
+                    const num = parseFloat(e.target.value)
+                    onChange({ ...value, force_border_width: isNaN(num) ? 0 : num })
+                  }}
+                />
+                <span className='select-none text-[11px] text-muted-foreground'>px</span>
+              </div>
+            )}
+            <Button
+              type='button'
+              variant={
+                value.force_border_width !== null && value.force_border_width !== undefined
+                  ? 'default'
+                  : 'outline'
+              }
+              className='h-8 text-[11px]'
+              onClick={() =>
+                onChange({
+                  ...value,
+                  force_border_width:
+                    value.force_border_width !== null && value.force_border_width !== undefined
+                      ? null
+                      : 0.5,
+                })
+              }
+            >
+              {value.force_border_width !== null && value.force_border_width !== undefined
+                ? t('settings.typesetting.overrides.revert')
+                : t('settings.typesetting.overrides.override')}
+            </Button>
+          </div>
+        </PreferenceRow>
+
+        <PreferenceRow
+          title={t('settings.typesetting.overrides.fontWeight')}
+          description={t('settings.typesetting.overrides.fontWeightDescription')}
+        >
+          <div className='flex items-center gap-2'>
+            {value.force_font_weight !== null && value.force_font_weight !== undefined && (
+              <input
+                type='number'
+                min='100'
+                max='900'
+                step='100'
+                className='h-8 w-16 rounded-md border border-input bg-transparent px-2 py-1 text-right text-[11px] tabular-nums shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+                value={value.force_font_weight}
+                onChange={(e) => {
+                  const num = parseInt(e.target.value, 10)
+                  onChange({ ...value, force_font_weight: isNaN(num) ? 400 : num })
+                }}
+              />
+            )}
+            <Button
+              type='button'
+              variant={
+                value.force_font_weight !== null && value.force_font_weight !== undefined
+                  ? 'default'
+                  : 'outline'
+              }
+              className='h-8 text-[11px]'
+              onClick={() =>
+                onChange({
+                  ...value,
+                  force_font_weight:
+                    value.force_font_weight !== null && value.force_font_weight !== undefined
+                      ? null
+                      : 400,
+                })
+              }
+            >
+              {value.force_font_weight !== null && value.force_font_weight !== undefined
+                ? t('settings.typesetting.overrides.revert')
+                : t('settings.typesetting.overrides.override')}
+            </Button>
+          </div>
+        </PreferenceRow>
+      </PreferenceSection>
     </PreferencePage>
   )
 }

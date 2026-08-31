@@ -5,12 +5,18 @@ use specta::Type;
 #[serde(default)]
 pub struct TypesettingConfig {
     pub font_families: Vec<String>,
+    pub force_border_width: Option<f32>,
+    pub force_black_text: bool,
+    pub force_font_weight: Option<u16>,
 }
 
 impl Default for TypesettingConfig {
     fn default() -> Self {
         Self {
             font_families: vec!["CCWildWords".to_owned(), "Adobe 黑体 Std".to_owned()],
+            force_border_width: None,
+            force_black_text: false,
+            force_font_weight: None,
         }
     }
 }

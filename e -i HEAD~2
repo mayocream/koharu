@@ -1,0 +1,2204 @@
+[33m5d47bfca[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtoggle_forced_font_clean[m[33m, [m[1;31morigin/toggle_forced_font_clean[m[33m)[m Added Global overrides for Font border width, weight and color
+[33m687af180[m[33m ([m[1;31mupstream/main[m[33m, [m[1;32mmain[m[33m)[m chore: update sponsors (#943)
+[33me910484b[m[33m ([m[1;33mtag: [m[1;33m0.80.0[m[33m)[m chore(release): 0.80.0
+[33m971fed9c[m docs: improve contribution guidelines
+[33m5b4b9b8e[m feat(llama): sync utilityai wrapper changes
+[33m26c7d45e[m[33m ([m[1;33mtag: [m[1;33m0.79.5[m[33m)[m chore(release): 0.79.5
+[33mba43b2dc[m docs: clarify hardware acceleration requirements
+[33m1c736f70[m fix(runtime): update native dependencies
+[33mccfdf340[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m runtime: limit ROCm devices to official ROCm 10
+[33mf282f225[m runtime: support every ROCm 10 device target
+[33m01ba67a6[m fix(ml): pass ggml Metal backend name MTL0 to FLUX.2 (#1006)
+[33m0147de13[m fix(runtime): update ROCm to 10.0
+[33m5ba1d974[m fix(ci): separate runner image caches
+[33m13d52c0a[m ci: use latest Windows runners
+[33md22757d0[m fix(ui): select CJK glyph variants from the interface language (#999)
+[33mf893e176[m[33m ([m[1;33mtag: [m[1;33m0.79.4[m[33m)[m chore(release): 0.79.4
+[33mfd0ca01e[m fix(runtime): update Torch to v2.13.0.3
+[33m2f308fa2[m fix(runtime): update Torch release
+[33m4932a9d0[m docs: update readme
+[33m6da18629[m[33m ([m[1;33mtag: [m[1;33m0.79.3[m[33m)[m chore(release): 0.79.3
+[33m86ff7f0f[m fix(runtime): use dedicated release repositories
+[33mbf516a01[m chore: update repository links
+[33m52dfe1e6[m chore: update codeowners
+[33m65eeb1cd[m[33m ([m[1;33mtag: [m[1;33m0.79.2[m[33m)[m chore(release): 0.79.2
+[33m559aab7b[m fix(runtime): use koharu-rs release repositories
+[33mcb60b7d0[m[33m ([m[1;33mtag: [m[1;33m0.79.1[m[33m)[m chore(release): 0.79.1
+[33m00c9317c[m chore(deps): update cargo & bun
+[33ma9ce05f8[m fix(build): pin Tauri CEF toolchain
+[33m5ba4f80f[m[33m ([m[1;33mtag: [m[1;33m0.79.0[m[33m)[m chore(release): 0.79.0
+[33m10c440aa[m fix(runtime): restore macOS Torch load order
+[33m023bf7a6[m fix: inpaint preview mask transparency (#987)
+[33m156c5fcf[m feat: add Hayai OCR model (#988)
+[33mb81d51d6[m[33m ([m[1;33mtag: [m[1;33m0.78.2[m[33m)[m chore(release): 0.78.2
+[33m922f0f48[m refactor(runtime): simplify Torch package variants
+[33mb5cfaba9[m refactor(runtime): use bundled native releases
+[33ma81c5829[m[33m ([m[1;33mtag: [m[1;33mdiffusion-master-827-97d2990[m[33m)[m ci: move runtime builds to dedicated repositories
+[33m904546a5[m ci: rename workflows
+[33m5fdf2e74[m refactor ci
+[33m36e21c3f[m ci: use gha cache
+[33m874ed98c[m fix: disable MIOpen on Windows
+[33m625bce87[m Revert "Try to use codebuild"
+[33m85b7a02b[m Try to use codebuild
+[33mddac1e46[m ci: stream compiler cache to GitHub Actions
+[33m19a7999e[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-b10615[m[33m)[m fix(ci): extend native build timeout
+[33mc1870af0[m ci(runtime): restore GitHub-hosted runners
+[33mbbb2f421[m fix(ci): use CodeBuild project defaults
+[33m8a7472d4[m fix(ci): route CodeBuild jobs by platform
+[33md47413c0[m fix(ci): apply explicit CodeBuild overrides
+[33mb3730fa1[m fix(ci): use CodeBuild large runners
+[33m44f90536[m fix(ci): use CodeBuild Ubuntu 7 image
+[33mdb2539f0[m ci(runtime): use CodeBuild runners
+[33m88565ea2[m ci(torch): use CodeBuild runners
+[33m8818911f[m fix(ml): disable MIOpen on Windows gfx10
+[33m67cffb8f[m fix(linux): prevent CEF mallinfo overflow
+[33m38fc352f[m test(torch): remove runtime-dependent serialization tests
+[33mdbed34d8[m refactor(runtime): require pinned Hugging Face revisions
+[33me09feb87[m fix(ml): align RF-DETR inference with upstream
+[33mbf930058[m test(torch): align serialization tests with upstream
+[33m9f73d2c0[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-b10604[m[33m)[m fix(torch): restore stream serialization
+[33mba313b47[m fix(torch): disambiguate module handle in C++20
+[33m12da3d94[m fix(ci): support PyTorch 2.13 Torch builds
+[33meb2a66aa[m ci: simplify Torch release packaging
+[33m93cc5f66[m ci: optimize native runtimes and package Torch shim
+[33mc434b7fa[m fix(ci): persist Torch ROCm architectures
+[33m16551b7f[m fix(ci): repair Torch accelerator builds
+[33m4a840e17[m fix(ci): use Linux CUDA package names
+[33m575b243b[m fix(ci): enable long paths for Torch checkout
+[33mc7daa732[m ci: build Torch runtime releases
+[33md3ce865b[m chore(runtime): update llama.cpp
+[33mbcefc521[m fix: resolve clippy warnings
+[33mea545e31[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-b10603[m[33m)[m fix(ci): include prerelease llama.cpp releases
+[33m99c81241[m chore(deps): bump actions/download-artifact from 7 to 8 (#968)
+[33m1c97ee34[m chore(deps): bump actions/setup-python from 6 to 7 (#967)
+[33m48941118[m chore(deps): bump actions/ai-inference from 2 to 3 (#969)
+[33m266015c7[m chore(deps): bump astral-sh/setup-uv from 9.0.0 to 10.0.1 (#970)
+[33md66ffb9e[m docs: update screenshot
+[33m15c2c067[m[33m ([m[1;33mtag: [m[1;33m0.78.1[m[33m)[m chore(release): 0.78.1
+[33me4c976b9[m fix(ml): disambiguate image buffer access
+[33m7834852e[m refactor(runtime): simplify downloads
+[33mc6a75bba[m[33m ([m[1;33mtag: [m[1;33m0.78.0[m[33m)[m chore(release): 0.78.0
+[33me7f0cbce[m fix(runtime): improve accelerator detection
+[33me4c3d069[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-v0.2.0[m[33m)[m feat(translator): add uncensored Qwen 3.8 model
+[33m49456e2b[m Fix CI
+[33m4c8cfa18[m chore(deps): update cargo & bun
+[33m4679ab69[m[33m ([m[1;33mtag: [m[1;33m0.77.5[m[33m)[m chore(release): 0.77.5
+[33m299e8835[m fix(metrics): exclude telemetry from logs
+[33m5b383936[m fix(ui): preserve quick settings across navigation
+[33mf53631b4[m fix(translator): map Gemini thinking controls
+[33mc1fce14c[m fix(runtime): isolate system HIP discovery
+[33mc7d635c5[m ci: remove unused params
+[33m68be1173[m chore: fix lint
+[33mdc2c0442[m fix(runtime): reject unsupported CUDA architectures
+[33m5f87445e[m refactor: refine metrics
+[33md08fe639[m[33m ([m[1;33mtag: [m[1;33m0.77.4[m[33m)[m chore(release): 0.77.4
+[33mdff193de[m docs: describe agent resources
+[33m765d3271[m docs: make contribution guidance more welcoming
+[33m6df4ded5[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-b10507[m[33m)[m chore(runtime): update native runtimes
+[33md2f659a4[m[33m ([m[1;33mtag: [m[1;33mstable-diffusion.cpp-master-827-97d2990[m[33m, [m[1;33mtag: [m[1;33m0.77.3[m[33m)[m chore(release): 0.77.3
+[33m3da33914[m fix(translator): decode optional Gemini thinking capability
+[33m27a3764e[m[33m ([m[1;33mtag: [m[1;33m0.77.2[m[33m)[m chore(release): 0.77.2
+[33m1dda0844[m fix(runtime): load ROCm libraries globally
+[33mc1768549[m[33m ([m[1;33mtag: [m[1;33m0.77.1[m[33m)[m chore(release): 0.77.1
+[33m556485b1[m fix(runtime): load Linux cuFile for Torch
+[33m92161d0c[m[33m ([m[1;33mtag: [m[1;33m0.77.0[m[33m)[m chore(release): 0.77.0
+[33mb855982c[m fix(ci): cover supported ROCm targets in HIP builds
+[33macb7d99c[m fix(pipeline): refine detection and inpainting reruns
+[33m66e603d4[m feat: add native usage metrics
+[33md2b04ad4[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-b10488[m[33m)[m fix(ci): target dependency releases at default branch
+[33m9bafac8b[m[33m ([m[1;33mtag: [m[1;33m0.76.0[m[33m)[m chore(release): 0.76.0
+[33mf842172e[m fix(translator): respect model capabilities
+[33m87104fcf[m feat(translator): support local reasoning
+[33m5b6672cc[m fix(translator): align reasoning capabilities
+[33mde511582[m[33m ([m[1;33mtag: [m[1;33m0.75.16[m[33m)[m chore(release): 0.75.16
+[33mbf7a6ea9[m fix(ci): restore Windows 2022 app builds
+[33m24864946[m fix(ci): stabilize dependency builds
+[33mfbc2e4f1[m fix(editor): replace text centered stroke with outward path (#951)
+[33mdda25baa[m ci: use ubuntu-latest runners
+[33md4997cad[m ci: use windows-latest runners
+[33mc280442b[m[33m ([m[1;33mtag: [m[1;33m0.75.15[m[33m)[m chore(release): 0.75.15
+[33m6d4d303e[m ci: enable Linux AppImage bundling
+[33m7ab39f14[m fix(ci): avoid MSVC environment during app builds
+[33m81bd3ebd[m[33m ([m[1;33mtag: [m[1;33m0.75.14[m[33m)[m chore(release): 0.75.14
+[33mb830b495[m fix(runtime): preserve ROCm wheel layout
+[33m9aba7419[m ci: optimize release caches
+[33mb661df61[m[33m ([m[1;33mtag: [m[1;33m0.75.13[m[33m)[m chore(release): 0.75.13
+[33mc6dab0c0[m fix(runtime): share ROCm runtime on Linux
+[33mc10063c2[m[33m ([m[1;33mtag: [m[1;33m0.75.12[m[33m)[m chore(release): 0.75.12
+[33m80b03f16[m fix(ui): gate vision by model capability
+[33m92e81945[m[33m ([m[1;33mtag: [m[1;33m0.75.11[m[33m)[m chore(release): 0.75.11
+[33m6c21c9ad[m fix(runtime): isolate bundled ROCm libraries on Linux
+[33m77de3a4d[m ci: disable OpenMP for stable-diffusion.cpp
+[33me56e4345[m[33m ([m[1;33mtag: [m[1;33m0.75.10[m[33m)[m chore(release): 0.75.10
+[33m0d206640[m fix(runtime): load CUDA Torch dependencies in order
+[33m308e29cb[m[33m ([m[1;33mtag: [m[1;33m0.75.9[m[33m)[m chore(release): 0.75.9
+[33m8ab7cde1[m fix(translator): use LM Studio vision capability
+[33m77623c8a[m[33m ([m[1;33mtag: [m[1;33m0.75.8[m[33m)[m chore(release): 0.75.8
+[33mfb74b752[m fix(runtime): isolate bundled DRM symbols on Linux
+[33m9772b7cd[m ci: cache on release
+[33m4ae92c0a[m[33m ([m[1;33mtag: [m[1;33m0.75.7[m[33m)[m chore(release): 0.75.7
+[33ma4e8b4d0[m fix(app): limit persistent log size
+[33mdcbb359a[m[33m ([m[1;33mtag: [m[1;33m0.75.6[m[33m)[m chore(release): 0.75.6
+[33m1143fe77[m fix(runtime): retry interrupted download ranges
+[33mce2e6fbe[m fix(ml): select precision by device capability
+[33m84ef3ee5[m fix(runtime): correct Linux cuDNN library manifest
+[33m4036bda1[m[33m ([m[1;33mtag: [m[1;33m0.75.5[m[33m)[m chore(release): 0.75.5
+[33m35872431[m feat(app): persist backend logs
+[33m5efb48ac[m[33m ([m[1;33mtag: [m[1;33m0.75.4[m[33m)[m chore(release): 0.75.4
+[33m01bc9705[m fix(runtime): load ROCm Torch dependencies in order
+[33md6f9b118[m[33m ([m[1;33mtag: [m[1;33m0.75.3[m[33m)[m chore(release): 0.75.3
+[33m63764d6c[m fix(ui): preserve model toggle preferences
+[33m97d73c5b[m[33m ([m[1;33mtag: [m[1;33m0.75.2[m[33m)[m chore(release): 0.75.2
+[33md8bddc42[m fix(app): restore frameless window resizing
+[33m764fbde5[m[33m ([m[1;33mtag: [m[1;33m0.75.1[m[33m)[m chore(release): 0.75.1
+[33m22dab373[m perf(runtime): accelerate multipart downloads
+[33mb9064aaf[m[33m ([m[1;33mtag: [m[1;33m0.75.0[m[33m)[m chore(release): 0.75.0
+[33mcf914e8b[m feat(runtime): add Linux CUDA and ROCm artifacts
+[33mb608a9f7[m perf(runtime): maximize download throughput
+[33mef53e3f9[m Revert "docs: improve readme feature list"
+[33mb0152251[m docs: improve readme feature list
+[33m316795b9[m docs: improve readme
+[33m2d38f14e[m docs: document hardware runtime support
+[33mcba26293[m docs: expand debug logging guide
+[33m2a05c67c[m[33m ([m[1;33mtag: [m[1;33mllama.cpp-b10472[m[33m)[m fix(ci): use Linux CUDA package names
+[33m9cd31005[m ci: automate native dependency releases
+[33m3671e5de[m[33m ([m[1;33mtag: [m[1;33m0.74.0[m[33m)[m chore(release): 0.74.0
+[33m7462036c[m feat(runtime): support ROCm Torch on Linux
+[33m002ec11b[m fix(app): hide link status bubble
+[33m8723c93f[m[33m ([m[1;33mtag: [m[1;33m0.73.0[m[33m)[m chore(release): 0.73.0
+[33m9962e14c[m feat(translator): tune local model sampling
+[33m653eb14b[m feat(ocr): tighten PaddleOCR-VL sampling
+[33mefb28e30[m feat(translator): strengthen translation prompt
+[33me47620c0[m perf(translator): optimize structured inference
+[33m43d69300[m feat: sort projects by recent activity
+[33m257ba9d8[m Revert "feat: sort projects by recent use"
+[33m369de570[m feat: sort projects by recent use
+[33m138b2ff6[m fix: refine provider and translation settings
+[33ma09f25d3[m fix: improve provider credential controls
+[33m5ef5b8f9[m[33m ([m[1;33mtag: [m[1;33m0.72.0[m[33m)[m chore(release): 0.72.0
+[33m412822d2[m feat(translator): discover provider model catalogs
+[33m800e32bb[m feat(translator): add Grok and MiniMax providers
+[33m08601a8f[m feat(translator): refresh remote model catalogs
+[33me7e37f38[m[33m ([m[1;33mtag: [m[1;33m0.71.0[m[33m)[m chore(release): 0.71.0
+[33m79cc4d6c[m feat: support archive and PDF page imports
+[33md4c075fe[m fix(renderer): apply language-aware line breaking
+[33mcbc631f6[m[33m ([m[1;33mtag: [m[1;33m0.70.6[m[33m)[m chore(release): 0.70.6
+[33mfaf9f42d[m fix: restore app icons
+[33m25e8d4fd[m[33m ([m[1;33mtag: [m[1;33m0.70.5[m[33m)[m chore(release): 0.70.5
+[33m19ec24ee[m fix(macos): titlebar style
+[33m2169d0d2[m chore(dev): fix macos development
+[33medfec194[m[33m ([m[1;33mtag: [m[1;33m0.70.4[m[33m)[m chore(release): 0.70.4
+[33m1d168ff4[m Revert "feat(translator): enforce keyed translation output"
+[33mdb439495[m[33m ([m[1;33mtag: [m[1;33m0.70.3[m[33m)[m chore(release): 0.70.3
+[33m8199a8b2[m fix(runtime): disable broken gfx1032 inpainting solver
+[33mdd13c757[m[33m ([m[1;33mtag: [m[1;33m0.70.2[m[33m)[m chore(release): 0.70.2
+[33m4d9f3aca[m fix(runtime): disable broken gfx1032 Winograd solver
+[33mec6b41c5[m[33m ([m[1;33mtag: [m[1;33m0.70.1[m[33m)[m chore(release): 0.70.1
+[33mc108afb1[m fix(ui): avoid localized hydration mismatch
+[33mcd57c827[m fix(editor): preserve automatic text direction
+[33ma3da2c17[m[33m ([m[1;33mtag: [m[1;33m0.70.0[m[33m)[m chore(release): 0.70.0
+[33m098d697f[m fix(renderer): respect text direction defaults
+[33m6269da2c[m feat(translator): enforce keyed translation output
+[33meaee34e3[m fix: configure CEF remote debugging in debug builds
+[33mfc183d89[m docs: update development prerequisites
+[33m82ccaa44[m[33m ([m[1;33mtag: [m[1;33m0.69.1[m[33m)[m chore(release): 0.69.1
+[33mc3d06fbd[m fix: compress PNG exports
+[33m28968b44[m fix: preserve canvas zoom and vertical text
+[33m0ebc0384[m fix: brush freeze bug, Change brush size with alt + scroll wheel (#937)
+[33m4d293aaf[m[33m ([m[1;33mtag: [m[1;33m0.69.0[m[33m)[m chore(release): 0.69.0
+[33mc17d7a07[m feat(translator): add Qwen 3.8 27B model
+[33md80649d0[m fix(ui): align updater header content
+[33m430b2bc2[m[33m ([m[1;33mtag: [m[1;33m0.68.0[m[33m)[m chore(release): 0.68.0
+[33ma6defc2c[m feat(i18n): detect preferred language
+[33ma0df79a1[m fix(ui): keep translation controls usable while saving
+[33m575ed13a[m[33m ([m[1;33mtag: [m[1;33m0.67.3[m[33m)[m chore(release): 0.67.3
+[33m6e19d687[m fix(desktop): enable Linux WebGPU Vulkan
+[33m54821b76[m chore(deps): bump tauri-apps/tauri-action from 0 to 1 (#839)
+[33m78c39aa2[m chore(deps): bump actions/deploy-pages from 4 to 5 (#838)
+[33me8422a29[m chore(deps): update Rust dependencies
+[33m641d7cff[m[33m ([m[1;33mtag: [m[1;33m0.67.2[m[33m)[m chore(release): 0.67.2
+[33ma6c71bd0[m refactor: use Tauri with CEF
+[33m7a6a2cb4[m[33m ([m[1;33mtag: [m[1;33m0.67.1[m[33m)[m chore(release): 0.67.1
+[33m49883fce[m chore: enable devtools
+[33m7fe1d29d[m fix(ui): preserve output picker state while saving
+[33m87442b49[m chore(deps): modernize workspace dependency configuration
+[33me66a6e77[m[33m ([m[1;33mtag: [m[1;33m0.67.0[m[33m)[m chore(release): 0.67.0
+[33m1d35a335[m test(koharu): mock canvas WASM module in Vitest
+[33m106a99cc[m chore: update sponsors (#927)
+[33m6ebec470[m refactor: WebGPU/WASM-based canvas
+[33mb87b93b2[m refactor: restructure application components
+[33m6a9a3d8f[m fix: correct updater dialog presentation
+[33m4cfebec4[m fix: disable viewport scaling
+[33ma774ee74[m Revert "fix(renderer): support tiled large images and mask geometry"
+[33m6959411c[m feat: update diffusion and ggml FFI bindings
+[33mc4fddad2[m[33m ([m[1;33mtag: [m[1;33mstable-diffusion.cpp-master-820-de298c2[m[33m, [m[1;33mtag: [m[1;33mllama.cpp-b10430[m[33m)[m ci: bump llama.cpp and sd.cpp
+[33mcac8f757[m chore: remove unused workspace dependencies
+[33m76cb7946[m[33m ([m[1;33mtag: [m[1;33m0.66.10[m[33m)[m chore(release): 0.66.10
+[33m7ac6e091[m fix(renderer): support tiled large images and mask geometry
+[33m2f178c1a[m fix(desktop): restore macOS keyboard input
+[33ma8f649f7[m fix(windows): attach to the parent console on startup
+[33mf8a25e2a[m MIT or Apache-2.0
+[33mdceb8485[m fix: recover from an out-of-range detection threshold (#912)
+[33m49d044a5[m[33m ([m[1;33mtag: [m[1;33m0.66.9[m[33m)[m chore(release): 0.66.9
+[33me81c0a16[m fix: render IME preedit without yellow background
+[33m1e2b1eaa[m[33m ([m[1;33mtag: [m[1;33m0.66.8[m[33m)[m chore(release): 0.66.8
+[33m7a0b96bd[m fix: IME on CEF window
+[33m1626c7f6[m fix: libkoharu-torch.so path
+[33m739f1e7b[m[33m ([m[1;33mtag: [m[1;33m0.66.7[m[33m)[m chore(release): 0.66.7
+[33mf5467d4a[m fix: relax revision validation
+[33mf2285077[m fix: only configure store path for windows
+[33mc79882d9[m[33m ([m[1;33mtag: [m[1;33m0.66.6[m[33m)[m chore(release): 0.66.6
+[33mb608c144[m fix: run CEF subprocesses before Tokio
+[33m93b3f50e[m ci: prefer rust cache
+[33m2142b970[m[33m ([m[1;33mtag: [m[1;33m0.66.5[m[33m)[m chore(release): 0.66.5
+[33mc6f2271b[m fix: runtime discover
+[33m47dd0d29[m refactor: remove usage-based eviction
+[33m152d79c3[m[33m ([m[1;33mtag: [m[1;33m0.66.4[m[33m)[m chore(release): 0.66.4
+[33mff37a020[m fix: missing ROCm files
+[33m2ed4895d[m[33m ([m[1;33mtag: [m[1;33m0.66.3[m[33m)[m chore(release): 0.66.3
+[33m95906312[m fix: put store in resource dir
+[33mb74f2805[m LICENSE
+[33mb5e71dc3[m[33m ([m[1;33mtag: [m[1;33m0.66.2[m[33m)[m chore(release): 0.66.2
+[33m10d2ae8f[m fix: bundle CEF correctly
+[33mc105043b[m[33m ([m[1;33mtag: [m[1;33m0.66.1[m[33m)[m chore(release): 0.66.1
+[33m66ce7c63[m fix: update dialog overflow
+[33mfe8075e9[m chore: update sponsors (#903)
+[33m73bc39ad[m[33m ([m[1;33mtag: [m[1;33m0.66.0[m[33m)[m chore(release): 0.66.0
+[33m93790068[m feat: CEF OSR
+[33m547106f1[m feat: use CEF runtime
+[33mfd670ad5[m Revert "refactor: use CEF to replace Tauri"
+[33mb956a599[m[33m ([m[1;33mtag: [m[1;33m0.65.3[m[33m)[m chore(release): 0.65.3
+[33m99dd895a[m fix: restore Windows packaged app startup and icon
+[33m53e6ed95[m Fix lint
+[33m2840f4a5[m[33m ([m[1;33mtag: [m[1;33m0.65.2[m[33m)[m chore(release): 0.65.2
+[33m2c8670f6[m Preserve macOS updater application bundle
+[33m649c48fe[m[33m ([m[1;33mtag: [m[1;33m0.65.1[m[33m)[m chore(release): 0.65.1
+[33mb70b74c7[m Fix signed desktop release bundles
+[33me0b15306[m Fix nested AppImage library exclusions
+[33m0ee95c44[m Preserve native bundler diagnostics
+[33mcdd7695e[m Pin linuxdeploy exclusion support
+[33m7c077648[m Fix AppImage runtime library exclusions
+[33m810a491c[m Fix Linux Torch runtime bundling
+[33mb53840a5[m Stream native bundler output
+[33m53ccea65[m Expose native bundler failures
+[33mc5d1e6e8[m[33m ([m[1;33mtag: [m[1;33m0.65.0[m[33m)[m chore(release): 0.65.0
+[33m0b7b5f29[m feat: updater & improve canvas
+[33m4176f965[m Fix CI
+[33ma5aca174[m Fix CI
+[33m40e96ddc[m Fix CI
+[33mdb373cbc[m Fix CI
+[33mf0acda10[m fix: support multiple GPUs
+[33m54b554d4[m Fix CI
+[33m2bb13452[m Fix CI
+[33m920faac6[m refactor: use CEF to replace Tauri
+[33m87d4472f[m[33m ([m[1;33mtag: [m[1;33m0.64.2[m[33m)[m chore(release): 0.64.2
+[33m981703c7[m fix: windows path bug
+[33me7e93783[m fix: support hip 6.x
+[33m59ad6cd5[m[33m ([m[1;33mtag: [m[1;33m0.64.1[m[33m)[m chore(release): 0.64.1
+[33m3b9ca08e[m fix: only enable bf16 when compute capability >= 80
+[33mb78ecebc[m[33m ([m[1;33mtag: [m[1;33m0.64.0[m[33m)[m chore(release): 0.64.0
+[33m8f67eaf4[m Move vision input to translation settings
+[33m5410373a[m[33m ([m[1;33mtag: [m[1;33m0.63.5[m[33m)[m chore(release): 0.63.5
+[33mc8eb1759[m Fix release script
+[33me7a8d075[m fix: device selection
+[33m2148b9fd[m[33m ([m[1;33mtag: [m[1;33m0.63.4[m[33m)[m chore(release): 0.63.4
+[33m08c7ab37[m Probe CUDA support through the driver API
+[33mb4060eda[m[33m ([m[1;33mtag: [m[1;33m0.63.3[m[33m)[m chore(release): 0.63.3
+[33m9d3d9131[m chore(ci): skip appimage
+[33m127a3369[m[33m ([m[1;33mtag: [m[1;33m0.63.2[m[33m)[m chore(release): 0.63.2
+[33m2131e9a3[m Disable fail-fast
+[33m1a55b6ab[m Cut black outline of screenshot
+[33mc1e9ba1a[m[33m ([m[1;33mtag: [m[1;33m0.63.1[m[33m)[m chore(release): 0.63.1
+[33m5290f885[m Fix CI
+[33mb30fc1e3[m[33m ([m[1;33mtag: [m[1;33m0.63.0[m[33m)[m chore(release): 0.63.0
+[33m102a476d[m Cut black outline of screenshot
+[33mbfed4749[m Include screenshot
+[33m8886ed12[m Remove CUDA from CI
+[33m82c03381[m Refactor bubble polygon type aliases
+[33m71d04165[m feat: Canvas Scrolling Tweaks (#897)
+[33md016e46b[m chore: update sponsors (#898)
+[33m54348552[m Add Atlas Cloud as a translation provider
+[33m733790e7[m Improve bubble lobe splitting and hyphenated text fitting
+[33m4e543f8f[m Prioritize structurally supported lobe splits
+[33mf1e581c6[m Improve outlined text paint inference
+[33mf8e26afe[m Prevent duplicate runtime subscriptions during Strict Mode replay
+[33m91c83eeb[m Improve typography color and outline inference
+[33m395b572f[m Preserve text outlines and group connected inpaint regions
+[33m1640838f[m Improve docs
+[33me4a8494e[m Refactor application architecture and update UI integration
+[33m19062932[m Fix CI
+[33md9df8016[m Refactor docs
+[33ma426876d[m Fix CI
+[33m18f27eee[m Fix CI
+[33mfa6dde74[m Fix CI
+[33mc8ab9e0e[m Fix CI
+[33me8707d6e[m Fix CI
+[33m2dca38b6[m Remove pt-BR
+[33mf0748a6e[m Remove pt-BR site
+[33m4258dbe9[m Fix CI
+[33m9ce1b7d6[m Fix CI
+[33mb71884c5[m Add multimodal image translation support
+[33maf8af8f8[m Remove ubuntu-24.04-arm
+[33medd83cf5[m Include koharu-torch dll/so/dylib
+[33mf09271e6[m Fix clippy
+[33m7a4ec9d8[m Fix tests
+[33ma278086a[m chore(ci): enable GHA
+[33m01c83389[m Refactor application and UI architecture
+[33mfb317020[m chore: update sponsors (#896)
+[33mfd24636d[m Allow unknown configuration fields
+[33mb521e352[m Remove Atlas Cloud translation provider
+[33m8697c3b1[m Simplify translation language ordering
+[33m86fb3bff[m Improve CJK punctuation layout and text alignment
+[33m0337f2b6[m Make renderer typesetting configuration dynamic
+[33m2a3cea8d[m Improve title bar project-page spacing
+[33m69d64490[m Refactor application and protocol architecture
+[33m8f9ba617[m Revert "Refactor application ownership and remove obsolete abstractions"
+[33m87484afb[m Revert "Instrument core operations with tracing"
+[33maaee7303[m Instrument core operations with tracing
+[33me5897eb2[m Refactor application ownership and remove obsolete abstractions
+[33m489e2321[m Retain unchanged rendered layers across scene updates
+[33m94ad55f2[m Coalesce canvas commands per animation frame
+[33m440f8dcf[m Preserve raster previews until committed images are ready
+[33md2b25906[m Improve brush controls and canvas cursor handling
+[33m7be0bf2e[m Refresh image caches after decode completion
+[33m6609d220[m Improve transform geometry, pipeline errors, and scene rebasing
+[33m680311ce[m Use explicit device dtype conversions when loading models
+[33m9890d84a[m Update camera state without replacing canvas view
+[33ma780dabb[m Support fallback desktop GPU adapter selection
+[33md372e5f7[m Fix UTF-8 token decoding and use quantized PaddleOCR VL
+[33mb424a51f[m Use segmentation masks for dialogue bubble containment
+[33m0c3ca3a7[m Improve text detection and balloon text layout
+[33m89876c6a[m Increase detection mask dilation radius
+[33me6dbb131[m Refactor core implementation
+[33m7bb67068[m Simplify text fitting and preserve promoted layer ownership
+[33me8296312[m Fix automatic text sizing for fitted layers
+[33m5fb172cd[m Fix layout ordering and await pipeline commit synchronization
+[33ma33cbcf9[m Improve inpainting masks and cleanup overlays
+[33m1ca63abf[m Centralize canvas color sampling
+[33m9a162fcd[m chore: update sponsors (#889)
+[33m8263681a[m Replace react-moveable with custom selection controls
+[33m75516556[m Use primary colors for active selection controls
+[33m20eed2fa[m Support font styles and transparent colors
+[33m80d6e6f3[m Replace border switch with icon toggle
+[33m37768214[m Refactor application boundaries and update consumers
+[33m583ae523[m Improve font family metadata and fallback resolution
+[33m5c05d93f[m Redesign project start view and confirm deletions
+[33m9e234698[m Refactor application ownership boundaries
+[33m7940e035[m chore: update sponsors (#888)
+[33m65726e8d[m Refactor application ownership and remove obsolete abstractions
+[33m0a86d630[m Fix scripts
+[33mcba8f940[m Remove training scripts
+[33m59aa81ec[m chore: remove mockup
+[33mb224395f[m chore(ci): remove docker
+[33m889dfd54[m Refactor project architecture and update consumers
+[33m0e07f92a[m Prepare 0.62.0 release and harden bundled library loading
+[33m52aa22d9[m Associate Koharu projects and normalize font selection
+[33mea185f16[m Support max and ultra reasoning levels
+[33m38761183[m Normalize reasoning aliases and add catalog coverage
+[33mff5340ca[m Defer canvas rendering while source images load
+[33m76c7bd0a[m refactor: rebuild scene graph
+[33m90f67937[m refactor(renderer): remove google fonts & bundle new fonts
+[33mf61c65b7[m chore(docs): update README.md [skip ci]
+[33mdbe38438[m chore: update sponsors (#882)
+[33mbf78ff0a[m fix(ci): update sponsors through pull requests [skip ci]
+[33md9ef27ed[m fix(sponsors): handle anonymous Patreon members [skip ci]
+[33mbb52e2f3[m chore: add SponsorKit graph automation
+[33m69d87bf4[m feat(translator): add Atlas Cloud provider
+[33meb05f4d2[m perf: optimize pipeline, rendering, and inpainting
+[33mfddfa9c7[m refactor: integrate canvas, storage, renderer, and desktop
+[33m7b796801[m build: package native runtimes across supported platforms
+[33md53d3d70[m refactor: rebuild Koharu application and ML architecture
+[33m0fdacd4f[m feat(llm): add Atlas Cloud provider (#881)
+[33m2107843f[m feat: Delete Page Confirmation (#809)
+[33me1fced91[m fix: Various Delete Function Fixes (#801)
+[33mf4ce0399[m fix: Allow deleting font size value completely. (#851)
+[33m6291d507[m chore(ui): cleaned up the styling of the text style buttons (#854)
+[33mea1e9f9f[m fix: fix bug where progress indicator doesn't progress (#845)
+[33md62bec2a[m feat: added a "delete selected textblocks" button and keyboard shortcut (#808)
+[33m00966bee[m chore(dev): Switched to Microsoft recommended way of finding MSVC (#849)
+[33m430ff6f6[m refactor: split secrets into koharu-secrets
+[33m2dd9a654[m fix: frontend dist path
+[33m3462e51e[m chore: use wildcard
+[33m81a3cd13[m refactor: move crates to crates/
+[33ma8d3bdc9[m ci: stop publishing bare exe on windows
+[33m055e7239[m chore(deps): update deps
+[33m7912c062[m chore(deps): bump actions/ai-inference from 1 to 2 (#812)
+[33m4cf45b7d[m chore(deps): bump docker/setup-buildx-action from 3 to 4 (#813)
+[33m2e765101[m chore(deps): bump docker/login-action from 3 to 4 (#814)
+[33m199aaf86[m chore(deps): bump actions/configure-pages from 5 to 6 (#815)
+[33made53f0e[m chore(deps): bump actions/cache from 5 to 6 (#816)
+[33m7de1cd9e[m chore(deps): bump rmcp from 1.7.0 to 1.8.0 (#819)
+[33m3c0e9e9e[m chore(deps): bump harfrust from 0.9.0 to 0.10.0 (#820)
+[33m7d31ce5c[m chore(deps-dev): bump oxfmt from 0.54.0 to 0.56.0 (#821)
+[33mca269b0d[m chore(deps): bump actions/upload-artifact from 4 to 7 (#804)
+[33mf5f948f8[m chore(deps): bump docker/build-push-action from 6 to 7 (#803)
+[33md87e0a27[m chore(deps): bump actions/cache from 4 to 5 (#805)
+[33m12c8fac5[m chore(deps): bump actions/upload-pages-artifact from 4 to 5 (#807)
+[33mda4c30d2[m chore(deps): bump actions/checkout from 4 to 7 (#806)
+[33m4cec8b4b[m chore(deps): update deps
+[33mf54ad1f4[m ci: configure dependabot
+[33m876dfe98[m docs: small edit to README
+[33m3d324e86[m chore(deps): bump skrifa from 0.42.1 to 0.43.2 (#779)
+[33mf26a775c[m chore(deps): bump tower-http from 0.6.11 to 0.7.0 (#787)
+[33mdf7065c4[m chore(deps): bump harfrust from 0.8.4 to 0.9.0 (#788)
+[33m4bf2d3eb[m docs: add homebrew
+[33m35f3e6d1[m[33m ([m[1;33mtag: [m[1;33m0.61.2[m[33m)[m chore(release): 0.61.2
+[33m2c34daa5[m fix: upgrade ZLUDA to v6-preview.77
+[33m93529285[m chore(deps): update bun & cargo
+[33m90d061ca[m docs: RUST_LOG=debug
+[33m2f3d6483[m chore: update gemini models (#790)
+[33m0d640615[m[33m ([m[1;33mtag: [m[1;33m0.61.1[m[33m)[m chore(release): 0.61.1
+[33m8d004530[m fix: pin windows-2022 (#772)
+[33ma9149816[m[33m ([m[1;33mtag: [m[1;33m0.61.0[m[33m)[m chore(release): 0.61.0
+[33m2822d18b[m ci: add ARM64 build support (#757)
+[33mbd612fac[m chore(deps): bump jieba-rs from 0.9 to 0.10
+[33m89e181b1[m chore(deps): bump harfrust from 0.6 to 0.8
+[33m7e52f2dc[m chore(deps): bump imageproc from 0.26 to 0.27
+[33mc8b5ebfa[m chore(deps): bump cargo deps
+[33m9730cef3[m chore(deps): bump bun deps
+[33m3995dcea[m docs: add paddleocr-vl-1.6 and gemma4-12b-it
+[33me83ff7b4[m chore: hu-HU label translation (#762)
+[33m639fda75[m feat: Page Deletion (#727)
+[33m19e14003[m feat: Custom Processing Pipeline (#744)
+[33mab82b6f1[m feat: Project Deletion (#753)
+[33mb29480cb[m chore(dev): do not check scripts
+[33mb5083037[m[33m ([m[1;33mtag: [m[1;33m0.60.0[m[33m)[m chore(release): 0.60.0
+[33md65d7304[m feat: add gemma4-12b-it
+[33me583a2d4[m feat: PaddleOCR-VL-1.6
+[33me0a7ce0e[m chore(deps): update bun & cargo
+[33me86080da[m feat: add Hungarian language (#759)
+[33mef1d3f1f[m Revert "chore: Update README with icon image (#703)"
+[33mccecce60[m chore(dev): remove unused script
+[33m5b962319[m chore(deps): update deps
+[33m4ec5a15b[m chore(tests): remove unused warning
+[33m46b4e412[m chore(deps): update bun
+[33m3cc6d8df[m chore(deps): update bun & cargo
+[33m271c43e0[m[33m ([m[1;33mtag: [m[1;33m0.59.2[m[33m)[m chore(release): 0.59.2
+[33m7f0e58c2[m fix: orval mock type
+[33m9a6b98e2[m fix: Remove Aggressive sceneEpoch Triggering (#715)
+[33m6fb2411b[m fix: Text Layers Rasterizing on PSD Exports (#710)
+[33m19a9b8fd[m chore: Update README with icon image (#703)
+[33m4b528af4[m fix: cuda vulkan thread isolation (#702)
+[33mcdbf7868[m chore(deps): update cargo & bun
+[33ma1c5981a[m[33m ([m[1;33mtag: [m[1;33m0.59.1[m[33m)[m chore(release): 0.59.1
+[33m2a12c2ca[m fix(llm): honor --cpu by zeroing n_gpu_layers (#309) (#692)
+[33m16bff7fc[m chore(deps): update bun & cargo
+[33m56ba5c9f[m[33m ([m[1;33mtag: [m[1;33m0.59.0[m[33m)[m chore(release): 0.59.0
+[33m5ca5677a[m feat: font favorite + weights/styles implementation (#670)
+[33m88625e28[m feat: Reading Order Dropdown + LTR Reading Order (#660)
+[33m0df8951c[m chore(deps): bump @tauri-apps/plugin-dialog from 2.7.0 to 2.7.1 (#674)
+[33m469b0874[m chore(deps): bump tauri-plugin-dialog from 2.7.0 to 2.7.1 (#675)
+[33m450e8bb1[m chore(deps): bump react-colorful from 5.6.1 to 5.7.0 (#672)
+[33me346fef4[m chore(deps): bump tokio from 1.52.2 to 1.52.3 (#671)
+[33m54d3d2f8[m chore(deps-dev): bump oxfmt from 0.47.0 to 0.48.0 (#673)
+[33mfb1b2bde[m chore(deps): bump react-hotkeys-hook from 5.3.0 to 5.3.2 (#676)
+[33m3b55b37f[m chore(deps): bump tower-http from 0.6.8 to 0.6.10 (#677)
+[33m880eefc9[m chore(deps): bump @tauri-apps/plugin-opener from 2.5.3 to 2.5.4 (#662)
+[33md2ae30e2[m chore(deps): bump react-resizable-panels from 4.10.0 to 4.11.0 (#663)
+[33m0cf466cb[m chore(deps): bump tokio from 1.52.1 to 1.52.2 (#667)
+[33m44eea2c5[m chore(deps): bump tauri-plugin-opener from 2.5.3 to 2.5.4 (#665)
+[33mee31d7fb[m chore(deps): bump zustand from 5.0.12 to 5.0.13 (#664)
+[33m13c8475d[m chore(deps): bump react-i18next from 17.0.6 to 17.0.7 (#666)
+[33md594a0dd[m chore(deps): bump tauri-plugin-fs from 2.5.0 to 2.5.1 (#668)
+[33m10de8f1c[m chore(deps): bump sentry from 0.48.0 to 0.48.1 (#669)
+[33m2e917f05[m chore(deps): bump tauri from 2.11.0 to 2.11.1 (#661)
+[33md9bfd2e7[m chore(deps): bump rmcp from 1.5.0 to 1.6.0 (#642)
+[33ma207cdb3[m chore(deps): bump react-hotkeys-hook from 5.2.4 to 5.3.0 (#643)
+[33m4fb870d0[m chore(deps): bump imageproc from 0.26.1 to 0.26.2 (#644)
+[33m8cfb57fa[m chore(deps): bump serde_with from 3.18.0 to 3.19.0 (#654)
+[33mbefc7cfc[m chore(deps-dev): bump msw from 2.14.2 to 2.14.3 (#655)
+[33m868f6ce3[m chore(deps): bump utoipa from 5.4.0 to 5.5.0 (#656)
+[33m3b5746f5[m chore(deps): bump @tauri-apps/plugin-fs from 2.5.0 to 2.5.1 (#657)
+[33m760bbe23[m chore(deps): bump @tanstack/react-query from 5.100.6 to 5.100.9 (#658)
+[33mfc15966b[m chore(deps): bump openssl from 0.10.78 to 0.10.79 (#659)
+[33m2d0b4382[m[33m ([m[1;33mtag: [m[1;33m0.58.0[m[33m, [m[1;31mupstream/copilot/create-release-build-lower-compute[m[33m, [m[1;31morigin/copilot/create-release-build-lower-compute[m[33m)[m chore(release): 0.58.0
+[33m0d4f899a[m fix: per-block translate
+[33m854209e1[m fix: PSD text placement & editable
+[33mb3e9dea3[m fix: render on textless page
+[33m4ffaa1df[m fix: black color not apply
+[33mc43f3a24[m fix: manual textbox modification should lock box
+[33m56e07840[m fix: i18n languages display names
+[33m6bc59adc[m[33m ([m[1;33mtag: [m[1;33m0.57.0[m[33m)[m chore(release): 0.57.0
+[33ma23ebf17[m feat: chinese segmentation jieba
+[33mb1ed7e61[m feat: anime-text model
+[33m81b0a9a1[m[33m ([m[1;33mtag: [m[1;33m0.56.0[m[33m)[m chore(release): 0.56.0
+[33m973be258[m feat: better text rendering
+[33m4b656a5b[m chore(deps-dev): bump jsdom from 29.1.0 to 29.1.1 (#635)
+[33m63c91af8[m chore(deps): bump tauri from 2.10.3 to 2.11.0 (#631)
+[33m6673ff70[m chore(deps): bump @tauri-apps/api from 2.10.1 to 2.11.0 (#632)
+[33m82699c49[m chore(deps-dev): bump @tauri-apps/cli from 2.10.1 to 2.11.0 (#634)
+[33m5f40efb4[m chore(deps): bump tauri-build from 2.5.6 to 2.6.0 (#633)
+[33m800c9090[m Fix: Centering Inconsistencies on Text Render (#630)
+[33mce8f2a51[m chore(deps): update tokenizers to 0.23
+[33mef28e37e[m chore(deps): update cargo & bun
+[33m6f825319[m chore: cleanup unused deps
+[33macdfd466[m chore(deps): update fs4 to 1.1.0
+[33mf3f3cd5f[m chore(deps): bump reqwest from 0.13.2 to 0.13.3 (#620)
+[33me6285404[m chore(deps-dev): bump @openapitools/openapi-generator-cli from 2.31.1 to 2.32.0 (#618)
+[33m61c57a50[m chore(deps): bump lucide-react from 1.12.0 to 1.14.0 (#627)
+[33m0bd783da[m chore(deps): bump @sentry/nextjs from 10.50.0 to 10.51.0 (#628)
+[33m7a8696f9[m chore(deps): bump xstate from 5.30.0 to 5.31.0 (#629)
+[33me491a7fe[m chore(deps): bump i18next from 26.0.7 to 26.0.8 (#617)
+[33m3977983a[m[33m ([m[1;33mtag: [m[1;33m0.55.0[m[33m)[m chore(release): 0.55.0
+[33m83d79dba[m feat: better text rendering
+[33m2567ba3a[m chore(deps-dev): bump oxfmt from 0.46.0 to 0.47.0 (#619)
+[33mcebcc576[m chore(deps): bump sentry from 0.47.0 to 0.48.0 (#622)
+[33m70441e75[m chore(deps): bump lucide-react from 1.11.0 to 1.12.0 (#621)
+[33mcb041aa7[m[33m ([m[1;33mtag: [m[1;33m0.54.0[m[33m)[m chore(release): 0.54.0
+[33m91cce6f7[m fix(editor): Delete key removes all selected text blocks (closes #559) (#599)
+[33m8e92960f[m fix: Revert inpainting logic for AOT/Lama (#609)
+[33mdc4789fd[m chore(deps): bump zip from 8.5.1 to 8.6.0 (#608)
+[33m5b466d07[m chore(deps): bump lru from 0.17.0 to 0.18.0 (#603)
+[33mf040549b[m chore(deps-dev): bump msw from 2.13.4 to 2.13.6 (#562)
+[33mca42fa2d[m chore(deps-dev): bump jsdom from 29.0.2 to 29.1.0 (#606)
+[33m44f064f7[m chore(deps): bump react-i18next from 17.0.4 to 17.0.6 (#604)
+[33m1f509814[m chore(deps-dev): bump oxlint from 1.61.0 to 1.62.0 (#605)
+[33m9c119a1e[m feat: add more cloud models
+[33m3cc8ac95[m Fix: Brush and Mask Layer not syncing on undo/redo (#557)
+[33m2e5f9b7c[m[33m ([m[1;33mtag: [m[1;33m0.53.0[m[33m)[m chore(release): 0.53.0
+[33mc431e823[m fix: filename overflow
+[33m3f0ec294[m feat: Qwen3.6
+[33ma4e4ceee[m[33m ([m[1;33mtag: [m[1;33m0.52.0[m[33m)[m chore(release): 0.52.0
+[33me9fa6cdb[m fix: ZLUDA compatibility issues (#582)
+[33m9f3eb17c[m fix(llm): update Gemma 4 model IDs with hyphens (#581)
+[33m2eaa48cb[m[33m ([m[1;33mtag: [m[1;33m0.51.0[m[33m)[m chore(release): 0.51.0
+[33mfa7b9b76[m feat: gemma models to gemini models (#578)
+[33ma214dcfa[m fix: prefer 4000 port
+[33m9d4dea21[m[33m ([m[1;33mtag: [m[1;33m0.50.2[m[33m)[m chore(release): 0.50.2
+[33m7f6f616f[m perf: prefer bf16
+[33m00ef924a[m[33m ([m[1;33mtag: [m[1;33m0.50.1[m[33m)[m chore(release): 0.50.1
+[33m33c0affb[m fix: include cudnn in zluda
+[33m1afef774[m fix: do not uppercase translation
+[33m60a2be40[m chore: Update ko_KR/translation.json (#573)
+[33m8f9f0eb1[m docs: winget
+[33mba1ff67f[m[33m ([m[1;33mtag: [m[1;33m0.50.0[m[33m)[m chore(release): 0.50.0
+[33m4a71a64a[m fix!: require CUDA compute cap 8.0
+[33ma66436f7[m perf: FLUX.2 improvements
+[33m973e2d46[m fix: implement universal locale-aware uppercase conversion for all no… (#572)
+[33me4529edb[m ci: add Winget Releaser workflow (#570)
+[33m8c925f0c[m feat: Collapsible Navigator (#571)
+[33m5f309a79[m fix(ui): open updater release-note links externally (#565)
+[33mca4cf817[m fix: implement universal locale-aware uppercase conversion using ICU (#567)
+[33m8b901452[m docs: add codex
+[33m7191288f[m[33m ([m[1;33mtag: [m[1;33m0.49.0[m[33m)[m chore(release): 0.49.0
+[33m5e29e136[m fix: only apply speech bubble mask logic to flux.2
+[33m9d8af427[m feat: Codex integration
+[33m1c69a723[m chore(deps): bump skrifa from 0.42.0 to 0.42.1 (#551)
+[33m20e825fc[m chore(deps): bump lucide-react from 1.9.0 to 1.11.0 (#561)
+[33m04a7fd3b[m chore(deps): bump i18next from 26.0.6 to 26.0.7 (#560)
+[33m9d33bb6a[m docs: add FLUX.2 Klein 4B
+[33m9216532b[m[33m ([m[1;33mtag: [m[1;33m0.48.0[m[33m)[m chore(release): 0.48.0
+[33md30ca44d[m feat: Refactor Brush Tool Settings to Sub-ToolRail panel (#537)
+[33mdfe33a36[m perf: use small-decoder for flux-2-klein-4b
+[33mac81ff78[m feat: Flux.2 Klein inpainting
+[33me331a6e0[m chore(dev): fix args parsing
+[33m87acca53[m feat: koharu-ai crate
+[33mcd225cdd[m chore(deps): bump lucide-react from 1.8.0 to 1.9.0 (#554)
+[33m3d1d1f74[m chore(deps): bump @sentry/nextjs from 10.49.0 to 10.50.0 (#549)
+[33m2b5f8a2d[m chore(deps): bump @tanstack/react-query from 5.99.2 to 5.100.1 (#550)
+[33m9821bf7c[m refactor: move keyring to koharu-runtime
+[33m7aa91353[m[33m ([m[1;33mtag: [m[1;33m0.47.8[m[33m)[m chore(release): 0.47.8
+[33me2f1d2b9[m fix: show auto when not manual override for font size
+[33m0f2a31bc[m docs: update to match current implementation
+[33m60954461[m docs: improve readme
+[33mb467e25f[m Add regression test for global and individual font changes (#542)
+[33m2835f1f8[m chore(deps-dev): bump oxfmt from 0.45.0 to 0.46.0 (#540)
+[33m8f8d5d3c[m chore(deps): update cargo
+[33ma1ba983e[m chore: rust 1.95.0 clippy fix
+[33m1f5c27b2[m[33m ([m[1;33mtag: [m[1;33m0.47.7[m[33m)[m chore(release): 0.47.7
+[33m4cff3eaf[m chore: adjust MAX_NEW_TOKENS to 256
+[33m103bb2c5[m fix: repeat guard for paddleocr-vl
+[33m15ca9711[m[33m ([m[1;33mtag: [m[1;33m0.47.6[m[33m)[m chore(release): 0.47.6
+[33mae80ce9a[m fix: add repetition_penalty to PaddleOcrVl
+[33mc38ac380[m chore: make clippy happy
+[33m666306ed[m[33m ([m[1;33mtag: [m[1;33m0.47.5[m[33m)[m chore(release): 0.47.5
+[33m0472ea9f[m chore: make clippy happy
+[33m6ee6aed1[m fix: keyring on Linux
+[33m0a5aa566[m chore(deps-dev): bump @vitest/ui from 4.1.4 to 4.1.5 (#534)
+[33me74c7edc[m chore(deps-dev): bump vitest from 4.1.4 to 4.1.5 (#532)
+[33m4a6a4706[m chore(deps-dev): bump @tailwindcss/postcss from 4.2.3 to 4.2.4 (#533)
+[33m2d998c4e[m chore(deps-dev): bump tailwindcss from 4.2.3 to 4.2.4 (#531)
+[33m4b86db76[m[33m ([m[1;33mtag: [m[1;33m0.47.4[m[33m)[m chore(release): 0.47.4
+[33m5c01ade0[m fix: panic when fail to bootstrap
+[33me4c47b69[m[33m ([m[1;33mtag: [m[1;33m0.47.3[m[33m)[m chore(release): 0.47.3
+[33mfacc424d[m chore: panic handler
+[33ma9764bee[m chore(deps-dev): bump orval from 8.8.0 to 8.8.1 (#524)
+[33m3f8d464f[m chore: Remove unnecessary dependencies (#527)
+[33mac6668ef[m chore(deps-dev): bump oxlint from 1.60.0 to 1.61.0 (#523)
+[33m2d9f7434[m chore(deps-dev): bump @tailwindcss/postcss from 4.2.2 to 4.2.3 (#521)
+[33m31df33a3[m chore(deps-dev): bump tailwindcss from 4.2.2 to 4.2.3 (#525)
+[33mc6efe474[m docs: Contributing
+[33me4512334[m[33m ([m[1;33mtag: [m[1;33m0.47.2[m[33m)[m chore(release): 0.47.2
+[33m6f1494af[m perf: improve inpainting
+[33m22638dd8[m[33m ([m[1;33mtag: [m[1;33m0.47.1[m[33m)[m chore(release): 0.47.1
+[33maeda77d0[m fix: inpainting OOM & pipeline error handling
+[33m55d39974[m[33m ([m[1;33mtag: [m[1;33m0.47.0[m[33m)[m chore(release): 0.47.0
+[33m211f6582[m fix(i18n): show language names in their native locale (#518)
+[33mc13a2ee3[m feat: keybind ui tweaks, redo/undo configuration (#517)
+[33mc72979cb[m fix: brush tool where it doesn't render every stroke after the first
+[33m9ef226ac[m fix: download stuck at 100% sometimes
+[33m1713b180[m[33m ([m[1;33mtag: [m[1;33m0.46.0[m[33m)[m chore(release): 0.46.0
+[33mea455b74[m fix: render panel throw an error when no page selected
+[33mfff194df[m fix: improve llm dropdown list
+[33mc62b050d[m fix: bold/italic cause postcard unable reopen
+[33m5156d51f[m fix: global color override per-block color
+[33mdf611134[m fix: auto render not pass default font
+[33m25a5de95[m fix: pipeline stop when no text to render
+[33m7c711d5b[m fix: AssetNotFound("index.html")
+[33me677200a[m chore(sentry): enable session tracking
+[33ma2bba3ae[m chore: configure sentry sample rate to 0.1
+[33m2b5f025f[m chore(deps): update bun & cargo
+[33m3b0c9a31[m feat: add Belarusian translation option (#512)
+[33m1e68efbd[m[33m ([m[1;33mtag: [m[1;33m0.45.3[m[33m)[m chore(release): 0.45.3
+[33m890fb2b3[m fix: normalizes invalid pipeline engine names back to the stage defaults
+[33m39a872cb[m fix: text overlapping
+[33m7d465a01[m[33m ([m[1;33mtag: [m[1;33m0.45.2[m[33m)[m chore(release): 0.45.2
+[33me70fc656[m fix: add bootstrap step
+[33md9e8a729[m[33m ([m[1;33mtag: [m[1;33m0.45.1[m[33m)[m chore(release): 0.45.1
+[33m08d32e51[m fix: broken export
+[33m4b146dde[m[33m ([m[1;33mtag: [m[1;33m0.45.0[m[33m)[m chore(release): 0.45.0
+[33mf8d096c4[m feat: improve text rendering ux
+[33mef295f0b[m feat: multi-selection on ui
+[33m5bc33d4d[m docs: update demo images
+[33med3ec953[m chore: add i18n keys
+[33m00b327af[m tests: ignore provider_secret_set_and_clear
+[33mf703f2f5[m docs: update demo images
+[33m4ef5c03c[m tests: fix unit test
+[33mcb1ce234[m fix: Arabic and mixed text rendering (#500)
+[33mc4ef1198[m fix: make clippy happy
+[33mfbf208db[m ci: run Rust integration tests and Vitest UI tests
+[33m48009ab2[m chore(fix): add missing client
+[33m4c1f5c56[m[33m ([m[1;31mupstream/v2[m[33m, [m[1;31morigin/v2[m[33m)[m chore: workspace config + next.js + tauri build glue for v2
+[33m14a73e8f[m test: Rust integration tests + Vitest UI tests
+[33m7ba57cf7[m feat(ui): shadcn primitive additions + polish + locale updates
+[33m7731a389[m refactor(ui): menu, settings, welcome, navigator + error/loading chrome
+[33m97f6cb36[m refactor(ui): rewrite editor canvas + right-panel components
+[33m86effa9a[m refactor(ui): rewrite hooks around the new scene snapshot + selection store
+[33me7f70a83[m refactor(ui): backend-as-truth state layer (ops / io / stores / events)
+[33md2c7ebc5[m refactor(ui): regenerate orval client against the v2 axum router
+[33m436885ac[m refactor(runtime): Tauri shell + downloads queue for the v2 backend
+[33m092fee3a[m refactor(rpc): axum router with typed routes, SSE events, binary I/O
+[33m24155b74[m refactor(psd): rewrite export around new Scene/Page/Node model
+[33m6e682313[m refactor(renderer): bubble-aware latin layout with BubbleIndex lookup
+[33m3e4b068e[m refactor(ml): shared TextRegion/TextDirection types for pipeline engines
+[33m8413df69[m feat(app): CLI pipeline binary for full-image regression testing
+[33m05dffa18[m feat(app): pipeline engine system with inventory-registered engines
+[33m8eb4a957[m refactor(app): replace monolithic engine/io with session + history + blobs
+[33m0cf9ac6e[m refactor(core): rewrite data model as Scene + Op + content-addressed blobs
+[33m720c8aab[m refactor: remove cudnn
+[33mfbd739b4[m refactor: remove e2e
+[33mc6b28a02[m refactor: remove bubbleDetector
+[33mae2eeeec[m chore(deps): bump react-i18next from 17.0.3 to 17.0.4 (#496)
+[33m2464bb48[m chore(deps): bump @tanstack/react-virtual from 3.13.23 to 3.13.24 (#497)
+[33mc24e9c12[m chore(deps-dev): bump typescript from 6.0.2 to 6.0.3 (#498)
+[33mb6b1dcdb[m[33m ([m[1;33mtag: [m[1;33m0.44.6[m[33m)[m chore(release): 0.44.6
+[33m7b17a841[m chore(deps): bump rayon from 1.11.0 to 1.12.0 (#448)
+[33ma3869add[m chore(deps): bump react-i18next from 17.0.2 to 17.0.3 (#450)
+[33mbacb571f[m chore(deps): bump next from 16.2.3 to 16.2.4 (#483)
+[33m5411daf2[m fix: RTL Support and Text Alignment Overhaul (#475)
+[33mf7fca6df[m feat: Add Caiyun translation provider (#478)
+[33md0d1a568[m fix: default font not being applied in processing (#456)
+[33m77489374[m fix: resolve black (#000000) text color not applying in render controls (#482)
+[33m5edb16e1[m ci: Build pt-BR docs and fix Portuguese wording (#481)
+[33m15dba783[m docs: Add Portuguese (pt-BR) docs and assets (#476)
+[33m19be2461[m chore: replace prettier with oxfmt and apply formatting (#472)
+[33m626d61f6[m chore(deps-dev): bump prettier from 3.8.2 to 3.8.3 (#468)
+[33m0e10a3e6[m chore(deps-dev): bump orval from 8.7.0 to 8.8.0 (#470)
+[33m41cb3540[m chore(deps): bump i18next from 26.0.4 to 26.0.5 (#469)
+[33m3bdf8506[m fix: Incorrect sorting by image name (#455)
+[33mf8a4d83a[m[33m ([m[1;33mtag: [m[1;33m0.44.5[m[33m)[m chore(release): 0.44.5
+[33m332f55b7[m feat: portable mode (#415)
+[33m0a913e99[m docs: runtime & model downloads
+[33mb4ec2bd4[m[33m ([m[1;33mtag: [m[1;33m0.44.4[m[33m)[m chore(release): 0.44.4
+[33m63bf6c1c[m fix: resolve incorrect ZLUDA DLLs usage (#442) (#458)
+[33ma05beccf[m[33m ([m[1;33mtag: [m[1;33m0.44.3[m[33m)[m chore(release): 0.44.3
+[33mb3385d03[m fix: load correct ZLUDA DLLs
+[33meb863dc4[m chore(deps-dev): bump oxlint from 0.15.15 to 1.60.0 (#449)
+[33m1c8ad742[m docs: improve README formatting and add resource links
+[33m820d03f9[m chore(deps-dev): bump @types/node from 25.5.2 to 25.6.0 (#452)
+[33mdddf65da[m chore(deps): bump @tanstack/react-query from 5.96.2 to 5.99.0 (#451)
+[33m5946814d[m[33m ([m[1;33mtag: [m[1;33m0.44.2[m[33m)[m chore(release): 0.44.2
+[33m23d97e55[m fix: upgrade zluda to v6-preview.64
+[33m9811e9eb[m[33m ([m[1;33mtag: [m[1;33m0.44.1[m[33m)[m chore(release): 0.44.1
+[33m7fa180b2[m fix: sentry setup
+[33m9fc18bce[m chore(deps): bump petname from 2.0.2 to 3.0.0 (#427)
+[33mfbe85358[m chore: Add oxc linting to CI and fix warnings (#435)
+[33m07963ad2[m chore: add confirmation message to Portuguese translations (#430)
+[33m94ae12b9[m ci: fix welcome workflow
+[33m9eb27248[m chore(deps-dev): bump orval from 8.6.2 to 8.7.0 (#424)
+[33m9912409f[m chore: Add OXLint for linting the UI code (#432)
+[33m1bf38c9e[m chore(deps-dev): bump prettier from 3.8.1 to 3.8.2 (#426)
+[33m71df1543[m chore(deps): bump react-resizable-panels from 4.9.0 to 4.10.0 (#428)
+[33m83c4395c[m chore(deps): bump lucide-react from 1.7.0 to 1.8.0 (#425)
+[33mff9f95ca[m ci: add Docker deployment (#401)
+[33m82e8c461[m ci: add missing SENTRY_AUTH_TOKEN
+[33m3ef79947[m[33m ([m[1;33mtag: [m[1;33m0.44.0[m[33m)[m chore(release): 0.44.0
+[33m0eacc1e2[m Potential fix for code scanning alert no. 4: Workflow does not contain permissions (#420)
+[33m46a39c12[m Potential fix for code scanning alert no. 3: Workflow does not contain permissions (#421)
+[33mfba46dfa[m Potential fix for code scanning alert no. 2: Workflow does not contain permissions (#422)
+[33mf6165d72[m Potential fix for code scanning alert no. 1: Workflow does not contain permissions (#423)
+[33me286f585[m ci: Enhance PR workflow with issue support and messages
+[33m472e15c9[m ci: simplify name
+[33m686d7103[m ci: enhance workflow
+[33mbb471fdb[m feat: Add keybind configuration in settings (#411)
+[33m654583f7[m feat(ui): add model search to llm popover (#409)
+[33m557662ac[m docs: correct download button label (#418)
+[33m56a5bbbc[m Adds the ability to reorder pages (#393)
+[33mb2c4d680[m chore(deps): bump i18next from 25.10.10 to 26.0.4 (#389)
+[33ma50a9f40[m chore(deps): bump react-dom from 19.2.4 to 19.2.5 (#388)
+[33mde4a1ec4[m chore(deps): bump react from 19.2.4 to 19.2.5 (#391)
+[33m87ee21f0[m chore(deps): bump next from 16.2.2 to 16.2.3 (#390)
+[33m7ab776d0[m chore(deps): bump harfrust from 0.5.2 to 0.6.0 (#399)
+[33mce9d4c28[m ci: add workflow to summarize new issues with AI
+[33m05ccbc8b[m feat: Tool keybind and Brush Outline on canvas implementation (#396)
+[33mc86578e2[m fix: No current document selected (#394)
+[33mbc38c492[m chore: enable Sentry only for production builds (#397)
+[33m8d70da28[m fix: linking and updater
+[33ma61bb756[m feat: updater
+[33m09c43a0a[m refactor(llm): deel & google translate (#361)
+[33m63fd98c2[m docs: update text rendering to include RTL
+[33ma78fdd67[m docs: update data privacy note
+[33m1e3462aa[m feat: sentry integration
+[33m9bf0e7a3[m Fix RTL shaping for Arabic text (#376)
+[33m2bb81aeb[m chore(ci): ignore scripts and generated
+[33m566b7263[m chore(deps): update cargo
+[33md0a14f29[m fix(renderer): add thai font fallback (#370)
+[33ma3c01a2e[m docs: update developement section
+[33mcaf9cecb[m docs: remove cudnn
+[33mb72338f6[m docs: include zluda
+[33m7db9bf46[m chore(dev): add release-with-debug profile
+[33md264853b[m fix: add `get_document_id_for_index` mcp tool (#377)
+[33mb51c0077[m feat: remove segmentation mask detections outside of detected text blocks (#378)
+[33m759985b7[m feat: add AMD GPU support via ZLUDA (#362)
+[33m1e54488f[m chore(deps): bump console from 0.15.11 to 0.16.3 (#366)
+[33ma95ed967[m chore(deps): bump petgraph from 0.7.1 to 0.8.3 (#367)
+[33mb6972d2b[m chore: update CODEOWNERS
+[33m8238a7cd[m feat: implementing --host cli parameter (#328)
+[33m5bf565f9[m feat(mt): DeepL/Google as koharu-llm providers (#357)
+[33m41c50d4e[m fix: allow Segmentation Mask to be viewed outside of Eraser and Repair Brush Tools (#358)
+[33m46bda27b[m Revert "docs: add technical term links"
+[33mb8866999[m docs: add technical term links
+[33m422c6536[m docs: mention text rendering
+[33m2300986e[m docs: improve readme
+[33m98fa81ce[m[33m ([m[1;33mtag: [m[1;33m0.43.2[m[33m)[m chore(release): 0.43.2
+[33ma2eeb1c6[m fix: store app-level global font
+[33md0885a8f[m fix: cl path error on dev script, (#348)
+[33m3b31ecce[m feat: change sort_manga_read_order algorithm for better ordering (#349)
+[33m5f99fbf0[m fix(ui): keep process-all semantics for single-image batches
+[33m215a5b6e[m fix: preserve font inheritance when editing defaults
+[33m434d27fb[m fix: persist font selection to document default when block is selected
+[33m142fb636[m fix: apply selected global font
+[33m537f088b[m fix: batch procssing pipeline
+[33md8e3bced[m fix: enhance pipeline processing
+[33m0a13a1a8[m[33m ([m[1;33mtag: [m[1;33m0.43.1[m[33m)[m chore(release): 0.43.1
+[33meecfafe6[m fix: qwen3.5 template
+[33m37162b95[m docs: list more LLMs
+[33md530cbe1[m chore: fix tests
+[33m3356fbad[m[33m ([m[1;33mtag: [m[1;33m0.43.0[m[33m)[m chore(release): 0.43.0
+[33md3e6b065[m feat: custom system prompt
+[33m04b90343[m chore: format code
+[33m7814d1ef[m feat: add uncensored LLMs
+[33me6262e49[m feat: add gemma4 and qwen3.5 models
+[33m4d2e5ef4[m feat: replce lfm2-350m-enjp-mt with lfm2.5-1.2b-instruct
+[33mcd866371[m feat: update llama.cpp to b8665
+[33md12cec0c[m fix(ui): invalidate stale font style
+[33m65bb821e[m chore: format code
+[33mbfc0aefa[m fix: scroll on canvas
+[33m177767f1[m feat: google fonts
+[33md6bf3172[m chore(ui): rename section name
+[33ma9f7a68b[m[33m ([m[1;33mtag: [m[1;33m0.42.4[m[33m)[m chore(release): 0.42.4
+[33m676495f9[m fix: http timeouts
+[33m8fbc4c90[m[33m ([m[1;33mtag: [m[1;33m0.42.3[m[33m)[m chore(release): 0.42.3
+[33m53617b62[m fix: predict stroke color
+[33mef5cb848[m ci: remove ts-rs env
+[33m7d27635b[m docs: rephrase
+[33m3847dcdd[m ci: disable github changelog
+[33mcae9542a[m fix: pin libz-sys to 1.1.25
+[33m73cd478a[m chore(deps): bump react-resizable-panels from 4.8.0 to 4.9.0 (#331)
+[33m9f9576ed[m chore(deps): bump lucide-react from 0.577.0 to 1.7.0 (#327)
+[33m64141806[m chore(deps): bump indexmap from 2.13.0 to 2.13.1 (#335)
+[33m81334c20[m chore(deps): bump tokio from 1.50.0 to 1.51.0 (#334)
+[33m2baee48a[m chore(deps): bump skrifa from 0.41.0 to 0.42.0 (#333)
+[33m14f5f0f0[m chore(deps): update bun & cargo
+[33m9003e9a8[m chore(deps): bump lru from 0.14.0 to 0.16.3
+[33m31f13dcf[m tests: remove outdated
+[33mc6c06dd9[m[33m ([m[1;33mtag: [m[1;33m0.42.2[m[33m)[m chore(release): 0.42.2
+[33m766662be[m fix: cuda startup failure
+[33m873236b7[m docs: reflect new models
+[33m84a50df8[m[33m ([m[1;33mtag: [m[1;33m0.42.1[m[33m)[m chore(release): 0.42.1
+[33m770a4772[m fix: tauri remote url
+[33m588936f0[m[33m ([m[1;33mtag: [m[1;33m0.42.0[m[33m)[m chore(release): 0.42.0
+[33mae85e1ac[m perf: improve ctd
+[33m18f2b42e[m feat: sort manga reading order
+[33m004a94a0[m feat: blob API, bubble/AOT-inpainting models, and rendering redesign
+[33maa91dbd7[m feat: custom tracing layer and log suppression
+[33mc84cfad0[m feat: pluggable engine system with DAG pipeline
+[33me29b31eb[m refactor(ui): centralize error handling with XState
+[33m290904db[m feat(ui): settings dialog, i18n, and initialization screen
+[33mf3017931[m refactor: simplify Tauri setup and dev server
+[33med48490d[m refactor: rewrite backend storage, config, and runtime
+[33m1502ac04[m refactor: OpenAPI codegen with utoipa and Orval
+[33m940b510e[m chore(deps): update cargo & bun deps
+[33mee4cbd00[m chore(deps): bump react-i18next from 16.6.6 to 17.0.2 (#324)
+[33m0e5af3c2[m chore(deps-dev): bump typescript from 5.9.3 to 6.0.2 (#320)
+[33mc5aae440[m chore(deps): bump next from 16.2.1 to 16.2.2 (#323)
+[33madde7911[m chore(deps): bump zip from 8.4.0 to 8.5.0 (#319)
+[33m752260a3[m chore(deps): bump icu from 2.1.1 to 2.2.0 (#321)
+[33mb16e7ff1[m chore(deps): bump minijinja from 2.18.0 to 2.19.0 (#325)
+[33med6e4ac1[m feat: add Portuguese (pt-BR) translations (#317)
+[33m58e53910[m chore: remove macos warnings
+[33m7edc7315[m chore(deps): bump toml from 0.9.12+spec-1.1.0 to 1.1.0+spec-1.1.0 (#312)
+[33me95ae3d8[m chore(deps): bump skrifa from 0.40.0 to 0.41.0 (#258)
+[33m203b3cd1[m chore(deps): update cargo & ui
+[33mf470146e[m feat: disabling keyring using --no-keyring (#308)
+[33m1d1b3df0[m feat: add Korean (ko-KR) locale and translate (#316)
+[33m4a999091[m feat: add Turkish UI localization (#315)
+[33m25d4fecd[m[33m ([m[1;33mtag: [m[1;33m0.41.4[m[33m)[m chore(release): 0.41.4
+[33m64cadbc4[m ci: use explicit tauri cli package in release
+[33med1f16a5[m[33m ([m[1;33mtag: [m[1;33m0.41.3[m[33m)[m chore(release): 0.41.3
+[33mea2a80b6[m ci: use npx tauri for release builds
+[33mb4117c4a[m[33m ([m[1;33mtag: [m[1;33m0.41.2[m[33m)[m chore(release): 0.41.2
+[33mb6866015[m ci: download trusted-signing-cli from release
+[33mf0fdcb07[m[33m ([m[1;33mtag: [m[1;33m0.41.1[m[33m)[m chore(release): 0.41.1
+[33mbb3e7d37[m fix(macos): allow downloaded llama runtimes to load
+[33m89cad40c[m[33m ([m[1;33mtag: [m[1;33m0.41.0[m[33m)[m chore(release): 0.41.0
+[33m55575a7f[m chore: make clippy happy
+[33m288fcc70[m feat: bootstrap window
+[33m98f90f74[m refactor: merge crates
+[33mea899a7e[m chore(i18n): add missing translations
+[33m623a55fe[m ci: rename integration tests to unit tests
+[33m2df4fca2[m chore: disable ml models integration tests
+[33m042cdb6c[m chore(dev): fix hydration warning
+[33m5b0a3c1a[m fix(linux): load native libraryes by using explicit path to resolve missing libggml errors on Unix systems (#295)
+[33mb1a45659[m docs: fix broken link
+[33m2e66e8d4[m docs: fix readme img link
+[33mdaa4b10b[m docs: ja-JP translation
+[33m90e6a29c[m docs: zh-CN translations
+[33m3780b1c3[m docs: text rendering
+[33mc0137901[m docs: open graph
+[33m13e07b21[m docs: more content
+[33md607a674[m docs: add llama.cpp
+[33m82454e03[m fix: pipeline crash when no text blocks detected (#291)
+[33mb17ead9c[m ci: cache bun packages and Next.js build output (#290)
+[33mebd16c8f[m docs: homepage
+[33m1ccf02c7[m fix: prevent koharu-llm from recompiling on every build (#289)
+[33mb8f34a04[m docs: add site
+[33m46d47f86[m fix: avoid full document cloning in API endpoints to speed up image switching (#279)
+[33mbcd9df15[m feat(ui): LLM multi-preset configuration (#282)
+[33m8808b124[m fix: nvcc build failure on linux
+[33m1e0bac81[m fix: revert cudaforge
+[33md73b2ad8[m chore(cargo): update deps
+[33m0eae7857[m fix: pin candle commit
+[33m8af2862c[m chore: make clippy happy
+[33mb22ade66[m fix: cast log level to i32 for previous level storage (#273)
+[33mf8db7d90[m fix: shared llama.cpp backend
+[33m5c4b7c1c[m feat: llama.cpp-based paddleocr-vl-1.5
+[33me78b2d24[m refactor: koharu-runtime
+[33m08e4170f[m fix: ui issue and automatic code formatting :v (#272)
+[33m30db0424[m feat: integrate llama.cpp
+[33m0465ff7e[m feat: llama.cpp crate
+[33m83615e7b[m feat: add open folder import, CUDA 13.2 build fixes, local LLM settin… (#271)
+[33mc367543b[m perf: fix paddleocr-vl
+[33m879c8da4[m fix: align paddleocr-vl impl with transformers
+[33m8003e9bf[m chore: vendor paddleocr-vl
+[33mca640939[m fix: remove normalize_ocr_text
+[33mf9987ca1[m docs: update models section
+[33m8bbeeabb[m[33m ([m[1;33mtag: [m[1;33m0.40.1[m[33m)[m chore(release): 0.40.1
+[33m1269cdde[m ci: add github token
+[33m9582c121[m[33m ([m[1;33mtag: [m[1;33m0.40.0[m[33m)[m chore(release): 0.40.0
+[33m4e4a7ca9[m fix: refine mask
+[33m05341008[m fix: use f32 for paddleocr-vl
+[33m2e5eb9c8[m perf: speedup detection & ocr
+[33mef543076[m feat: wire new models
+[33m2e7209eb[m feat: manga-text-segmentation-2025 model
+[33m1b0f45e7[m feat: paddleocr-vl-1.5 model
+[33m3724003f[m feat: pp-doclayout-v3 model
+[33m42ddd88d[m chore: add refine manga109 script
+[33m1b55b542[m[33m ([m[1;33mtag: [m[1;33m0.39.0[m[33m)[m chore(release): 0.39.0
+[33m17382cf2[m fix: global font not applied
+[33m3446a093[m fix: llm list not loaded
+[33m327120a2[m feat: add bg-BG lang
+[33m9b84b514[m feat: support more languages
+[33mc451d84f[m fix: text box ordering regression
+[33m09e4f25d[m chore: i18n consistent
+[33ma7246b16[m fix: style & ui build
+[33m89b9ed21[m feat: export to psd
+[33m22640468[m chore(deps): bump motion from 12.37.0 to 12.38.0 (#244)
+[33mf3cbadd7[m chore(deps-dev): bump @tailwindcss/postcss from 4.2.1 to 4.2.2 (#247)
+[33me5ccbda7[m chore(deps): bump next from 16.1.7 to 16.2.0 (#246)
+[33md28a2609[m feat: add delete functionality to text blocks (#245)
+[33m5d71b648[m ci: speed up linux
+[33mc59b3d96[m ci: speed up cuda install
+[33md5e3101a[m ci: add release notes
+[33m6e1e7273[m[33m ([m[1;33mtag: [m[1;33m0.38.1[m[33m)[m chore(release): 0.38.1
+[33mf3a8f743[m fix: fallback to cpu if nvidia driver doesn't support cuda 13.1
+[33m4609e86a[m chore(deps): bump minijinja from 2.17.1 to 2.18.0 (#236)
+[33m2918fd45[m chore(deps): bump winreg from 0.55.0 to 0.56.0 (#238)
+[33m915207fc[m chore(deps): bump ts-rs from 10.1.0 to 12.0.1 (#241)
+[33m0eb93c9e[m chore: update deps
+[33m103b93e4[m fix: compare_blocks_for_reading_order panics
+[33m18780641[m fix: headless on linux
+[33mdae16474[m refactor: simplify string serialization
+[33m288b8c62[m[33m ([m[1;33mtag: [m[1;33m0.38.0[m[33m)[m chore(release): 0.38.0
+[33m550014a8[m docs: add openai-compatible
+[33m9570a459[m feat: OpenAi Compatible
+[33m19d0f4fb[m fix: settings page scrollarea
+[33m69d94211[m feat: add Deepseek provider (#235)
+[33m32ef47c6[m refactor: switch ws to http
+[33m23f7d9fb[m refactor: avoid race condition
+[33m23b2063f[m docs: fix broken links
+[33m926dc02e[m docs: add ja & zh README
+[33m9cfef634[m Revert "docs: remove ja and zh-CN readme"
+[33mb260dc1d[m chore(deps): bump lucide-react from 0.575.0 to 0.577.0 (#203)
+[33m718388ac[m chore(deps): bump strum from 0.27.2 to 0.28.0 (#186)
+[33m9cdec475[m chore: update deps
+[33mcf466b6d[m chore: format ui
+[33m7ccbc9bb[m docs: fix typo
+[33mb39a1507[m docs: remove ja and zh-CN readme
+[33mfd0ad727[m chore: rename LICENSE
+[33m375c8800[m chore: remove APACHE license
+[33mb499c50f[m refactor: merge koharu-api into koharu-types
+[33m58fc0e84[m ci: add cargo fmt
+[33m7c08c2af[m fix: remove unnecessary check for Tauri in Providers component
+[33mc0bd46fc[m remove unnecessary change
+[33m44b41621[m fix: integrations test
+[33mc78a021d[m fix: use keyring credential deletion API
+[33mc6a47cee[m feat: implement API provider support with OpenAI, Gemini, and Claude integration
+[33me481ae50[m docs: fix typo
+[33m8085ac7f[m[33m ([m[1;33mtag: [m[1;33m0.37.0[m[33m)[m chore(release): 0.37.0
+[33m1398b035[m feat: add bulk export
+[33m17fa5f62[m fix: normalize ocr text
+[33m8f5eb503[m ci: upload portable exe
+[33mbaed0b00[m feat: enhance color picker
+[33mf4962ab3[m fix: improve hunyuan result
+[33m0d55c6cb[m fix: Korean text (Hangul) incorrectly rendered vertically in tall text blocks
+[33m556442a7[m fix: do not automatically apply Repair Brush in boxes at the "Detect" step
+[33mc235dd18[m fix(ui): do not automatically display Inpainted Layer when creating new text box or adjusting text box size
+[33me9a26f1b[m fix(renderer): manual size, do not auto-expand.
+[33mbb18ba97[m fix(renderer): handle new line break
+[33m6c38a75b[m tests: remove unless test
+[33m704d858e[m fix: adjust LLM generate options
+[33mb292ea40[m feat: block-aware inpainting
+[33mfbab2efd[m feat: add mit48px OCR backend
+[33mbdcb9330[m feat: overhaul comic text detector pipeline
+[33m19d67d83[m chore(dev): fix cudnn path
+[33mea04b05a[m[33m ([m[1;33mtag: [m[1;33m0.36.1[m[33m)[m chore(release): 0.36.1
+[33mc3eb3afa[m fix: unable to resize text box on latin text box
+[33meca0c512[m[33m ([m[1;33mtag: [m[1;33m0.36.0[m[33m)[m chore(release): 0.36.0
+[33m0501c546[m chore: strip quotes from translated text
+[33m6882aae1[m feat: structured prompt
+[33m42ca4e86[m fix: global font family & disable image transition
+[33m1f2ee016[m feat: text align options
+[33m8de00194[m fix: smooth text editing Fixes #197
+[33m1a980ecc[m docs: new screenshots
+[33m62c25560[m feat: improve english text rendering & layout
+[33m8464b177[m chore: make clippy happy
+[33m62fc37ab[m feat: punctuation normalization in vertical mode
+[33m3b87b492[m feat: centering full-width punctuation in vertical layout
+[33m24894d48[m feat: add italic, bold, border
+[33m5de019c6[m feat(ui): move font settings to tabs
+[33m77f01aba[m docs: add zh-CN readme
+[33mcfdacfbb[m docs: add note for cuda driver
+[33m70ddc1b2[m[33m ([m[1;33mtag: [m[1;33m0.35.0[m[33m)[m chore(release): 0.35.0
+[33m64e762c9[m feat: implement error handling and UI for RPC errors
+[33m760eccd1[m fix: for issue https://github.com/mayocream/koharu/issues/197
+[33mb50aac17[m feat: add loading indicators for pipeline step buttons
+[33m4d216cc2[m nitpick fix: remove unused variable in add_documents function
+[33m80839494[m feat: add 'Add Documents' functionality
+[33m211ae376[m chore: update deps
+[33ma9b00912[m feat: add Spanish translations and update language options (#198)
+[33mbbde259e[m feat: add `ru-RU` translations (#195)
+[33m040843dc[m remove unused scripts
+[33m383b7773[m tests: e2e
+[33mae044ce8[m refactor: testable ui
+[33m67dd4ec9[m Revert "refactor: reduce duplicates in ui"
+[33me6244fbd[m refactor: reduce duplicates in ui
+[33m06ef2f76[m refactor: reduce duplicates
+[33m6c15adc5[m[33m ([m[1;33mtag: [m[1;33m0.34.0[m[33m)[m chore(release): 0.34.0
+[33m5909f9ba[m chore: edit release script to accept a version
+[33m38374991[m feat: persist font family close #176
+[33me3f180bd[m refactor: remove sys-locale
+[33mcd0eb2fa[m refactor: simplify device name logic
+[33m5c513460[m chore(deps): bump lucide-react from 0.563.0 to 0.575.0 (#178)
+[33m215a7cbe[m chore(deps): bump i18next from 25.8.12 to 25.8.13 (#177)
+[33mdf10f490[m chore(deps): bump rfd from 0.16.0 to 0.17.2 (#179)
+[33m84df9559[m chore(deps): bump zip from 7.2.0 to 8.1.0 (#180)
+[33m95ce3508[m chore(deps): bump rmcp from 0.15.0 to 0.16.0 (#181)
+[33mf4f1247f[m chore(deps): bump minijinja from 2.15.1 to 2.16.0 (#182)
+[33mc24e00c2[m docs: tidy changelog
+[33m2e19d48c[m chore: disable ad shown by i18next
+[33m85ddf528[m docs: Update copyright year to 2026 and owner to Mayo Takanashi in license files.
+[33m0c6d19db[m chore: remove unused fonts
+[33md2cc55a2[m chore: update rust deps
+[33m172913dc[m chore: update deps
+[33m6af61fc2[m chore: remove unused deps
+[33m0a4ba70e[m docs: Update READMEs to include Linux in the list of supported pre-built binary platforms.
+[33mda213164[m[33m ([m[1;33mtag: [m[1;33m0.33.0[m[33m)[m chore: release 0.33.0
+[33md31f7dfd[m feat: mcp server
+[33m860f474d[m refactor: split modules
+[33mefdaa3b3[m docs: do not mention 7z
+[33m96e2b193[m refactor: remove unused result wrapper
+[33m990af475[m chore: remove portable path
+[33m940e3b0a[m[33m ([m[1;33mtag: [m[1;33m0.32.8[m[33m)[m chore: release 0.32.8
+[33m8ac5b18a[m chore: remove lint-stage & husky
+[33m88e6e7aa[m fix: race condition in ui Fixes #170
+[33m4005e65b[m[33m ([m[1;33mtag: [m[1;33m0.32.7[m[33m)[m chore: release 0.32.7
+[33md6c73624[m fix: add polyfill for file system api
+[33mb82651b2[m[33m ([m[1;33mtag: [m[1;33m0.32.6[m[33m)[m chore: release 0.32.6
+[33mf1cf37b6[m chore: update deps
+[33mb0acf523[m[33m ([m[1;33mtag: [m[1;33m0.32.5[m[33m)[m chore: release 0.32.5
+[33mbcc3f2da[m fix: update tauri pubkey
+[33m7eb6be5c[m[33m ([m[1;33mtag: [m[1;33m0.32.4[m[33m)[m chore: release 0.32.4
+[33md3234b4f[m fix: update tauri pubkey
+[33mbf758113[m[33m ([m[1;33mtag: [m[1;33m0.32.3[m[33m)[m chore: release 0.32.3
+[33m50bfad47[m fix: update tauri key
+[33ma6b7de74[m[33m ([m[1;33mtag: [m[1;33m0.32.2[m[33m)[m chore: release 0.32.2
+[33m3870dfa6[m fix: tauri updater password
+[33mc1b7ba91[m[33m ([m[1;33mtag: [m[1;33m0.32.1[m[33m)[m chore: release 0.32.1
+[33m5a25fdcd[m fix: add serde_json
+[33mefc333f2[m[33m ([m[1;33mtag: [m[1;33m0.32.0[m[33m)[m chore: release 0.32.0
+[33mcbb22e77[m feat: tauri updater
+[33mac11eeb3[m ci: fix lint & build
+[33m1fa69f6b[m[33m ([m[1;33mtag: [m[1;33m0.31.6[m[33m)[m chore: release 0.31.6
+[33m4aad5a56[m fix: windows release build
+[33mb9415d66[m[33m ([m[1;33mtag: [m[1;33m0.31.5[m[33m)[m chore: release 0.31.5
+[33m5a537520[m fix: tauri bundle config
+[33m6547d187[m[33m ([m[1;33mtag: [m[1;33m0.31.4[m[33m)[m chore: release 0.31.4
+[33m0b763827[m fix: apple certificate
+[33m2b1d1a0d[m[33m ([m[1;33mtag: [m[1;33m0.31.3[m[33m)[m chore: release 0.31.3
+[33m35f2622d[m refactor: remove auto-update
+[33m98e9efee[m[33m ([m[1;33mtag: [m[1;33m0.31.2[m[33m)[m chore: release 0.31.2
+[33m5ea500af[m fix: linux release bundle
+[33m21c18ab4[m[33m ([m[1;33mtag: [m[1;33m0.31.1[m[33m)[m chore: release 0.31.1
+[33m804d1a65[m fix: linux release build
+[33m23c65a66[m ci: support linux
+[33mab81a282[m[33m ([m[1;33mtag: [m[1;33m0.31.0[m[33m)[m chore: release 0.31.0
+[33me09a2b2d[m fix: patch cudarc to load cufft 12.x Fix #169
+[33m40b84a09[m chore: remove unused tower-http
+[33m0304c5c1[m feat: websocket-based rpc
+[33m4ef5132e[m[33m ([m[1;33mtag: [m[1;33m0.30.1[m[33m)[m chore: release 0.30.1
+[33mae317ccd[m fix: cuda missing header
+[33m2f7a15c2[m[33m ([m[1;33mtag: [m[1;33m0.30.0[m[33m)[m chore: release 0.30.0
+[33m48e1c53e[m chore: make clippy happy
+[33mdf70fd25[m feat: Rust-based processing
+[33mff00dc29[m feat: CUDA 13.1
+[33mdd6f3d6d[m docs: add contributors
+[33mc48ed3b4[m chore: remove unused settings
+[33mf14a0eef[m docs: add ja README
+[33macf3851f[m Revert "Fix vertical column pitch (#158)"
+[33mce57af9d[m feat: download progress indicator
+[33m976db9fb[m[33m ([m[1;33mtag: [m[1;33m0.29.0[m[33m)[m chore: release 0.29.0
+[33m84c9ba24[m Fix vertical column pitch (#158)
+[33me19e2df2[m chore: remove logo
+[33mb263cab3[m docs: add logo
+[33mfa7607f3[m fix: use file system api
+[33m5598069b[m chore: make indicator vertically align
+[33mec128e37[m fix: make ui text not selectable
+[33mcc19baa2[m chore: update deps
+[33mddef086a[m chore: better i18n
+[33m8261e663[m refactor: remove openai-compatible feature
+[33m45f804d9[m feat: add color-picker component
+[33m75104d45[m feat: unify components usage
+[33m4c670640[m chore: make toolbar more attractive
+[33m87b85bc1[m chore: remove AGENTS.md
+[33medf1142b[m chore: remove unused types
+[33m8781094c[m[33m ([m[1;33mtag: [m[1;33m0.28.0[m[33m)[m chore: release 0.28.0
+[33mfa245d1a[m feat: custom titlebar
+[33mf727e6aa[m[33m ([m[1;33mtag: [m[1;33m0.27.2[m[33m)[m chore: release 0.27.2
+[33mc801192a[m fix: disable prefetch to make navigation work
+[33m8aa7e38e[m chore: add more context info
+[33me6957c01[m fix: listen port lazy
+[33mae1698e3[m refactor: remove hf mirror
+[33mabb1961b[m refactor: simplify app.rs
+[33m2eb84f3b[m chore: rename scripts
+[33m1c6c8454[m refactor: remove tauri http plugin
+[33m83849f7a[m refactor: remove macros
+[33mc86f9aa3[m fix: macos titlebar
+[33m8c8af40b[m[33m ([m[1;33mtag: [m[1;33m0.27.1[m[33m)[m chore: release 0.27.1
+[33mf82b376c[m fix: use tauri based http
+[33m7f243778[m Fix image rendering (#154)
+[33me57bf422[m chore: change window size to 1024x768
+[33m8ed1826f[m[33m ([m[1;33mtag: [m[1;33m0.27.0[m[33m)[m chore: release 0.27.0
+[33mc4ea493a[m feat: add motion
+[33m67e5aff9[m feat: redesign interface
+[33mf7ac35cf[m fix: status bar being hidden
+[33md8f48f9a[m fix: preview is stale
+[33mcbe4597d[m feat: device info
+[33m352166a5[m feat: about page
+[33mc74f4fc0[m feat: settings page & dark mode
+[33m0945b5d2[m chore: remove unused deps
+[33mc6a34d57[m refactor: i18n
+[33ma7583633[m Revert "docs: remove mentioning 7z"
+[33m55164795[m chore: remove unused dep
+[33m5a149b6a[m Revert "chore: remove unused deps"
+[33m19c9bc2c[m Revert "refactor: remove prefetch"
+[33me3993630[m fix: type error
+[33m4221b2d3[m feat: use shadcn ui components
+[33m6942085b[m chore: update deps
+[33m4ec6b80d[m chore: update frontend deps
+[33mca1bcfa9[m docs: do not mention crs since it's buggy
+[33m445518de[m docs: add CONTRIBUTING.md
+[33mb86fcdce[m chore: make clippy happy
+[33mc5bbee6e[m fix: types mismatch
+[33m8afb6567[m fix: crash when loading large images Fixes #118
+[33m4429015a[m refactor: use single document view
+[33m91dc5cd9[m chore: add AGENTS.md
+[33mb70d9d24[m fix: revert moe changes for candle
+[33me8efb54c[m fix: patch ug
+[33mb7f783d9[m chore: update cudarc to 0.19.0
+[33m2ca38aa2[m chore: remove unused deps
+[33m11941aec[m chore: add author fffonion
+[33m51324a17[m chore: update to candle 0.9.2
+[33m6426ad70[m chore: make clippy happy
+[33meb1018a1[m refactor: separate api.rs into endpoints.rs and server.rs
+[33mbf2fa165[m refactor: introduce koharu-macros
+[33m37eca4fb[m refactor: update API
+[33m38d631e4[m refactor: use HTTP based API instead of Tauri commands
+[33m0fe18032[m chore: make clippy happy
+[33md19b2807[m docs: remove mentioning 7z
+[33m27be8a1b[m refactor: remove prefetch
+[33m926f4679[m refactor: remove startup documents
+[33m1148022b[m refactor: create windows.rs
+[33mce9280c2[m refactor: clean up embed
+[33m4e25aa79[m chore: add git-version
+[33m9c8d6836[m[33m ([m[1;33mtag: [m[1;33m0.26.2[m[33m)[m chore: release 0.26.2
+[33m03d4fbc2[m ci: setup dotnet 9.0.x for macos
+[33maa5f0493[m[33m ([m[1;33mtag: [m[1;33m0.26.1[m[33m)[m chore: release 0.26.1
+[33m0d182d90[m ci: setup dotnet
+[33m9dff1b71[m[33m ([m[1;33mtag: [m[1;33m0.26.0[m[33m)[m chore: release 0.26.0
+[33mea643396[m fix: pin cudnn version
+[33m90fc5a45[m chore: cargo update dependencies
+[33mec547417[m chore(deps): bump react-i18next from 16.5.1 to 16.5.2 (#136)
+[33mc3897b33[m chore(deps-dev): bump @types/node from 25.0.3 to 25.0.6 (#134)
+[33m1170174a[m chore(deps): bump zustand from 5.0.9 to 5.0.10 (#138)
+[33m31667caa[m chore(deps): bump harfrust from 0.4.1 to 0.5.0 (#135)
+[33mc616c12e[m chore(deps): bump skrifa from 0.39.0 to 0.40.0 (#131)
+[33mefe2fca9[m chore: clarifying ml in readme
+[33mf7606216[m chore: update dependencies
+[33m8f20d9ab[m chore(deps): bump tempfile from 3.23.0 to 3.24.0 (#122)
+[33m980f275f[m chore(deps): bump reqwest from 0.12.26 to 0.12.28 (#114)
+[33m3e370e89[m chore(deps): bump serde_json from 1.0.145 to 1.0.147 (#123)
+[33m17c13c98[m chore(deps): bump react-i18next from 16.5.0 to 16.5.1 (#125)
+[33m24de076e[m chore(deps): bump i18next from 25.7.3 to 25.7.4 (#128)
+[33mabf2ecda[m chore(deps): bump zip from 6.0.0 to 7.0.0 (#109)
+[33m0bc56edd[m chore: improve dev performance
+[33ma0858da7[m chore(deps): bump next from 16.1.0 to 16.1.1 (#112)
+[33mfb1f8b92[m chore(deps): bump axum from 0.7.9 to 0.8.8 (#113)
+[33mf259e37d[m fix: select default fonts based on OS and locale
+[33m3ef1e1a7[m fix: show release notes from markdown source
+[33m91145c1b[m fix: enable ansi color mode on the debug console too
+[33mcd7ab247[m feat: display release notes
+[33mdba643ab[m[33m ([m[1;33mtag: [m[1;33m0.25.4[m[33m)[m chore: release 0.25.4
+[33m428b140e[m ci: bundle release notes in velopack
+[33mc2150170[m ci: add release notes
+[33m58d5fb0e[m[33m ([m[1;33mtag: [m[1;33m0.25.3[m[33m)[m chore: release 0.25.3
+[33m6d5cd10a[m chore: fix release workflow
+[33mc6a96515[m[33m ([m[1;33mtag: [m[1;33m0.25.2[m[33m)[m chore: release 0.25.2
+[33ma78fb20e[m chore: add benchmark for renderer
+[33maf2ab388[m fix: font fallbacks (#115)
+[33m6f08d289[m fix: lint happier
+[33m7576a0ca[m[33m ([m[1;33mtag: [m[1;33m0.25.1[m[33m)[m chore: release 0.25.1
+[33m12feab75[m fix: adjust tooltip
+[33m81646f8f[m doc: update readme
+[33m444858b0[m fix: rebase error
+[33m0a9c1e55[m[33m ([m[1;33mtag: [m[1;33m0.25.0[m[33m)[m chore: release 0.25.0
+[33m77c26b3f[m fix: crs api load llm on first request
+[33m80878eec[m fix: lint
+[33m57ed7f5f[m feat: add comic read script API
+[33m7ac87c90[m chore: reorganize code
+[33m900cebff[m[33m ([m[1;33mtag: [m[1;33m0.24.0[m[33m)[m chore: release 0.24.0
+[33m57b1bc5f[m feat: add headless mode to be used in browser
+[33m6f301216[m fix: correct image layer
+[33m9e63a861[m[33m ([m[1;33mtag: [m[1;33m0.23.1[m[33m)[m chore: release 0.23.1
+[33mdd4675e9[m fix: smaller color input button
+[33m6907bd49[m fix: render brush
+[33m84d1401a[m[33m ([m[1;33mtag: [m[1;33m0.23.0[m[33m)[m chore: release 0.23.0
+[33mc35f6c47[m fix: more greedy partial inpaint for text block change
+[33m857ddfb8[m feat: drag and zoom
+[33m8cbdf3fd[m perf: reduce unused partial inpaint
+[33m47432e50[m feat: color brush and erasor
+[33mcac5378e[m feat: smoother image transition
+[33m4c0c7bf1[m perf: partial update mask
+[33m2ffb7c7b[m fix: add non-null assertion for segment
+[33mc0fc0c6d[m feat: inpaint brush and erasor
+[33m6c13daf4[m chore: align code style
+[33m8a577d88[m chore: update dependencies
+[33m5a3b224c[m ci: do not cache cargo targets
+[33m5922ec04[m fix: clippy happy
+[33m74236d86[m[33m ([m[1;33mtag: [m[1;33m0.22.0[m[33m)[m chore: release 0.22.0
+[33mc1b2ef33[m feat: block font and color
+[33m7ee49eb2[m feat: add some text shader styles
+[33mdec2e056[m tests: yolo ignore tests
+[33m8480c6ce[m fix: wgpu renderer minor issues
+[33mc5706305[m chore: make clippy happy
+[33m2ff2c7f9[m feat: Wgpu renderer (#105)
+[33m341c853d[m chore: hide debug window
+[33m4110c4e0[m chore(deps-dev): bump @tauri-apps/cli from 2.9.5 to 2.9.6 (#83)
+[33m4cee94c0[m chore(deps): bump winreg from 0.52.0 to 0.55.0 (#104)
+[33m7f4771c4[m chore: update ui dependencies
+[33m01a7cffc[m tests: ignore dylib tests
+[33md8607036[m docs: cleanup per-crate docs
+[33m83a06fd2[m chore: mark rendering integration tests as ignored due to lack of fonts
+[33me187cda3[m Revert "chore: use format mode"
+[33m96f59da4[m chore: update dependencies
+[33m90da89c5[m chore: use format mode
+[33m98bf9e65[m fix: integration tests
+[33m353cf693[m chore: remove unused deppendencies
+[33m4cb959f5[m fix: add missing ui/components/ResizableSidebar.tsx
+[33m6da24a63[m fieat: resizable navigator and panels
+[33m293dfcb7[m fix: activity bubble animation and per operation sub title
+[33m074d570d[m feat: add openai endpoint support
+[33m7f43570e[m[33m ([m[1;33mtag: [m[1;33m0.21.0[m[33m)[m chore: bundled pack portable
+[33mf1ececb5[m chore: release 0.21.0
+[33m89617790[m feat: multi lang llm translate
+[33m43512d2b[m chore: simplify bubble logic
+[33me19c109d[m[33m ([m[1;33mtag: [m[1;33m0.20.0[m[33m)[m chore: release 0.20.0
+[33me02db8f8[m feat: double click or CLI to open a file
+[33m63428561[m[33m ([m[1;33mtag: [m[1;33m0.19.0[m[33m)[m chore: release 0.19.0
+[33mfd59dea5[m fix: add a textBlockSyncer to avoid block on mutex
+[33m2c89173f[m fix: cargo happy
+[33m6e4e4061[m fix: dom text layer bug
+[33m86a1d591[m feat: operation bubble and cancellable batch
+[33m04256480[m chore: use workspace Cargo
+[33mfd1b29c0[m chore: clippy happier
+[33m136f3748[m feat: async update check
+[33m7e90a7df[m feat: .khr file association on windows
+[33m13bb9743[m feat: show version number
+[33m20fc1b9a[m feat: save and load projects
+[33m14f9c435[m docs: change demo image
+[33mc5624eaa[m feat: save and load projects
+[33m674654b7[m perf: improve renderer performance
+[33md9f4e0a3[m fix: stroke and font color normalization
+[33md9289a5b[m feat: wysiwyg canvas
+[33m2367f9bb[m refactor: new renderer (#99)
+[33mb0c2df70[m feat: add hunyuan to translate more languages
+[33m7a7e9bc6[m[33m ([m[1;33mtag: [m[1;33m0.18.0[m[33m)[m chore: release 0.18.0
+[33mc7b1be35[m feat: renderer to clamp near black
+[33m2cb0a4ed[m fix: remove stroke auto color, keep font auto color
+[33ma26e623c[m fix: add font detect test
+[33m7f3c2815[m feat: auto choose color and stroke
+[33m2e079c4e[m fix: close bigger holes in ctd
+[33m92e8db64[m chore: remove unused import in koharu-renderer
+[33m5ffa16c4[m fix: clippy happy
+[33mc3f09fb5[m feat: font detection using yuzumaker.FontDetection
+[33m23b5c013[m fix: windows to search system32 for DLLs too
+[33m0122d453[m fix: layout CJK and English at same time in horizontal view
+[33m5401b5b0[m test: add vertical CJK layout test
+[33me3863709[m tests: add layout line wrapping test
+[33m9070fe54[m chore: add layout tests
+[33m869d8288[m tests: use google fonts
+[33m9f23d62c[m feat: google fonts
+[33m7e02624e[m chore: remove unnessary conditional deps
+[33m210e1c85[m chore: only create span when cache is not valid
+[33mbe288378[m fix: avoid conflict with existing dlls on windows
+[33mcfd76250[m tests: fix tests
+[33m3928a51b[m chore: make clippy happy
+[33m4efdf54e[m ci: remove reviewdog
+[33mffbc3d84[m ci: add ignore annotation for llm test requiring large model downloads
+[33m3bb25b14[m ci: update cargo clippy command to treat warnings as errors
+[33m220ec147[m fix: llm test running locally
+[33mdae78211[m feat: reimplement load tokenizer from gguf
+[33mbbb5c392[m[33m ([m[1;33mtag: [m[1;33m0.17.0[m[33m)[m chore: release 0.17.0
+[33mb5cd3e37[m fix: llm template should add generation prompt
+[33m8381dee8[m Revert "feat: load tokenizer from gguf"
+[33m3f5a2850[m feat: load tokenizer from gguf
+[33meae45356[m[33m ([m[1;33mtag: [m[1;33m0.16.0[m[33m)[m chore: release 0.16.0
+[33mdc4d69ef[m fix: vntl incorrect template
+[33m49b3e4e2[m fix: use cfg target_os in Cargo.toml
+[33m65395601[m fix: better compatiblity with windows conhost
+[33m4e2fd996[m fix: unload llm on change
+[33m626d06b1[m feat: normalize font sizes
+[33md5b8a452[m feat: predict word wrap in horizontal layout
+[33m693bf07f[m ci: add cargo tests (#89)
+[33mb8a1e71b[m fix: cpu only mode ctd and model sorting
+[33m125da9f4[m feat: add cpu only mode
+[33m9f859815[m tests: add ctd integration test
+[33mf5e5f0c1[m ci: add reviewdog
+[33m7308b929[m perf: speed up metal fft
+[33m6ce80235[m perf: batch inference for manga-ocr
+[33m8bd2eb86[m chore(deps-dev): bump @types/node from 24.10.2 to 25.0.0 (#70)
+[33mc2f7e936[m chore(deps): bump react-i18next from 15.7.4 to 16.4.1 (#71)
+[33meb45517d[m chore(deps-dev): bump @tailwindcss/postcss from 4.1.17 to 4.1.18 (#72)
+[33m5431676b[m chore(deps): bump lucide-react from 0.559.0 to 0.560.0 (#68)
+[33m50d43161[m chore(deps-dev): bump tailwindcss from 4.1.17 to 4.1.18 (#69)
+[33m9f300412[m chore: add husky & lint-staged
+[33m496bb371[m chore: make clippy happy again
+[33m0ad33751[m ci: fix linter
+[33m259e52ac[m chore: make clippy happy
+[33meee6250d[m ci: add linter
+[33m511e080a[m chore: remove unused deps
+[33m32da9bb4[m chore: switch to cudarc 0.18.2
+[33m53ba067d[m[33m ([m[1;33mtag: [m[1;33m0.15.0[m[33m)[m chore: release 0.15.0
+[33ma5eb2d04[m fix: add top level tracing and mark others as debug
+[33ma399564f[m chore: format lama code with LF
+[33mb0d3986b[m refactor: move fft to seperate files
+[33m4aa74ba7[m perf: cache cufft plan
+[33m9aca5cda[m[33m ([m[1;33mtag: [m[1;33m0.14.5[m[33m)[m chore: release 0.14.5
+[33me10c8eca[m fix: sakura-1.5b-qwen2.5-v1.0 incorrect eos_token_id
+[33m1b848334[m chore: release 0.14.4
+[33m51aeab21[m Merge branch 'main' of github.com:mayocream/koharu
+[33m2be6f044[m chore: remove unwrap
+[33m8d4a00e8[m fix: remove unused deserialize
+[33mf9ac15c0[m fix: format code and llm example
+[33mb78f8703[m fix: use templates from gguf file
+[33m2fafedce[m chore: add release script
+[33mee60acf9[m docs: update changelog
+[33m71dbaf47[m[33m ([m[1;33mtag: [m[1;33m0.14.3[m[33m)[m release: 0.14.3
+[33m01c87887[m docs: add changelog.md
+[33m62e686ba[m chore: remove release-please
+[33m80c5ce36[m chore: do not publish crates
+[33ma1799b86[m chore(ci): use release-plz
+[33mf942a383[m fix: support non-nvidia gpu on windows
+[33mca6a9f17[m chore(deps): bump zustand from 5.0.8 to 5.0.9 (#54)
+[33m67183984[m chore(deps): bump lucide-react from 0.555.0 to 0.556.0 (#53)
+[33m912b805f[m chore(deps): bump tauri from 2.9.4 to 2.9.5 (#59)
+[33m3a5baabf[m chore(deps): bump reqwest from 0.12.24 to 0.12.25 (#60)
+[33m40d74842[m chore(deps): bump i18next from 23.16.8 to 25.7.2 (#61)
+[33m7a7480f9[m chore(deps-dev): bump @types/node from 24.10.1 to 24.10.2 (#62)
+[33me7aeed89[m chore(deps): bump next from 16.0.7 to 16.0.8 (#63)
+[33mf5f6d030[m ci: add release-please
+[33m60778d60[m[33m ([m[1;33mtag: [m[1;33m0.14.2[m[33m)[m release: 0.14.2
+[33mf3039b64[m fix: llm markers close #65
+[33m3396619f[m[33m ([m[1;33mtag: [m[1;33m0.14.1[m[33m)[m release: 0.14.1
+[33m1c910d31[m fix: macos to use local data dir
+[33m8ce0bc76[m[33m ([m[1;33mtag: [m[1;33m0.14.0[m[33m)[m release: 0.14.0
+[33mf1bbd231[m feat: translate single textblock
+[33m51eb0015[m feat: delete and backspace key can delete text blocks
+[33mf52c6089[m fix: unable to add textblocks
+[33mff98cd92[m fix: llm idle i18n
+[33m5a1b50f6[m fix: menbar overlay
+[33m60c8a548[m Merge branch 'main' of github.com:mayocream/koharu
+[33m06879d60[m feat: i18n
+[33m90dd883c[m fix: try to make lfm2 output better results
+[33m9a9949f3[m fix: set progress message is not awaited
+[33m907e996b[m chore: add version to cli
+[33m4f30a524[m docs: fix broken words
+[33m5b822cf8[m[33m ([m[1;33mtag: [m[1;33m0.13.1[m[33m)[m release: 0.13.1
+[33mc4424eef[m fix: prefer to use huggingface.co since hf-mirror is unstable
+[33m9dacce75[m doc: update readme on llm
+[33m7d907a8f[m fix: lfm2 remove extra debugging code
+[33m69b15b5e[m feat: lfm2 iterration 2
+[33m5635f4f0[m chore: cleanup tracing logs
+[33m1368a800[m[33m ([m[1;33mtag: [m[1;33m0.13.0[m[33m)[m release: 0.13.0
+[33mc929422e[m feat: add experimental smaller model support
+[33mb3237f13[m feat: lfm2 iterration 1
+[33m684c1686[m fix: correct llm loading status
+[33m6fd3db63[m fix: sort llm
+[33m46158eaa[m feat: add task bar progress bar
+[33m68970b01[m[33m ([m[1;33mtag: [m[1;33m0.12.1[m[33m)[m cd: upload correct artifact
+[33m74781fe9[m cd: reduce bundled file size
+[33mfc538961[m chore: skip preloading llm models
+[33mb778fd19[m chore: add tracing logs for download
+[33mdb717125[m refactor: re-introduce koharu-core
+[33m96e60593[m release: 0.12.1
+[33m5b3128e6[m cd: create bundle archive for windows
+[33m78f84cf6[m fix: hf hub download also uses cache location
+[33me4388b31[m ci: install nvcc and upload artifacts
+[33mbfce2902[m feat: add cli mode & download only
+[33m01e2a427[m ci: speed up cuda install
+[33m369cd64a[m[33m ([m[1;33mtag: [m[1;33m0.12.0[m[33m)[m release: 0.12.0
+[33m02ce9c86[m chore: format code
+[33me82d5bc9[m fix: portable mode libs and models location
+[33m58fdc690[m fix: refine url
+[33m4cb21fd4[m fix: pypi mirror
+[33m9ddaa434[m feat: add hf mirror
+[33mfea5b3d9[m chore: format code
+[33m8ca464dc[m feat: select pypi mirror
+[33mab476788[m[33m ([m[1;33mtag: [m[1;33m0.11.0[m[33m)[m release: 0.11.0
+[33m977ff836[m chore(deps-dev): bump @tauri-apps/cli from 2.9.4 to 2.9.5 (#44)
+[33m1428dc55[m chore(deps): bump react from 19.2.0 to 19.2.1 (#47)
+[33m59656814[m chore(deps-dev): bump prettier from 3.7.3 to 3.7.4 (#45)
+[33m20bc12d5[m chore(deps): bump next from 16.0.6 to 16.0.7 (#46)
+[33mf8e302c3[m chore(deps): bump react-dom from 19.2.0 to 19.2.1 (#48)
+[33me54db7e7[m chore(deps): bump unicode-script from 0.5.7 to 0.5.8 (#50)
+[33m9dbb4009[m fix: wheels matching on Linux (#49)
+[33ma65f8feb[m chore: update deps
+[33m103874e3[m chore(deps): update objc2 and related dependencies to string format
+[33m1c56e4f7[m chore(deps-dev): bump prettier-plugin-tailwindcss from 0.7.1 to 0.7.2 (#38)
+[33m8a1907d9[m chore(deps): bump lucide-react from 0.554.0 to 0.555.0 (#33)
+[33m22c15236[m chore(deps): bump rfd from 0.15.4 to 0.16.0 (#31)
+[33m29fa659f[m chore(deps): bump reqwest-retry from 0.7.0 to 0.8.0 (#32)
+[33m8003bf8b[m chore(deps-dev): bump prettier from 3.6.2 to 3.7.3 (#39)
+[33me8a9fa49[m chore(deps): bump next from 16.0.4 to 16.0.6 (#40)
+[33m95b0e859[m chore(deps): bump @tauri-apps/api from 2.9.0 to 2.9.1 (#41)
+[33mefcffd5a[m chore(deps): bump tokenizers from 0.22.1 to 0.22.2 (#42)
+[33md5ab31c4[m chore: move sys-locale to workspace deps
+[33m8a65ee78[m fix: center compensation should always be positive
+[33m08576708[m fix: more merge errors
+[33m1e28f7d1[m fix: merge error
+[33mc47efae5[m fix: center compensation bug in vertical layout
+[33m93c86f11[m chore: code style
+[33m35e4f903[m fix: resize, batch and UI fixes
+[33m25dddf7e[m feat: use local directory if portal
+[33m83986300[m fix: only compensate on selected axis
+[33m7e5e0165[m fix: horizontal latin min fontsize limit
+[33m53068287[m fix: break on whitespace and centeralize text
+[33m13bb6d35[m fix: latin should not in vertical
+[33m15177dc7[m fix: add macOS default fonts and skip non normal variants
+[33m400e8228[m fix: vertical magic spacing
+[33m012c217c[m fix: adjust vertical layout for small glyphs
+[33ma30d525e[m fix: latin character in CJK text vertical hack
+[33m2fc5af27[m feat: auto detect font family order
+[33m8ec4d947[m fix: order font by preferred language
+[33ma788ed38[m feat: export and batch export
+[33m8d1cacf3[m feat: only inpaint mask inside boxes
+[33ma716b657[m feat: batch show status
+[33m4d6d0cef[m fix: font size bisearch fix
+[33md6b13a74[m fix: UI fixes
+[33mcc22d752[m feat: batch process
+[33mf1ab8a25[m fix: fallback to Yahei
+[33m005829c8[m fix: order llm by locale
+[33m5f870ecf[m fix: use gpu to postprocess
+[33m90d6f447[m add tracing logs
+[33m236f9231[m fix: fft precision
+[33m2b423b97[m fix: mask
+[33mcf44d268[m feat: metal fft
+[33md47b91ce[m fix: metal
+[33m20a3080e[m feat: use cufft
+[33m51755244[m add candle-nn features
+[33m017f2a75[m perf: add instruments
+[33mbb98ff42[m perf: use GPU to resize
+[33m8a9a1f30[m perf: use GPU to resize and postprocess
+[33m3d9c2bbe[m add instrument for ctd
+[33m45ca74bf[m fix: macos
+[33m0b49d622[m fix: lama
+[33m7b150bb4[m remove unused params
+[33md626018e[m remove coreml
+[33m55fab1dd[m docs: add horizontal rule in README for better section separation
+[33m072273f8[m refactor: use koharu-ml
+[33m0a4e185d[m chore: remove unused deps
+[33m220750b3[m refactor: rename models to ml
+[33me2cdf7a1[m docs: update license section in README files
+[33m55ffc943[m refactor: replace onnx with candle
+[33ma594bfc0[m refactor: replace onnx with candle
+[33m082e0b16[m improve bbox and mask handling
+[33mda1097d5[m perf: avoid cpu offload
+[33m324cd22a[m refactor: correct ctd behavor
+[33m7f10dea8[m fix: preprocess and postprocess
+[33m8a07783d[m refactor: replace onnx with candle
+[33m869a6bd0[m Revert "refactor: dbnet & unet"
+[33m8ceafdb0[m refactor: dbnet & unet
+[33mba493239[m refactor: yolov5
+[33mef89ee8e[m feat: add cudnn support
+[33m7803ba8a[m refactor: use pure FFT for lama
+[33m8bca4f63[m re-implement lama with candle
+[33m7cc49af9[m re-implement manga-ocr with candle
+[33mca8db23c[m Add dbnet and unet
+[33m209b2d74[m Add YOLOv5 impl
+[33ma33903e8[m[33m ([m[1;33mtag: [m[1;33m0.10.1[m[33m)[m release: 0.10.1
+[33mc4dcdfba[m fix: use onnxruntime-gpu when cuda enabled
+[33md6c3814d[m[33m ([m[1;33mtag: [m[1;33m0.10.0[m[33m)[m release: 0.10.0
+[33m2cbff021[m chore: move update to init phase
+[33m526d6c86[m chore: remove profile
+[33m02e419ef[m feat: dynamic loading cuda & onnxruntime
+[33m9cdfe7bc[m chore(deps-dev): bump @types/react from 19.2.6 to 19.2.7 (#29)
+[33m94493786[m chore(deps): bump next from 16.0.3 to 16.0.4 (#30)
+[33m3124ad44[m chore(ci): only draft release on ci
+[33m54cf8dc3[m docs: support metal
+[33m1855fd70[m[33m ([m[1;33mtag: [m[1;33m0.9.13[m[33m)[m release: 0.9.13
+[33me7e6d3fe[m fix: release
+[33me43af4c8[m[33m ([m[1;33mtag: [m[1;33m0.9.12[m[33m)[m release: 0.9.12
+[33m959b0bd1[m fix: ci
+[33me1c0f094[m[33m ([m[1;33mtag: [m[1;33m0.9.11[m[33m)[m release: 0.9.11
+[33m65787bae[m fix: release
+[33mee4a5bad[m fix: remove suffix
+[33mca271baf[m reorder pipeline
+[33m03d6652f[m macos code signing
+[33m8816e0cb[m feat: support coreml
+[33md7af7ac4[m fix: support macos
+[33m148bfa1b[m fix: update macOS platform tag to universal2
+[33mdd91bb76[m fix: support macos
+[33m5363dc3a[m chore(ci): setup macos
+[33md4d67a2f[m feat: support metal
+[33m4f70012b[m docs: fix link
+[33me9d56ce6[m docs: sponsorship
+[33m43459002[m[33m ([m[1;33mtag: [m[1;33m0.9.10[m[33m)[m release: 0.9.10
+[33m9f96da81[m Add detailed README files for koharu-core, koharu-models, koharu-renderer, and koharu-runtime
+[33mdb17d336[m Add Apache-2.0 for sub-crates
+[33md0a0f72a[m Revert "Add Apache License file"
+[33mb4bbd577[m Add Apache License file
+[33m89798c22[m[33m ([m[1;33mtag: [m[1;33m0.9.9[m[33m)[m release: 0.9.9
+[33mb29d2e86[m[33m ([m[1;33mtag: [m[1;33m0.9.9-alpha.2[m[33m)[m release: 0.9.9-alpha.2 (auto-update test)
+[33md4275c91[m[33m ([m[1;33mtag: [m[1;33m0.9.9-alpha.1[m[33m)[m release: 0.9.9-alpha.1
+[33m38ab31a4[m feat: auto-update
+[33mbf42787a[m[33m ([m[1;33mtag: [m[1;33m0.9.8[m[33m)[m release: 0.9.8
+[33m42870fd2[m[33m ([m[1;33mtag: [m[1;33m0.9.8-alpha.1[m[33m)[m release: 0.9.8-alpha.1
+[33m2fe9a620[m[33m ([m[1;33mtag: [m[1;33m0.9.7[m[33m)[m release: 0.9.7
+[33m00f048c8[m[33m ([m[1;33mtag: [m[1;33m0.9.6[m[33m)[m release: 0.9.6
+[33m1dc85157[m[33m ([m[1;33mtag: [m[1;33m0.9.5[m[33m)[m release: 0.9.5
+[33m42c19510[m[33m ([m[1;33mtag: [m[1;33m0.9.4[m[33m)[m release: 0.9.4
+[33mdcee290f[m fix: bundle cuda at build time
+[33m565dd8a2[m[33m ([m[1;33mtag: [m[1;33m0.9.3[m[33m)[m release: 0.9.3
+[33m0c9fc3cd[m docs: add screenshots
+[33m0e19d01e[m chore: UX improvements
+[33mdd25eb55[m feat: support English text rendering
+[33m6c8dec21[m docs: update README for clarity and consistency in feature descriptions
+[33m93dd4eed[m[33m ([m[1;33mtag: [m[1;33m0.9.2[m[33m)[m release: 0.9.2
+[33m28286db5[m fix: add --no-verify flag to cargo publish command in workflow
+[33mb9b06d5d[m[33m ([m[1;33mtag: [m[1;33m0.9.1[m[33m)[m release: 0.9.1
+[33m27280fc7[m docs: update README
+[33m7eb7f250[m chore: add Arial font to default font families in TextStyle
+[33medebb2ca[m fix: correct enum variant casing for SakuraGalTransl7Bv3_7
+[33m773362ae[m refactor: remove system prompt handling from LlmControls and store
+[33maf2fd81f[m feat: auto-prompt
+[33mf935bd3e[m feat: support SakuraLLM/Sakura-GalTransl-7B-v3.7
+[33m6a04db07[m feat: add vntl-llama3-8b-v2 support & remove Gemma3 and Qwen2.5
+[33m6b87cabb[m chore(ci): add publish workflow
+[33mb2310ae7[m chore: publish to crates.io
+[33m9fffbb86[m[33m ([m[1;33mtag: [m[1;33m0.9.0[m[33m)[m release: 0.9.0
+[33ma8f2a08b[m feat: auto font size
+[33m475dc8f9[m feat: initial implement for text redering on ui
+[33m95930575[m feat: text rendering via Rust
+[33m702efa51[m refactor: reorganize font module exports and add query method
+[33mac39540a[m chore: add cargo script to package.json
+[33m8975be92[m refactor: reorganize module imports and update dylib function calls
+[33m1de8c092[m chore(deps): bump lucide-react from 0.552.0 to 0.554.0 (#28)
+[33m1d8768e2[m chore: make clippy happy
+[33m3d14a7f8[m chore(deps): bump next from 16.0.1 to 16.0.3 (#24)
+[33m97cd9809[m chore(deps): bump clap from 4.5.52 to 4.5.53 (#25)
+[33m5ad35a87[m chore(deps): update bun package ecosystem configuration to use a single directory
+[33md06272a6[m chore(deps): add bun package ecosystem to Dependabot configuration
+[33m2f867f0a[m chore: remove unused dependencies (backon, ndarray, unicode-linebreak, rayon)
+[33mf711375c[m chore(deps): bump tauri from 2.9.2 to 2.9.3 (#22)
+[33mf115da9b[m tests: place text to corner
+[33m8cd59d88[m tests: add vertical text rendering
+[33m0cba676d[m refactor: rewrite renderer
+[33m61a09ecd[m fix: typo
+[33mb7468b29[m chore(deps): bump tauri-build from 2.5.1 to 2.5.2 (#18)
+[33m45377d22[m chore(scripts): auto-detect cuda
+[33m1ae7e49a[m chore(deps): update @tauri-apps/cli to version 2.9.4 and other dependencies
+[33mfdab2ad9[m chore(deps): bump open from 5.3.2 to 5.3.3 (#21)
+[33m2f86be75[m chore(deps): bump image from 0.25.8 to 0.25.9 (#20)
+[33m3704b32a[m chore(deps): bump clap from 4.5.51 to 4.5.52 (#19)
+[33mcbb619ce[m refactor: better stucture
+[33m7f3ee844[m refactor: remove unnecessary componetns
+[33me78a1154[m chore: remove unused unicode dependencies from Cargo.toml
+[33mae8bdd99[m tests: add test to ensure vertical feature works
+[33m48e7edeb[m feat: add vertical layout features for text shaping
+[33m259f85cc[m initial impl for renderer
+[33m584d873c[m initial impl for koharu-renderer
+[33med8b7ac1[m feat: initial impl for text block renderer
+[33m7493466f[m[33m ([m[1;33mtag: [m[1;33m0.8.0[m[33m)[m release: 0.8.0
+[33m93a97998[m refactor: use DOM-based canvas
+[33m4ce562c5[m refactor: update features section in README for clarity and consistency
+[33ma7192aba[m feat: update llmSystemPrompt for Japanese→English translation
+[33mcdabe230[m chore: enable segmentation mask and inpainted image display
+[33mbbe3a841[m feat: auto scale
+[33m7d0b0810[m fix: ui issue
+[33m8f0f1b84[m refactor: cleanup ui
+[33m172e06fa[m chore: rename koharu-app to koharu
+[33meac59503[m chore: update tool modes in Workspace and store, removing 'navigate' and 'text' options
+[33m1391da9a[m feat: add context menu for text block management in Workspace
+[33m9958ce63[m feat: implement draft block functionality for text selection in Workspace
+[33mf5844016[m feat: enhance TextBlockAnnotations with update functionality and transformer support
+[33m90808a0b[m chore: replace updateBlock with updateTextBlocks for batch updates in TextBlocksPanel
+[33mac1eeb91[m feat: add update_text_blocks command to modify text blocks in documents
+[33m686698f9[m refactor: implement accordion for text blocks in Panels component
+[33mb40d3ba1[m chore: add configuration store for detection and inpainting parameters
+[33m70e7c717[m refactor: streamline Canvas component structure and remove unused functions
+[33m8bb04f7f[m refactor: simplify MenuBar component structure
+[33m0631160a[m fix: ui layout
+[33m272b620e[m fix: scroll bar
+[33mf97c9edf[m refactor: improve UX
+[33m804958c8[m chore: remove koharu_preview script
+[33m82bfd38e[m refactor: enhance logging configuration in initialize function
+[33mb6d9cda1[m perf: download with http range
+[33mf4bddb15[m refactor: use stream for http request
+[33m4f2e43d4[m feat: add default capability configuration
+[33m0339985d[m refactor: remove error logging in setup and replace with panic
+[33mb6c7287d[m fix: update PROGRESS_WINDOW_EVENT URL to match naming convention
+[33m806b3108[m feat: add tracing events for download events
+[33m295e4ee0[m refactor: use async api
+[33m7f3deb70[m Revert "refactor: renmae koharu-app to koharu"
+[33m407f1eac[m refactor: renmae koharu-app to koharu
+[33m0bd84091[m refactor: reorganize dylib handling and update HTTP client references
+[33m3a62c726[m chore: move signing to .github
+[33m5e129e93[m feat: Implement core application structure and functionality
+[33ma39863ea[m Add koharu-models crate with implementations for comic text detection, image inpainting, LLM generation, and manga OCR
+[33m39b327e6[m Refactor koharu and koharu-runtime:
+[33m43a39c53[m refactor: simplify model load and offload commands
+[33md2968f02[m chore: clippy style
+[33m68bc706b[m chore: make clippy happy
+[33m1e2e14c6[m[33m ([m[1;33mtag: [m[1;33m0.7.6[m[33m)[m release: 0.7.6
+[33m430d1a3f[m feat: retry on failures
+[33meeb4f596[m[33m ([m[1;33mtag: [m[1;33m0.7.5[m[33m)[m release: 0.7.5
+[33me4b0c878[m fix: download while not preload
+[33m746669ee[m[33m ([m[1;33mtag: [m[1;33m0.7.4[m[33m)[m release: 0.7.4
+[33me3e2a16a[m ci: we don't need dll at bundle time
+[33m70521008[m fix: onnxruntime dynamic loading
+[33m7157186d[m fix: improve ONNX Runtime dynamic library loading conditions
+[33m79c238b2[m try to dynamic load onnxruntime
+[33m2713b30b[m chore(deps): bump dirs from 5.0.1 to 6.0.0 (#17)
+[33mea853e9b[m fix: hard-coded dylib loading order
+[33m3bcebc8d[m refactor: load dylib in data local dir
+[33mdb7986a6[m[33m ([m[1;33mtag: [m[1;33m0.7.3[m[33m)[m release: 0.7.3
+[33m17b1e4db[m fix: download cuda libs to current dir
+[33m5732504f[m Revert "feat: refactor CUDA package handling and improve dylib loading in app initialization"
+[33md442e3cd[m feat: refactor CUDA package handling and improve dylib loading in app initialization
+[33ma6a64946[m refactor: remove unused dependencies from Cargo.lock
+[33m32113f3a[m feat: update dependencies and improve CUDA integration in app initialization
+[33m26fdcc68[m refactor: speedup cuda-rt
+[33mb0591aa9[m feat: add tempfile dependency and implement tests for ensure_dylibs function
+[33m8717f476[m feat: skip if hash matches
+[33md6853c38[m refactor: replace ureq with reqwest in zip.rs and update dependencies in Cargo.toml and Cargo.lock
+[33m6c94ee1e[m refactor: replace ureq with reqwest for HTTP requests in fetch_and_extract
+[33m86683f02[m refactor: switch reqwest client to blocking for synchronous operations
+[33m23bbf0fc[m refactor: mark RecordEntry struct as unused
+[33m2dd0971f[m feat: add zip via http
+[33m234c0e97[m refactor: make it a runtime lib
+[33maa643aa0[m refactor: simplify workspace members list in Cargo.toml
+[33m81c8a99d[m docs: remove optional Python dependency from installation instructions
+[33m6a9197f4[m refactor: remove CUDA setup function from build script
+[33m0e668f86[m chore: set default workspace member to koharu
+[33m1613497f[m refactor: add cuda-rt crate
+[33m7840aa0f[m chore: enable cuda on windows by default
+[33meda89ef2[m Add progress mod
+[33m4db16186[m[33m ([m[1;33mtag: [m[1;33m0.7.2[m[33m)[m release: 0.7.2
+[33m6ef51516[m UX improvements
+[33m5d184ce0[m[33m ([m[1;33mtag: [m[1;33m0.7.1[m[33m)[m release: 0.7.1
+[33m4660d04e[m Merge branch 'main' of github.com:mayocream/koharu
+[33mbe72ff67[m chore: remove unused crate
+[33mff136554[m Revert "refactor: switch to tauri nsis"
+[33mc82d4eea[m Revert "fix: add CUDA_COMPUTE_CAP environment variable to build workflow"
+[33mfe6062ce[m Revert "ci: add code signing"
+[33m2abbd893[m Revert "fix: update artifact upload path to include all executable files"
+[33m5cbc4e9d[m Revert "ci: add updater"
+[33m213a88d4[m Revert "fix: update resource paths in tauri.windows.conf.json to specify release directory"
+[33mfd4903b8[m Revert "ci: enable bundle"
+[33mb70a7dc6[m Revert "ci: enable bundle"
+[33m88969d0e[m Set GitHub Sponsors username
+[33m6706de87[m ci: enable bundle
+[33m31c4e18b[m ci: enable bundle
+[33mae49aa6d[m fix: update resource paths in tauri.windows.conf.json to specify release directory
+[33mf12a6a4d[m ci: add updater
+[33m0aac81d1[m fix: update artifact upload path to include all executable files
+[33m8da4edef[m ci: add code signing
+[33m59b10307[m fix: add CUDA_COMPUTE_CAP environment variable to build workflow
+[33m67d1a063[m refactor: switch to tauri nsis
+[33mb2fe0803[m[33m ([m[1;33mtag: [m[1;33m0.7.0[m[33m)[m fix: disable default features of tokenizers to avoid build issue
+[33ma1b0ad28[m feat: LLM translation
+[33m32e2a095[m ci: add cuda setup to release workflow
+[33md08925f1[m fix: add missing step for MSVC development command setup
+[33md1cf241c[m fix: update CUDA_COMPUTE_CAP to 121
+[33m6d84679d[m Add CUDA_COMPUTE_CAP environment variable
+[33mf1e962c7[m ci: build cuda features
+[33m93e007e6[m fix: remove futures
+[33m6a7a2852[m chore: remove unused futures dependency from Cargo.toml
+[33maac6474b[m feat: add llm commands
+[33m9240ca1a[m feat: implement llm in koharu
+[33me3d43709[m Revert "docs: add logo to README for improved visual appeal"
+[33mb8cfe32f[m docs: add logo to README for improved visual appeal
+[33m9f05afa7[m chore: update package version to 0.7.0 and add related projects section in README
+[33m4abc8e83[m docs: enhance README with detailed features and model descriptions
+[33mf7405d27[m fix: correct model identifiers for Qwen2 and update README links
+[33m6404944a[m docs: update README for improved clarity and structure
+[33m29dd2c02[m fix: use lowercase and remove prompt from output
+[33m3a2d0782[m feat: prompt format
+[33m326fc34e[m feat: add Sakura1_5BQwen2_5_1_0
+[33m5fbd1bac[m feat: add Qwen2_5_1_5BInstruct
+[33m6438cc4c[m refactor: production-ready
+[33mc9bb0c71[m refactor: make the llm ready to use
+[33mbcf118d8[m feat: llm crate
+[33m3672c2ea[m docs: update README to include CUDA installation instructions for candle
+[33m40f79c7a[m wip: llm crate
+[33mf21ec062[m feat: add dilate and erode param
+[33mf7b71718[m fix: centralize SplashScreen
+[33md64cd79e[m[33m ([m[1;33mtag: [m[1;33m0.6.1[m[33m)[m release: 0.6.1
+[33m1b166094[m[33m ([m[1;33mtag: [m[1;33m0.6.0[m[33m)[m chore: bump version to 0.6.0
+[33m03d8857e[m Add feature flags to CI
+[33m12c0ccf3[m Implement annotations
+[33m6bbf1e78[m Implement detect, ocr, inapint api
+[33m9db6281f[m Implement scaling
+[33m2e271d64[m centralize canvas
+[33ma39f5524[m fix: canvas scollbar
+[33mb0cbaf67[m Implement canvas
+[33m69b6b228[m Add rayon
+[33mb8df66e0[m style: update splash screen text colors to pink
+[33m90c4270d[m Add AppState
+[33m3e1557dc[m docs: update README to clarify installation instructions and dependencies
+[33mdc2f1682[m refactor: make Rust the source of truth
+[33m4f18e805[m refactor: simplify image.rs
+[33mdf068e76[m refactor: replace react context with zustand
+[33mb63d6a3a[m refactor: remove update
+[33md5f3c589[m docs: update GUI framework reference from Slint to Tauri
+[33m8cebcaad[m docs: update dev steps
+[33m91ba2519[m fix: add page number to thumbnails
+[33m988c0574[m fix: thumbnails panel
+[33m786fe7e2[m Add context and pick_files
+[33mf5e90ce1[m Add commands for ui
+[33m27407a55[m chore: add params to detect
+[33m42943990[m refactor: impl state
+[33m5f90727a[m chore: remove unused lib
+[33md16fcb44[m Implement Webp
+[33m479ef075[m Implement menbar - help
+[33m31c298db[m chore: modify GHA to adapt tauri
+[33m0293296c[m refactor: setup Tauri
+[33m074a15db[m chore: stop publishing crates
+[33m08535727[m refactor: style components
+[33m7b155725[m refactor: add initial next.js
+[33mb7474369[m refactor: remove Slint
+[33mca9c8564[m release: 5.0.1
+[33mb39a5979[m  add release profile optimizations
+[33mb295f12b[m build(deps): bump clap from 4.5.50 to 4.5.51 (#15)
+[33m981079e2[m[33m ([m[1;33mtag: [m[1;33m0.5.0[m[33m)[m release: 0.5.0
+[33m38e662bc[m Add bundle flag
+[33m5de14dcc[m feat: inpaint
+[33mb1bec873[m Merge inference impl
+[33md7a7397e[m add cuda in sub crates
+[33m27d59d0c[m feat: multiresolution blending with tiled inpainting
+[33m19a52f70[m Revert "docs: rewrite README.md"
+[33me6324d98[m Revert "docs: reorganize README for clarity and remove outdated sections"
+[33md0645dea[m docs: reorganize README for clarity and remove outdated sections
+[33md38e9e2f[m docs: rewrite README.md
+[33m1edc6314[m docs: update README to clarify model downloading and ONNX conversion
+[33m0524502d[m chore: add publish workflow
+[33m43c0722b[m chore: remove unused ONNX inference script
+[33m83c92754[m chore: update deps
+[33md46969db[m docs: enhance dev and cuda part
+[33m56b4a756[m chore: add app ico
+[33m0cb2c971[m chore: apply cargo clippy
+[33m605525ff[m[33m ([m[1;33mtag: [m[1;33m0.4.0[m[33m)[m release: 0.4.0
+[33m91e9d69c[m chore: add cuda flag
+[33m063c4bd9[m feat: bundle cuda and cudnn
+[33m256a3a29[m fix: ensure Spinner is indeterminate in InProgressOverlay
+[33m74363ab4[m chore: bump version to 0.3.1
+[33mcc860c2f[m chore: rename channel to win
+[33m0801903b[m[33m ([m[1;33mtag: [m[1;33m0.3.1[m[33m)[m fix channel
+[33mcf074722[m[33m ([m[1;33mtag: [m[1;33m0.3.0[m[33m)[m release: 0.3.0
+[33m64453eaa[m only run velopack when release
+[33ma92cbfd0[m fix update logic
+[33mad4af5b7[m remove unused step
+[33mea7951f7[m[33m ([m[1;33mtag: [m[1;33m0.2.3-alpha5[m[33m)[m try to fix stuck on code signing
+[33m1cbe3600[m[33m ([m[1;33mtag: [m[1;33m0.2.4-alpha3[m[33m)[m try to fix path on ci
+[33m4c93910d[m[33m ([m[1;33mtag: [m[1;33m0.2.4-alpha2[m[33m)[m use production for env
+[33m46eea14f[m debug on main
+[33m71dacc7e[m[33m ([m[1;33mtag: [m[1;33m0.2.4-alpha1[m[33m)[m fix ci
+[33m12c88dfc[m[33m ([m[1;33mtag: [m[1;33m0.2.4-alpha[m[33m)[m use velopack to release
+[33m068e4ee3[m Add velopack
+[33m39d9443f[m docs: add dev steps
+[33meedd6eaa[m[33m ([m[1;33mtag: [m[1;33m0.2.3[m[33m)[m release: 0.2.3
+[33m14ab742b[m Add code signing
+[33me46a02c9[m[33m ([m[1;33mtag: [m[1;33m0.2.2[m[33m)[m release: 0.2.2
+[33m6aec8e90[m Add in-progress state
+[33m2a4ac500[m Add storage
+[33md1b693d6[m chore: bump version to 0.2.1
+[33m62697df6[m docs: add installation guide
+[33mdc48579f[m[33m ([m[1;33mtag: [m[1;33m0.2.1[m[33m)[m Add inpainting panel
+[33m97bbb8c2[m[33m ([m[1;33mtag: [m[1;33m0.2.0[m[33m)[m chore: add release action
+[33mdac1af89[m try dynamic-time linking
+[33m494f7c17[m build on windows
+[33m2af57504[m fix release issue
+[33mba28a1a5[m release: 0.2.0
+[33mad8af8ce[m chore: use winit with femtovg-wgpu render
+[33mb71ff6e5[m fix: images with wrong suffix not able to load
+[33m66b2cd98[m refactor: streamline operations
+[33ma6cc909a[m chore: update deps
+[33m66a20804[m Format slint files
+[33m87a26a27[m Check image null before detect
+[33mf66f97b0[m Fix ui
+[33me4c43752[m Add niubide auto scale
+[33mb2f9a885[m Fix ui layout
+[33m2486c4be[m wip
+[33me27dc113[m Add segment
+[33m05d6976f[m feat: ocr
+[33mb40dc65a[m Fix overlay position issue
+[33md59d26ef[m feat: detection
+[33m4826341f[m refactor: single page editor
+[33m61a60ddb[m Add scale control
+[33mc006598d[m Impl logic to swtich main canvas' image
+[33m8738b785[m Order images by name
+[33mf050dc01[m style: format slint features for better readability
+[33m2c0cc2b1[m enbale software-renderer-systemfonts for slint
+[33m596488dd[m chore: add rust GHA
+[33medc91bd4[m Update Dependabot configuration for Cargo and schedule
+[33m523df696[m chore: update deps
+[33m4591a9c7[m Revert "perf: improve image loading time"
+[33m914c36d4[m perf: improve image loading time
+[33m0d37a599[m Impl real logic to load images
+[33m1b3ecefe[m Impl file picker
+[33md298ace7[m Add canvas component
+[33me1e02ad1[m Adjust text size and add preview script
+[33m5bd9d2f0[m Add detection panel
+[33mf4bedfd1[m Add workflow component
+[33m0dc3519c[m Add thumbnails and placeholder
+[33m2e142fb6[m chore: separate logic into its own module
+[33mbc681985[m Refactor menu components for improved layout and styling
+[33mfefe636c[m Remove unused imports from main.slint
+[33m4d994b87[m Add about
+[33md41ada08[m Fix preferred layout
+[33m8daf4c0a[m Add menus
+[33mb12bd6f4[m Remove badges
+[33m2023886c[m Load models in koharu
+[33mb0e3244d[m remove .cargo/config.toml
+[33m8528d8ab[m chore: add alias and env to support live preview
+[33m28d26bf5[m Add koharu skeleton
+[33me66999ff[m chore: publish sub-crates
+[33mb93de9e9[m chore: bump version for sub-crates
+[33mbbd30679[m chore: bump version for 0.2.0
+[33m8e9c41fa[m chore: update deps
+[33m05153f63[m Remove GHA for Tauri
+[33mdbc614a8[m chore: update deps
+[33m859d283b[m Remove Tauri
+[33m7f7a79c3[m refactor: replace RwLock with Mutex for AppState management and move AppState to its own module
+[33m5fee9606[m refactor: rename Result type to CommandResult for consistency
+[33mbcd7f702[m refactor: add commands.rs
+[33mfe6c1ddd[m chore: update dependencies in package.json and bun.lock to latest versions
+[33mc5d90164[m fix: improve error handling in image opening function
+[33m1c0ada30[m chore: remove unused wasm-bindgen dependency from Cargo.toml
+[33m66054766[m chore: update @types/node and @types/react to latest versions
+[33m0f3e3c7a[m fix: update image handling in detection function and improve error logging
+[33mcf824f4d[m fix: update state management to useEditorStore in App component
+[33m5e23c2d8[m refactor: remove onnxruntime-web
+[33ma4a9bbea[m chore: update dependencies in package.json and bun.lock
+[33m2c6eb5d7[m add inference
+[33ma5605248[m chore: update description and windows capabilities in default.json
+[33m4bb46b67[m[33m ([m[1;33mtag: [m[1;33m0.1.11[m[33m)[m publish 0.1.11
+[33m7dd44946[m fix: correct formatting of CUDA paths in README.md
+[33m0aeeccba[m refactor: update section headers in README.md
+[33mb6db47c5[m update README.md
+[33m7a286da9[m disable macos and linux builds
+[33m11045643[m make cuda default
+[33m6c57cd80[m refactor: load cuda
+[33m5acf6a39[m initialize models in tauri
+[33m01091868[m add splashscreen
+[33m66d24ba2[m chore: update package versions to 0.1.10
+[33mb23070f6[m[33m ([m[1;33mtag: [m[1;33m0.1.10[m[33m)[m chore: update package version to 0.1.10
+[33mdf29d695[m fix: add tauri cli to root
+[33mcde92629[m feat: add cuda
+[33mfe852264[m fix: reduce app size
+[33mc33ccd1a[m chore: rename web to next
+[33m62c37fda[m chore: reduce app size
+[33m4cb3c184[m chore: update ort to rc10
+[33mc0caae19[m chore: update cargo lock
+[33m4333a697[m Revert "Reapply "say goodbye to tauri""
+[33mb3787d25[m refactor: rename selectedTool to tool in Canvas component
+[33mc3ae4e23[m refactor: rename selectedTool to tool in workflow store and related components
+[33m1bb63351[m update next dependency to version ^15.4.4
+[33m4029aeda[m remove fill color from selection rectangle in Canvas component
+[33ma46bd1f6[m remove unnecessary tools
+[33m045be165[m add indicator for text blocks
+[33md5ae5107[m switch to browser-fs-access
+[33m37369976[m fix: improve error message formatting in model initialization
+[33m22808736[m ignore onnxruntime warnings
+[33m7d0a2cda[m fix: ensure devIndicators is set to false in next.config.ts
+[33m3b825ef7[m feat: add p-limit library for limiting concurrent inference requests
+[33m4dd1479c[m refactor: remove unused settings button and related imports from Topbar component
+[33mbe7ff0bd[m chore: update dependencies in package.json
+[33me05656a5[m refactor: remove VSCode extensions configuration file
+[33mc672115a[m refactor: streamline image resizing and tensor creation in inference function
+[33m3b97fe45[m refactor: add TODO for improved error handling in model initialization
+[33mc6273dd1[m refactor: remove settings page
+[33m3871b93b[m refactor: use ImageBitmap directly
+[33me1adbd97[m refactor: move maskThreshold to inference parameters and relocate non-maximum suppression implementation
+[33me7e17457[m refactor: use ImageBitmap
+[33mc82ee194[m Revert "refactor: use Jimp"
+[33m1b2aebb2[m refactor: use Jimp
+[33maf355361[m refactor: rename util to utils
+[33maaeb76a3[m refactor: remove hooks
+[33m829a7407[m fix: remove loop
+[33m6da800d6[m fix: debug inpaint
+[33m0ef2b2ab[m fix: use webgpu
+[33m759f7d62[m fix: initialize lib before using
+[33m81ff6d09[m rename next to web
+[33m8371194b[m chore: update workspace resolver to version 3
+[33md0cac225[m Reapply "say goodbye to tauri"
+[33ma7b04c28[m chore: update onnxruntime-web to version 1.23.0-dev.20250703-7fc6235861
+[33m39ace090[m docs: add Rust version requirement to prerequisites
+[33m033d3d06[m docs: remove ONNX model references from README
+[33mc9115264[m Revert "say goodbye to tauri"
+[33m6269bea1[m refactor: consolidate image and model utility functions into a single directory
+[33m36afe7ff[m refactor: remove unused Tauri import and clean up code
+[33m04177507[m chore: update Next.js configuration and dependencies
+[33m863c9ef8[m say goodbye to tauri
+[33m2a94def7[m docs: update README to reflect technology stack and application hosting
+[33mea893ace[m refactor: remove ort and use onnxruntime-web
+[33m5d98dce0[m chore: update prettier to version 3.6.2 in package.json and bun.lock
+[33m9ecfb214[m Revert "chore: remove web deployment workflow"
+[33m4344ae4a[m chore: remove .gitattributes file
+[33mefe2579e[m chore: remove web deployment workflow
+[33m1a1464f2[m refactor: add splash screen
+[33m3db05c28[m Revert "Refactor application structure and remove unused components"
+[33mb67c72f6[m add splashscreen
+[33m44f5d894[m Refactor application structure and remove unused components
+[33mab0799f6[m chore: remove experimental directories from .gitignore
+[33m510df2c7[m chore: update dependencies in package.json files
+[33m9a5f7a68[m docs: update README to remove browser trial reference
+[33m0b1b1538[m ci: update artifact upload condition to only trigger on tag pushes
+[33m63b0fb22[m chore: bump package versions to 0.1.2
+[33m73b06aef[m[33m ([m[1;33mtag: [m[1;33m0.1.2[m[33m)[m chore: bump version to 0.1.2
+[33m1763290a[m ci: refine cuda workflow
+[33mf3fe0581[m ci: fix windows bundle
+[33m968c92ae[m ci: fix windows
+[33m816dcbc2[m Revert "ci: try to fix windows build"
+[33m11f3f672[m ci: try to fix windows build
+[33m4a73ccd9[m ci: fix windows build
+[33m2287935a[m try to fix the windows ci
+[33m45045f37[m fix: streamline Rust installation step in build workflow
+[33m31fc42e9[m fix: remove bundling step for Windows 2025 platform
+[33m7cb17f05[m fix: update condition for Windows Tauri app bundling
+[33m7b2c0f5d[m fix: fix Windows build
+[33m89d10240[m fix: place dll into root dir
+[33m58f8ce6a[m chore: remove unused setting
+[33m910e9dee[m ci: support nsis bundle
+[33maf2d684d[m fix: update jq command to use raw output for version retrieval
+[33m79161c35[m ci: update version retrieval method in build workflow
+[33m3c994c29[m chore: use version from Cargo.toml
+[33m37989411[m ci: use underscore
+[33m3e3ec59b[m ci: fix windows
+[33mc732e9b1[m[33m ([m[1;33mtag: [m[1;33m0.1.1[m[33m)[m chore: bump version to 0.1.1
+[33mdf25f5e7[m ci: add prefix for windows bundle
+[33m35af04aa[m ci: fix version
+[33m040f942a[m ci: fix windows bundle
+[33m9c8e2784[m chore: add distDir and output configuration to next.config.ts
+[33md7e42707[m ci: trigger build
+[33md590e085[m ci: test bundle
+[33m3cbcb60a[m chore: use workspace dependencies
+[33mba613cb3[m Merge branch 'main' of github.com:mayocream/koharu
+[33m5ce4cb85[m chore: update deps
+[33m2771e07a[m chore: add example for lama
+[33m8c8d3b38[m chore: add example for manga-ocr
+[33m4760ae33[m chore: format members list in Cargo.toml for consistency
+[33mbbdb0579[m refactor: use sub modules
+[33m93fec317[m chore: add example for ctd
+[33m31b311b1[m chore: add sub modules
+[33mc8e1c390[m refactor: implement caching for model downloads to improve performance
+[33m3c19aa4f[m docs: update README to include browser usage information
+[33mbb26b56b[m style: simplify function calls and improve readability in DetectionPanel and Topbar components
+[33m90751831[m chore: add icon for web
+[33mc9eef09e[m fix: check for navigator before setting wasm.numThreads
+[33m2661f4d7[m chore: add 'use client' directive to inpaint.ts
+[33ma0b18636[m perf: use multi-thread wasm
+[33m93ea2a62[m refactor: remove unused packages from Cargo.lock
+[33m6e0ac913[m refactor: remove unused projects and clean up workspace
+[33m3f0debcc[m chore: update dependencies and configuration files
+[33ma0991f25[m fix: inpaint pixel index
+[33m4641857b[m wip: add inpaint inference
+[33m4af41a08[m feat: add progress indicator to splash screen during initialization
+[33m22c3c517[m feat: store model in indexeddb
+[33m24a7057b[m chore: update dependencies to latest versions in bun.lock and package.json
+[33m4f3d6517[m refactor: remove unused output setting from Next.js configuration
+[33mfc446ed1[m refactor: simplify Next.js configuration by removing unused image settings and asset prefix
+[33m3baedc84[m refactor: update ONNX runtime import to use 'onnxruntime-web' for consistency across detection and OCR modules
+[33mf554269a[m ci: add web deployment
+[33m84dd59d7[m chore: remove splashscreen window configuration and related initialization logic
+[33m92eab6a3[m fix: correct token ID calculation in OCR inference logic for accurate text extraction
+[33m73a0753e[m refactor: optimize OCR processing logic in OCRPanel for improved text extraction
+[33ma4ed34dd[m fix: ensure canvas dimensions default to zero when image data is unavailable
+[33ma80b61b5[m wip: add ocr to web
+[33mfbcd713e[m feat: initial support of web
+[33m02e2f1e9[m Revert "refactor: update image handling in components to use imagePath instead of image for improved file management"
+[33m484aa8e6[m refactor: update image handling in components to use imagePath instead of image for improved file management
+[33ma60a2940[m style: update height handling in OCRPanel and TranslationPanel for better layout consistency
+[33mc0d1ac4f[m style: simplify button component in TranslationPanel for cleaner code
+[33mbf50a440[m refactor: streamline Canvas component by removing redundant stage reference and adding inpaint layer reference
+[33m2d737b66[m refactor: add tauri-plugin-fs for file system access and update dependencies in package.json and Cargo.lock
+[33mb9e0fad9[m refactor: remove bugy wheel event handler from Canvas component to streamline functionality
+[33m597a7f2c[m style: refine scale adjustment increments in ScaleControl for smoother user experience
+[33mdc8adb3b[m style: adjust height and overflow handling in OCRPanel and TranslationPanel for improved layout
+[33m6e58b52f[m style: update Canvas component layout for improved alignment and overflow handling
+[33ma6c74e2d[m style: increase width of Tools component and adjust layout in main application for improved usability
+[33meb05d124[m refactor: improve layout and responsiveness of main components, remove unused window size hook
+[33m8ec1e2df[m style: update SplashScreen component with new design and branding elements
+[33m4e293412[m feat: add system prompt label to TranslationPanel for improved clarity
+[33m160375b4[m chore: update API settings documentation and improve placeholder text in form inputs
+[33m1e656f03[m feat: update translation logic to use JSON format and improve response handling
+[33m6a2fcfd8[m chore: replace textarea with TextArea component in TranslationPanel for consistency
+[33m46d44579[m fix: adjust position of ScaleControl component for better visibility
+[33m9d0eb7eb[m feat: enhance OCR and Translation panels with badge indicators for text items
+[33m741abac5[m chore: conditionally render inpaint image based on selected tool
+[33m62b44ba6[m feat: add confidence and NMS threshold controls in DetectionPanel and update detect function to accept thresholds
+[33m1ecc74e6[m refactor: update inference triggers in DetectionPanel and OCRPanel, and adjust imageSrc handling in Topbar
+[33m4af1b4a7[m refactor: remove imageSrcHistory and related logic from canvas store
+[33mde0bdaec[m chore: remove unused download button from topbar
+[33m7333db00[m chore: adjust logging level for event loop runner to Error
+[33ma7a0eb3c[m feat: integrate Radix UI themes and update components
+[33md59ddd7a[m chore: remove loading spinner from splash screen
+[33m67c36acb[m chore: remove unused dependencies from Cargo.lock
+[33m6405f906[m docs: update README to include instructions for enabling CUDA acceleration
+[33me5ad5a2f[m docs: update README to include CUDA acceleration instructions and remove obsolete guidance
+[33mcf993f0a[m chore: update workspace members and add .gitattributes for language detection
+[33m1a893b98[m chore: cleanup
+[33m9848e54f[m chore: use re-upload models
+[33mf20112ea[m feat: split encoder and decoder to reuse encoder outputs for manga-ocr, close #7
+[33m16c0fcd5[m chore: remove obsolete Paperspace credentials from example env file
+[33m8ea2475f[m chore: remove obsolete Paperspace automation script
+[33m2fdf7ec8[m feat: use english for UI
+[33mfc13d80b[m feat: import react aria
+[33m0f9dd417[m chore: restructure files
+[33m1e57d9ad[m chore: improve splashscreen
+[33m14e60e42[m feat: add notification
+[33m47504af1[m chore: update deps
+[33mcad2f742[m pref: use rwlock
+[33me3794401[m fix: add thresholded for mask
+[33mb75caa63[m chore: add test batch
+[33m81eed826[m feat: parallel inpaint
+[33m15d15db9[m feat: use correct exported onnx inpaint model
+[33me47b7143[m feat: dilate segment mask
+[33m4f0ac89c[m chore: inference python scripts
+[33m3ee39030[m Revert "Colab を使用して作成されました"
+[33m7047b01c[m Colab を使用して作成されました
+[33m98646e85[m Merge branch 'main' of github.com:mayocream/koharu
+[33m32ecf9d2[m chore: rename model_path to model in CLI arguments for consistency
+[33m2b8eea80[m zoom towards cursor position on scroll
+[33m9afaf0b3[m Revert "chore: set default feature to CUDA in Cargo.toml"
+[33me1796fd1[m chore: set default feature to CUDA in Cargo.toml
+[33mfa63522f[m chore: move execution provider initialization to main function
+[33medc2ada6[m refactor: remove unused execution providers from model initialization
+[33mfc6ee3ad[m docs: add CUDA acceleration feature instructions to README
+[33m35ab2748[m feat: add logging support and update run function to return a result
+[33mb2412c7a[m docs: add instructions for creating a debug build in README
+[33m1ef16efe[m docs: add Tauri prerequisites installation instructions to README
+[33m8c267b85[m docs: update workflow steps and model references in README
+[33m58f9df50[m chore: cleanup lama inference code
+[33m3e454ae2[m refactor: extract canvas logic into hooks and utils
+[33me8b926b1[m centering the image when opening a new file
+[33mb3330088[m fix: canvas not automatically updated after inpaint operation
+[33m7a824652[m chore: switch to a generic dotenv file (#4)
+[33m0204a5d6[m feat: implement image resizing with padding and add revert functionality
+[33mfe60a2d8[m fix: update model path in CLI and add BallonsTranslator to .gitignore
+[33m40801c4e[m fix: update model path and optimize mask value extraction
+[33m01cc760e[m feat: free-draggable canvas layout with floating toolbars
+[33md13f2a12[m fix: Prevent operations from previous file continuing on new file open
+[33m07716e9b[m fix: use for-await-of to handle asynchronous text processing in inpainting
+[33m63e49d1a[m add inpaint
+[33m0debdffe[m move prettier to root
+[33m5c4724e7[m feat: scroll mouse wheel to zoom the canvas
+[33m7dc329ee[m add segment tool highlight
+[33m4ae2fd66[m feat: add lama
+[33m434c249f[m docs: add LaMa inpainting model to the models section of README
+[33mf192ce2f[m fix the minor error
+[33m8ca30a94[m fix: update mask interpretation logic for inpainting areas
+[33m89ebf366[m fix mask png and add more examples
+[33m19440203[m add lama
+[33m879cd0cb[m fix: handle null segmentData in Canvas and clear segment on new image load in Topbar
+[33m6aefd2d0[m feat: add segmentation functionality and update state management
+[33m137f4830[m add segment
+[33m7e3e7832[m fix: update README to correct bundle size from less than 10MB to less than 20MB
+[33me2cc9cba[m chore: remove unused useRef import in canvas component
+[33mc6686ab2[m improve UI
+[33me9296f00[m Merge branch 'main' of github.com:mayocream/koharu
+[33mdbff208f[m test: add mask processing and saving functionality in main.rs
+[33m598c2959[m fix: canvas cannot be fully displayed when scrollbar is scrolled to the bottom
+[33mc5c1d31c[m docs: add Discord support note and fix punctuation in development status note
+[33me0d5e3e0[m fix: right panel scrollbar
+[33mefc51148[m[33m ([m[1;33mtag: [m[1;33mv0.1.1[m[33m)[m ci: add tag trigger for versioned releases in build workflow
+[33mc97b9dc2[m docs: add note about development status and issue reporting in README.md
+[33mca0c16ec[m fix: remove unnecessary blank line in README.md
+[33m475be6c0[m ci: update publish workflow to trigger on version tags only
+[33mba83bd42[m add publish crate ci
+[33mcfe146cd[m ci: update macOS and Windows platform specifications in build configuration
+[33m8965151c[m feat: add CUDA feature support for ort dependency and update build configuration
+[33m83ffeba9[m fix: redetect when switch tools, settings
+[33m223753a3[m feat: trigger OCR automatically when detect complete
+[33m94690ee2[m chore: add "prettier-plugin-tailwindcss" and format
+[33m70ce9220[m improve orc-panel edit mode
+[33mcb823248[m fix: stream translate missing last piece
+[33m5ea3746a[m feat: OCR text editable
+[33m1452f8e5[m Merge branch 'main' of github.com:mayocream/koharu
+[33mee1cea35[m chore: auto-trigger inference when imageSrc changes
+[33mc0aea96f[m feat: translate text using stream mode
+[33m54ea3099[m format code
+[33md6490956[m feat: use GPU acceleration when available
+[33m9fd25f0a[m feat: highlight selected text item
+[33mbf53a1b7[m modify dev server port
+[33m0fe36159[m chore: rename job from publish-tauri to build-tauri in workflow
+[33m2edcd4e4[m ci: add workflow for PR
+[33m7f2220d8[m Merge branch 'main' of github.com:mayocream/koharu
+[33m4c8c8df7[m add `Noto_Sans_SC`
+[33mb17e8b48[m improve layout
+[33mdb094e03[m Revert "reduce app size"
+[33m8c945ea5[m reduce app size
+[33m6ddf653a[m adjust global scrollbar style
+[33m843b0acf[m refactor: use available parallelism for intra-threads in model sessions
+[33m87e91c14[m set tauri window height
+[33mcd343a60[m set tauri window width and height
+[33m580b3f36[m chore: update README and configuration for Windows setup and Tauri CLI dependencies
+[33m58d1b676[m add steps for dev build
+[33m937ece39[m fix: specify shell for artifact processing step in release workflow
+[33m5a642972[m fix: refactor artifact upload step to improve handling of paths
+[33m33c04e3c[m fix: update artifact paths formatting for GitHub release upload
+[33m7e3d378c[m fix: correct JSON parsing for artifact paths in release workflow
+[33m1bd14164[m ci: upload portable executable
+[33m81de1af4[m trigger build
+[33mb12e77d3[m ci: add rust cache
+[33m2251307b[m[33m ([m[1;33mtag: [m[1;33mv0.1.0[m[33m)[m revive bundle
+[33mbb97f8e7[m format with prettier
+[33m99bbdf8f[m rm output.png
+[33m488c6884[m chore: tauri just output the executable file
+[33m5e8b6aa9[m docs: update workflow section to use checklist format
+[33m16a27047[m docs: update README with preview section and download instructions
+[33mb3337806[m add images
+[33m833ea448[m fuck csp
+[33m67193fe7[m fuck csp
+[33m1043790b[m add openai
+[33m50f80024[m chore: add prettier
+[33m11e11db7[m fix: add max height and overflow to OCR panel for better layout
+[33m727e836d[m feat: order bboxes
+[33m4dacfa5a[m fix: ocr results got cutted
+[33m79b902b8[m fix: display detected texts in detection and OCR panels
+[33mc7cc88eb[m add ocr
+[33mbdc6ccd8[m rename blocks to texts
+[33m3426a345[m fix: clears blocks only when new image loaded
+[33m3f3bd910[m add resize
+[33m5f949f1b[m chore: update dependencies to latest versions
+[33mab5c4b13[m add manga-ocr to tauri
+[33m897f7afe[m feat: enhance canvas and detection panel with loading state and reset functionality
+[33mc439ef07[m feat: add blocks state management and render rectangles in canvas
+[33m7bd47397[m refactor: use konva-react
+[33m4a0b947a[m fix panic
+[33m0c7d25be[m feat: implement comic text detection and update dependencies
+[33m9070f43c[m feat: add comic text detection functionality and update dependencies
+[33m4122edba[m add splashscreen
+[33m5d226c38[m fix: simplify ort dependency declaration by removing unnecessary features
+[33m1a8356a1[m refactor: update tool selection and improve topbar icon imports
+[33m10b47afc[m fix: ensure stage size is set correctly to match image dimensions
+[33m140020d9[m remove storage for now
+[33m582ead82[m feat: add scale control
+[33m9aca40f5[m refactor: improve scale control component structure and functionality
+[33m6b7a196e[m add a placeholder scale control
+[33m1b340a91[m fix: ensure file selection is validated before processing in Topbar component
+[33m1f68c491[m fix typo
+[33ma523c083[m update README.md to enhance project description and clarify workflow steps
+[33m2ca5d287[m add missing dependency
+[33m5e7c781f[m fix build step
+[33m5829320e[m add build step
+[33m413a7809[m Create release.yaml
+[33mc1aee01a[m fix image loaded
+[33mc951c5f5[m migrate from Vite to Next.js
+[33me4e4352e[m wip
+[33mf977deaa[m replace react-konva with pure konva
+[33m120d876a[m feat: add Tauri plugins for store and persisted scope, update dependencies in Cargo and package files
+[33m1d546780[m feat: enhance canvas layout and improve image handling in Topbar component
+[33m41d02fb4[m fix: move stageRef.current.destroyChildren() call to ensure proper cleanup before loading new image
+[33m771255e3[m feat: add Tauri plugins for dialog and logging, enhance canvas functionality, and improve app structure
+[33ma11dde12[m use swc
+[33m0aca2a15[m feat: integrate react-konva for canvas rendering in App component
+[33md9b5ff18[m feat: add layout components and tools for layer management
+[33me9ad2cf0[m fix: add missing description for manga-ocr model in README
+[33m8e769022[m fix typo
+[33m13f4d15f[m add manga-ocr
+[33m05d65f93[m chore: reorganize README structure and add models section
+[33m31770126[m move notebook to traning
+[33ma9180ab7[m fix: update gdown command to use placeholder for ID
+[33m51762162[m feat: enhance image processing with configurable thresholds and bounding box drawing
+[33m96692b5e[m feat: add image processing and object detection functionality to comic-text-detector
+[33m6a6b2464[m feat: update dependencies and enhance model session handling in main.rs
+[33m7aba290a[m feat: implement main functionality for comic-text-detector and update dependencies
+[33me4d3fed0[m rename yolov8
+[33m5c0b8c04[m add GNU General Public License version 3 to the project
+[33m155addec[m feat: add comic-text-detector package with initial implementation
+[33mf6eab139[m fix: correct model import in main.rs
+[33m8dcc60c1[m Add Roboto Mono font file to the project
+[33mf896aa11[m refactor: update project structure and dependencies
+[33maced59d9[m refactor: remove execution output from validation cell in detection notebook
+[33m2ff157b3[m feat: simplify manga109 to YOLO conversion by removing book selection and updating class mapping
+[33m98f31a0c[m feat: add script to download Blue Archive comics with asynchronous requests
+[33m021eeb3e[m feat: enhance manga109 to YOLO conversion with 80/20 train/val split and YAML config
+[33madf207e6[m feat: add Puppeteer script for Paperspace login and notebook access
+[33maf44ec49[m feat: add detection notebook for dataset preparation and training with YOLO
+[33m85b28aa9[m feat: add manga109 to YOLO conversion script
+[33m09a9301f[m chore: update @types/react and vite to latest versions
+[33m46ba6aa8[m add icons
+[33mf6b6f697[m chore: update dependencies to specific versions in bun.lock
+[33mb3ab7571[m feat: initialize Tauri + React application with basic greeting functionality
+[33mdf3093cc[m Initial commit

@@ -134,6 +134,19 @@ function TypeInspector() {
   const page = usePage().data
   const selectedIds = useKoharuStore((state) => state.selectedLayers)
   const availableFonts = useFonts().data
+
+  const storeState = useKoharuStore((state: any) => state)
+  const config = storeState.config || storeState.preferences
+  const typesetting = config?.typesetting
+
+  const forcedBlackText = typesetting?.force_black_text
+  const forcedBorderWidth = typesetting?.force_border_width
+  const forcedFontWeight = typesetting?.force_font_weight
+
+  const isColorForced = !!forcedBlackText
+  const isBorderForced = forcedBorderWidth !== undefined && forcedBorderWidth !== null
+  const isWeightForced = forcedFontWeight !== undefined && forcedFontWeight !== null
+
   const expandedSelection = page ? expandLayerSelection(page.layers, selectedIds) : []
   const selected =
     page?.layers.filter(isTextLayer).filter((layer) => expandedSelection.includes(layer.id)) ?? []
@@ -218,12 +231,12 @@ function TypeInspector() {
               }}
             />
           </InspectorField>
-          <InspectorField label={t('inspector.color')}>
+          <InspectorField label={t('inspector.color')} forced={isColorForced}>
             <ColorWell
               label={t('inspector.textColor')}
               size='sm'
-              disabled={disabled}
-              value={rgbaToHex(typography.color ?? defaultTypography.color!)}
+              disabled={disabled || isColorForced}
+              value={isColorForced ? '#000000' : rgbaToHex(typography.color ?? defaultTypography.color!)}
               onChange={(color) => apply((value) => ({ ...value, color: hexToRgba(color) }))}
             />
           </InspectorField>
@@ -245,10 +258,10 @@ function TypeInspector() {
               }
             />
           </InspectorField>
-          <InspectorField label={t('inspector.weight')}>
+          <InspectorField label={t('inspector.weight')} forced={isWeightForced}>
             <Select
-              disabled={disabled}
-              value={String(weight)}
+              disabled={disabled || isWeightForced}
+              value={isWeightForced ? String(forcedFontWeight) : String(weight)}
               onValueChange={(font_weight) =>
                 apply((value) => ({
                   ...value,
@@ -401,13 +414,13 @@ function TypeInspector() {
               }}
             />
           </InspectorField>
-          <InspectorField label={t('inspector.width')}>
+          <InspectorField label={t('inspector.width')} forced={isBorderForced}>
             <NumberField
               id={borderWidthId}
               name='border-width'
               className='min-w-0'
-              disabled={disabled}
-              value={displayedStrokeWidth}
+              disabled={disabled || isBorderForced}
+              value={isBorderForced ? forcedBorderWidth : displayedStrokeWidth}
               min={0.5}
               max={32}
               step={0.5}
@@ -878,12 +891,30 @@ function LayerEditor({ layer, onDelete }: { layer: Layer; onDelete?: () => void 
   )
 }
 
-function InspectorField({ label, children }: { label: string; children: React.ReactNode }) {
+function InspectorField({
+  label,
+  forced,
+  children,
+}: {
+  label: string
+  forced?: boolean
+  children: React.ReactNode
+}) {
   return (
     <div className='grid min-w-0 gap-0.5'>
-      <span className='text-[8px] font-medium tracking-[0.06em] text-muted-foreground uppercase'>
-        {label}
-      </span>
+      <div className='flex items-center gap-1.5'>
+        <span className='truncate text-[8px] font-medium tracking-[0.06em] text-muted-foreground uppercase'>
+          {label}
+        </span>
+        {forced && (
+          <div
+            className='relative flex size-2.5 shrink-0 items-center justify-center overflow-hidden rounded-[1px] border border-muted-foreground/40 bg-transparent'
+            title='Overridden by global setting'
+          >
+            <div className='absolute h-[0.5px] w-[120%] -rotate-45 bg-muted-foreground/40' />
+          </div>
+        )}
+      </div>
       {children}
     </div>
   )
