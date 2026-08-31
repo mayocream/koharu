@@ -15,9 +15,27 @@ Thank you for helping improve Koharu. Contributions of every size are welcome, i
 
 ## Plan the change
 
-Keep each pull request focused on one problem. Open an issue before starting a large behavior or architecture change so the direction can be discussed early.
+Small bug fixes, documentation improvements, tests, and other focused changes can usually be submitted directly. Keep each pull request focused on one problem.
+
+Before implementing a new product feature, significant UI change, new model or provider, platform integration, dependency, public API, schema change, or architectural refactor, open an issue and discuss the problem and proposed direction with the maintainers. We would rather discuss an idea early than have you spend time on work Koharu cannot sustainably adopt.
+
+An open issue, feature request, or working implementation is not a promise that a change will be accepted. Agreement on a direction also does not guarantee that every implementation will be merged.
 
 The README of an affected crate can provide useful context about that component's responsibilities.
+
+## How features are evaluated
+
+Maintainers consider:
+
+- alignment with Koharu's product direction;
+- value to users and whether the use case is sufficiently broad;
+- effects on UX, architecture, performance, security, privacy, and platform support;
+- testing, documentation, dependencies, and operational complexity;
+- whether the maintainers can support the feature over the long term.
+
+Maintainers may decline or postpone a feature, request a smaller scope, prefer another design, or suggest that it remain outside the core project. This is not a judgment of the effort put into the proposal.
+
+Once a change is merged, its maintenance becomes the project's responsibility. A contributor's willingness to continue helping is valuable, but Koharu must still be able to own the feature if that availability changes.
 
 ## Follow Koharu's project rules
 
@@ -50,6 +68,20 @@ Review is a conversation. Maintainers may suggest revisions or a smaller scope, 
 
 ## AI-assisted contributions
 
-AI tools may be used to assist development. Please understand, review, and test everything you submit, and adapt generated material to Koharu's codebase and conventions. You should be able to explain the change and the evidence that supports it.
+AI tools may assist development or communication, but a human contributor must remain the author and owner of every submission.
+
+If AI substantially helped design or implement a change, disclose the extent and purpose of that assistance in the pull request description. Routine code completion, grammar correction, and translation do not need detailed disclosure.
+
+Do not submit autonomous or unreviewed issues, pull requests, review comments, or security reports. Before submitting, you must:
+
+- personally review the complete diff;
+- verify generated claims against the code and reproduce reported problems;
+- understand and be able to explain every change and its important edge cases;
+- be able to revise the implementation in response to review;
+- provide the same relevant tests and evidence expected from any other contribution.
+
+Treat generated output as a draft, not as evidence or a finished contribution. The substance of the pull request description and responses to maintainers must reflect your own understanding.
+
+Maintainers may close a submission without detailed review when it appears unreviewed, contains speculative or fabricated claims, cannot be explained or revised by its contributor, or requires substantially more review effort than the value it offers. If you are unsure whether your use of an AI tool is appropriate, ask before submitting.
 
 Next, set up the checkout with [Development setup](/development/setup/).
