@@ -15,7 +15,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "v0.3.0";
+const RELEASE: &str = "b10690";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Llama {
