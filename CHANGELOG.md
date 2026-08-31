@@ -1,3 +1,14 @@
+## [0.80.0](https://github.com/koharu-rs/koharu/compare/0.79.5..0.80.0) - 2026-08-31
+
+### ⛰️  Features
+
+- *(llama)* Sync utilityai wrapper changes - ([5b4b9b8](https://github.com/koharu-rs/koharu/commit/5b4b9b8e862e06b7a1e9e4d2bef383fe2b2f63c5))
+
+### 📚 Documentation
+
+- Improve contribution guidelines - ([971fed9](https://github.com/koharu-rs/koharu/commit/971fed9c16bf712d5bb1ddf9e46abaf67a018dfb))
+
+
 ## [0.79.5](https://github.com/koharu-rs/koharu/compare/0.79.4..0.79.5) - 2026-08-31
 
 ### 🐛 Bug Fixes
