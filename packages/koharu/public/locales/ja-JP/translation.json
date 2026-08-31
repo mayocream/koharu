@@ -460,7 +460,22 @@
       "loadError": "フォントを読み込めませんでした。既存のファミリーは削除できます。",
       "loadingFonts": "フォントを読み込み中…",
       "removeFamily": "{{family}}を削除",
-      "title": "組版"
+      "title": "組版",
+
+      "overrides": {
+      "title": "Global Overrides",
+      "description": "Force specific typography settings across all text layers.",
+      "fontColor": "Font Color",
+      "fontColorDescription": "Override the typography color with solid black.",
+      "borderWidth": "Font Border Width",
+      "borderWidthDescription": "Override the automatically detected stroke width.",
+      "fontWeight": "Font Weight",
+      "fontWeightDescription": "Override the font thickness globally.",
+      "forceBlack": "Force Black",
+      "revertAuto": "Revert to Auto",
+      "override": "Override",
+      "revert": "Revert"
+      }
     }
   },
   "start": {
