@@ -169,15 +169,23 @@ impl<'a> Parser<'a> {
     ///
     /// Models routinely leave quotes inside a value unescaped, as in
     /// `"that's "kindness.""`. A quote glued to more text cannot be the end of
-    /// the value, so it is kept as content. Whitespace still ends the string,
-    /// which leaves two adjacent strings with a missing comma parsing as two
-    /// strings rather than one run-on.
+    /// the value, so it is kept as content, and whitespace or a delimiter still
+    /// ends it.
+    ///
+    /// A second quote is the ambiguous case: `"a""b"` is either one value
+    /// holding quotes or two values that lost their comma. It is resolved by
+    /// what follows the pair. A value starting there means this quote closes
+    /// and only the comma was lost, so the two stay separate; anything else
+    /// means the pair sits inside the value and the later quote closes it.
     fn closes_string(&self) -> bool {
         match self.peek() {
             None => true,
-            Some(character) => {
-                character.is_whitespace() || matches!(character, ',' | '}' | ']' | ':')
-            }
+            Some('"') => self
+                .remaining()
+                .chars()
+                .nth(1)
+                .is_some_and(|following| !ends_value(following)),
+            Some(character) => ends_value(character),
         }
     }
 
@@ -331,6 +339,11 @@ impl<'a> Parser<'a> {
     }
 }
 
+/// Whether a value cannot continue past this character.
+fn ends_value(character: char) -> bool {
+    character.is_whitespace() || matches!(character, ',' | '}' | ']' | ':')
+}
+
 fn quote_end(character: char) -> Option<char> {
     match character {
         '"' | '\'' | '`' => Some(character),
@@ -433,12 +446,25 @@ mod tests {
         );
     }
 
+    /// `"a""b"` is ambiguous: one value holding quotes, or two that lost their
+    /// comma. What follows the pair decides, so healing a value cannot silently
+    /// merge two of them.
+    #[test]
+    fn resolves_a_quote_pair_by_what_follows_it() {
+        let separate = from_str::<Output>("{\"translations\":[\"hello\"\"world\"]}").unwrap();
+        assert_eq!(separate.translations, ["hello", "world"]);
+
+        let joined = from_str::<Output>("{\"translations\":[\"that's \"kindness.\"\"]}").unwrap();
+        assert_eq!(joined.translations, ["that's \"kindness.\""]);
+    }
+
     #[test]
     fn repairs_relaxed_syntax() {
         for input in [
             r#"{translations: ['hello', 'world'],}"#,
             r#"{“translations”: [“hello”, “world”]}"#,
             "{translations: [\"hello\" \"world\"]}",
+            "{translations: [\"hello\"\"world\"]}",
             "{translations: [\"hello\", /* later */ \"world\",]}",
         ] {
             assert_eq!(from_str::<Output>(input).unwrap(), expected());
