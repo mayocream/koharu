@@ -46,19 +46,19 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 
 ## Hardware Acceleration
 
-Koharu supports GPU acceleration with CUDA and ROCm / HIP on Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux. [Runtime and hardware requirements](https://koharu.rs/getting-started/runtime-models-and-hardware/) vary by backend and operating system.
+Koharu supports CUDA and ROCm / HIP on Windows and Linux, Metal on Apple silicon, and Vulkan on Windows and Linux. Keep your graphics driver current; a full CUDA or ROCm SDK installation is not required. See [Runtime and hardware requirements](https://koharu.rs/getting-started/runtime-models-and-hardware/) for model-specific guidance.
 
 ### CUDA
 
-The CUDA backend targets CUDA 13.0 on Windows and Linux. Make sure to install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/). [CUDA 13.0 requires R580 or newer](https://docs.nvidia.com/cuda/archive/13.0.0/cuda-toolkit-release-notes/index.html#cuda-driver).
+CUDA 13.0 requires an NVIDIA Turing-class or newer GPU and an R580 or newer driver. Check NVIDIA's official [CUDA toolkit, driver, and architecture matrix](https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html) and install the [latest NVIDIA driver](https://www.nvidia.com/en-us/drivers/).
 
 ### ROCm / HIP
 
-ROCm / HIP is available for AMD GPUs on Windows and Linux. Make sure to install the [latest AMD driver](https://www.amd.com/en/support).
+ROCm 10.0 support depends on the exact AMD GPU, operating system, and driver combination. Check AMD's official [ROCm 10.0.0 compatibility matrix](https://rocm.docs.amd.com/en/docs-10.0.0/compatibility/compatibility-matrix.html) and install a compatible [AMD driver](https://www.amd.com/en/support).
 
 ### Metal
 
-Metal is used on Apple silicon Macs.
+Metal is available on Apple silicon Macs.
 
 ### Vulkan
 
@@ -66,11 +66,11 @@ Vulkan is available on Windows and Linux as an alternative to CUDA and ROCm / HI
 
 ### WebGPU
 
-The editor canvas uses WebGPU inside the embedded CEF webview. WebGPU requires a current graphics driver even when inference runs on the CPU.
+The editor canvas uses WebGPU and requires a current graphics driver even when inference runs on the CPU.
 
 ### CPU
 
-Koharu uses the CPU when no accelerator is available or initialization fails. No GPU SDK is required, but inference is slower.
+CPU inference is available for supported workloads but is substantially slower.
 
 ## Machine Learning Models
 
