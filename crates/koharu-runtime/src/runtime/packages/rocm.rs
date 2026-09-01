@@ -283,28 +283,26 @@ impl Rocm {
             .is_file();
         #[cfg(target_os = "linux")]
         let device_library = {
-            let target = self.to_string();
             let root = path.join("_rocm_sdk_libraries/lib/rocblas/library");
-            let target_root = root.join(&target);
-            let prefix = format!("Kernels.so-000-{target}");
-            let mut exists = false;
-            'search: for directory in [&root, &target_root] {
-                let Ok(entries) = std::fs::read_dir(directory) else {
-                    continue;
-                };
-                for entry in entries.flatten() {
-                    let name = entry.file_name();
-                    let name = name.to_string_lossy();
-                    if entry.path().is_file()
-                        && name.starts_with(&prefix)
-                        && name.ends_with(".hsaco")
-                    {
-                        exists = true;
-                        break 'search;
-                    }
+            match self {
+                Self::Gfx90a => {
+                    let root = root.join("gfx90a");
+                    root.join("Kernels.so-000-gfx90a-xnack+.hsaco").is_file()
+                        && root.join("Kernels.so-000-gfx90a-xnack-.hsaco").is_file()
                 }
+                Self::Gfx908
+                | Self::Gfx942
+                | Self::Gfx950
+                | Self::Gfx1150
+                | Self::Gfx1151
+                | Self::Gfx1152
+                | Self::Gfx1153
+                | Self::Gfx1250 => root
+                    .join(self.to_string())
+                    .join(format!("Kernels.so-000-{self}.hsaco"))
+                    .is_file(),
+                _ => root.join(format!("Kernels.so-000-{self}.hsaco")).is_file(),
             }
-            exists
         };
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         let device_library = false;
