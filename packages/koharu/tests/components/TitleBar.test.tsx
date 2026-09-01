@@ -56,7 +56,7 @@ describe('text import and export menu actions', () => {
   it('groups import actions under Import Text', () => {
     openFileMenu()
 
-    fireEvent.click(screen.getByText('Import Text'))
+    fireEvent.click(screen.getByText('Import Text…'))
     fireEvent.click(screen.getByText('Source Texts'))
 
     expect(mocks.call).toHaveBeenCalledWith(commandMocks.importTexts, 'source')
@@ -65,7 +65,7 @@ describe('text import and export menu actions', () => {
   it('exports all source texts', () => {
     openFileMenu()
 
-    fireEvent.click(screen.getByText('Export Text'))
+    fireEvent.click(screen.getByText('Export Text…'))
     fireEvent.click(screen.getByText('Source Texts'))
 
     expect(mocks.call).toHaveBeenCalledWith(commandMocks.exportTexts, [], 'source')
@@ -74,7 +74,7 @@ describe('text import and export menu actions', () => {
   it('exports all translations', () => {
     openFileMenu()
 
-    fireEvent.click(screen.getByText('Export Text'))
+    fireEvent.click(screen.getByText('Export Text…'))
     fireEvent.click(screen.getByText('Translations'))
 
     expect(mocks.call).toHaveBeenCalledWith(commandMocks.exportTexts, [], 'translation')
