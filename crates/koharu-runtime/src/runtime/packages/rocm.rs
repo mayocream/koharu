@@ -196,26 +196,6 @@ pub(crate) enum Rocm {
     Gfx1250,
 }
 
-#[cfg(target_os = "linux")]
-fn linux_device_library_exists(path: &Path, target: &str) -> bool {
-    let root = path.join("_rocm_sdk_libraries/lib/rocblas/library");
-    let target_root = root.join(target);
-    let prefix = format!("Kernels.so-000-{target}");
-    for directory in [&root, &target_root] {
-        let Ok(entries) = std::fs::read_dir(directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            if entry.path().is_file() && name.starts_with(&prefix) && name.ends_with(".hsaco") {
-                return true;
-            }
-        }
-    }
-    false
-}
-
 impl Rocm {
     pub(crate) fn discover(hardware: &Hardware) -> Result<Self> {
         hardware
@@ -302,7 +282,30 @@ impl Rocm {
             .join(format!("blas_lib_{self}.kpack"))
             .is_file();
         #[cfg(target_os = "linux")]
-        let device_library = linux_device_library_exists(path, &self.to_string());
+        let device_library = {
+            let target = self.to_string();
+            let root = path.join("_rocm_sdk_libraries/lib/rocblas/library");
+            let target_root = root.join(&target);
+            let prefix = format!("Kernels.so-000-{target}");
+            let mut exists = false;
+            'search: for directory in [&root, &target_root] {
+                let Ok(entries) = std::fs::read_dir(directory) else {
+                    continue;
+                };
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    if entry.path().is_file()
+                        && name.starts_with(&prefix)
+                        && name.ends_with(".hsaco")
+                    {
+                        exists = true;
+                        break 'search;
+                    }
+                }
+            }
+            exists
+        };
         #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         let device_library = false;
         Library::iter().all(|library| path.join(library.to_string()).is_file()) && device_library
