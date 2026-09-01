@@ -1,18 +1,16 @@
+use anyhow::{Context, Result, anyhow};
+use base64::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::Mutex;
-use serde::{Deserialize, Serialize};
-use anyhow::{anyhow, Context, Result};
-use base64::prelude::*;
+use tokio::sync::{Mutex, mpsc};
 
 use async_trait::async_trait;
-use koharu_pipeline::{Pipeline, Request, Operation, Stage, RunStatus};
-use koharu_scene::{
-    Session, PageDraft, AssetRole, AssetInput, AssetMetadata
-};
+use koharu_pipeline::{Operation, Pipeline, Request, RunStatus, Stage};
+use koharu_rasterizer::{RasterOptions, Rasterizer};
 use koharu_renderer::Renderer;
-use koharu_rasterizer::{Rasterizer, RasterOptions};
+use koharu_scene::{AssetInput, AssetMetadata, AssetRole, PageDraft, Session};
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "action", content = "payload")]
@@ -100,7 +98,9 @@ async fn main() -> Result<()> {
     let home_dir = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_owned());
-    let log_path = std::path::PathBuf::from(home_dir).join(".koharu").join("native-host.log");
+    let log_path = std::path::PathBuf::from(home_dir)
+        .join(".koharu")
+        .join("native-host.log");
     std::fs::create_dir_all(log_path.parent().unwrap()).ok();
     let log_file = std::fs::File::create(log_path)?;
 
@@ -162,31 +162,38 @@ async fn main() -> Result<()> {
     });
 
     let mut stdin = tokio::io::stdin();
-    let mut stdout = tokio::io::stdout();
+
+    let (responses, mut outbound) = mpsc::unbounded_channel::<ExtensionResponse>();
+    let writer = tokio::spawn(async move {
+        let mut stdout = tokio::io::stdout();
+        while let Some(response) = outbound.recv().await {
+            let bytes = match serde_json::to_vec(&response) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to serialize response");
+                    continue;
+                }
+            };
+            if let Err(e) = write_frame(&mut stdout, &bytes).await {
+                tracing::error!(error = %e, "Failed to write response frame");
+                break;
+            }
+        }
+    });
 
     loop {
         match read_frame(&mut stdin).await {
             Ok(Some(frame)) => {
                 let state_clone = state.clone();
-                let request: Result<ExtensionRequest, serde_json::Error> = serde_json::from_slice(&frame);
+                let request: Result<ExtensionRequest, serde_json::Error> =
+                    serde_json::from_slice(&frame);
                 match request {
-                    Ok(req) => {
-                        let responses = handle_request(state_clone, req).await;
-                        for response in responses {
-                            let response_bytes = serde_json::to_vec(&response)?;
-                            if let Err(e) = write_frame(&mut stdout, &response_bytes).await {
-                                tracing::error!(error = %e, "Failed to write response frame");
-                                break;
-                            }
-                        }
-                    }
+                    Ok(req) => handle_request(state_clone, req, &responses).await,
                     Err(e) => {
-                        let err_resp = ExtensionResponse::Error {
+                        let _ = responses.send(ExtensionResponse::Error {
                             transfer_id: None,
                             message: format!("Failed to parse request JSON: {}", e),
-                        };
-                        let bytes = serde_json::to_vec(&err_resp)?;
-                        let _ = write_frame(&mut stdout, &bytes).await;
+                        });
                     }
                 }
             }
@@ -201,62 +208,124 @@ async fn main() -> Result<()> {
         }
     }
 
+    drop(responses);
+    let _ = writer.await;
+
     Ok(())
 }
 
-async fn handle_request(state: Arc<AppState>, request: ExtensionRequest) -> Vec<ExtensionResponse> {
+type Responses = mpsc::UnboundedSender<ExtensionResponse>;
+
+async fn handle_request(state: Arc<AppState>, request: ExtensionRequest, responses: &Responses) {
     match request {
-        ExtensionRequest::UploadChunk { transfer_id, index, total, data } => {
+        ExtensionRequest::UploadChunk {
+            transfer_id,
+            index,
+            total,
+            data,
+        } => {
             let decoded = match BASE64_STANDARD.decode(data.trim()) {
                 Ok(bytes) => bytes,
-                Err(e) => return vec![ExtensionResponse::Error {
-                    transfer_id: Some(transfer_id),
-                    message: format!("Invalid base64: {}", e),
-                }],
-            };
-
-            let mut uploads = state.uploads.lock().await;
-            let entry = uploads.entry(transfer_id.clone()).or_insert_with(|| UploadSession {
-                total,
-                chunks: HashMap::new(),
-            });
-
-            entry.chunks.insert(index, decoded);
-
-            vec![ExtensionResponse::ChunkReceived { transfer_id, index }]
-        }
-        ExtensionRequest::Process { transfer_id, stages, target_language } => {
-            let image_bytes = {
-                let mut uploads = state.uploads.lock().await;
-                if let Some(session) = uploads.remove(&transfer_id) {
-                    let mut complete = Vec::new();
-                    for i in 0..session.total {
-                        if let Some(chunk) = session.chunks.get(&i) {
-                            complete.extend_from_slice(chunk);
-                        } else {
-                            return vec![ExtensionResponse::Error {
-                                transfer_id: Some(transfer_id),
-                                message: format!("Missing chunk index {}", i),
-                            }];
-                        }
-                    }
-                    complete
-                } else {
-                    return vec![ExtensionResponse::Error {
+                Err(e) => {
+                    let _ = responses.send(ExtensionResponse::Error {
                         transfer_id: Some(transfer_id),
-                        message: "No upload session found for this transferId".to_owned(),
-                    }];
+                        message: format!("Invalid base64: {}", e),
+                    });
+                    return;
                 }
             };
 
-            match run_pipeline(state.clone(), &transfer_id, image_bytes, stages, target_language).await {
-                Ok(success) => success,
-                Err(e) => vec![ExtensionResponse::Error {
+            let mut uploads = state.uploads.lock().await;
+            let entry = uploads
+                .entry(transfer_id.clone())
+                .or_insert_with(|| UploadSession {
+                    total,
+                    chunks: HashMap::new(),
+                });
+
+            entry.chunks.insert(index, decoded);
+
+            let _ = responses.send(ExtensionResponse::ChunkReceived { transfer_id, index });
+        }
+        ExtensionRequest::Process {
+            transfer_id,
+            stages,
+            target_language,
+        } => {
+            let image_bytes = {
+                let mut uploads = state.uploads.lock().await;
+                match uploads.remove(&transfer_id) {
+                    Some(session) => {
+                        let mut complete = Vec::new();
+                        let mut missing = None;
+                        for i in 0..session.total {
+                            match session.chunks.get(&i) {
+                                Some(chunk) => complete.extend_from_slice(chunk),
+                                None => {
+                                    missing = Some(i);
+                                    break;
+                                }
+                            }
+                        }
+                        if let Some(i) = missing {
+                            let _ = responses.send(ExtensionResponse::Error {
+                                transfer_id: Some(transfer_id),
+                                message: format!("Missing chunk index {}", i),
+                            });
+                            return;
+                        }
+                        complete
+                    }
+                    None => {
+                        let _ = responses.send(ExtensionResponse::Error {
+                            transfer_id: Some(transfer_id),
+                            message: "No upload session found for this transferId".to_owned(),
+                        });
+                        return;
+                    }
+                }
+            };
+
+            if let Err(e) = run_pipeline(
+                state.clone(),
+                &transfer_id,
+                image_bytes,
+                stages,
+                target_language,
+                responses,
+            )
+            .await
+            {
+                let _ = responses.send(ExtensionResponse::Error {
                     transfer_id: Some(transfer_id),
                     message: format!("Pipeline execution failed: {:?}", e),
-                }],
+                });
             }
         }
+    }
+}
+
+fn progress_response(transfer_id: &str, progress: koharu_pipeline::Progress) -> ExtensionResponse {
+    use koharu_pipeline::Progress;
+
+    let (stage, message) = match progress {
+        Progress::Started { stages, .. } => {
+            let names: Vec<String> = stages.iter().map(ToString::to_string).collect();
+            ("started".to_owned(), format!("Queued {}", names.join(", ")))
+        }
+        Progress::Loading { stage, model, .. } => (stage.to_string(), format!("Loading {}", model)),
+        Progress::Running { stage, model, .. } => (stage.to_string(), format!("Running {}", model)),
+        Progress::Finished { stage, elapsed, .. } => (
+            stage.to_string(),
+            format!("Done in {:.1}s", elapsed.as_secs_f64()),
+        ),
+        Progress::Skipped { stage, .. } => (stage.to_string(), "Skipped".to_owned()),
+    };
+
+    ExtensionResponse::Progress {
+        transfer_id: transfer_id.to_owned(),
+        stage,
+        message,
     }
 }
 
@@ -266,15 +335,16 @@ async fn run_pipeline(
     image_bytes: Vec<u8>,
     stages: Vec<Stage>,
     target_language: Option<String>,
-) -> Result<Vec<ExtensionResponse>> {
+    responses: &Responses,
+) -> Result<()> {
     // 1. Create a scene session
     let mut session = Session::memory().await?;
     let mut edit = session.snapshot().edit();
 
     // Decode image dimensions to set up page correctly
     let (width, height) = (|| -> Result<(f64, f64), image::ImageError> {
-        let reader = image::ImageReader::new(std::io::Cursor::new(&image_bytes))
-            .with_guessed_format()?;
+        let reader =
+            image::ImageReader::new(std::io::Cursor::new(&image_bytes)).with_guessed_format()?;
         let (w, h) = reader.into_dimensions()?;
         Ok((w as f64, h as f64))
     })()
@@ -314,8 +384,17 @@ async fn run_pipeline(
     }
 
     // 3. Prepare execution request
+    let progress_sink: koharu_pipeline::ProgressSink = {
+        let responses = responses.clone();
+        let transfer_id = transfer_id.to_owned();
+        Arc::new(move |progress| {
+            let _ = responses.send(progress_response(&transfer_id, progress));
+        })
+    };
+
     let request = Request {
         operation: Operation::Stages { stages },
+        progress: Some(progress_sink),
         ..Request::default()
     };
 
@@ -325,7 +404,10 @@ async fn run_pipeline(
 
     #[async_trait]
     impl koharu_pipeline::Committer for PipelineCommitter {
-        async fn commit(&mut self, output: koharu_pipeline::StageOutput) -> Result<koharu_scene::Snapshot> {
+        async fn commit(
+            &mut self,
+            output: koharu_pipeline::StageOutput,
+        ) -> Result<koharu_scene::Snapshot> {
             self.session.commit(output.patch).await?;
             Ok(self.session.snapshot())
         }
@@ -334,11 +416,11 @@ async fn run_pipeline(
     let mut committer = PipelineCommitter { session };
 
     // 4. Run the pipeline
-    let report = state.pipeline
+    let report = state
+        .pipeline
         .execute(committer.session.snapshot(), request, &mut committer)
         .await
         .map_err(|e| anyhow!("Pipeline run error: {:?}", e))?;
-
 
     if report.status == RunStatus::Stopped {
         return Err(anyhow!("Pipeline execution was stopped."));
@@ -347,25 +429,28 @@ async fn run_pipeline(
     // 5. Render and rasterize the final page (containing both inpainted canvas and translated text)
     let final_snapshot = committer.session.snapshot();
     let frame = state.renderer.render(&final_snapshot, page).await?;
-    let raster = state.rasterizer.rasterize(&frame.raster_frame()?, RasterOptions::default())?;
+    let raster = state
+        .rasterizer
+        .rasterize(&frame.raster_frame()?, RasterOptions::default())?;
 
     // Encode to PNG bytes in memory
     let mut png_bytes = Vec::new();
     let mut writer = std::io::Cursor::new(&mut png_bytes);
-    raster.image.write_to(&mut writer, image::ImageFormat::Png)?;
+    raster
+        .image
+        .write_to(&mut writer, image::ImageFormat::Png)?;
     let encoded = BASE64_STANDARD.encode(&png_bytes);
 
     // Chunk size: 500 KB (base64 characters = 500,000 bytes)
     const CHUNK_SIZE: usize = 500 * 1024;
     let total_chunks = (encoded.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
-    let mut responses = Vec::new();
     for i in 0..total_chunks {
         let start = i * CHUNK_SIZE;
         let end = std::cmp::min(start + CHUNK_SIZE, encoded.len());
         let chunk = encoded[start..end].to_owned();
 
-        responses.push(ExtensionResponse::DownloadChunk {
+        let _ = responses.send(ExtensionResponse::DownloadChunk {
             transfer_id: transfer_id.to_owned(),
             index: i,
             total: total_chunks,
@@ -373,7 +458,7 @@ async fn run_pipeline(
         });
     }
 
-    Ok(responses)
+    Ok(())
 }
 
 async fn read_frame<R>(reader: &mut R) -> Result<Option<Vec<u8>>>
