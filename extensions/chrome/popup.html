@@ -1,39 +1,187 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body {
-      width: 240px;
-      font-family: system-ui, -apple-system, sans-serif;
-      margin: 10px;
-      padding: 0;
-      color: #1f2937;
-    }
-    h2 {
-      font-size: 16px;
-      margin-top: 0;
-      color: #4f46e5;
-    }
-    p {
-      font-size: 12px;
-      line-height: 1.4;
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 4px 8px;
-      font-size: 11px;
-      font-weight: bold;
-      border-radius: 4px;
-      background-color: #f3f4f6;
-      color: #4b5563;
-      margin-top: 5px;
-    }
-  </style>
-</head>
-<body>
-  <h2>Koharu Translator</h2>
-  <p>Hover over any manga image on a website and click the **Translate** button to process it locally.</p>
-  <div class="status-badge">Local Engine Native Port</div>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --radius: 0.625rem;
+        --background: oklch(1 0 0);
+        --foreground: oklch(0.145 0 0);
+        --card: oklch(1 0 0);
+        --muted: oklch(0.97 0 0);
+        --muted-foreground: oklch(0.556 0 0);
+        --primary: oklch(0.645 0.246 16.439);
+        --primary-hover: oklch(0.586 0.253 17.585);
+        --primary-foreground: oklch(0.985 0 0);
+        --accent: oklch(0.941 0.03 12.58);
+        --accent-foreground: oklch(0.514 0.222 16.935);
+        --border: oklch(0.922 0 0);
+        --destructive: oklch(0.577 0.245 27.325);
+        --online: oklch(0.723 0.192 149.579);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: oklch(0.145 0 0);
+          --foreground: oklch(0.985 0 0);
+          --card: oklch(0.205 0 0);
+          --muted: oklch(0.269 0 0);
+          --muted-foreground: oklch(0.708 0 0);
+          --primary: oklch(0.712 0.194 13.428);
+          --primary-hover: oklch(0.645 0.246 16.439);
+          --primary-foreground: oklch(0.145 0 0);
+          --accent: oklch(0.271 0.105 12.094);
+          --accent-foreground: oklch(0.941 0.03 12.58);
+          --border: oklch(1 0 0 / 10%);
+          --destructive: oklch(0.704 0.191 22.216);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 14px;
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .header {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .title {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--primary);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        margin-bottom: 10px;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted-foreground);
+        flex-shrink: 0;
+      }
+
+      .dot.online {
+        background: var(--online);
+      }
+
+      .dot.error {
+        background: var(--destructive);
+      }
+
+      .status-label {
+        font-weight: 500;
+      }
+
+      .status-note {
+        margin-top: 4px;
+        font-size: 11px;
+        color: var(--muted-foreground);
+        word-break: break-word;
+      }
+
+      .status-note.error {
+        color: var(--destructive);
+      }
+
+      button {
+        width: 100%;
+        padding: 7px 12px;
+        border: none;
+        border-radius: calc(var(--radius) - 4px);
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      button.stop {
+        background: transparent;
+        color: var(--destructive);
+        border: 1px solid var(--border);
+      }
+
+      button.stop:hover:not(:disabled) {
+        background: var(--muted);
+      }
+
+      .hint {
+        margin: 10px 0 0;
+        font-size: 11px;
+        color: var(--muted-foreground);
+      }
+
+      .hint strong {
+        color: var(--accent-foreground);
+        background: var(--accent);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <span class="title">Koharu</span>
+    </div>
+
+    <div class="card">
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span class="status-label" id="status-label">Checking…</span>
+      </div>
+      <div class="status-note" id="status-note"></div>
+    </div>
+
+    <button id="power" disabled>Start engine</button>
+
+    <p class="hint">
+      Hover any manga image and click <strong>Translate</strong> to process it
+      locally.
+    </p>
+
+    <script src="popup.js"></script>
+  </body>
 </html>
