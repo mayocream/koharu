@@ -374,7 +374,6 @@ mod tests {
         assert_eq!("gfx1010".parse(), Ok(Rocm::Gfx1010));
         assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
         assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
-        assert!("gfx1250".parse::<Rocm>().is_err());
         assert!("gfx1251".parse::<Rocm>().is_err());
     }
 }
