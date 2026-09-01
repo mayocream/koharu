@@ -56,6 +56,8 @@ export const commands = {
 	process: (scope: Scope, operation: Operation) => __TAURI_INVOKE<JobId>("process", { scope, operation }),
 	stopJob: (job: JobId) => __TAURI_INVOKE<null>("stop_job", { job }),
 	exportPages: (pages: EntityId[], format: ExportFormat) => __TAURI_INVOKE<null>("export_pages", { pages, format }),
+	exportTexts: (pages: EntityId[], exportKind: TextExportKind) => __TAURI_INVOKE<null>("export_texts", { pages, exportKind }),
+	importTexts: (importKind: TextExportKind) => __TAURI_INVOKE<ImportTextsResult>("import_texts", { importKind }),
 	getThumbnail: (page: EntityId) => __TAURI_INVOKE<ThumbnailBytes>("get_thumbnail", { page }),
 	getFonts: () => __TAURI_INVOKE<FontFamily[]>("get_fonts"),
 	getFontPreview: (familyName: string) => __TAURI_INVOKE<FontPreviewBytes>("get_font_preview", { familyName }),
@@ -259,6 +261,17 @@ export type GoogleCloudConfig = Record<string, never>;
 export type GrokConfig = Record<string, never>;
 
 export type GroupRole = "text";
+
+export type ImportTextsResult = {
+	applied: number,
+	skipped: ImportTextsSkip[],
+	errors: string[],
+};
+
+export type ImportTextsSkip = {
+	page: number,
+	reason: string,
+};
 
 export type InpaintingModel = { model: "lama" } | { model: "aot-inpainting" } | {
 	model: "flux2-klein",
@@ -484,6 +497,8 @@ export type TextContent = {
 	role: string | null,
 	source_region: EntityId | null,
 };
+
+export type TextExportKind = "source" | "translation";
 
 export type TextLayoutKind = "point" | "paragraph";
 

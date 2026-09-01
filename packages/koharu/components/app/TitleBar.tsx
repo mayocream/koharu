@@ -34,6 +34,7 @@ import {
   MenubarSubTrigger,
   MenubarTrigger as UiMenubarTrigger,
 } from '@koharu/ui/components/menubar'
+import { toast } from '@koharu/ui/components/toast'
 import { cn } from '@koharu/ui/lib/utils'
 
 export function TitleBar() {
@@ -56,6 +57,29 @@ export function TitleBar() {
     void call(commands.process, scope, operation).catch(() => undefined)
 
   const closeProject = () => void call(commands.closeProject).catch(() => undefined)
+
+  const importText = async (kind: 'source' | 'translation') => {
+    try {
+      const result = await call(commands.importTexts, kind)
+      await refresh(projectKey, pagesKey, pageKey)
+      if (result.errors.length === 0 && result.skipped.length === 0) return
+      const details = result.skipped
+        .map((skip) => `Page ${skip.page}: ${skip.reason}`)
+        .join('\n')
+      const message = result.errors.length
+        ? result.errors.join('\n')
+        : `Applied text to ${result.applied} page(s). Skipped ${result.skipped.length} page(s).${
+            details ? `\n\n${details}` : ''
+          }`
+      toast.add({
+        type: result.errors.length ? 'error' : 'warning',
+        title: result.errors.length ? 'Could not import text' : 'Some pages were skipped',
+        description: message,
+      })
+    } catch {
+      // `call` reports native errors through the shared application store.
+    }
+  }
 
   return (
     <>
@@ -102,6 +126,19 @@ export function TitleBar() {
                   </MenubarItem>
                 </MenubarSubContent>
               </MenubarSub>
+              <MenubarSub>
+                <MenubarSubTrigger disabled={!project || pages.length === 0}>
+                  {t('menu.importText')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-40 p-1'>
+                  <MenubarItem onClick={() => void importText('source')}>
+                    {t('menu.exportSourceTexts')}
+                  </MenubarItem>
+                  <MenubarItem onClick={() => void importText('translation')}>
+                    {t('menu.exportTranslations')}
+                  </MenubarItem>
+                </MenubarSubContent>
+              </MenubarSub>
               <MenubarItem
                 disabled={!project || pages.length === 0}
                 onClick={() =>
@@ -118,6 +155,21 @@ export function TitleBar() {
               >
                 {t('menu.exportPsd')}
               </MenubarItem>
+              <MenubarSub>
+                <MenubarSubTrigger disabled={!project || pages.length === 0}>
+                  {t('menu.exportText')}
+                </MenubarSubTrigger>
+                <MenubarSubContent className='min-w-40 p-1'>
+                  <MenubarItem onClick={() => void call(commands.exportTexts, [], 'source')}>
+                    {t('menu.exportSourceTexts')}
+                  </MenubarItem>
+                  <MenubarItem
+                    onClick={() => void call(commands.exportTexts, [], 'translation')}
+                  >
+                    {t('menu.exportTranslations')}
+                  </MenubarItem>
+                </MenubarSubContent>
+              </MenubarSub>
               <MenubarSeparator />
               <MenubarItem disabled={!project} onClick={closeProject}>
                 {t('menu.closeProject')}

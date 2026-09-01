@@ -8,12 +8,12 @@ use koharu_psd::{PsdExportOptions, export_page};
 use koharu_rasterizer::{Raster, RasterOptions, Rasterizer};
 use koharu_renderer::{Frame, Renderer};
 use koharu_scene::{AssetRole, EntityId, Snapshot};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::sync::Arc;
 use tauri::{Cef, State, WebviewWindow, ipc::IpcResponse};
 
-use super::{Error, project::CurrentProject};
+use super::{ChannelExt as _, Error, canvas::CanvasChannel, project::CurrentProject};
 use koharu_desktop::Desktop;
 
 const THUMBNAIL_EDGE: u32 = 128;
@@ -33,6 +33,280 @@ impl IpcResponse for ThumbnailBytes {
 pub enum ExportFormat {
     Png,
     Psd,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TextExportKind {
+    Source,
+    Translation,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TextExport {
+    pages: Vec<TextExportPage>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TextExportPage {
+    page: usize,
+    texts: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Type)]
+pub(crate) struct ImportTextsResult {
+    pub applied: u32,
+    pub skipped: Vec<ImportTextsSkip>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Type)]
+pub(crate) struct ImportTextsSkip {
+    pub page: u32,
+    pub reason: String,
+}
+
+fn serialize_text_export(pages: Vec<TextExportPage>) -> Result<Vec<u8>> {
+    Ok(serde_json::to_vec_pretty(&TextExport { pages })?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn export_texts(
+    window: WebviewWindow<Cef>,
+    pages: Vec<EntityId>,
+    project: State<'_, CurrentProject>,
+    export_kind: TextExportKind,
+) -> Result<(), Error> {
+    let snapshot = {
+        let project = project.project.lock().await;
+        let project = project.as_ref().context("no project is open")?;
+        project.snapshot()
+    };
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .set_parent(&window)
+        .set_file_name(match export_kind {
+            TextExportKind::Source => "source-texts.json",
+            TextExportKind::Translation => "translations.json",
+        })
+        .save_file()
+        .await
+    else {
+        return Ok(());
+    };
+    let pages = if pages.is_empty() {
+        snapshot.pages().map(|page| page.id()).collect()
+    } else {
+        pages
+    };
+
+    if pages.is_empty() {
+        return Err(anyhow::anyhow!("there are no pages to export").into());
+    }
+
+    let mut exported_pages = Vec::with_capacity(pages.len());
+    for (page_index, page_id) in pages.into_iter().enumerate() {
+        let page = snapshot.page(page_id)?;
+        let mut texts = Vec::new();
+
+        if let Some(text_group) = page.text_group()? {
+            for layer in text_group.text_layers()? {
+                let content = layer.content()?;
+                let Some(source) = content.source()? else {
+                    let text = match export_kind {
+                        TextExportKind::Source => String::new(),
+                        TextExportKind::Translation => content
+                            .translation()?
+                            .map_or_else(String::new, |text| text.text.value),
+                    };
+                    texts.push(text);
+                    continue;
+                };
+                let text = match export_kind {
+                    TextExportKind::Source => source.text.value,
+                    TextExportKind::Translation => content
+                        .translation()?
+                        .map_or_else(String::new, |text| text.text.value),
+                };
+                texts.push(text);
+            }
+        }
+
+        if texts.iter().any(|text| !text.trim().is_empty()) {
+            exported_pages.push(TextExportPage {
+                page: page_index + 1,
+                texts,
+            });
+        }
+    }
+
+    let bytes = serialize_text_export(exported_pages)?;
+    tokio::fs::write(file.path(), bytes).await?;
+    Ok(())
+}
+
+fn extract_json(input: &str) -> Option<&str> {
+    if let Some(start) = input.find("```json") {
+        let after = &input[start + 7..];
+        if let Some(end) = after.find("```") {
+            return Some(after[..end].trim());
+        }
+    }
+    if let Some(start) = input.find("```") {
+        let after = &input[start + 3..];
+        if let Some(end) = after.find("```") {
+            return Some(after[..end].trim());
+        }
+    }
+    if let (Some(open), Some(close)) = (input.find('{'), input.rfind('}'))
+        && close > open
+    {
+        Some(input[open..=close].trim())
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn import_texts(
+    window: WebviewWindow<Cef>,
+    project: State<'_, CurrentProject>,
+    desktop: State<'_, Desktop>,
+    canvas_channel: State<'_, CanvasChannel>,
+    import_kind: TextExportKind,
+) -> Result<ImportTextsResult, Error> {
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .set_parent(&window)
+        .add_filter("JSON", &["json"])
+        .pick_file()
+        .await
+    else {
+        return Ok(ImportTextsResult {
+            applied: 0,
+            skipped: Vec::new(),
+            errors: Vec::new(),
+        });
+    };
+
+    let bytes = tokio::fs::read(file.path()).await?;
+    let input = String::from_utf8(bytes).context("the selected file is not valid UTF-8")?;
+    let Some(json) = extract_json(&input) else {
+        return Ok(ImportTextsResult {
+            applied: 0,
+            skipped: Vec::new(),
+            errors: vec!["could not locate a JSON object in the selected file".to_owned()],
+        });
+    };
+    let export: TextExport = match serde_json::from_str(json) {
+        Ok(export) => export,
+        Err(error) => {
+            return Ok(ImportTextsResult {
+                applied: 0,
+                skipped: Vec::new(),
+                errors: vec![format!("failed to parse JSON: {error}")],
+            });
+        }
+    };
+
+    let (commit, page, result) = {
+        let mut project = project.project.lock().await;
+        let project = project.as_mut().context("no project is open")?;
+        let snapshot = project.snapshot();
+        let page_ids = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
+        let mut last_commit = None;
+        let mut applied = 0_u32;
+        let mut skipped = Vec::new();
+
+        for (page_index, page_id) in page_ids.into_iter().enumerate() {
+            let page_number = page_index + 1;
+            let page = snapshot.page(page_id)?;
+            let mut text_layers = Vec::new();
+            let group = match page.text_group() {
+                Ok(group) => group,
+                Err(error) => {
+                    skipped.push(ImportTextsSkip {
+                        page: page_number as u32,
+                        reason: format!("failed to read text group: {error}"),
+                    });
+                    continue;
+                }
+            };
+            if let Some(group) = group {
+                let layers = match group.text_layers() {
+                    Ok(layers) => layers,
+                    Err(error) => {
+                        skipped.push(ImportTextsSkip {
+                            page: page_number as u32,
+                            reason: format!("failed to read text layers: {error}"),
+                        });
+                        continue;
+                    }
+                };
+                for layer in layers {
+                    text_layers.push(layer.id());
+                }
+            }
+
+            if text_layers.is_empty() {
+                continue;
+            }
+            let Some(page_export) = export.pages.iter().find(|page| page.page == page_number)
+            else {
+                continue;
+            };
+            if page_export.texts.len() != text_layers.len() {
+                skipped.push(ImportTextsSkip {
+                    page: page_number as u32,
+                    reason: format!(
+                        "text count mismatch: expected {}, got {}",
+                        text_layers.len(),
+                        page_export.texts.len()
+                    ),
+                });
+                continue;
+            }
+
+            for (layer, text) in text_layers.into_iter().zip(&page_export.texts) {
+                let commit = match import_kind {
+                    TextExportKind::Source => project.set_source_text(layer, text.clone()).await,
+                    TextExportKind::Translation => {
+                        project.set_translation(layer, Some(text.clone())).await
+                    }
+                };
+                match commit {
+                    Ok(commit) => {
+                        project.record_commit(&commit);
+                        last_commit = Some(commit);
+                    }
+                    Err(error) => {
+                        skipped.push(ImportTextsSkip {
+                            page: page_number as u32,
+                            reason: format!("failed to apply text: {error}"),
+                        });
+                        break;
+                    }
+                };
+            }
+            applied += 1;
+        }
+
+        (
+            last_commit,
+            project.active_page(),
+            ImportTextsResult {
+                applied,
+                skipped,
+                errors: Vec::new(),
+            },
+        )
+    };
+
+    if let Some(commit) = commit {
+        desktop.synchronize(&commit.snapshot, page, &commit).await?;
+        canvas_channel.channel.publish(desktop.canvas_state());
+    }
+    Ok(result)
 }
 
 #[tracing::instrument(

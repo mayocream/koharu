@@ -40,6 +40,7 @@ nav = [
       "workflow/cleanup-and-inpainting.md",
       "workflow/typesetting.md",
       "workflow/export.md",
+      "workflow/json_import_export.md",
     ] },
     { "日本語" = [
       "ja-JP/workflow/projects-and-imports.md",
@@ -49,6 +50,7 @@ nav = [
       "ja-JP/workflow/cleanup-and-inpainting.md",
       "ja-JP/workflow/typesetting.md",
       "ja-JP/workflow/export.md",
+      "ja-JP/workflow/json_import_export.md",
     ] },
     { "简体中文" = [
       "zh-CN/workflow/projects-and-imports.md",
@@ -58,6 +60,7 @@ nav = [
       "zh-CN/workflow/cleanup-and-inpainting.md",
       "zh-CN/workflow/typesetting.md",
       "zh-CN/workflow/export.md",
+      "zh-CN/workflow/json_import_export.md",
     ] },
   ] },
   { "Models" = [

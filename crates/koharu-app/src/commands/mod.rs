@@ -89,6 +89,8 @@ pub fn bindings() -> tauri_specta::Builder<tauri::Cef> {
             processing::process,
             processing::stop_job,
             output::export_pages,
+            output::export_texts,
+            output::import_texts,
             output::get_thumbnail,
             fonts::get_fonts,
             fonts::get_font_preview,
