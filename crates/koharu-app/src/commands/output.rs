@@ -149,28 +149,6 @@ pub(crate) async fn export_texts(
     Ok(())
 }
 
-fn extract_json(input: &str) -> Option<&str> {
-    if let Some(start) = input.find("```json") {
-        let after = &input[start + 7..];
-        if let Some(end) = after.find("```") {
-            return Some(after[..end].trim());
-        }
-    }
-    if let Some(start) = input.find("```") {
-        let after = &input[start + 3..];
-        if let Some(end) = after.find("```") {
-            return Some(after[..end].trim());
-        }
-    }
-    if let (Some(open), Some(close)) = (input.find('{'), input.rfind('}'))
-        && close > open
-    {
-        Some(input[open..=close].trim())
-    } else {
-        None
-    }
-}
-
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn import_texts(
@@ -195,14 +173,7 @@ pub(crate) async fn import_texts(
 
     let bytes = tokio::fs::read(file.path()).await?;
     let input = String::from_utf8(bytes).context("the selected file is not valid UTF-8")?;
-    let Some(json) = extract_json(&input) else {
-        return Ok(ImportTextsResult {
-            applied: 0,
-            skipped: Vec::new(),
-            errors: vec!["could not locate a JSON object in the selected file".to_owned()],
-        });
-    };
-    let export: TextExport = match serde_json::from_str(json) {
+    let export: TextExport = match koharu_translator::parse_json(&input) {
         Ok(export) => export,
         Err(error) => {
             return Ok(ImportTextsResult {
@@ -540,19 +511,6 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(value, serde_json::json!({ "pages": [] }));
-    }
-
-    #[test]
-    fn extracts_json_from_llm_wrappers() {
-        assert_eq!(
-            extract_json("Here:\n```json\n{\"pages\":[]}\n```\nDone."),
-            Some("{\"pages\":[]}")
-        );
-        assert_eq!(
-            extract_json("Some text {\"pages\":[]} after"),
-            Some("{\"pages\":[]}")
-        );
-        assert_eq!(extract_json("no JSON here"), None);
     }
 
     #[test]

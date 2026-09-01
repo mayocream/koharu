@@ -13,6 +13,7 @@ mod remote;
 use std::sync::Arc;
 
 use koharu_ml::Device;
+use serde::de::DeserializeOwned;
 
 use error::{Error, Result};
 use local::LocalTranslator;
@@ -22,6 +23,11 @@ pub use language::Language;
 pub use model::{GenerationConfig, Model, ModelSelection, Quantization};
 pub(crate) use model::{ModelGeneration, QuantizationDefinition, display_name};
 pub use provider::{Provider, ProviderConfig, ProvidersConfig};
+
+/// Parse JSON using repair layer.
+pub fn parse_json<T: DeserializeOwned>(input: &str) -> anyhow::Result<T> {
+    json::from_str(input)
+}
 
 #[derive(Clone)]
 pub struct Translator {
