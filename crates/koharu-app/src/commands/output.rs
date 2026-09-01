@@ -42,12 +42,12 @@ pub(crate) enum TextExportKind {
     Translation,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct TextExport {
     pages: Vec<TextExportPage>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct TextExportPage {
     page: usize,
     texts: Vec<String>,
