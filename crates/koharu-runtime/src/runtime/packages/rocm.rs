@@ -191,9 +191,6 @@ pub(crate) enum Rocm {
     Gfx1200,
     #[strum(serialize = "gfx1201")]
     Gfx1201,
-    #[cfg(target_os = "linux")]
-    #[strum(serialize = "gfx1250")]
-    Gfx1250,
 }
 
 impl Rocm {
@@ -296,8 +293,7 @@ impl Rocm {
                 | Self::Gfx1150
                 | Self::Gfx1151
                 | Self::Gfx1152
-                | Self::Gfx1153
-                | Self::Gfx1250 => root
+                | Self::Gfx1153 => root
                     .join(self.to_string())
                     .join(format!("Kernels.so-000-{self}.hsaco"))
                     .is_file(),
@@ -378,9 +374,6 @@ mod tests {
         assert_eq!("gfx1010".parse(), Ok(Rocm::Gfx1010));
         assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
         assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
-        #[cfg(target_os = "linux")]
-        assert_eq!("gfx1250".parse(), Ok(Rocm::Gfx1250));
-        #[cfg(not(target_os = "linux"))]
         assert!("gfx1250".parse::<Rocm>().is_err());
         assert!("gfx1251".parse::<Rocm>().is_err());
     }
