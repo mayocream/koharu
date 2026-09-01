@@ -63,9 +63,7 @@ export function TitleBar() {
       const result = await call(commands.importTexts, kind)
       await refresh(projectKey, pagesKey, pageKey)
       if (result.errors.length === 0 && result.skipped.length === 0) return
-      const details = result.skipped
-        .map((skip) => `Page ${skip.page}: ${skip.reason}`)
-        .join('\n')
+      const details = result.skipped.map((skip) => `Page ${skip.page}: ${skip.reason}`).join('\n')
       const message = result.errors.length
         ? result.errors.join('\n')
         : `Applied text to ${result.applied} page(s). Skipped ${result.skipped.length} page(s).${
@@ -163,9 +161,7 @@ export function TitleBar() {
                   <MenubarItem onClick={() => void call(commands.exportTexts, [], 'source')}>
                     {t('menu.exportSourceTexts')}
                   </MenubarItem>
-                  <MenubarItem
-                    onClick={() => void call(commands.exportTexts, [], 'translation')}
-                  >
+                  <MenubarItem onClick={() => void call(commands.exportTexts, [], 'translation')}>
                     {t('menu.exportTranslations')}
                   </MenubarItem>
                 </MenubarSubContent>

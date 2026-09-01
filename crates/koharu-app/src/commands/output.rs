@@ -42,12 +42,12 @@ pub(crate) enum TextExportKind {
     Translation,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct TextExport {
     pages: Vec<TextExportPage>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct TextExportPage {
     page: usize,
     texts: Vec<String>,
@@ -68,6 +68,13 @@ pub(crate) struct ImportTextsSkip {
 
 fn serialize_text_export(pages: Vec<TextExportPage>) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec_pretty(&TextExport { pages })?)
+}
+
+fn text_export_page(page: usize, texts: Vec<String>) -> Option<TextExportPage> {
+    texts
+        .iter()
+        .any(|text| !text.trim().is_empty())
+        .then_some(TextExportPage { page, texts })
 }
 
 #[tauri::command]
@@ -132,11 +139,8 @@ pub(crate) async fn export_texts(
             }
         }
 
-        if texts.iter().any(|text| !text.trim().is_empty()) {
-            exported_pages.push(TextExportPage {
-                page: page_index + 1,
-                texts,
-            });
+        if let Some(page) = text_export_page(page_index + 1, texts) {
+            exported_pages.push(page);
         }
     }
 
@@ -215,6 +219,7 @@ pub(crate) async fn import_texts(
         let snapshot = project.snapshot();
         let page_ids = snapshot.pages().map(|page| page.id()).collect::<Vec<_>>();
         let mut last_commit = None;
+        let mut revisions = Vec::new();
         let mut applied = 0_u32;
         let mut skipped = Vec::new();
 
@@ -276,7 +281,7 @@ pub(crate) async fn import_texts(
                 };
                 match commit {
                     Ok(commit) => {
-                        project.record_commit(&commit);
+                        revisions.push(commit.revision);
                         last_commit = Some(commit);
                     }
                     Err(error) => {
@@ -290,6 +295,7 @@ pub(crate) async fn import_texts(
             }
             applied += 1;
         }
+        project.record(revisions);
 
         (
             last_commit,
@@ -501,4 +507,72 @@ async fn rasterize(
         .await
         .context("rasterizer worker stopped unexpectedly")?
         .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn omits_pages_with_only_empty_text() {
+        assert!(text_export_page(2, vec![String::new(), "  ".to_owned()]).is_none());
+    }
+
+    #[test]
+    fn preserves_empty_text_placeholders_on_non_empty_pages() {
+        let page = text_export_page(
+            1,
+            vec!["first".to_owned(), String::new(), "third".to_owned()],
+        )
+        .expect("page contains text");
+
+        assert_eq!(page.texts, vec!["first", "", "third"]);
+    }
+
+    #[test]
+    fn serializes_empty_page_list_when_all_pages_are_empty() {
+        let pages = [vec![String::new()], vec![" ".to_owned()]]
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, texts)| text_export_page(index + 1, texts))
+            .collect();
+        let bytes = serialize_text_export(pages).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(value, serde_json::json!({ "pages": [] }));
+    }
+
+    #[test]
+    fn extracts_json_from_llm_wrappers() {
+        assert_eq!(
+            extract_json("Here:\n```json\n{\"pages\":[]}\n```\nDone."),
+            Some("{\"pages\":[]}")
+        );
+        assert_eq!(
+            extract_json("Some text {\"pages\":[]} after"),
+            Some("{\"pages\":[]}")
+        );
+        assert_eq!(extract_json("no JSON here"), None);
+    }
+
+    #[test]
+    fn exported_texts_round_trip_through_import_format() {
+        let exported = TextExport {
+            pages: vec![
+                TextExportPage {
+                    page: 1,
+                    texts: vec!["First translation".to_owned(), String::new()],
+                },
+                TextExportPage {
+                    page: 3,
+                    texts: vec!["Only text on page 3".to_owned()],
+                },
+            ],
+        };
+
+        let bytes = serialize_text_export(exported.pages.clone()).unwrap();
+        let imported: TextExport = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(imported, exported);
+    }
 }

@@ -1438,6 +1438,53 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn grouped_import_revisions_are_reversed_by_one_undo() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let first_page = setup
+            .add_page(PageDraft::new("first", 100.0, 100.0), At::End)
+            .unwrap();
+        let second_page = setup
+            .add_page(PageDraft::new("second", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+
+        let first = project
+            .rename_page(first_page, "first changed".to_owned())
+            .await
+            .unwrap();
+        let second = project
+            .rename_page(second_page, "second changed".to_owned())
+            .await
+            .unwrap();
+        project.record(vec![first.revision, second.revision]);
+
+        project.undo().await.unwrap();
+
+        assert_eq!(
+            project
+                .snapshot()
+                .page(first_page)
+                .unwrap()
+                .page()
+                .unwrap()
+                .label,
+            "first"
+        );
+        assert_eq!(
+            project
+                .snapshot()
+                .page(second_page)
+                .unwrap()
+                .page()
+                .unwrap()
+                .label,
+            "second"
+        );
+    }
+
     #[test]
     fn raster_strokes_are_continuous_and_erasable() {
         let mut image = RgbaImage::new(32, 16);
