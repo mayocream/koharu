@@ -141,8 +141,10 @@ pub(crate) fn wheel_platform() -> Result<&'static str> {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumString)]
 pub(crate) enum Rocm {
+    #[cfg(target_os = "linux")]
     #[strum(serialize = "gfx908")]
     Gfx908,
+    #[cfg(target_os = "linux")]
     #[strum(serialize = "gfx90a")]
     Gfx90a,
     #[cfg(target_os = "linux")]
@@ -177,6 +179,7 @@ pub(crate) enum Rocm {
     Gfx1101,
     #[strum(serialize = "gfx1102")]
     Gfx1102,
+    #[cfg(target_os = "windows")]
     #[strum(serialize = "gfx1103")]
     Gfx1103,
     #[strum(serialize = "gfx1150")]
@@ -185,6 +188,7 @@ pub(crate) enum Rocm {
     Gfx1151,
     #[strum(serialize = "gfx1152")]
     Gfx1152,
+    #[cfg(target_os = "windows")]
     #[strum(serialize = "gfx1153")]
     Gfx1153,
     #[strum(serialize = "gfx1200")]
@@ -292,8 +296,7 @@ impl Rocm {
                 | Self::Gfx950
                 | Self::Gfx1150
                 | Self::Gfx1151
-                | Self::Gfx1152
-                | Self::Gfx1153 => root
+                | Self::Gfx1152 => root
                     .join(self.to_string())
                     .join(format!("Kernels.so-000-{self}.hsaco"))
                     .is_file(),
@@ -374,6 +377,18 @@ mod tests {
         assert_eq!("gfx1010".parse(), Ok(Rocm::Gfx1010));
         assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
         assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
+        #[cfg(target_os = "linux")]
+        assert_eq!("gfx908".parse(), Ok(Rocm::Gfx908));
+        #[cfg(not(target_os = "linux"))]
+        assert!("gfx908".parse::<Rocm>().is_err());
+        #[cfg(target_os = "windows")]
+        assert_eq!("gfx1103".parse(), Ok(Rocm::Gfx1103));
+        #[cfg(not(target_os = "windows"))]
+        assert!("gfx1103".parse::<Rocm>().is_err());
+        #[cfg(target_os = "windows")]
+        assert_eq!("gfx1153".parse(), Ok(Rocm::Gfx1153));
+        #[cfg(not(target_os = "windows"))]
+        assert!("gfx1153".parse::<Rocm>().is_err());
         assert!("gfx1251".parse::<Rocm>().is_err());
     }
 }
