@@ -279,7 +279,12 @@
   },
   "navigator": {
     "actionsFor": "Ações para {{page}}",
+    "batchDeleteConfirmDescription": "Excluir as {{count}} páginas selecionadas deste projeto?",
+    "batchDeleteConfirmTitle": "Excluir as páginas selecionadas?",
     "delete": "Excluir",
+    "deleteSelected": "Excluir selecionadas",
+    "deleting": "Excluindo…",
+    "selectedCount": "{{count}} selecionadas",
     "emptyDescription": "Importe arquivos de imagem ou uma pasta para adicionar páginas.",
     "emptyTitle": "Ainda não há páginas",
     "filter": "Filtrar páginas",

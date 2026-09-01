@@ -330,6 +330,46 @@ describe('greenfield editor', () => {
     expect(screen.queryByText('01')).not.toBeInTheDocument()
   })
 
+  it('confirms before deleting the selected pages as one batch', async () => {
+    const user = userEvent.setup()
+    installProject()
+    queryClient.setQueryData(pagesKey, [
+      ...(queryClient.getQueryData<PageSummary[]>(pagesKey) ?? []),
+      {
+        id: 'page-2',
+        label: 'Page 2',
+        size: { width: 1000, height: 1500 },
+        source_asset: null,
+        layer_count: 0,
+      },
+    ])
+    useKoharuStore.setState({ selectedPages: ['page', 'page-2'] })
+    const deletePages = vi.spyOn(commands, 'deletePages').mockResolvedValue(null)
+    vi.spyOn(commands, 'getProject').mockResolvedValue({
+      name: 'Book',
+      revision: 2,
+      active_page: null,
+      can_undo: true,
+      can_redo: false,
+    })
+    vi.spyOn(commands, 'getPages').mockResolvedValue([])
+    vi.spyOn(commands, 'getPage').mockResolvedValue(null)
+    render(<PageRail />)
+
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Delete selected' }))
+
+    expect(screen.getByRole('heading', { name: 'Delete selected pages?' })).toBeInTheDocument()
+    expect(screen.getByText('Delete 2 selected pages from this project?')).toBeInTheDocument()
+    expect(deletePages).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(deletePages).toHaveBeenCalledWith(['page', 'page-2']))
+    await waitFor(() => expect(useKoharuStore.getState().selectedPages).toEqual([]))
+    expect(useKoharuStore.getState().selectedLayers).toEqual([])
+  })
+
   it('keeps rapid page switches on the latest native selection', async () => {
     installProject()
     const pages = [

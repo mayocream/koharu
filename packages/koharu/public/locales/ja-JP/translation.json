@@ -279,7 +279,12 @@
   },
   "navigator": {
     "actionsFor": "{{page}}の操作",
+    "batchDeleteConfirmDescription": "選択した{{count}}ページをこのプロジェクトから削除しますか？",
+    "batchDeleteConfirmTitle": "選択したページを削除しますか？",
     "delete": "削除",
+    "deleteSelected": "選択項目を削除",
+    "deleting": "削除中…",
+    "selectedCount": "{{count}}件選択中",
     "emptyDescription": "画像ファイルまたはフォルダーを読み込んでページを追加します。",
     "emptyTitle": "ページがまだありません",
     "filter": "ページを絞り込む",

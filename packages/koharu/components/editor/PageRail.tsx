@@ -37,6 +37,17 @@ import {
   type PageSummary,
   type ProjectInfo,
 } from '@koharu/bridge/protocol'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@koharu/ui/components/alert-dialog'
 import { Button } from '@koharu/ui/components/button'
 import {
   Dialog,
@@ -82,7 +93,13 @@ export function PageRail() {
   const [query, setQuery] = useState('')
   const [renaming, setRenaming] = useState<PageSummary | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [pagesToDelete, setPagesToDelete] = useState<string[] | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const normalized = query.trim().toLocaleLowerCase()
+  const selectedItems = useMemo(
+    () => pages.filter((page) => selected.includes(page.id)),
+    [pages, selected],
+  )
   const visiblePages = useMemo(
     () =>
       pages
@@ -205,6 +222,23 @@ export function PageRail() {
       })
       .catch(() => undefined)
 
+  const deleteSelectedPages = async () => {
+    const targets = pagesToDelete
+    if (!targets?.length || deleting) return
+    setDeleting(true)
+    selectionRequest.current += 1
+    try {
+      await call(commands.deletePages, targets)
+      setPagesToDelete(null)
+      const deleted = new Set(targets)
+      selectPages(selected.filter((page) => !deleted.has(page)))
+      if (active && deleted.has(active)) selectLayers([])
+      await refresh(projectKey, pagesKey, pageKey)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const openRename = (page: PageSummary) => {
     setRenaming(page)
     setRenameValue(page.label)
@@ -263,6 +297,24 @@ export function PageRail() {
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
             </label>
+          </div>
+        )}
+
+        {selectedItems.length > 1 && (
+          <div className='flex h-8 shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-destructive/[0.04] px-2'>
+            <span className='truncate text-[10px] text-muted-foreground'>
+              {t('navigator.selectedCount', { count: selectedItems.length })}
+            </span>
+            <Button
+              type='button'
+              variant='destructive'
+              size='xs'
+              aria-label={t('navigator.deleteSelected')}
+              onClick={() => setPagesToDelete(selectedItems.map((page) => page.id))}
+            >
+              <Trash2 />
+              {t('navigator.deleteSelected')}
+            </Button>
           </div>
         )}
 
@@ -382,6 +434,38 @@ export function PageRail() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={pagesToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPagesToDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className='bg-destructive/10 text-destructive'>
+              <Trash2 className='size-5' />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{t('navigator.batchDeleteConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('navigator.batchDeleteConfirmDescription', {
+                count: pagesToDelete?.length ?? 0,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant='destructive'
+              disabled={deleting}
+              aria-busy={deleting}
+              onClick={() => void deleteSelectedPages().catch(() => undefined)}
+            >
+              {deleting ? t('navigator.deleting') : t('navigator.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

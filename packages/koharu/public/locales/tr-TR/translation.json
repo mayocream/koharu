@@ -279,7 +279,12 @@
   },
   "navigator": {
     "actionsFor": "{{page}} için eylemler",
+    "batchDeleteConfirmDescription": "Seçilen {{count}} sayfa bu projeden silinsin mi?",
+    "batchDeleteConfirmTitle": "Seçilen sayfalar silinsin mi?",
     "delete": "Sil",
+    "deleteSelected": "Seçilenleri sil",
+    "deleting": "Siliniyor…",
+    "selectedCount": "{{count}} seçildi",
     "emptyDescription": "Sayfa eklemek için görüntü dosyalarını veya bir klasörü içe aktarın.",
     "emptyTitle": "Henüz sayfa yok",
     "filter": "Sayfaları filtrele",

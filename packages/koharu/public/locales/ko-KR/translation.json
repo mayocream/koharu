@@ -279,7 +279,12 @@
   },
   "navigator": {
     "actionsFor": "{{page}} 작업",
+    "batchDeleteConfirmDescription": "선택한 {{count}}개의 페이지를 이 프로젝트에서 삭제하시겠습니까?",
+    "batchDeleteConfirmTitle": "선택한 페이지를 삭제하시겠습니까?",
     "delete": "삭제",
+    "deleteSelected": "선택 항목 삭제",
+    "deleting": "삭제 중…",
+    "selectedCount": "{{count}}개 선택됨",
     "emptyDescription": "이미지 파일이나 폴더를 가져와 페이지를 추가하세요.",
     "emptyTitle": "아직 페이지가 없습니다",
     "filter": "페이지 필터링",

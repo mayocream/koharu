@@ -279,7 +279,12 @@
   },
   "navigator": {
     "actionsFor": "{{page}} 的操作",
+    "batchDeleteConfirmDescription": "从此项目中删除所选的 {{count}} 个页面吗？",
+    "batchDeleteConfirmTitle": "删除所选页面？",
     "delete": "删除",
+    "deleteSelected": "删除所选项",
+    "deleting": "正在删除…",
+    "selectedCount": "已选择 {{count}} 项",
     "emptyDescription": "导入图像文件或文件夹以添加页面。",
     "emptyTitle": "还没有页面",
     "filter": "筛选页面",

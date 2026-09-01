@@ -279,7 +279,12 @@
   },
   "navigator": {
     "actionsFor": "Действия для {{page}}",
+    "batchDeleteConfirmDescription": "Удалить выбранные страницы ({{count}}) из этого проекта?",
+    "batchDeleteConfirmTitle": "Удалить выбранные страницы?",
     "delete": "Удалить",
+    "deleteSelected": "Удалить выбранные",
+    "deleting": "Удаление…",
+    "selectedCount": "Выбрано: {{count}}",
     "emptyDescription": "Импортируйте изображения или папку, чтобы добавить страницы.",
     "emptyTitle": "Страниц пока нет",
     "filter": "Фильтровать страницы",
