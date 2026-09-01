@@ -145,12 +145,32 @@ pub(crate) enum Rocm {
     Gfx908,
     #[strum(serialize = "gfx90a")]
     Gfx90a,
+    #[cfg(target_os = "linux")]
     #[strum(serialize = "gfx942")]
     Gfx942,
+    #[cfg(target_os = "linux")]
     #[strum(serialize = "gfx950")]
     Gfx950,
+    #[strum(serialize = "gfx1010")]
+    Gfx1010,
+    #[strum(serialize = "gfx1011")]
+    Gfx1011,
+    #[strum(serialize = "gfx1012")]
+    Gfx1012,
     #[strum(serialize = "gfx1030")]
     Gfx1030,
+    #[strum(serialize = "gfx1031")]
+    Gfx1031,
+    #[strum(serialize = "gfx1032")]
+    Gfx1032,
+    #[strum(serialize = "gfx1033")]
+    Gfx1033,
+    #[strum(serialize = "gfx1034")]
+    Gfx1034,
+    #[strum(serialize = "gfx1035")]
+    Gfx1035,
+    #[strum(serialize = "gfx1036")]
+    Gfx1036,
     #[strum(serialize = "gfx1100")]
     Gfx1100,
     #[strum(serialize = "gfx1101")]
@@ -171,6 +191,29 @@ pub(crate) enum Rocm {
     Gfx1200,
     #[strum(serialize = "gfx1201")]
     Gfx1201,
+    #[cfg(target_os = "linux")]
+    #[strum(serialize = "gfx1250")]
+    Gfx1250,
+}
+
+#[cfg(target_os = "linux")]
+fn linux_device_library_exists(path: &Path, target: &str) -> bool {
+    let root = path.join("_rocm_sdk_libraries/lib/rocblas/library");
+    let target_root = root.join(target);
+    let prefix = format!("Kernels.so-000-{target}");
+    for directory in [&root, &target_root] {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if entry.path().is_file() && name.starts_with(&prefix) && name.ends_with(".hsaco") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 impl Rocm {
@@ -253,15 +296,16 @@ impl Rocm {
     }
 
     fn complete(self, path: &Path) -> bool {
-        let device_library = if cfg!(target_os = "windows") {
-            path.join("_rocm_sdk_libraries/.kpack")
-                .join(format!("blas_lib_{self}.kpack"))
-        } else {
-            path.join("_rocm_sdk_libraries/lib/rocblas/library")
-                .join(format!("Kernels.so-000-{self}.hsaco"))
-        };
-        Library::iter().all(|library| path.join(library.to_string()).is_file())
-            && device_library.is_file()
+        #[cfg(target_os = "windows")]
+        let device_library = path
+            .join("_rocm_sdk_libraries/.kpack")
+            .join(format!("blas_lib_{self}.kpack"))
+            .is_file();
+        #[cfg(target_os = "linux")]
+        let device_library = linux_device_library_exists(path, &self.to_string());
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        let device_library = false;
+        Library::iter().all(|library| path.join(library.to_string()).is_file()) && device_library
     }
 }
 
@@ -330,7 +374,13 @@ mod tests {
 
     #[test]
     fn parses_supported_targets() {
+        assert_eq!("gfx1010".parse(), Ok(Rocm::Gfx1010));
+        assert_eq!("gfx1036".parse(), Ok(Rocm::Gfx1036));
         assert_eq!("gfx1201".parse(), Ok(Rocm::Gfx1201));
+        #[cfg(target_os = "linux")]
+        assert_eq!("gfx1250".parse(), Ok(Rocm::Gfx1250));
+        #[cfg(not(target_os = "linux"))]
         assert!("gfx1250".parse::<Rocm>().is_err());
+        assert!("gfx1251".parse::<Rocm>().is_err());
     }
 }
