@@ -39,9 +39,19 @@ impl AgentState {
     }
 
     async fn status(&self) -> Result<AgentStatus> {
-        let account = self.agent.codex().account()?;
+        let mut account = self.agent.codex().account()?;
         let models = if account.is_some() {
-            self.agent.models().await?
+            match self.agent.models().await {
+                Ok(models) => models,
+                Err(error) => {
+                    account = self.agent.codex().account()?;
+                    if account.is_some() {
+                        return Err(error);
+                    }
+                    self.agent.clear().await;
+                    Vec::new()
+                }
+            }
         } else {
             Vec::new()
         };
