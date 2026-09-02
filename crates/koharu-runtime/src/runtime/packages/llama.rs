@@ -15,44 +15,64 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "b10690";
+const RELEASE: &str = "b10752";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Llama {
     #[strum(
         serialize = "windows-cuda",
-        props(asset = "Windows-cuda.tar.gz", libraries = "llama.dll,mtmd.dll")
+        props(
+            asset = "x86_64-pc-windows-msvc-cuda.tar.gz",
+            libraries = "llama.dll,mtmd.dll"
+        )
     )]
     WindowsCuda,
-    #[strum(
-        serialize = "linux-cuda",
-        props(asset = "Linux-cuda.tar.gz", libraries = "libllama.so,libmtmd.so")
+    #[cfg_attr(
+        all(target_os = "linux", target_arch = "aarch64"),
+        strum(props(asset = "aarch64-unknown-linux-gnu-cuda.tar.gz"))
     )]
+    #[cfg_attr(
+        not(all(target_os = "linux", target_arch = "aarch64")),
+        strum(props(asset = "x86_64-unknown-linux-gnu-cuda.tar.gz"))
+    )]
+    #[strum(serialize = "linux-cuda", props(libraries = "libllama.so,libmtmd.so"))]
     LinuxCuda,
     #[strum(
         serialize = "windows-hip",
-        props(asset = "Windows-hip.tar.gz", libraries = "llama.dll,mtmd.dll")
+        props(
+            asset = "x86_64-pc-windows-msvc-hip.tar.gz",
+            libraries = "llama.dll,mtmd.dll"
+        )
     )]
     WindowsHip,
     #[strum(
         serialize = "linux-hip",
-        props(asset = "Linux-hip.tar.gz", libraries = "libllama.so,libmtmd.so")
+        props(
+            asset = "x86_64-unknown-linux-gnu-hip.tar.gz",
+            libraries = "libllama.so,libmtmd.so"
+        )
     )]
     LinuxHip,
     #[strum(
         serialize = "windows-vulkan",
-        props(asset = "Windows-vulkan.tar.gz", libraries = "llama.dll,mtmd.dll")
+        props(
+            asset = "x86_64-pc-windows-msvc-vulkan.tar.gz",
+            libraries = "llama.dll,mtmd.dll"
+        )
     )]
     WindowsVulkan,
     #[strum(
         serialize = "linux-vulkan",
-        props(asset = "Linux-vulkan.tar.gz", libraries = "libllama.so,libmtmd.so")
+        props(
+            asset = "x86_64-unknown-linux-gnu-vulkan.tar.gz",
+            libraries = "libllama.so,libmtmd.so"
+        )
     )]
     LinuxVulkan,
     #[strum(
         serialize = "macos-metal",
         props(
-            asset = "macOS-metal.tar.gz",
+            asset = "aarch64-apple-darwin-metal.tar.gz",
             libraries = "libllama.dylib,libmtmd.dylib"
         )
     )]
@@ -125,6 +145,8 @@ impl DiscoverablePackage for Llama {
                 return Some(Self::LinuxHip);
             }
             hardware.supports_vulkan().then_some(Self::LinuxVulkan)
+        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+            hardware.supports_cuda().then_some(Self::LinuxCuda)
         } else if hardware.supports_metal() {
             Some(Self::MacosMetal)
         } else {

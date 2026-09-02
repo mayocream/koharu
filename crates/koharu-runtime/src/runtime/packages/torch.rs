@@ -15,7 +15,7 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "v2.13.0.4";
+const RELEASE: &str = "v2.13.0.5";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub enum Torch {
@@ -70,16 +70,18 @@ impl Torch {
     }
 
     fn asset(self) -> Result<String> {
-        let platform = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            "Windows"
+        let target = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+            "x86_64-pc-windows-msvc"
         } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            "Linux"
+            "x86_64-unknown-linux-gnu"
+        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+            "aarch64-unknown-linux-gnu"
         } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            "macOS"
+            "aarch64-apple-darwin"
         } else {
             anyhow::bail!("Torch {self} does not support this target")
         };
-        Ok(format!("{platform}-{self}.tar.gz"))
+        Ok(format!("{target}-{self}.tar.gz"))
     }
 }
 
@@ -117,6 +119,9 @@ impl DiscoverablePackage for Torch {
     fn discover(hardware: &Hardware) -> Option<Self> {
         if hardware.supports_metal() {
             return Some(Self::Cpu);
+        }
+        if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+            return hardware.supports_cuda().then_some(Self::Cuda);
         }
         if !cfg!(any(
             all(target_os = "windows", target_arch = "x86_64"),
