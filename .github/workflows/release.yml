@@ -23,6 +23,8 @@ jobs:
             args: '--target aarch64-apple-darwin'
           - platform: 'ubuntu-latest'
             args: ''
+          - platform: 'ubuntu-24.04-arm'
+            args: ''
           - platform: 'windows-latest'
             args: ''
 
@@ -63,7 +65,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          key: ${{ matrix.platform }}-bun-${{ hashFiles('**/bun.lock') }}
 
       - name: Install dependencies
         run: bun install
