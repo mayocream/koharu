@@ -1,3 +1,29 @@
+## [0.81.0](https://github.com/koharu-rs/koharu/compare/0.80.0..0.81.0) - 2026-09-02
+
+### ⛰️  Features
+
+- *(runtime)* Support Linux ARM64 CUDA - ([892db6b](https://github.com/koharu-rs/koharu/commit/892db6bfe0d4e1f461793341a26607bfddbba59a))
+- *(runtime)* Support all ROCm 10 targets - ([1938566](https://github.com/koharu-rs/koharu/commit/193856650c85352eff530fbfbab75ef83e6679d9))
+
+### 🐛 Bug Fixes
+
+- *(runtime)* Align ROCm targets with llama.cpp - ([eadb797](https://github.com/koharu-rs/koharu/commit/eadb7976450ded81849d88b79e1d0f279da6c928))
+- *(runtime)* Drop unsupported gfx1250 - ([64173ab](https://github.com/koharu-rs/koharu/commit/64173abbc4fd4c089bf5c3d8a9e350c483e4cbef))
+- *(runtime)* Use exact ROCm library paths - ([eb06347](https://github.com/koharu-rs/koharu/commit/eb063470e06a8c8fdc2e510774996915c869fbba))
+
+### 🚜 Refactor
+
+- *(runtime)* Inline ROCm device library check - ([9152946](https://github.com/koharu-rs/koharu/commit/9152946a89e96fa2cc9ec78c7385d190afa0c014))
+
+### 🧪 Testing
+
+- *(runtime)* Remove gfx1250 reference - ([c3e79e6](https://github.com/koharu-rs/koharu/commit/c3e79e689179921c70de04cb5ac9913afb3ce8a5))
+
+### ⚙️ Miscellaneous Tasks
+
+- Update sponsors ([#943](https://github.com/koharu-rs/koharu/issues/943)) - ([687af18](https://github.com/koharu-rs/koharu/commit/687af180abcd5ecb69994d997acfcef115ad560f))
+
+
 ## [0.80.0](https://github.com/koharu-rs/koharu/compare/0.79.5..0.80.0) - 2026-08-31
 
 ### ⛰️  Features
