@@ -1,3 +1,10 @@
+## [0.81.1](https://github.com/koharu-rs/koharu/compare/0.81.0..0.81.1) - 2026-09-02
+
+### ⚙️ Miscellaneous Tasks
+
+- Build Linux ARM64 application - ([4add6d8](https://github.com/koharu-rs/koharu/commit/4add6d8d7a60f7a7cafc70a9b756fae4a3b0dd6a))
+
+
 ## [0.81.0](https://github.com/koharu-rs/koharu/compare/0.80.0..0.81.0) - 2026-09-02
 
 ### ⛰️  Features
