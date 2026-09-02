@@ -15,43 +15,66 @@ use crate::{
     source::extract,
 };
 
-const RELEASE: &str = "master-829-0a565f2.9";
+const RELEASE: &str = "master-841-6b3edaa.2";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, strum::Display, strum::EnumProperty)]
 pub(crate) enum Diffusion {
     #[strum(
         serialize = "windows-cuda",
-        props(asset = "Windows-cuda.tar.gz", library = "stable-diffusion.dll")
+        props(
+            asset = "x86_64-pc-windows-msvc-cuda.tar.gz",
+            library = "stable-diffusion.dll"
+        )
     )]
     WindowsCuda,
-    #[strum(
-        serialize = "linux-cuda",
-        props(asset = "Linux-cuda.tar.gz", library = "libstable-diffusion.so")
+    #[cfg_attr(
+        all(target_os = "linux", target_arch = "aarch64"),
+        strum(props(asset = "aarch64-unknown-linux-gnu-cuda.tar.gz"))
     )]
+    #[cfg_attr(
+        not(all(target_os = "linux", target_arch = "aarch64")),
+        strum(props(asset = "x86_64-unknown-linux-gnu-cuda.tar.gz"))
+    )]
+    #[strum(serialize = "linux-cuda", props(library = "libstable-diffusion.so"))]
     LinuxCuda,
     #[strum(
         serialize = "windows-hip",
-        props(asset = "Windows-hip.tar.gz", library = "stable-diffusion.dll")
+        props(
+            asset = "x86_64-pc-windows-msvc-hip.tar.gz",
+            library = "stable-diffusion.dll"
+        )
     )]
     WindowsHip,
     #[strum(
         serialize = "linux-hip",
-        props(asset = "Linux-hip.tar.gz", library = "libstable-diffusion.so")
+        props(
+            asset = "x86_64-unknown-linux-gnu-hip.tar.gz",
+            library = "libstable-diffusion.so"
+        )
     )]
     LinuxHip,
     #[strum(
         serialize = "windows-vulkan",
-        props(asset = "Windows-vulkan.tar.gz", library = "stable-diffusion.dll")
+        props(
+            asset = "x86_64-pc-windows-msvc-vulkan.tar.gz",
+            library = "stable-diffusion.dll"
+        )
     )]
     WindowsVulkan,
     #[strum(
         serialize = "linux-vulkan",
-        props(asset = "Linux-vulkan.tar.gz", library = "libstable-diffusion.so")
+        props(
+            asset = "x86_64-unknown-linux-gnu-vulkan.tar.gz",
+            library = "libstable-diffusion.so"
+        )
     )]
     LinuxVulkan,
     #[strum(
         serialize = "macos-metal",
-        props(asset = "macOS-metal.tar.gz", library = "libstable-diffusion.dylib")
+        props(
+            asset = "aarch64-apple-darwin-metal.tar.gz",
+            library = "libstable-diffusion.dylib"
+        )
     )]
     MacosMetal,
 }
@@ -122,6 +145,8 @@ impl DiscoverablePackage for Diffusion {
                 return Some(Self::LinuxHip);
             }
             hardware.supports_vulkan().then_some(Self::LinuxVulkan)
+        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+            hardware.supports_cuda().then_some(Self::LinuxCuda)
         } else if hardware.supports_metal() {
             Some(Self::MacosMetal)
         } else {
