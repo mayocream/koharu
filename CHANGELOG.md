@@ -1,3 +1,10 @@
+## [0.81.4](https://github.com/koharu-rs/koharu/compare/0.81.3..0.81.4) - 2026-09-03
+
+### 🐛 Bug Fixes
+
+- *(translator)* Recover model responses the JSON repair layer rejects ([#1022](https://github.com/koharu-rs/koharu/issues/1022)) - ([e6d330c](https://github.com/koharu-rs/koharu/commit/e6d330c83a76ed3efa1f7ab15988f81544df8219))
+
+
 ## [0.81.3](https://github.com/koharu-rs/koharu/compare/0.81.2..0.81.3) - 2026-09-03
 
 ### 🐛 Bug Fixes
