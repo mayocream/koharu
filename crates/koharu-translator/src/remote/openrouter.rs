@@ -34,7 +34,7 @@ pub(super) async fn translate(
             Some(api_key.expose_secret()),
             model,
             generation,
-            ResponseMode::PromptOnly,
+            ResponseMode::JsonSchema,
         )
     };
     super::openai_compatible::translate(client, backend, request).await

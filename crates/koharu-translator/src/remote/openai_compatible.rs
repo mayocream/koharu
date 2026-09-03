@@ -50,7 +50,7 @@ pub(super) async fn compatible(
             api_key.as_ref().map(ExposeSecret::expose_secret),
             model,
             generation,
-            ResponseMode::PromptOnly,
+            ResponseMode::JsonSchema,
         )
     };
     translate(client, backend, request).await
@@ -223,8 +223,7 @@ struct ChatRequest<'a> {
     reasoning: Option<ReasoningConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<ThinkingConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<ResponseFormat>,
+    response_format: ResponseFormat,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -240,27 +239,25 @@ struct ReasoningConfig {
 
 #[derive(Clone, Copy)]
 pub(super) enum ResponseMode {
-    PromptOnly,
     JsonObject,
     JsonSchema,
 }
 
 impl ResponseMode {
-    fn response_format(self, expected: usize) -> Option<ResponseFormat> {
+    fn response_format(self, expected: usize) -> ResponseFormat {
         match self {
-            Self::PromptOnly => None,
-            Self::JsonObject => Some(ResponseFormat {
+            Self::JsonObject => ResponseFormat {
                 kind: "json_object",
                 json_schema: None,
-            }),
-            Self::JsonSchema => Some(ResponseFormat {
+            },
+            Self::JsonSchema => ResponseFormat {
                 kind: "json_schema",
                 json_schema: Some(JsonSchema {
                     name: "manga_translation",
                     strict: true,
                     schema: prompt::output_schema(expected),
                 }),
-            }),
+            },
         }
     }
 }
@@ -346,12 +343,11 @@ mod tests {
     #[test]
     fn serializes_provider_specific_response_formats() {
         assert_eq!(
-            serde_json::to_value(ResponseMode::JsonObject.response_format(2).unwrap()).unwrap(),
+            serde_json::to_value(ResponseMode::JsonObject.response_format(2)).unwrap(),
             serde_json::json!({ "type": "json_object" })
         );
 
-        let strict =
-            serde_json::to_value(ResponseMode::JsonSchema.response_format(2).unwrap()).unwrap();
+        let strict = serde_json::to_value(ResponseMode::JsonSchema.response_format(2)).unwrap();
         assert_eq!(strict["type"], "json_schema");
         assert_eq!(strict["json_schema"]["name"], "manga_translation");
         assert_eq!(strict["json_schema"]["strict"], true);
@@ -360,7 +356,6 @@ mod tests {
                 ["maximum"],
             1
         );
-        assert!(ResponseMode::PromptOnly.response_format(2).is_none());
     }
 
     #[test]
@@ -386,7 +381,7 @@ mod tests {
             reasoning_effort: Some("none"),
             reasoning: None,
             thinking: None,
-            response_format: None,
+            response_format: ResponseMode::JsonSchema.response_format(2),
         };
         let value = serde_json::to_value(request).unwrap();
         assert_eq!(value["max_completion_tokens"], 1024);

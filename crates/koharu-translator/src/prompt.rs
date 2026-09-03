@@ -28,7 +28,7 @@ pub(crate) fn translations(
     text: &str,
     source_segments: &[String],
 ) -> anyhow::Result<Vec<String>> {
-    let output = crate::json::from_str::<TranslationOutput>(text).with_context(|| {
+    let output = serde_json::from_str::<TranslationOutput>(text).with_context(|| {
         format!(
             "{provider} returned invalid translation JSON for {} segments; response was: {}",
             source_segments.len(),
@@ -244,31 +244,46 @@ mod tests {
     }
 
     #[test]
-    fn parses_plain_json_and_markdown_fences() {
+    fn parses_plain_json() {
         let source = ["one".to_owned(), "two".to_owned()];
-        let expected = vec!["hello".to_owned(), "world".to_owned()];
+        let response = r#"{"translations":[{"id":0,"text":"hello"},{"id":1,"text":"world"}]}"#;
+
+        assert_eq!(
+            translations("test", response, &source).unwrap(),
+            ["hello", "world"]
+        );
+    }
+
+    #[test]
+    fn rejects_wrapped_and_malformed_json() {
+        let source = ["one".to_owned(), "two".to_owned()];
         for response in [
-            r#"{"translations":[{"id":0,"text":"hello"},{"id":1,"text":"world"}]}"#,
             "```json\n{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"}]}\n```",
-            "```JSON\n{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"}]}\n```",
-            "```\n{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"}]}\n```",
+            r#"{translations: [{id: 0, text: 'hello'}, {id: 1, text: 'world'},],}"#,
+            r#"Here is the result: {"translations": [{"id": 0, "text": "hello"}, {"id": 1, "text": "world"},]}"#,
+            "{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"",
         ] {
-            assert_eq!(translations("test", response, &source).unwrap(), expected);
+            assert!(
+                translations("test", response, &source).is_err(),
+                "{response}"
+            );
         }
     }
 
     #[test]
-    fn repairs_malformed_llm_json() {
-        let source = ["one".to_owned(), "two".to_owned()];
-        let expected = vec!["hello".to_owned(), "world".to_owned()];
-        for response in [
-            r#"{translations: [{id: 0, text: 'hello'}, {id: 1, text: 'world'},],}"#,
-            r#"Here is the result: {"translations": [{"id": 0, "text": "hello"}, {"id": 1, "text": "world"},]}"#,
-            "{\"translations\":[{\"id\":0,\"text\":\"hello\"},{\"id\":1,\"text\":\"world\"",
-            r#"{"translations":[{"id":"0","text":"hello"},{"id":"1","text":"world"}]}"#,
-        ] {
-            assert_eq!(translations("test", response, &source).unwrap(), expected);
-        }
+    fn parse_error_preserves_the_root_failure_and_response() {
+        let source = ["one".to_owned()];
+        let response = "{\n  \"translations\": [{\"id\": 0}]\n}";
+        let error = format!(
+            "{:#}",
+            translations("test", response, &source).expect_err("missing text should fail")
+        );
+
+        assert!(error.contains("missing field `text`"), "{error}");
+        assert!(
+            error.contains(r#"response was: {\n  "translations": [{"id": 0}]\n}"#),
+            "{error}"
+        );
     }
 
     #[test]
