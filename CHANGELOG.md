@@ -1,3 +1,10 @@
+## [0.81.3](https://github.com/koharu-rs/koharu/compare/0.81.2..0.81.3) - 2026-09-03
+
+### 🐛 Bug Fixes
+
+- *(ci)* Remove AppImage bundle target ([#1035](https://github.com/koharu-rs/koharu/issues/1035)) ([#1037](https://github.com/koharu-rs/koharu/issues/1037)) - ([859ae68](https://github.com/koharu-rs/koharu/commit/859ae68a6c012afe349bedffc616e38a929b8f19))
+
+
 ## [0.81.2](https://github.com/koharu-rs/koharu/compare/0.81.1..0.81.2) - 2026-09-03
 
 ### 🐛 Bug Fixes
