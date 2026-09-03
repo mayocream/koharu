@@ -1,3 +1,10 @@
+## [0.81.2](https://github.com/koharu-rs/koharu/compare/0.81.1..0.81.2) - 2026-09-03
+
+### 🐛 Bug Fixes
+
+- *(agent)* Recover from invalidated Codex refresh tokens ([#1034](https://github.com/koharu-rs/koharu/issues/1034)) - ([5f299cd](https://github.com/koharu-rs/koharu/commit/5f299cd88e2ecfd834823a6e62068f420a72f73a))
+
+
 ## [0.81.1](https://github.com/koharu-rs/koharu/compare/0.81.0..0.81.1) - 2026-09-02
 
 ### ⚙️ Miscellaneous Tasks
