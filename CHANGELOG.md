@@ -1,3 +1,10 @@
+## [0.81.5](https://github.com/koharu-rs/koharu/compare/0.81.4..0.81.5) - 2026-09-03
+
+### 🐛 Bug Fixes
+
+- *(updater)* Install Windows updates quietly - ([e2df1f6](https://github.com/koharu-rs/koharu/commit/e2df1f60ad3850b79d78b224dc698de6c2d82c8b))
+
+
 ## [0.81.4](https://github.com/koharu-rs/koharu/compare/0.81.3..0.81.4) - 2026-09-03
 
 ### 🐛 Bug Fixes
