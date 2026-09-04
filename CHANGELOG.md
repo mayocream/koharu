@@ -1,3 +1,10 @@
+## [0.81.6](https://github.com/koharu-rs/koharu/compare/0.81.5..0.81.6) - 2026-09-04
+
+### 🐛 Bug Fixes
+
+- *(app)* Pass Linux CEF switches correctly - ([24bda3a](https://github.com/koharu-rs/koharu/commit/24bda3a5cc9d47ed45b0d118cbf0711c3b46effe))
+
+
 ## [0.81.5](https://github.com/koharu-rs/koharu/compare/0.81.4..0.81.5) - 2026-09-03
 
 ### 🐛 Bug Fixes
