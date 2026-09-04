@@ -109,19 +109,23 @@ impl<'a> HuggingFaceFile<'a> {
         }
     }
 
+    #[must_use]
+    pub fn path(self) -> PathBuf {
+        let repository = Repository::new(self.repository);
+        Store::root()
+            .join("hugging-face")
+            .join(self.kind.api_route())
+            .join(repository.id.replace(['/', '\\'], "--"))
+            .join("snapshots")
+            .join(self.revision)
+            .join(self.filename)
+    }
+
     #[tracing::instrument(skip_all)]
     pub async fn resolve(self) -> anyhow::Result<PathBuf> {
         let repository = Repository::new(self.repository);
         let revision = self.revision.to_owned();
-        let repository_name = repository.id.replace(['/', '\\'], "--");
-        let target = Store::root()
-            .join("hugging-face")
-            .join(self.kind.api_route())
-            .join(repository_name)
-            .join("snapshots")
-            .join(&revision)
-            .join(self.filename);
-        Store::file(target, move |stage| async move {
+        Store::file(self.path(), move |stage| async move {
             let client = client()?;
             download::receive(
                 self.filename,
@@ -132,5 +136,41 @@ impl<'a> HuggingFaceFile<'a> {
             .await
         })
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_REVISION: &str = "c0de233c0de233c0de233c0de233c0de233c0de2";
+
+    #[test]
+    fn pinned_model_uses_models_cache_layout() {
+        let path = HuggingFaceFile::pinned("koharu-test/issue-233", TEST_REVISION, "model.gguf")
+            .path()
+            .strip_prefix(Store::root())
+            .expect("huggingface cache path is under the store root")
+            .to_owned();
+        assert_eq!(
+            path,
+            PathBuf::from("hugging-face")
+                .join("models")
+                .join("koharu-test--issue-233")
+                .join("snapshots")
+                .join(TEST_REVISION)
+                .join("model.gguf")
+        );
+    }
+
+    #[test]
+    fn missing_file_is_not_present() {
+        let path = HuggingFaceFile::pinned(
+            "koharu-test/issue-233-missing",
+            TEST_REVISION,
+            "missing-unique.gguf",
+        )
+        .path();
+        assert!(!path.is_file());
     }
 }

@@ -79,6 +79,7 @@ impl Default for ModelSelection {
 pub struct Quantization {
     pub id: String,
     pub name: String,
+    pub downloaded: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Type)]
@@ -206,6 +207,17 @@ mod tests {
         let unsupported = generation.for_model(&selection(false, false));
         assert_eq!(unsupported.vision, None);
         assert_eq!(unsupported.reasoning, None);
+    }
+
+    #[test]
+    fn quantization_includes_downloaded_field() {
+        let quantization = Quantization {
+            id: "Q4_K_XL".to_owned(),
+            name: "Q4_K XL".to_owned(),
+            downloaded: false,
+        };
+        let value = serde_json::to_value(quantization).unwrap();
+        assert_eq!(value["downloaded"], false);
     }
 
     #[test]
