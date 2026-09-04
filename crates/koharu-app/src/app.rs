@@ -74,7 +74,8 @@ pub fn run(context: tauri::Context<Cef>) -> Result<()> {
     ]);
     #[cfg(target_os = "linux")]
     let builder = builder.command_line_args([
-        ("enable-unsafe-webgpu", None),
+        ("--no-first-run", None),
+        ("--enable-unsafe-webgpu", None),
         ("enable-features", Some("Vulkan,VulkanFromANGLE")),
         ("use-angle", Some("vulkan")),
     ]);
