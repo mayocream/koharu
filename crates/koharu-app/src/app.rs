@@ -65,8 +65,7 @@ pub(crate) async fn initialize(handle: AppHandle<Cef>) -> Result<()> {
 }
 
 pub fn run(context: tauri::Context<Cef>) -> Result<()> {
-    let attrs = tauri::CefRuntimeAttributes::default()
-        .command_line_args::<_, &str>([("--hide-chrome-bubbles", None)]);
+    let attrs = tauri::CefRuntimeAttributes::default();
     #[cfg(debug_assertions)]
     let attrs = attrs.command_line_args([
         ("remote-debugging-port", Some("4000")),
