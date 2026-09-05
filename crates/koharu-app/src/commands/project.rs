@@ -4,12 +4,13 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use koharu_desktop::Frame;
 use koharu_scene::{
-    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin,
+    AssetInput, AssetMetadata, AssetRole, At, Authored, Commit, EntityId, EntityOrigin, FitsTo,
     Geometry as SceneGeometry, Group as SceneGroup, Origin, PageDraft, Point as ScenePoint,
-    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, Region as SceneRegion,
-    RemovePolicy, Revision, Session, Snapshot, SourceText as SceneSourceText,
-    TextGroup as SceneTextGroup, TextLayout as SceneTextLayout, TextLayoutKind,
-    Translation as SceneTranslation, Typography as SceneTypography, Visibility as SceneVisibility,
+    Presents, RasterLayer as SceneRasterLayer, RasterLayerKind, RecognizedFrom,
+    Region as SceneRegion, RemovePolicy, Revision, Session, Snapshot,
+    SourceText as SceneSourceText, TextGroup as SceneTextGroup, TextLayout as SceneTextLayout,
+    TextLayoutKind, TextRegion, Translation as SceneTranslation, Typography as SceneTypography,
+    Visibility as SceneVisibility,
 };
 use serde::Serialize;
 use specta::Type;
@@ -423,6 +424,7 @@ impl Project {
         let geometry = Self::geometry_from_frame(frame)?;
         let mut layer = None;
         let patch = snapshot.patch(|edit| {
+            let region = edit.add_analysis_region::<TextRegion>(page, At::End, &geometry, None)?;
             let content = edit.add_text_content(page, At::End)?;
             edit.set(
                 content,
@@ -431,6 +433,7 @@ impl Project {
                     language: None,
                 },
             )?;
+            edit.relate::<RecognizedFrom>(content, region)?;
             let added_layer = edit.add_text_layer(
                 page,
                 At::End,
@@ -440,8 +443,8 @@ impl Project {
                     kind,
                 },
             )?;
+            edit.relate::<FitsTo>(added_layer, region)?;
             layer = Some(added_layer);
-            edit.set(added_layer, &geometry)?;
             edit.set(
                 added_layer,
                 &SceneTypography {
@@ -1435,6 +1438,81 @@ mod tests {
                 .unwrap()
                 .label,
             "latest manual"
+        );
+    }
+
+    #[tokio::test]
+    async fn manual_text_uses_an_editable_ocr_region() {
+        let mut session = Session::memory().await.unwrap();
+        let mut setup = session.snapshot().edit();
+        let page = setup
+            .add_page(PageDraft::new("page", 100.0, 100.0), At::End)
+            .unwrap();
+        session.commit(setup.finish().unwrap()).await.unwrap();
+        let mut project = Project::new(session, "test".to_owned());
+        let (commit, layer) = project
+            .add_text_box(
+                page,
+                Frame {
+                    x: 10.0,
+                    y: 20.0,
+                    width: 30.0,
+                    height: 40.0,
+                    angle_degrees: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+        let text_layer = commit.snapshot.text_layer(layer).unwrap();
+        let region = text_layer
+            .content()
+            .unwrap()
+            .source_region()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            text_layer.automatic_target().unwrap().unwrap().id(),
+            region.id()
+        );
+        assert_eq!(
+            text_layer.frame().unwrap(),
+            Some(region.geometry().unwrap())
+        );
+
+        let moved = Project::geometry_from_frame(Frame {
+            x: 40.0,
+            y: 30.0,
+            width: 20.0,
+            height: 10.0,
+            angle_degrees: 0.0,
+        })
+        .unwrap();
+        project
+            .set_geometry(vec![GeometryUpdate {
+                layer,
+                points: Some(
+                    moved
+                        .points
+                        .iter()
+                        .map(|point| Point {
+                            x: point.x,
+                            y: point.y,
+                        })
+                        .collect(),
+                ),
+            }])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            project
+                .snapshot()
+                .text_layer(layer)
+                .unwrap()
+                .frame()
+                .unwrap(),
+            Some(moved)
         );
     }
 
