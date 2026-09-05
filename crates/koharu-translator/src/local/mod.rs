@@ -124,15 +124,45 @@ pub(crate) fn models() -> Vec<Model> {
             quantizations: descriptor
                 .quantizations
                 .iter()
-                .map(|quantization| Quantization {
-                    id: quantization.id.to_owned(),
-                    name: quantization.name.to_owned(),
-                })
+                .map(|quantization| public_quantization(descriptor, quantization))
                 .collect(),
             vision: descriptor.projector.is_some(),
             reasoning: descriptor.reasoning,
         })
         .collect()
+}
+
+fn public_quantization(
+    descriptor: &catalog::LocalModelDescriptor,
+    definition: &crate::QuantizationDefinition,
+) -> Quantization {
+    let gguf_present = koharu_runtime::HuggingFaceFile::pinned(
+        descriptor.repository,
+        descriptor.revision,
+        definition.filename,
+    )
+    .path()
+    .is_file();
+
+    let downloaded = match descriptor.projector {
+        None => gguf_present,
+        Some(projector) => {
+            gguf_present
+                && koharu_runtime::HuggingFaceFile::pinned(
+                    descriptor.repository,
+                    descriptor.revision,
+                    projector,
+                )
+                .path()
+                .is_file()
+        }
+    };
+
+    Quantization {
+        id: definition.id.to_owned(),
+        name: definition.name.to_owned(),
+        downloaded,
+    }
 }
 
 pub(crate) fn supports_vision(selection: &ModelSelection) -> bool {
@@ -142,4 +172,116 @@ pub(crate) fn supports_vision(selection: &ModelSelection) -> bool {
             .find(|descriptor| descriptor.id == model)
             .is_some_and(|descriptor| descriptor.projector.is_some())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use super::*;
+    use crate::{ModelGeneration, QuantizationDefinition};
+    use catalog::{LocalModelDescriptor, SupportedLanguages};
+
+    const TEST_REVISION: &str = "c0de233c0de233c0de233c0de233c0de233c0de2";
+    const QUANTS: &[QuantizationDefinition] =
+        &[QuantizationDefinition::new("Q4", "Q4", "model.gguf")];
+
+    struct RemoveOnDrop(Vec<PathBuf>);
+
+    impl Drop for RemoveOnDrop {
+        fn drop(&mut self) {
+            for path in self.0.drain(..).rev() {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+
+    fn touch(path: PathBuf, guard: &mut RemoveOnDrop) {
+        fs::create_dir_all(path.parent().expect("cache file has a parent")).unwrap();
+        fs::write(&path, b"downloaded").unwrap();
+        guard.0.push(path);
+    }
+
+    fn descriptor(
+        repository: &'static str,
+        projector: Option<&'static str>,
+    ) -> LocalModelDescriptor {
+        LocalModelDescriptor {
+            id: "issue-233-minimal",
+            reasoning: false,
+            name: "Issue 233 Minimal",
+            quantizations: QUANTS,
+            generation: ModelGeneration::default(),
+            repository,
+            revision: TEST_REVISION,
+            projector,
+            target_languages: SupportedLanguages::All,
+        }
+    }
+
+    #[test]
+    fn reports_not_downloaded_when_gguf_is_missing() {
+        let descriptor = descriptor("koharu-test/issue-233-minimal-missing", None);
+        let _ = fs::remove_file(
+            koharu_runtime::HuggingFaceFile::pinned(
+                descriptor.repository,
+                descriptor.revision,
+                descriptor.quantizations[0].filename,
+            )
+            .path(),
+        );
+        assert!(!public_quantization(&descriptor, &descriptor.quantizations[0]).downloaded);
+    }
+
+    #[test]
+    fn reports_downloaded_when_required_files_exist() {
+        let descriptor = descriptor("koharu-test/issue-233-minimal-ready", Some("mmproj.gguf"));
+        let mut guard = RemoveOnDrop(Vec::new());
+        touch(
+            koharu_runtime::HuggingFaceFile::pinned(
+                descriptor.repository,
+                descriptor.revision,
+                descriptor.quantizations[0].filename,
+            )
+            .path(),
+            &mut guard,
+        );
+        touch(
+            koharu_runtime::HuggingFaceFile::pinned(
+                descriptor.repository,
+                descriptor.revision,
+                "mmproj.gguf",
+            )
+            .path(),
+            &mut guard,
+        );
+        assert!(public_quantization(&descriptor, &descriptor.quantizations[0]).downloaded);
+    }
+
+    #[test]
+    fn vision_model_requires_projector_file() {
+        let descriptor = descriptor(
+            "koharu-test/issue-233-minimal-projector-missing",
+            Some("mmproj.gguf"),
+        );
+        let mut guard = RemoveOnDrop(Vec::new());
+        touch(
+            koharu_runtime::HuggingFaceFile::pinned(
+                descriptor.repository,
+                descriptor.revision,
+                descriptor.quantizations[0].filename,
+            )
+            .path(),
+            &mut guard,
+        );
+        let _ = fs::remove_file(
+            koharu_runtime::HuggingFaceFile::pinned(
+                descriptor.repository,
+                descriptor.revision,
+                "mmproj.gguf",
+            )
+            .path(),
+        );
+        assert!(!public_quantization(&descriptor, &descriptor.quantizations[0]).downloaded);
+    }
 }
