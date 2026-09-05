@@ -460,7 +460,22 @@
       "loadError": "Не удалось загрузить шрифты. Существующие семейства всё ещё можно удалить.",
       "loadingFonts": "Загрузка шрифтов…",
       "removeFamily": "Удалить {{family}}",
-      "title": "Вёрстка"
+      "title": "Вёрстка",
+
+      "overrides": {
+      "title": "Global Overrides",
+      "description": "Force specific typography settings across all text layers.",
+      "fontColor": "Font Color",
+      "fontColorDescription": "Override the typography color with solid black.",
+      "borderWidth": "Font Border Width",
+      "borderWidthDescription": "Override the automatically detected stroke width.",
+      "fontWeight": "Font Weight",
+      "fontWeightDescription": "Override the font thickness globally.",
+      "forceBlack": "Force Black",
+      "revertAuto": "Revert to Auto",
+      "override": "Override",
+      "revert": "Revert"
+      }
     }
   },
   "start": {

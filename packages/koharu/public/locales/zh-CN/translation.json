@@ -460,7 +460,22 @@
       "loadError": "无法加载字体。仍可删除现有字体系列。",
       "loadingFonts": "正在加载字体…",
       "removeFamily": "删除 {{family}}",
-      "title": "排版"
+      "title": "排版",
+
+      "overrides": {
+      "title": "Global Overrides",
+      "description": "Force specific typography settings across all text layers.",
+      "fontColor": "Font Color",
+      "fontColorDescription": "Override the typography color with solid black.",
+      "borderWidth": "Font Border Width",
+      "borderWidthDescription": "Override the automatically detected stroke width.",
+      "fontWeight": "Font Weight",
+      "fontWeightDescription": "Override the font thickness globally.",
+      "forceBlack": "Force Black",
+      "revertAuto": "Revert to Auto",
+      "override": "Override",
+      "revert": "Revert"
+      }
     }
   },
   "start": {

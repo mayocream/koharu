@@ -460,7 +460,22 @@
       "loadError": "글꼴을 불러오지 못했습니다. 기존 패밀리는 삭제할 수 있습니다.",
       "loadingFonts": "글꼴 불러오는 중…",
       "removeFamily": "{{family}} 삭제",
-      "title": "조판"
+      "title": "조판",
+
+      "overrides": {
+      "title": "Global Overrides",
+      "description": "Force specific typography settings across all text layers.",
+      "fontColor": "Font Color",
+      "fontColorDescription": "Override the typography color with solid black.",
+      "borderWidth": "Font Border Width",
+      "borderWidthDescription": "Override the automatically detected stroke width.",
+      "fontWeight": "Font Weight",
+      "fontWeightDescription": "Override the font thickness globally.",
+      "forceBlack": "Force Black",
+      "revertAuto": "Revert to Auto",
+      "override": "Override",
+      "revert": "Revert"
+      }
     }
   },
   "start": {
