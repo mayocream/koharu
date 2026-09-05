@@ -1,3 +1,14 @@
+## [0.81.7](https://github.com/koharu-rs/koharu/compare/0.81.6..0.81.7) - 2026-09-05
+
+### 🐛 Bug Fixes
+
+- *(app)* Remove ineffective hide-chrome-bubbles flag - ([5e317b6](https://github.com/koharu-rs/koharu/commit/5e317b6255faf2802b5a7e3a58a2719f0e0a86c5))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove summary GHA - ([3a0c6a3](https://github.com/koharu-rs/koharu/commit/3a0c6a366d5355dee7a19cc905f28d84afa6e4b8))
+
+
 ## [0.81.6](https://github.com/koharu-rs/koharu/compare/0.81.5..0.81.6) - 2026-09-04
 
 ### 🐛 Bug Fixes
